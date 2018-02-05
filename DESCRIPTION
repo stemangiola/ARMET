@@ -1,0 +1,45 @@
+Package: ARMET
+Type: Package
+Title: Algorithms for Resolving Micro Enviroment Transcriptomes
+Version: 1.0
+Date: 2018-02-02
+Authors@R: c(person("Stefano", "Mangiola", email = "mangiolastefano@gmail.com", role = c("cre", "aut", "ctb", "trl")))
+Description: More about what it does (maybe more than one line)
+License: GPL (>=3)
+Depends: 
+	R (>= 3.3.0), 
+	Rcpp (>= 0.12.15), 
+	methods
+Imports: 
+	rstan (>= 2.17.3), 
+	rstantools (>= 1.4.0),
+	reshape (>= 0.8.7),
+	matrixStats (>= 0.53),
+	ini,
+	jsonlite (>= 1.5),
+	preprocessCore,
+	ggplot2 (>= 2.2.1),
+	plyr,
+	dplyr (>=  0.7.4),
+	tibble (>= 1.4.2),
+	tidyr (>= 0.7.2),
+	parallel (>= 3.4.3),
+	edgeR,
+	limma,
+	data.tree,
+	jsonlite,
+	yaml,
+	ggrepel,
+	RColorBrewer,
+	doFuture
+LinkingTo: 
+	StanHeaders (>= 2.17.2), 
+	rstan (>= 2.17.3), 
+	BH (>= 1.65.0.1), 
+	Rcpp (>= 0.12.15), 
+	RcppEigen (>= 0.3.3.3.1)
+SystemRequirements: pandoc
+VignetteBuilder: knitr
+LazyData: true
+NeedsCompilation: yes
+RoxygenNote: 6.0.1
