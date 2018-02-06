@@ -18,9 +18,7 @@ ARMET_tc_coreAlg = function(
 	is_mix_microarray = obj.in$is_mix_microarray	
 	output_dir = obj.in$output_dir
 	bg_tree = obj.in$bg_tree
-	
-	print(output_dir)
-	
+
 	# Calculate proportion of 0s
 	theta = apply(mix, 2, function(mc) length(which(mc>0)))
 	theta[theta==nrow(mix)] = theta[theta==nrow(mix)]-1
@@ -88,7 +86,7 @@ ARMET_tc_coreAlg = function(
 	# balance the evidences
 	e_map_matrix_dim = table(e.obj$e$ct_num)
 	e_map_matrix_norm = median(e_map_matrix_dim)/e_map_matrix_dim
-	e_i_matrix = do.call("rbind.fill", lapply(unique(sort(e.obj$e$ct_num)), function(ct) data.frame(t(data.frame(rownames(e.obj$e[e.obj$e$ct_num==ct,] ))))))
+	e_i_matrix = do.call(plyr:::rbind.fill, lapply(unique(sort(e.obj$e$ct_num)), function(ct) data.frame(t(data.frame(rownames(e.obj$e[e.obj$e$ct_num==ct,] ))))))
 	e_i_matrix = apply(e_i_matrix, 2, function(mc) {
 		x = as.numeric(as.character(mc))
 		x[is.na(x)] = 0
@@ -96,7 +94,7 @@ ARMET_tc_coreAlg = function(
 	})
 	
 	# if design is NULL
-	my_design = NULL
+	#my_design = NULL
 	my_local_design = if(is.null(my_design)) matrix(rep(1, ncol(mix)), ncol=1) else my_design
 	
 	#/
@@ -149,9 +147,9 @@ ARMET_tc_coreAlg = function(
 		beta_bg =                         beta_bg
 		
 	)
-	print(sprintf("%s/%s_model_in.RData", output_dir, ct))
+	#print(sprintf("%s/%s_model_in.RData", output_dir, ct))
 	#save(model.in, file=sprintf("%s/%s_model_in.RData", output_dir, ct))
-	
+
 	# Choose model
 	model = if(fully_bayesian) stanmodels$ARMET_tc_recursive else stanmodels$ARMET_tcFix_recursive
 
@@ -178,26 +176,30 @@ ARMET_tc_coreAlg = function(
 	# Save output
 	#save(fit, file=sprintf("%s/%s_fit.RData", output_dir, ct))
 	# p = traceplot(fit, pars=c("alpha"), inc_warmup=F)
-	# #ggsave(sprintf("%s_chains.png", ct), p)
+	# #ggplot2:::ggsave(sprintf("%s_chains.png", ct), p)
 	#write.csv(proportions, sprintf("%s/%s_composition.csv", output_dir, ct))
 	
 	proportions_4_plot = as.data.frame(proportions)
 	proportions_4_plot$sample = rownames(proportions_4_plot)
 	proportions_4_plot$cov = if(length(cov_to_test)>0) my_design[,"cov"] else 1
-	proportions_4_plot = melt(proportions_4_plot, id.vars=c("sample", "cov"))
-	proportions_4_plot$perc_1 = melt(proportions_2.5)$value
-	proportions_4_plot$perc_2 = melt(proportions_97.5)$value
-	proportions_4_plot$minus_sd = proportions_4_plot$value - melt(proportions_sd)$value
-	proportions_4_plot$plus_sd = proportions_4_plot$value + melt(proportions_sd)$value
-	p = ggplot( proportions_4_plot, aes(x=jitter(cov), y=value,fill=factor(variable)))+ 
-		geom_boxplot(coef = 6) + geom_point(size=0.1) +
-		geom_linerange(aes(ymin = perc_1, ymax = perc_2),  alpha=0.05) +
-		geom_errorbar(aes(ymin = minus_sd, ymax = plus_sd),width=.2,  alpha=0.2) +
-		facet_grid(~variable) +
-		theme(axis.text.x=element_text(angle=90, vjust=0.4,hjust=1), panel.background = element_blank())
-	#ggsave(sprintf("%s/%s_proportions.pdf", output_dir, ct), useDingbats=FALSE,plot=p)
+	proportions_4_plot = reshape:::melt(proportions_4_plot, id.vars=c("sample", "cov"))
+	proportions_4_plot$perc_1 = reshape:::melt(proportions_2.5)$value
+	proportions_4_plot$perc_2 = reshape:::melt(proportions_97.5)$value
+	proportions_4_plot$minus_sd = proportions_4_plot$value - reshape:::melt(proportions_sd)$value
+	proportions_4_plot$plus_sd = proportions_4_plot$value + reshape:::melt(proportions_sd)$value
+	p = ggplot2:::ggplot( proportions_4_plot, ggplot2:::aes(x=jitter(cov), y=value,fill=factor(variable)))+ 
+		ggplot2:::geom_boxplot(coef = 6) + 
+		ggplot2:::geom_point(size=0.1) +
+		ggplot2:::geom_linerange(ggplot2:::aes(ymin = perc_1, ymax = perc_2),  alpha=0.05) +
+		ggplot2:::geom_errorbar(ggplot2:::aes(ymin = minus_sd, ymax = plus_sd),width=.2,  alpha=0.2) +
+		ggplot2:::facet_grid(~variable) +
+		ggplot2:::theme(
+			axis.text.x= ggplot2:::element_text(angle=90, vjust=0.4,hjust=1), 
+			panel.background = ggplot2:::element_blank()
+		)
+	#ggplot2:::ggsave(sprintf("%s/%s_proportions.pdf", output_dir, ct), useDingbats=FALSE,plot=p)
 	
-	print("saved")
+	
 	
 	if(length(cov_to_test)>0){
 		#plot generate quantities
@@ -208,18 +210,26 @@ ARMET_tc_coreAlg = function(
 		gq = as.data.frame(t(gq))
 		gq$cov = my_design[,"cov"]
 		gq$sample = rownames(gq)
-		gq = melt(gq, id.vars=c("sample", "cov"))
-		p = ggplot( gq, aes(x=factor(cov), y=value,fill=factor(variable)))+
-			geom_boxplot()+ geom_jitter(position=position_dodge(width=0.75),aes(group=variable)) +
-			facet_grid(~variable) + theme(axis.text.x=element_text(angle=90, vjust=0.4,hjust=1))
-		#ggsave(sprintf("%s/%s_proportions_posterior.pdf", output_dir, ct), useDingbats=FALSE,plot=p)
+		gq = reshape:::melt(gq, id.vars=c("sample", "cov"))
+		p = ggplot2:::ggplot( gq, ggplot2:::aes(x=factor(cov), y=value,fill=factor(variable)))+
+			ggplot2:::geom_boxplot()+ 
+			ggplot2:::geom_jitter(position=position_dodge(width=0.75), ggplot2:::aes(group=variable)) +
+			ggplot2:::facet_grid(~variable) + 
+			ggplot2:::theme(axis.text.x=ggplot2:::element_text(angle=90, vjust=0.4,hjust=1))
+		#ggplot2:::ggsave(sprintf("%s/%s_proportions_posterior.pdf", output_dir, ct), useDingbats=FALSE,plot=p)
 	}
 	# Calculate predicted values
 	#pred.df=as.matrix(ref[markers,])%*%t(as.matrix(res.df))
 	
-	print("saved")
+	
 	# about means
-	df_4_plot = data.frame(merge(melt(mix+1), melt(t(proportions %*% t(ref.mean)+1)), by=c("X1", "X2")))
+	df_4_plot = data.frame(
+		merge(
+			reshape:::melt(mix+1), 
+			reshape:::melt(t(proportions %*% t(ref.mean)+1)), 
+			by=c("X1", "X2")
+		)
+	)
 	colnames(df_4_plot)[3:4] = c("value", "predicted")
 	df_4_plot$ct = sapply(df_4_plot$X1, function(x1) node_from_gene(my_tree, x1)$name )
 	df_4_plot$bg = apply(df_4_plot, 1, function(mr) 	y_hat_background[mr[2], mr[1]] )
@@ -230,41 +240,49 @@ ARMET_tc_coreAlg = function(
 	df_4_plot = df_4_plot[df_4_plot$X2%in%unique(df_4_plot$X2)[1:20], ]
 	#df_4_plot = df_4_plot[grep("CD8", df_4_plot$X2), ]
 	
-	p = ggplot(df_4_plot, aes(predicted, value, label = X1, size=bg_prop,color = factor(ct))) + geom_point(alpha=0.5) + scale_size(range = c(0, 5)) + expand_limits(x = 0.1, y = 0.1) +
-		geom_abline(intercept=0, slope=1) + scale_x_log10() + scale_y_log10() +
-		geom_text_repel(
-			aes(color = ct),
+	p = ggplot2:::ggplot(df_4_plot, ggplot2:::aes(predicted, value, label = X1, size=bg_prop,color = factor(ct))) + 
+		ggplot2:::geom_point(alpha=0.5) + 
+		ggplot2:::scale_size(range = c(0, 5)) + 
+		ggplot2:::expand_limits(x = 0.1, y = 0.1) +
+		ggplot2:::geom_abline(intercept=0, slope=1) + 
+		ggplot2:::scale_x_log10() + 
+		ggplot2:::scale_y_log10() +
+		ggrepel:::geom_text_repel(
+			ggplot2:::aes(color = ct),
 			size = 2,
 			segment.alpha= 0.2) +
-		facet_wrap( ~ X2, nrow=5) +
-		coord_fixed() +
-		theme(panel.background = element_blank(), legend.text=element_text(size=30))
-	#ggsave(sprintf("%s/%s_predicted_values.pdf", output_dir, ct), useDingbats=FALSE, width = 80, height = 80, units = "cm", plot=p)
+		ggplot2:::facet_wrap( ~ X2, nrow=5) +
+		ggplot2:::coord_fixed() +
+		ggplot2:::theme(
+			panel.background = ggplot2:::element_blank(), 
+			legend.text=ggplot2:::element_text(size=30)
+		)
+	#ggplot2:::ggsave(sprintf("%s/%s_predicted_values.pdf", output_dir, ct), useDingbats=FALSE, width = 80, height = 80, units = "cm", plot=p)
 	
-	print("saved")
+	
 	
 	if(!is.null(observed_prop) & 0) {
 		writeLines("ARMET: start plotting expected gene vallues")
-		link = as_tibble(do.call("rbind", lapply(unique(colnames(observed_prop)), function(op) {
+		link = tibble:::as_tibble(do.call("rbind", lapply(unique(colnames(observed_prop)), function(op) {
 			ct = get_hierarchy(my_tree, ct=op)
 			c(op, ct[ct%in%colnames(ref.mean)])
 		})))
 		if(ncol(link)>=2){
 			colnames(link) = c("ct", "ct_new")
-			observed_prop = as_tibble(melt(observed_prop))
+			observed_prop = tibble:::as_tibble(reshape:::melt(observed_prop))
 			colnames(observed_prop) = c("sample", "ct", "value")
 			
 			observed_prop = 
-				left_join(observed_prop, link, by="ct") %>% 
-				select(-ct) %>% 
-				group_by(sample, ct_new) %>% 
-				summarise(value = sum(value, na.rm=TRUE)) %>% 
-				spread(ct_new, value)
+				dplyr:::left_join(observed_prop, link, by="ct") %>% 
+				dplyr:::select(-ct) %>% 
+				dplyr:::group_by(sample, ct_new) %>% 
+				dplyr:::summarise(value = sum(value, na.rm=TRUE)) %>% 
+				tidyr:::spread(ct_new, value)
 			
 			for(r in colnames(ref.mean)[!colnames(ref.mean)%in%colnames(observed_prop)]) {
 				my_df = matrix(rep(0, nrow(observed_prop)))
 				colnames(my_df) = r
-				observed_prop = observed_prop %>% bind_cols(as_tibble(my_df)) 
+				observed_prop = observed_prop %>% dplyr:::bind_cols(as_tibble(my_df)) 
 			}
 			
 			observed_prop = as.data.frame(observed_prop)
@@ -275,23 +293,31 @@ ARMET_tc_coreAlg = function(
 			
 			print(proportions)
 			
-			df_4_plot = data.frame(merge(melt(mix+1), melt(t(observed_prop %*% t(ref.mean)+1)), by=c("X1", "X2")))
+			df_4_plot = data.frame(merge(reshape:::melt(mix+1), reshape:::melt(t(observed_prop %*% t(ref.mean)+1)), by=c("X1", "X2")))
 			colnames(df_4_plot)[3:4] = c("value", "predicted")
 			df_4_plot$ct = sapply(df_4_plot$X1, function(x1) node_from_gene(my_tree, x1)$name )
 			df_4_plot$bg = apply(df_4_plot, 1, function(mr) 	y_hat_background[mr[2], mr[1]] )
 			df_4_plot$bg_prop = df_4_plot$bg /df_4_plot$value
 			df_4_plot$bg_prop[df_4_plot$bg_prop >10] = 10
 	
-			p = ggplot( df_4_plot[df_4_plot$X2%in%unique(df_4_plot$X2)[1:20], ], aes(predicted, value, label = X1, size=bg_prop)) + geom_point(alpha=0.5) + scale_size(range = c(0, 5)) + expand_limits(x = 0.1, y = 0.1) +
-				geom_abline(intercept=0, slope=1) + scale_x_log10() + scale_y_log10() +
-				geom_text_repel(
+			p = ggplot2:::ggplot( df_4_plot[df_4_plot$X2%in%unique(df_4_plot$X2)[1:20], ], ggplot2:::aes(predicted, value, label = X1, size=bg_prop)) + 
+				ggplot2:::geom_point(alpha=0.5) + 
+				ggplot2:::scale_size(range = c(0, 5)) + 
+				ggplot2:::expand_limits(x = 0.1, y = 0.1) +
+				ggplot2:::geom_abline(intercept=0, slope=1) + 
+				ggplot2:::scale_x_log10() + 
+				ggplot2:::scale_y_log10() +
+				ggrepel:::geom_text_repel(
 					aes(color = ct),
 					size = 2,
 					segment.alpha= 0.2) +
-				facet_wrap( ~ X2, nrow=5) +
-				coord_fixed() +
-				theme(panel.background = element_blank(), legend.text=element_text(size=30))
-			#ggsave(sprintf("%s/%s_predicted_values_observed_prop.pdf", output_dir, ct), useDingbats=FALSE, width = 80, height = 80, units = "cm", plot=p)
+				ggplot2:::facet_wrap( ~ X2, nrow=5) +
+				ggplot2:::coord_fixed() +
+				ggplot2:::theme(
+					panel.background = ggplot2:::element_blank(), 
+					legend.text=ggplot2:::element_text(size=30)
+				)
+			#ggplot2:::ggsave(sprintf("%s/%s_predicted_values_observed_prop.pdf", output_dir, ct), useDingbats=FALSE, width = 80, height = 80, units = "cm", plot=p)
 		}
 		
 	}

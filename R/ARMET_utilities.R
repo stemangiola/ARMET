@@ -52,14 +52,14 @@ average_duplicated_genes = function(ref, symbol){
 	temp = na.omit(temp)
 	us = unique(symbol)
 
-	cl = makeCluster(20)
-	clusterExport(cl, "temp", envir = environment())
-	clusterEvalQ(cl, library("matrixStats"))
+	cl = parallel:::makeCluster(20)
+	parallel:::clusterExport(cl, "temp", envir = environment())
+	parallel:::clusterEvalQ(cl, library("matrixStats"))
 	
-	ref.symbol = do.call("rbind", parLapply(cl, us, function(tt) {
-		colMedians(as.matrix(temp[temp$symbol==tt,-1]))
+	ref.symbol = do.call("rbind", parallel:::parLapply(cl, us, function(tt) {
+		matrixStats:::colMedians(as.matrix(temp[temp$symbol==tt,-1]))
 	}))
-	stopCluster(cl)
+	parallel:::stopCluster(cl)
 	
 	colnames(ref.symbol) = colnames(ref)
 	rownames(ref.symbol) = us
@@ -83,22 +83,22 @@ plot_densities = function(df, color="0",  fill = "0", alpha = 0.30, do_log = T){
 		colnames(df.4plot) = paste0("#", 1:dim(df.4plot)[2])
 		warning("ARMET: colnames duplicated, replacing with dummy names.")
 	}
-	color_df = tibble(X2 = factor(colnames(df.4plot)), color = color, fill = factor(fill))
-	df.4plot.melt = as_tibble(melt(df.4plot))
-	df.4plot.melt = left_join(df.4plot.melt, color_df, by="X2")
+	color_df = tibble:::tibble(X2 = factor(colnames(df.4plot)), color = color, fill = factor(fill))
+	df.4plot.melt = tibble:::as_tibble(reshape:::melt(df.4plot))
+	df.4plot.melt = dplyr:::left_join(df.4plot.melt, color_df, by="X2")
 	if(do_log) df.4plot.melt$value = df.4plot.melt$value + 0.1
 	
-	p = ggplot(df.4plot.melt, aes(value, group=X2, color = color, fill = fill)) +
-		geom_line(stat="density", alpha=alpha) +
-		expand_limits(x=0.1) +
-		theme_bw() +
-		theme(
-			panel.border = element_blank(),
-			panel.grid.major = element_blank(),
-			panel.grid.minor = element_blank(),
-			axis.line = element_line(colour = "black")
+	p = ggplot2:::ggplot(df.4plot.melt, ggplot2:::aes(value, group=X2, color = color, fill = fill)) +
+		ggplot2:::geom_line(stat="density", alpha=alpha) +
+		ggplot2:::expand_limits(x=0.1) +
+		ggplot2:::theme_bw() +
+		ggplot2:::theme(
+			panel.border = ggplot2:::element_blank(),
+			panel.grid.major = ggplot2:::element_blank(),
+			panel.grid.minor = ggplot2:::element_blank(),
+			axis.line = ggplot2:::element_line(colour = "black")
 		)
-	if(do_log) p = p + scale_x_log10()
+	if(do_log) p = p + ggplot2:::scale_x_log10()
 	
 	return( p )
 }
@@ -110,7 +110,7 @@ plot_densities = function(df, color="0",  fill = "0", alpha = 0.30, do_log = T){
 #' @return A ggplot
 sanity_check_p = function(fit, do_show = F){
 	
-	plot_chains = traceplot(fit, inc_warmup = FALSE, pars="alpha")
+	plot_chains = rstan:::traceplot(fit, inc_warmup = FALSE, pars="alpha")
 	if(do_show) plot(plot_chains)
 	
 	return( plot_chains )
@@ -126,11 +126,11 @@ check_if_sd_zero = function(df){
 	
 	# check if pathologic data with no sd
 	df = as.matrix(df)
-	df.melt =                        melt(df)
+	df.melt =                        reshape:::melt(df)
 	colnames(df.melt) =              c("gene", "cell_type", "value")
 	#df.melt$gene.numeric =           match(df.melt$gene, rownames(df))
 	#df.melt$cell_type.numeric =      match(df.melt$cell_type, levels(cell_types))
-	df.melt.aggr = aggregate(log(df.melt$value+1), by=list(df.melt$gene, df.melt$cell_type), FUN=function(x) c(mean = mean(x, na.rm=T), sd = sd(x, na.rm=T) ))
+	df.melt.aggr = stats:::aggregate(log(df.melt$value+1), by=list(df.melt$gene, df.melt$cell_type), FUN=function(x) c(mean = mean(x, na.rm=T), sd = sd(x, na.rm=T) ))
 	
 	# Fix all NA problem
 	if(any(apply(is.na(df.melt.aggr$x[,1:2]), 1, function(mr) mr[1] | mr[2] )))
@@ -180,13 +180,13 @@ rnaseq_norm.calcNormFactor = function(df, reference = NULL, cpm_theshold = 0.5, 
 	if(max(my_df, na.rm = T) < 50) stop("ARMET: Both mixture and signatures have to be in count form, log tranformation detected")
 	
 	cn = colnames(my_df)
-	keep1 <- rowSums(cpm(my_df) > cpm_theshold) >= ceiling(ncol(my_df)*prop)
+	keep1 <- rowSums(edgeR:::cpm(my_df) > cpm_theshold) >= ceiling(ncol(my_df)*prop)
 	writeLines(sprintf("ARMET: %s genes on %s total genes have been filtered out for normalization", length(which(!keep1)), nrow(my_df)))
 	#print(dim(my_df))
 	#print(length(keep1))
 	my_df = my_df[keep1, , drop=FALSE]
 	
-	list(nf=calcNormFactors(my_df, refColumn=reference), df=my_df)
+	list(nf=edgeR:::calcNormFactors(my_df, refColumn=reference), df=my_df)
 }
 
 #' Normalize a RNA seq data set using rnaseq_norm.calcNormFactor
@@ -234,8 +234,8 @@ rnaseq_norm_ref_mix = function(ref, mix){
 	if(max(ref, na.rm=T) < 50 | max(mix) < 50) stop("ARMET: Both objects have to be in count form, log tranformation detected")
 	#print(head(mix))
 	mix = rnaseq_norm(mix)
-	#print(head(cbind(rowMedians(mix), rowMedians(ref, na.rm=T))))
-	nf.obj = rnaseq_norm.calcNormFactor(cbind(rowMedians(mix), rowMedians(ref, na.rm=T)), 1)
+	#print(head(cbind(matrixStats:::rowMedians(mix), matrixStats:::rowMedians(ref, na.rm=T))))
+	nf.obj = rnaseq_norm.calcNormFactor(cbind(matrixStats:::rowMedians(mix), matrixStats:::rowMedians(ref, na.rm=T)), 1)
 	nf = nf.obj$nf
 	my_df = nf.obj$df
 	
@@ -259,7 +259,7 @@ array_norm = function(ref, mix){
 	
 	writeLines("Normalizing Array data")
 	log_ex = log(cbind(ref, mix)+1)
-	log_ex.norm = normalizeBetweenArrays(log_ex)
+	log_ex.norm = limma:::normalizeBetweenArrays(log_ex)
 	ref = exp(log_ex.norm[,1:dim(ref)[2]])
 	mix = exp(log_ex.norm[,(dim(ref)[2]+1):dim(log_ex.norm)[2]])
 	
@@ -407,7 +407,7 @@ prepare_input = function(ref, cell_types, markers){
 	# Check if sd == 0 for any marker
 	if(max(ref, na.rm=T)>0) ref = check_if_sd_zero(ref)
 	
-	e.obj = melt(ref)
+	e.obj = reshape:::melt(ref)
 	e.obj$gene_num = match(e.obj$X1, markers) 
 	e.obj$ct_num = match(e.obj$X2, cell_types)
 	
@@ -433,7 +433,7 @@ get_mean_signature = function(df, do_log=F, verbose= T){
 	temp =                     data.frame(ct = colnames(df), t(df), row.names=NULL)
 	df.mean =                  do.call("cbind", by(temp, temp$ct, function(df) {
 		#print(unique(df[,1]))
-		colMedians(as.matrix(df[,-1]), na.rm=T)
+		matrixStats:::colMedians(as.matrix(df[,-1]), na.rm=T)
 		}))
 	rownames(df.mean) =        rownames(df)
 	
@@ -516,7 +516,7 @@ parse_summary_vector_in_2D = function(f){
 			mean =                          f
 		)
 	
-	f =                                 cast(f, gene ~ topic, value="mean")
+	f =                                 reshape:::cast(f, gene ~ topic, value="mean")
 	rownames(f) =                       f$gene
 	f =                                 data.frame(f[, -1])
 	

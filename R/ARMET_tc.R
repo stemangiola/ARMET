@@ -21,7 +21,7 @@ ARMET_tc = function(
 	
 	#Read ini file for some options
 	if(file.exists("ARMET.ini")) {
-		pars =  read.ini("ARMET.ini")$ARMET
+		pars =  ini:::read.ini("ARMET.ini")$ARMET
 		writeLines("Importing parameters from .ini file..")
 		for(n in names(pars)){
 			if(pars[n]%in%c("T", "F", "TRUE", "FALSE"))
@@ -43,9 +43,17 @@ ARMET_tc = function(
 	##########################################################
 
 	# Load reference
-	if(!is_mix_microarray) data(ref_RNAseq) else data(ref_array)
+	#ref = as.matrix(read.csv("~/PhD/deconvolution/ARMET_dev/ARMET_TME_signature_df_RNAseq.csv", header=T, row.names=1))
+	#colnames(ref) = as.vector(sapply(colnames(ref), function(cn) strsplit(cn, ".", fixed=T)[[1]][1]))
+	#save(ref, file="data/ref_RNAseq.rda")
+	
+	#if(!is_mix_microarray) data(ref_RNAseq) else data(ref_array)
+	load("data/ref_RNAseq.rda")
 	
 	# Create trees
+	# library(jsonlite)
+	# tree = read_json("/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/ARMET_dev/ARMET_TME_tree_RNAseq.json")
+	# save(tree, file="data/tree_json.rda")
 	data(tree_json)
 	my_tree = drop_node_from_tree(tree, ct_to_omit)
 	ref = ref[, colnames(ref)%in%get_leave_label(my_tree, last_level = 0, label = "name")]
@@ -61,7 +69,7 @@ ARMET_tc = function(
 	mix = 															norm.obj$mix
 	
 	# Save density plot
-	ggsave(sprintf("%s/densities.png", output_dir), plot=norm.obj$plot)
+	#ggplot2:::ggsave(sprintf("%s/densities.png", output_dir), plot=norm.obj$plot)
 	
 	## Execute core ##############################################################################
 	##############################################################################################

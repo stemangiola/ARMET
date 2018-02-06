@@ -382,22 +382,25 @@ plot_makers = function(tree, ct, df, do_replacement=F, markers = NULL){
 	}
 	else {
 		my_df = as.matrix(my_df[markers,]+1)
-		my_df = melt(my_df)
+		my_df = reshape:::melt(my_df)
 		colnames(my_df) = c("X1", "X2", "value")
 	}
 	
-	ggplot(my_df, aes(x=factor(X2), y=value,fill=factor(X2)))+
-		geom_violin()+ geom_jitter(position=position_dodge(width=0.75),aes(group=X2)) +
-		facet_grid(.~X1) + theme(axis.text.x=element_text(angle=90, vjust=0.4,hjust=1)) +
-		scale_y_log10() + ggtitle(ct) +
-		facet_wrap(~X1,  nrow = ceiling(length(markers)/6)) 
+	ggplot2:::ggplot(my_df, ggplot2:::aes(x=factor(X2), y=value,fill=factor(X2)))+
+		ggplot2:::geom_violin()+ 
+		ggplot2:::geom_jitter(position=position_dodge(width=0.75), ggplot2:::aes(group=X2)) +
+		ggplot2:::facet_grid(.~X1) + 
+		ggplot2:::theme(axis.text.x= ggplot2:::element_text(angle=90, vjust=0.4,hjust=1)) +
+		ggplot2:::scale_y_log10() + 
+		ggplot2:::ggtitle(ct) +
+		ggplot2:::facet_wrap(~X1,  nrow = ceiling(length(markers)/6)) 
 	
 }
 
 #' Plot violin plot for arbitrary markers 
 plot_custom_makers = function(df){
 	
-	ggplot(melt(df), aes(x=factor(X2), y=value,fill=factor(X2)))+
+	ggplot2:::ggplot(reshape:::melt(df), aes(x=factor(X2), y=value,fill=factor(X2)))+
 		geom_violin()+ geom_jitter(position=position_dodge(width=0.75),aes(group=X2)) +
 		facet_grid(.~X1) + theme(axis.text.x=element_text(angle=90, vjust=0.4,hjust=1)) +
 		scale_y_log10() 
@@ -414,13 +417,13 @@ plot_makers_in_tree = function(tree, df, do_replacement=F){
 
 #' Get top differentially transcribed genes
 top_de = function(df, design){
-	y <- DGEList(counts=round(as.matrix(df)), group=design[,2])
+	y <- edgeR:::DGEList(counts=round(as.matrix(df)), group=design[,2])
 	#y <- calcNormFactors(y, method="upperquartile")
-	y <- estimateGLMCommonDisp(y, design)
-	y <- estimateGLMTagwiseDisp(y, design)
-	fit <- glmFit(y, design)
-	lrt <- glmLRT(fit, coef=2)
-	topTags(lrt, n=nrow(df))$table
+	y <- edgeR:::estimateGLMCommonDisp(y, design)
+	y <- edgeR:::estimateGLMTagwiseDisp(y, design)
+	fit <- edgeR:::glmFit(y, design)
+	lrt <- edgeR:::glmLRT(fit, coef=2)
+	edgeR:::topTags(lrt, n=nrow(df))$table
 }
 
 #' Test differentially transcribed gene for a node
@@ -453,7 +456,7 @@ test_genes_in_node = function(tree, df, ct, n = 20, do_replacement=F, ct_to_test
 		
 		calc_sd = function(df){
 			cn = colnames(df)
-			apply(df, 1, function(mr) max(aggregate(log(mr+1), by= list(cn), FUN=sd)$x))
+			apply(df, 1, function(mr) max(stats:::aggregate(log(mr+1), by= list(cn), FUN=sd)$x))
 		}
 		
 		my_df = cbind(do.call("cbind", lapply(node_to_balanced_sampling(tree, ancestor, df, keep_orig_names = F, do_replacement)$ct_main, function(ro) ro$df)))
@@ -468,9 +471,9 @@ test_genes_in_node = function(tree, df, ct, n = 20, do_replacement=F, ct_to_test
 			my_df.internal = replace_NA_for_edgeR(my_df.internal)
 			
 			design.internal <- model.matrix(~ l, data=data.frame(l = colnames(my_df.internal)))
-			fit <- lmFit(log(my_df.internal+1), design.internal)
-			fit <- eBayes(fit)
-			top = topTable(fit, n=999999)
+			fit <- limma:::lmFit(log(my_df.internal+1), design.internal)
+			fit <- limma:::eBayes(fit)
+			top = limma:::topTable(fit, n=999999)
 			gene_to_exclude = rownames(top[top$adj.P.Val<0.05,])
 			
 			# if no genes remained take the best 500
@@ -481,8 +484,8 @@ test_genes_in_node = function(tree, df, ct, n = 20, do_replacement=F, ct_to_test
 			#cl <- makeCluster(30)
 			# clusterEvalQ(cl, library(reshape))
 			# clusterEvalQ(cl, library(stats))
-			# pvalues = parApply(cl, my_df.internal, 1, function(rn) summary(aov(value ~ Var1, data = melt(log(as.matrix(rn)+1))))[[1]][1,5] )
-			# pvalues = apply(my_df.internal, 1, function(rn) summary(aov(value ~ Var1, data = melt(log(as.matrix(rn)+1))))[[1]][1,5] )
+			# pvalues = parApply(cl, my_df.internal, 1, function(rn) summary(aov(value ~ Var1, data = reshape:::melt(log(as.matrix(rn)+1))))[[1]][1,5] )
+			# pvalues = apply(my_df.internal, 1, function(rn) summary(aov(value ~ Var1, data = reshape:::melt(log(as.matrix(rn)+1))))[[1]][1,5] )
 			# pvalues = p.adjust(pvalues, method="BH")
 			#gene_to_exclude = names(pvalues[pvalues<0.05])
 		}
@@ -494,8 +497,8 @@ test_genes_in_node = function(tree, df, ct, n = 20, do_replacement=F, ct_to_test
 		
 		# Eliminate the lowly expressed genes for markes
 		my_df = my_df[
-			rowMedians(my_df[,colnames(my_df)==ct], na.rm=T)>expression_threshold
-			& !is.na(rowMedians(my_df[,colnames(my_df)==ct], na.rm=T))
+			matrixStats:::rowMedians(my_df[,colnames(my_df)==ct], na.rm=T)>expression_threshold
+			& !is.na(matrixStats:::rowMedians(my_df[,colnames(my_df)==ct], na.rm=T))
 			,]
 		
 		
@@ -523,7 +526,7 @@ test_genes_in_node = function(tree, df, ct, n = 20, do_replacement=F, ct_to_test
 		
 		plot_makers(tree, ct, df, markers=markers)
 		
-		# df_4_plot  = melt(my_df[markers,]+1)
+		# df_4_plot  = reshape:::melt(my_df[markers,]+1)
 		# df_4_plot$X1 = factor(df_4_plot$X1, levels=unique(df_4_plot$X1)) 
 		# colnames(df_4_plot) = c("Var1", "Var2", "value")
 		# p = ggplot( df_4_plot, aes(x=factor(Var2), y=value,fill=factor(Var2)))+
@@ -549,6 +552,10 @@ test_genes_in_tree = function(tree, df, n = 20, do_replacement=F, expression_thr
 #' @return A probability array
 run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree){
 	
+	# library(doFuture)
+	doFuture:::registerDoFuture()
+	future:::plan(future:::multiprocess)
+	
 	if(length(node$children)>0){
 		
 		obj.in$bg_tree = bg_tree
@@ -559,9 +566,7 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree){
 			bg_tree = add_info_to_tree(bg_tree, ll, "relative_proportion", obj.out$proportion[, ll, drop=F])
 		}
 
-		node$children = foreach(cc = node$children) %dopar% {
-			registerDoFuture()
-			plan(multiprocess)
+		node$children = foreach:::foreach(cc = node$children) %dopar% {
 			
 			run_coreAlg_though_tree_recursive(cc, obj.in, bg_tree) 
 		}
@@ -571,9 +576,7 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree){
 }
 
 run_coreAlg_though_tree = function(tree, obj.in){
-	
-	registerDoFuture()
-	plan(multiprocess)
+
 	
 	root_proportion = data.frame(TME=rep(1, ncol(obj.in$mix))) 
 	rownames(root_proportion) = colnames(obj.in$mix)
