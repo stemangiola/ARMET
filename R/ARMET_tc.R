@@ -43,12 +43,14 @@ ARMET_tc = function(
 	##########################################################
 
 	# Load reference
-	#ref = as.matrix(read.csv("~/PhD/deconvolution/ARMET_dev/ARMET_TME_signature_df_RNAseq.csv", header=T, row.names=1))
-	#colnames(ref) = as.vector(sapply(colnames(ref), function(cn) strsplit(cn, ".", fixed=T)[[1]][1]))
-	#save(ref, file="data/ref_RNAseq.rda")
-	
-	#if(!is_mix_microarray) data(ref_RNAseq) else data(ref_array)
-	load("data/ref_RNAseq.rda")
+	# ref_RNAseq = as.matrix(read.csv("~/PhD/deconvolution/ARMET_dev/ARMET_TME_signature_df_RNAseq.csv", header=T, row.names=1))
+	# colnames(ref_RNAseq) = as.vector(sapply(colnames(ref_RNAseq), function(cn) strsplit(cn, ".", fixed=T)[[1]][1]))
+	# save(ref_RNAseq, file="data/ref_RNAseq.rda")
+	# ref_array = as.matrix(read.csv("~/PhD/deconvolution/ARMET_dev/ARMET_TME_signature_df_array.csv", header=T, row.names=1))
+	# colnames(ref_array) = as.vector(sapply(colnames(ref_array), function(cn) strsplit(cn, ".", fixed=T)[[1]][1]))
+	# save(ref_array, file="data/ref_array.rda")
+	ref = if(!is_mix_microarray) ref_RNAseq else ref_array
+
 	
 	# Create trees
 	# library(jsonlite)
