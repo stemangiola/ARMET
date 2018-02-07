@@ -138,7 +138,7 @@ check_if_sd_zero = function(df){
 	
 	if(any(df.melt.aggr[,3][,2]==0)){
 		
-		writeLines("ARMET: One of your markers has 0 variance, this is not compatible with MLE algorithm.")
+		writeLines("ARMET: One of your markers has 0 variance, this is not compatible with MCMC inference.")
 		writeLines("The following genes will acquire a background variance.")
 		df.melt.aggr.2correct = df.melt.aggr[df.melt.aggr[,3][,2]==0,]
 		

@@ -16,7 +16,8 @@ ARMET_tc = function(
 	fully_bayesian =                    F,
 	is_mix_microarray =                 F,
 	observed_prop =                     NULL,
-	ct_to_omit =                        c("t_CD4_naive", "adipocyte")
+	ct_to_omit =                        c("t_CD4_naive", "adipocyte"),
+	verbose =                           F
 ){
 	
 	#Read ini file for some options
