@@ -77,9 +77,21 @@ ARMET_tc_coreAlg = function(
 	
 	p_target = t(beta_bg[,ct, drop=FALSE])
 	beta_bg = as.matrix(beta_bg[,!colnames(beta_bg)%in%ct])
+	
+	# R bug for t() for 1 colmn matrices
+	if(ncol(mix)==1) beta_bg = t(beta_bg)
+	
 	x_bg = get_mean_signature(bg)
 	bg.obj = prepare_input(bg, levels(factor(colnames(bg))), markers)
+
+	# Reorder the array same as the signatures
 	if(ncol(beta_bg)>1) beta_bg = beta_bg[,colnames(x_bg)]
+
+	beta_bg = as.matrix(beta_bg)
+	
+	# R bug for t() for 1 colmn matrices
+	if(ncol(mix)==1) beta_bg = t(beta_bg)
+	
 	y_hat_background = as.matrix(beta_bg) %*% t(x_bg)
 	rownames(y_hat_background) = colnames(mix)
 	
