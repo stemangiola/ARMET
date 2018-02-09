@@ -553,8 +553,9 @@ test_genes_in_tree = function(tree, df, n = 20, do_replacement=F, expression_thr
 run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree){
 	
 	# library(doFuture)
-	doFuture:::registerDoFuture()
-	future:::plan(future:::multiprocess)
+	# doFuture:::registerDoFuture()
+	# future:::plan(future:::multiprocess)
+
 	
 	if(length(node$children)>0){
 		
@@ -565,7 +566,14 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree){
 			node = add_info_to_tree(node, ll, "relative_proportion", obj.out$proportion[, ll, drop=F])
 			bg_tree = add_info_to_tree(bg_tree, ll, "relative_proportion", obj.out$proportion[, ll, drop=F])
 		}
-
+		
+		#n_cores = floor(detectCores() / 6)
+		n_cores = 4
+		cl <- parallel:::makeCluster(n_cores)
+		parallel:::clusterExport(cl, c("obj.in", "bg_tree"), environment())
+		#clusterEvalQ(cl, library("ARMET"))
+		doParallel:::registerDoParallel(cl)
+		
 		node$children = foreach:::foreach(cc = node$children) %dopar% {
 			
 			run_coreAlg_though_tree_recursive(cc, obj.in, bg_tree) 
