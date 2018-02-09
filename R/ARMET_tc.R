@@ -18,7 +18,9 @@ ARMET_tc = function(
 	observed_prop =                     NULL,
 	ct_to_omit =                        c("t_CD4_naive", "adipocyte"),
 	verbose =                           F,
-	prior_sd =                          0.01
+	sigma_hyper_sd =                    0.01,
+	phi_hyper_sd =                      5,
+	alpha_hyper_value =                 10
 ){
 	
 	#Read ini file for some options
@@ -33,7 +35,7 @@ ARMET_tc = function(
 	}
 	
 	# Check input
-	check_input(mix, is_mix_microarray, my_design, cov_to_test, prior_sd)
+	check_input(mix, is_mix_microarray, my_design, cov_to_test, sigma_hyper_sd)
 	
 	# Create directory
 	output_dir = create_temp_result_directory()
@@ -88,17 +90,19 @@ ARMET_tc = function(
 	my_tree = run_coreAlg_though_tree(
 		my_tree, 
 		list(
-			mix = mix, 
-			ref = ref, 
-			my_design= my_design, 
-			cov_to_test = cov_to_test, 
-			fully_bayesian = fully_bayesian,
-			observed_prop = observed_prop, 
-			ct_to_omit = ct_to_omit, 
-			my_tree = my_tree, 
-			is_mix_microarray = is_mix_microarray,
-			output_dir = output_dir,
-			prior_sd = prior_sd
+			mix =                      mix, 
+			ref =                      ref, 
+			my_design=                 my_design, 
+			cov_to_test =              cov_to_test, 
+			fully_bayesian =           fully_bayesian,
+			observed_prop =            observed_prop, 
+			ct_to_omit =               ct_to_omit, 
+			my_tree =                  my_tree, 
+			is_mix_microarray =        is_mix_microarray,
+			output_dir =               output_dir,
+			sigma_hyper_sd =           sigma_hyper_sd,
+			phi_hyper_sd =             phi_hyper_sd,
+			alpha_hyper_value =        alpha_hyper_value
 		)
 	)
 		

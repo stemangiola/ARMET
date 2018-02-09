@@ -11,13 +11,15 @@ data{
 	
 	vector<lower=0, upper=1>[S] theta[1];
 	int is_mix_microarray;
-	real<lower=0> prior_sd;
+	real<lower=0> sigma_hyper_sd; 
+	real<lower=0> phi_hyper_sd;
+	real<lower=0> alpha_hyper_value;
 
 }
 transformed data{
 	matrix<lower=0>[S,G] y_log;                 // log tranformation of the data
 	real<lower=0> mult;
-	vector<lower=1>[P] alpha_hyper_prior;
+	vector<lower=1>[P] alpha_hyper;
 
 	real bern_0;
 	real bern_1;
@@ -28,7 +30,7 @@ transformed data{
 	y_log = log(y+1);                           // log tranformation of the data
 	mult = 2;
 	if(mult<1) mult = 1;
-	for(p in 1:P) alpha_hyper_prior[p] = 10;
+	for(p in 1:P) alpha_hyper[p] = alpha_hyper_value;
 	
 	bern_0 = bernoulli_lpmf(0 | theta[1]);
 	bern_1 = bernoulli_lpmf(1 | theta[1]);
@@ -82,9 +84,9 @@ model {
 	matrix[S,G] y_hat_log; 
 	matrix[S,G] y_err; 
 
-	sigma0 ~ normal(0, prior_sd);
+	sigma0 ~ normal(0, sigma_hyper_sd);
 	phi_phi ~ cauchy(1,2);
-	phi ~ normal(0,5);
+	phi ~ normal(0,phi_hyper_sd);
 	
 	y_hat_log = log(y_hat+1);
 
@@ -112,7 +114,7 @@ model {
 	
  
   for(s in 1:S) beta[s] ~ dirichlet(beta_hat_hat[s]);
-  for(r in 1:R) alpha[r] ~ dirichlet(alpha_hyper_prior * phi_phi);
+  for(r in 1:R) alpha[r] ~ dirichlet(alpha_hyper * phi_phi);
 
 }
 generated quantities{

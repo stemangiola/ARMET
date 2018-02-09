@@ -7,18 +7,20 @@ ARMET_tc_coreAlg = function(
 	is_test=F){
 
 	# Parse input
-	mix = obj.in$mix
-	ref = obj.in$ref
-	my_design= obj.in$my_design
-	cov_to_test = obj.in$cov_to_test
-	fully_bayesian = obj.in$fully_bayesian
-	observed_prop = obj.in$observed_prop
-	ct_to_omit = obj.in$ct_to_omit
-	my_tree = obj.in$my_tree
-	is_mix_microarray = obj.in$is_mix_microarray	
-	output_dir = obj.in$output_dir
-	bg_tree = obj.in$bg_tree
-	prior_sd = obj.in$prior_sd
+	mix =                   obj.in$mix
+	ref =                   obj.in$ref
+	my_design=              obj.in$my_design
+	cov_to_test =           obj.in$cov_to_test
+	fully_bayesian =        obj.in$fully_bayesian
+	observed_prop =         obj.in$observed_prop
+	ct_to_omit =            obj.in$ct_to_omit
+	my_tree =               obj.in$my_tree
+	is_mix_microarray =     obj.in$is_mix_microarray	
+	output_dir =            obj.in$output_dir
+	bg_tree =               obj.in$bg_tree
+	sigma_hyper_sd =        obj.in$sigma_hyper_sd
+	phi_hyper_sd =          obj.in$phi_hyper_sd
+	alpha_hyper_value =     obj.in$alpha_hyper_value
 
 	# Calculate proportion of 0s
 	theta = apply(mix, 2, function(mc) length(which(mc>0)))
@@ -127,7 +129,11 @@ ARMET_tc_coreAlg = function(
 		y_hat_background =                y_hat_background,
 		p_target =                        p_target,
 		theta =                           theta,
-		prior_sd =                        prior_sd,
+		sigma_hyper_sd =                  sigma_hyper_sd,
+		phi_hyper_sd =                    phi_hyper_sd,
+		alpha_hyper_value =               alpha_hyper_value,
+		
+		
 		is_mix_microarray =               as.numeric(is_mix_microarray),
 		
 		# For full Bayesian
