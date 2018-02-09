@@ -1,6 +1,6 @@
 
 #' Check the input for anomalies
-check_input = function(mix, is_mix_microarray, my_design, cov_to_test){
+check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd){
 	# Check if duplicated names
 	if(any(table(colnames(mix))>1)) stop("ARMET: you have duplicated column names in the mix data frame")
 	
@@ -28,6 +28,8 @@ check_input = function(mix, is_mix_microarray, my_design, cov_to_test){
 	#   !cov_to_test%in%colnames(my_design)
 	# ) stop(sprintf("ARMET: you have to specify one or more covariate(s) to test for your design matrix among these: %s", paste(colnames(my_design), collapse=" ")))
 	if(is.null(my_design) & !is.null(cov_to_test)) stop("ARMET: you have specified a covariate to test but no design matrix")
+	
+	if(prior_sd<=0) stop("ARMET: prior_sd must be a positive number.")
 	
 	
 }
