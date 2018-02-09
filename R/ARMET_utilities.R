@@ -295,7 +295,7 @@ quant_norm_to_RNAseq = function(target, obj){
 	
 	rn = rownames(obj)
 	cn = colnames(obj)
-	obj = normalize.quantiles.use.target(obj, target=as.vector(target))
+	obj = preprocessCore:::normalize.quantiles.use.target(obj, target=as.vector(target))
 	rownames(obj) = rn
 	colnames(obj) = cn
 	
@@ -326,7 +326,7 @@ quant_norm_to_array = function(obj, target){
 	
 	rn = rownames(obj)
 	cn = colnames(obj)
-	obj = normalize.quantiles.use.target(obj, target=as.vector(target))
+	obj = preprocessCore:::normalize.quantiles.use.target(obj, target=as.vector(target))
 	rownames(obj) = rn
 	colnames(obj) = cn
 	
