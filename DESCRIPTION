@@ -32,8 +32,7 @@ Imports:
 	ggrepel,
 	RColorBrewer,
 	foreach,
-	future,
-	doFuture
+	doParallel
 LinkingTo: 
 	StanHeaders (>= 2.17.2), 
 	rstan (>= 2.17.3), 
