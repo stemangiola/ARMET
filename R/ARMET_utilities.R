@@ -111,16 +111,16 @@ plot_densities = function(df, color="0",  fill = "0", alpha = 0.30, do_log = T){
 #' @return A ggplot
 plot_densities_from_melted = function(df_melted){
 	
-	p = ggplot2:::ggplot(df_melted, aes(value+0.1, group=X2, color=source)) +
-		geom_line(stat="density", alpha=0.15) +
-		scale_x_log10() +
-		expand_limits(x=0.1) +
-		theme_bw() +
-		theme(
-			panel.border = element_blank(),
-			panel.grid.major = element_blank(),
-			panel.grid.minor = element_blank(),
-			axis.line = element_line(colour = "black")
+	p = ggplot2:::ggplot(df_melted, ggplot2:::aes(value+0.1, group=X2, color=source)) +
+		ggplot2:::geom_line(stat="density", alpha=0.15) +
+		ggplot2:::scale_x_log10() +
+		ggplot2:::expand_limits(x=0.1) +
+		ggplot2:::theme_bw() +
+		ggplot2:::theme(
+			panel.border = ggplot2:::element_blank(),
+			panel.grid.major = ggplot2:::element_blank(),
+			panel.grid.minor = ggplot2:::element_blank(),
+			axis.line = ggplot2:::element_line(colour = "black")
 		)
 	return( p )
 }
@@ -138,10 +138,10 @@ plot_densities_double = function(reference,obj){
 	# Build data fraes for plotting
 	reference.4plot = reference
 	colnames(reference.4plot) = paste0("r", 1:dim(reference.4plot)[2])
-	reference.4plot = data.frame(melt(reference.4plot), source="reference")
+	reference.4plot = data.frame(reshape:::melt(reference.4plot), source="reference")
 	obj.4plot = obj
 	colnames(obj.4plot) = paste0("r", 1:dim(obj.4plot)[2])
-	obj.4plot = data.frame(melt(obj.4plot), source="obj")
+	obj.4plot = data.frame(reshape:::melt(obj.4plot), source="obj")
 	
 	# Build plot
 	p = plot_densities_from_melted(rbind(reference.4plot, obj.4plot))
