@@ -8,7 +8,8 @@ data{
 	matrix<lower=0>[S,G] y;                      // Observed counts
 	matrix<lower=0>[G,P] x;                      // signature counts
 	vector<lower=0, upper=1>[S] p_target[1];      //This is the proportion of the whole taget -> simplex_beta * p_target
-	
+	real<lower=0> prior_sd;
+
 	real<lower=0, upper=1> theta[S];
 
 	// Main cell types
@@ -128,7 +129,7 @@ model {
 	real bern_1;
 
 
-	sigma0 ~ normal(0, 0.01);
+	sigma0 ~ normal(0, prior_sd);
 	phi_phi ~ cauchy(1,2);
 	bg_sd ~ normal(0,0.01);
 	phi ~ normal(0,5);
