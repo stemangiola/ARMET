@@ -18,6 +18,7 @@ ARMET_tc_coreAlg = function(
 	is_mix_microarray = obj.in$is_mix_microarray	
 	output_dir = obj.in$output_dir
 	bg_tree = obj.in$bg_tree
+	prior_sd = obj.in$prior_sd
 
 	# Calculate proportion of 0s
 	theta = apply(mix, 2, function(mc) length(which(mc>0)))
@@ -126,7 +127,7 @@ ARMET_tc_coreAlg = function(
 		y_hat_background =                y_hat_background,
 		p_target =                        p_target,
 		theta =                           theta,
-		
+		prior_sd =                        prior_sd,
 		is_mix_microarray =               as.numeric(is_mix_microarray),
 		
 		# For full Bayesian
