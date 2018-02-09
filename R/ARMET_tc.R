@@ -17,7 +17,8 @@ ARMET_tc = function(
 	is_mix_microarray =                 F,
 	observed_prop =                     NULL,
 	ct_to_omit =                        c("t_CD4_naive", "adipocyte"),
-	verbose =                           F
+	verbose =                           F,
+	prior_sd =                          0.01
 ){
 	
 	#Read ini file for some options
@@ -32,7 +33,7 @@ ARMET_tc = function(
 	}
 	
 	# Check input
-	check_input(mix, is_mix_microarray, my_design, cov_to_test)
+	check_input(mix, is_mix_microarray, my_design, cov_to_test, prior_sd)
 	
 	# Create directory
 	output_dir = create_temp_result_directory()
@@ -89,7 +90,8 @@ ARMET_tc = function(
 			ct_to_omit = ct_to_omit, 
 			my_tree = my_tree, 
 			is_mix_microarray = is_mix_microarray,
-			output_dir = output_dir
+			output_dir = output_dir,
+			prior_sd = prior_sd
 		)
 	)
 		
