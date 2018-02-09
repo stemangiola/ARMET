@@ -18,7 +18,7 @@ ARMET_tc_coreAlg = function(
 	is_mix_microarray =     obj.in$is_mix_microarray	
 	output_dir =            obj.in$output_dir
 	bg_tree =               obj.in$bg_tree
-	sigma_sd_hyper =        obj.in$sigma_sd_hyper
+	sigma_hyper_sd =        obj.in$sigma_hyper_sd
 	phi_hyper_sd =          obj.in$phi_hyper_sd
 	alpha_hyper_value =     obj.in$alpha_hyper_value
 
@@ -129,7 +129,7 @@ ARMET_tc_coreAlg = function(
 		y_hat_background =                y_hat_background,
 		p_target =                        p_target,
 		theta =                           theta,
-		sigma_sd_hyper =                  sigma_sd_hyper,
+		sigma_hyper_sd =                  sigma_hyper_sd,
 		phi_hyper_sd =                    phi_hyper_sd,
 		alpha_hyper_value =               alpha_hyper_value,
 		

@@ -18,7 +18,7 @@ ARMET_tc = function(
 	observed_prop =                     NULL,
 	ct_to_omit =                        c("t_CD4_naive", "adipocyte"),
 	verbose =                           F,
-	sigma_sd_hyper =                    0.01,
+	sigma_hyper_sd =                    0.01,
 	phi_hyper_sd =                      5,
 	alpha_hyper_value =                 10
 ){
@@ -35,7 +35,7 @@ ARMET_tc = function(
 	}
 	
 	# Check input
-	check_input(mix, is_mix_microarray, my_design, cov_to_test, sigma_sd_hyper)
+	check_input(mix, is_mix_microarray, my_design, cov_to_test, sigma_hyper_sd)
 	
 	# Create directory
 	output_dir = create_temp_result_directory()
@@ -93,7 +93,7 @@ ARMET_tc = function(
 			my_tree =                  my_tree, 
 			is_mix_microarray =        is_mix_microarray,
 			output_dir =               output_dir,
-			sigma_sd_hyper =           sigma_sd_hyper,
+			sigma_hyper_sd =           sigma_hyper_sd,
 			phi_hyper_sd =             phi_hyper_sd,
 			alpha_hyper_value =        alpha_hyper_value
 		)

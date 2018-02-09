@@ -11,9 +11,9 @@ data{
 	
 	vector<lower=0, upper=1>[S] theta[1];
 	int is_mix_microarray;
-	real<lower=0> sigma_sd_hyper;
+	real<lower=0> sigma_hyper_sd; 
 	real<lower=0> phi_hyper_sd;
-	real<lower=0> alpha_hyper_value
+	real<lower=0> alpha_hyper_value;
 
 }
 transformed data{
@@ -84,7 +84,7 @@ model {
 	matrix[S,G] y_hat_log; 
 	matrix[S,G] y_err; 
 
-	sigma0 ~ normal(0, prior_sd);
+	sigma0 ~ normal(0, sigma_hyper_sd);
 	phi_phi ~ cauchy(1,2);
 	phi ~ normal(0,phi_hyper_sd);
 	
