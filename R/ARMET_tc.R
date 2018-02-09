@@ -51,7 +51,14 @@ ARMET_tc = function(
 	# ref_array = as.matrix(read.csv("~/PhD/deconvolution/ARMET_dev/ARMET_TME_signature_df_array.csv", header=T, row.names=1))
 	# colnames(ref_array) = as.vector(sapply(colnames(ref_array), function(cn) strsplit(cn, ".", fixed=T)[[1]][1]))
 	# save(ref_array, file="data/ref_array.rda")
-	ref = if(!is_mix_microarray) ref_RNAseq else ref_array
+	
+	#ref = if(!is_mix_microarray) ref_RNAseq else ref_array
+	if(!is_mix_microarray) ref = ref_RNAseq
+	else {
+		load("~/PhD/deconvolution/ARMET/data/ref_array.rda") 
+		ref = ref_array
+	}
+	
 
 	
 	# Create trees
