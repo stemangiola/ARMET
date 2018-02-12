@@ -33,7 +33,7 @@ check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd,
 	if(prior_sd<=0) stop("ARMET: prior_sd must be a positive number.")
 	
 	# Check custom reference
-	if(!is.null(custom_ref) & !all(get_leave_names(tree)%in%colnames(custom_ref))) stop("ARMET: Some cell types within the tree are absent in your custom reference provided") 
+	if(!is.null(custom_ref) & !all(get_leave_names(tree, last_level = 1)%in%colnames(custom_ref))) stop("ARMET: Some cell types within the tree are absent in your custom reference provided") 
 	
 }
 
