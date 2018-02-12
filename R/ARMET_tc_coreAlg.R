@@ -21,6 +21,7 @@ ARMET_tc_coreAlg = function(
 	sigma_hyper_sd =        obj.in$sigma_hyper_sd
 	phi_hyper_sd =          obj.in$phi_hyper_sd
 	alpha_hyper_value =     obj.in$alpha_hyper_value
+	save_report =           obj.in$save_report
 
 	# Calculate proportion of 0s
 	theta = apply(mix, 2, function(mc) length(which(mc>0)))
@@ -166,8 +167,8 @@ ARMET_tc_coreAlg = function(
 		beta_bg =                         beta_bg
 		
 	)
-	#print(sprintf("%s/%s_model_in.RData", output_dir, ct))
-	#save(model.in, file=sprintf("%s/%s_model_in.RData", output_dir, ct))
+
+	if(save_report) save(model.in, file=sprintf("%s/%s_model_in.RData", output_dir, ct))
 
 	# Choose model
 	model = if(fully_bayesian) stanmodels$ARMET_tc_recursive else stanmodels$ARMET_tcFix_recursive
@@ -193,10 +194,12 @@ ARMET_tc_coreAlg = function(
 	colnames(proportions) =  colnames(proportions_2.5) = colnames(proportions_97.5) = colnames(proportions_sd) = order_cell_types
 
 	# Save output
-	#save(fit, file=sprintf("%s/%s_fit.RData", output_dir, ct))
-	# p = traceplot(fit, pars=c("alpha"), inc_warmup=F)
-	# #ggplot2:::ggsave(sprintf("%s_chains.png", ct), p)
-	#write.csv(proportions, sprintf("%s/%s_composition.csv", output_dir, ct))
+	if(save_report) save(fit, file=sprintf("%s/%s_fit.RData", output_dir, ct))
+	p = rstan:::traceplot(fit, pars=c("alpha"), inc_warmup=F)
+		
+	#if(save_report) ggplot2:::ggsave(sprintf("%s_chains.png", ct), p)
+	if(save_report)	write.csv(proportions, sprintf("%s/%s_composition.csv", output_dir, ct))
+	
 	
 	proportions_4_plot = as.data.frame(proportions)
 	proportions_4_plot$sample = rownames(proportions_4_plot)
@@ -216,9 +219,8 @@ ARMET_tc_coreAlg = function(
 			axis.text.x= ggplot2:::element_text(angle=90, vjust=0.4,hjust=1), 
 			panel.background = ggplot2:::element_blank()
 		)
-	#ggplot2:::ggsave(sprintf("%s/%s_proportions.pdf", output_dir, ct), useDingbats=FALSE,plot=p)
 	
-	
+	#if(save_report) ggplot2:::ggsave(sprintf("%s/%s_proportions.pdf", output_dir, ct), useDingbats=FALSE,plot=p)
 	
 	if(length(cov_to_test)>0){
 		#plot generate quantities
@@ -235,7 +237,8 @@ ARMET_tc_coreAlg = function(
 			ggplot2:::geom_jitter(position=position_dodge(width=0.75), ggplot2:::aes(group=variable)) +
 			ggplot2:::facet_grid(~variable) + 
 			ggplot2:::theme(axis.text.x=ggplot2:::element_text(angle=90, vjust=0.4,hjust=1))
-		#ggplot2:::ggsave(sprintf("%s/%s_proportions_posterior.pdf", output_dir, ct), useDingbats=FALSE,plot=p)
+		
+		#if(save_report) ggplot2:::ggsave(sprintf("%s/%s_proportions_posterior.pdf", output_dir, ct), useDingbats=FALSE,plot=p)
 	}
 	# Calculate predicted values
 	#pred.df=as.matrix(ref[markers,])%*%t(as.matrix(res.df))
@@ -276,8 +279,8 @@ ARMET_tc_coreAlg = function(
 			panel.background = ggplot2:::element_blank(), 
 			legend.text=ggplot2:::element_text(size=30)
 		)
-	#ggplot2:::ggsave(sprintf("%s/%s_predicted_values.pdf", output_dir, ct), useDingbats=FALSE, width = 80, height = 80, units = "cm", plot=p)
 	
+	#if(save_report) ggplot2:::ggsave(sprintf("%s/%s_predicted_values.pdf", output_dir, ct), useDingbats=FALSE, width = 80, height = 80, units = "cm", plot=p)
 	
 	
 	if(!is.null(observed_prop) & 0) {
@@ -336,7 +339,8 @@ ARMET_tc_coreAlg = function(
 					panel.background = ggplot2:::element_blank(), 
 					legend.text=ggplot2:::element_text(size=30)
 				)
-			#ggplot2:::ggsave(sprintf("%s/%s_predicted_values_observed_prop.pdf", output_dir, ct), useDingbats=FALSE, width = 80, height = 80, units = "cm", plot=p)
+			
+			#if(save_report) ggplot2:::ggsave(sprintf("%s/%s_predicted_values_observed_prop.pdf", output_dir, ct), useDingbats=FALSE, width = 80, height = 80, units = "cm", plot=p)
 		}
 		
 	}
