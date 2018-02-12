@@ -1,6 +1,6 @@
 
 #' Check the input for anomalies
-check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd){
+check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd, custom_ref, tree){
 	# Check if duplicated names
 	if(any(table(colnames(mix))>1)) stop("ARMET: you have duplicated column names in the mix data frame")
 	
@@ -29,11 +29,26 @@ check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd)
 	# ) stop(sprintf("ARMET: you have to specify one or more covariate(s) to test for your design matrix among these: %s", paste(colnames(my_design), collapse=" ")))
 	if(is.null(my_design) & !is.null(cov_to_test)) stop("ARMET: you have specified a covariate to test but no design matrix")
 	
+	# Check prior sd
 	if(prior_sd<=0) stop("ARMET: prior_sd must be a positive number.")
 	
+	# Check custom reference
+	if(!is.null(custom_ref) & !all(get_leave_names(tree)%in%colnames(custom_ref))) stop("ARMET: Some cell types within the tree are absent in your custom reference provided") 
 	
 }
 
+#' Get parameters from ini file if it exists
+get_ini = function(){
+	if(file.exists("ARMET.ini")) {
+		pars =  ini:::read.ini("ARMET.ini")$ARMET
+		writeLines("Importing parameters from .ini file..")
+		for(n in names(pars)){
+			if(pars[n]%in%c("T", "F", "TRUE", "FALSE"))
+				pars[n] = as.logical(pars[n])
+			assign(n, unlist(pars[n]))
+		}
+	}
+}
 #' Creates the directory needed for archive
 #'
 #' @param name A char

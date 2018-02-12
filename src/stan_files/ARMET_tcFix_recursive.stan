@@ -86,7 +86,7 @@ model {
 
 	sigma0 ~ normal(0, sigma_hyper_sd);
 	phi_phi ~ cauchy(1,2);
-	phi ~ normal(0,phi_hyper_sd);
+	phi ~ normal(1,phi_hyper_sd);
 	
 	y_hat_log = log(y_hat+1);
 
