@@ -587,3 +587,20 @@ parse_summary_vector_in_2D = function(f){
 	
 	return(f)
 }
+
+get_stats_on_ref = function(ref, tree){
+	`%>%` <- magrittr::`%>%`
+	rbind(
+		foreach:::foreach(ct = get_leave_names(tree), .combine = rbind) %do% {
+			tibble:::tibble(
+				ct, 
+				count = length(which(get_leave_label(node_from_name(tree, ct), label = "markers") %in%	rownames(ref)	)),
+				val = "gene"
+			)
+		},
+		tibble:::as_tibble(table(colnames(ref))) %>%  
+		dplyr:::rename(ct=Var1, count = n) %>%   
+		dplyr:::mutate(val = "sample")
+	)
+	
+}

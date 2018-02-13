@@ -19,7 +19,7 @@ Imports:
 	jsonlite (>= 1.5),
 	preprocessCore,
 	ggplot2 (>= 2.2.1),
-	plyr,
+	magrittr,
 	dplyr (>=  0.7.4),
 	tibble (>= 1.4.2),
 	tidyr (>= 0.7.2),

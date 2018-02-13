@@ -576,8 +576,6 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree){
 			doParallel:::registerDoParallel(cl)
 			
 			node$children = foreach:::foreach(cc = node$children) %do% {
-				print(typeof(obj.in))
-				print(cc$name)
 				run_coreAlg_though_tree_recursive(cc, obj.in, bg_tree)
 			}
 			
@@ -585,10 +583,7 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree){
 			
 		} else {
 			node$children = lapply(node$children, function(cc){
-				print(typeof(obj.in))
-				print(cc$name)
-				xx = run_coreAlg_though_tree_recursive(cc, obj.in, bg_tree) 
-				xx
+				run_coreAlg_though_tree_recursive(cc, obj.in, bg_tree) 
 			})
 		}
 	}

@@ -60,6 +60,7 @@ ARMET_tc = function(
 		}
 	}
 
+	if(save_report) write.csv(get_stats_on_ref(ref, tree), sprintf("%s/stats_on_ref.csv", output_dir))
 	
 	# Create trees
 	# library(jsonlite)
