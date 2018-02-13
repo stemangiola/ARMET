@@ -567,19 +567,30 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree){
 			bg_tree = add_info_to_tree(bg_tree, ll, "relative_proportion", obj.out$proportion[, ll, drop=F])
 		}
 		
-		#n_cores = floor(detectCores() / 6)
-		n_cores = 4
-		cl <- parallel:::makeCluster(n_cores)
-		parallel:::clusterExport(cl, c("obj.in", "bg_tree"), environment())
-		#clusterEvalQ(cl, library("ARMET"))
-		doParallel:::registerDoParallel(cl)
-		
-		node$children = foreach:::foreach(cc = node$children) %dopar% {
+		if(obj.in$multithread){
+			#n_cores = floor(detectCores() / 6)
+			n_cores = 4
+			cl <- parallel:::makeCluster(n_cores)
+			parallel:::clusterExport(cl, c("obj.in", "bg_tree"), environment())
+			#clusterEvalQ(cl, library("ARMET"))
+			doParallel:::registerDoParallel(cl)
 			
-			run_coreAlg_though_tree_recursive(cc, obj.in, bg_tree) 
+			node$children = foreach:::foreach(cc = node$children) %do% {
+				print(typeof(obj.in))
+				print(cc$name)
+				run_coreAlg_though_tree_recursive(cc, obj.in, bg_tree)
+			}
+			
+			parallel:::stopCluster(cl)
+			
+		} else {
+			node$children = lapply(node$children, function(cc){
+				print(typeof(obj.in))
+				print(cc$name)
+				xx = run_coreAlg_though_tree_recursive(cc, obj.in, bg_tree) 
+				xx
+			})
 		}
-		
-		parallel:::stopCluster(cl)
 	}
 	node
 }

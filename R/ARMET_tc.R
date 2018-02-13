@@ -22,7 +22,8 @@ ARMET_tc = function(
 	phi_hyper_sd =                      5,
 	alpha_hyper_value =                 10,
 	save_report =                       F,
-	custom_ref =                        NULL
+	custom_ref =                        NULL,
+	multithread =                       T
 ){
 	
 	#Read ini file for some options
@@ -91,7 +92,8 @@ ARMET_tc = function(
 			output_dir =                    output_dir,
 			sigma_hyper_sd =                sigma_hyper_sd,
 			phi_hyper_sd =                  phi_hyper_sd,
-			alpha_hyper_value =             alpha_hyper_value
+			alpha_hyper_value =             alpha_hyper_value,
+			multithread =                   multithread
 		)
 	)
 		
