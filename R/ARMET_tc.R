@@ -35,20 +35,26 @@ ARMET_tc = function(
 	# Create directory
 	output_dir = if(save_report)        create_temp_result_directory() else NULL
 	
+	# Initialize pipe
+	`%>%` <- magrittr::`%>%`
+	
 	# Format input
-	mix =                               as.matrix(mix)
-	if(max(mix) < 50) mix =             exp(mix)
+	mix =                               mix %>%	tidyr:::gather("sample", "value", 2:ncol(mix))
+	if(max(mix$value) < 50)             mix %>% dplyr:::mutate(value=exp(value))
 	
 	##########################################################
 
 	# Load reference
 	# ref_RNAseq = as.matrix(read.csv("~/PhD/deconvolution/ARMET_dev/ARMET_TME_signature_df_RNAseq.csv", header=T, row.names=1))
 	# colnames(ref_RNAseq) = as.vector(sapply(colnames(ref_RNAseq), function(cn) strsplit(cn, ".", fixed=T)[[1]][1]))
+	# ref_RNAseq = as_tibble(melt(ref_RNAseq)) %>% rename(gene=X1, ct=X2, value = value)
 	# save(ref_RNAseq, file="data/ref_RNAseq.rda")
 	# ref_array = as.matrix(read.csv("~/PhD/deconvolution/ARMET_dev/ARMET_TME_signature_df_array.csv", header=T, row.names=1))
 	# colnames(ref_array) = as.vector(sapply(colnames(ref_array), function(cn) strsplit(cn, ".", fixed=T)[[1]][1]))
+	# ref_array = as_tibble(melt(ref_array)) %>% rename(gene=X1, ct=X2, value = value)
 	# save(ref_array, file="data/ref_array.rda")
-	if(!is.null(custom_ref))            ref = custom_ref 
+	
+	if(!is.null(custom_ref))            ref = custom_ref
 	else                                ref = if(!is_mix_microarray) ref_RNAseq else ref_array
 
 	if(save_report) write.csv(get_stats_on_ref(ref, tree), sprintf("%s/stats_on_ref.csv", output_dir))
@@ -59,12 +65,12 @@ ARMET_tc = function(
 	# save(tree, file="data/tree_json.rda")
 	data(tree_json)
 	my_tree =                           drop_node_from_tree(tree, ct_to_omit)
-	ref =                               ref[, colnames(ref)%in%get_leave_label(my_tree, last_level = 0, label = "name")]
+	ref =                               ref %>% dplyr:::filter(ct%in%get_leave_label(my_tree, last_level = 0, label = "name"))
 	
 	# Make data sets comparable
-	common_genes =                      intersect(rownames(mix), rownames(ref))
-	mix =                               mix[common_genes,, drop=FALSE]
-	ref =                               ref[common_genes,, drop=FALSE]
+	common_genes =                      intersect(mix$gene, ref$gene)
+	mix =                               mix %>% dplyr:::filter(genes%in%common_genes)
+	ref =                               ref %>% dplyr:::filter(genes%in%common_genes)
 	
 	# Normalize data
 	norm.obj = 													wrapper_normalize_mix_ref(mix, ref, is_mix_microarray)

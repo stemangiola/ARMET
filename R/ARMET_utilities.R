@@ -236,8 +236,8 @@ check_if_sd_zero = function(df){
 #' @return A list including the filtered data frame and the normalization factors
 rnaseq_norm.calcNormFactor = function(df, reference = NULL, cpm_theshold = 0.5, prop = 3/4){
 	#print(dim(df))
-	
-	my_df = na.omit(df)
+	>>>>>>
+	my_df =  na.omit(df)
 	#print(dim(my_df))
 	if(max(my_df, na.rm = T) < 50) stop("ARMET: Both mixture and signatures have to be in count form, log tranformation detected")
 	
@@ -293,7 +293,7 @@ rnaseq_norm_ref_mix = function(ref, mix){
 	mix_rn = rownames(mix)
 	ref_rn = rownames(ref)
 	
-	if(max(ref, na.rm=T) < 50 | max(mix) < 50) stop("ARMET: Both objects have to be in count form, log tranformation detected")
+	if(max(ref$value) < 50 | max(mix$value) < 50) stop("ARMET: Both objects have to be in real scale, log tranformation detected")
 	#print(head(mix))
 	mix = rnaseq_norm(mix)
 	#print(head(cbind(matrixStats:::rowMedians(mix), matrixStats:::rowMedians(ref, na.rm=T))))
@@ -594,11 +594,11 @@ get_stats_on_ref = function(ref, tree){
 		foreach:::foreach(ct = get_leave_names(tree), .combine = rbind) %do% {
 			tibble:::tibble(
 				ct, 
-				count = length(which(get_leave_label(node_from_name(tree, ct), label = "markers") %in%	rownames(ref)	)),
+				count = length(which(get_leave_label(node_from_name(tree, ct), label = "markers") %in%	ref$gene	)),
 				val = "gene"
 			)
 		},
-		tibble:::as_tibble(table(colnames(ref))) %>%  
+		tibble:::as_tibble(table(ref$ct)) %>%  
 		dplyr:::rename(ct=Var1, count = n) %>%   
 		dplyr:::mutate(val = "sample")
 	)
