@@ -579,6 +579,7 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree){
 			run_coreAlg_though_tree_recursive(cc, obj.in, bg_tree) 
 		}
 		
+		parallel:::stopCluster(cl)
 	}
 	node
 }
