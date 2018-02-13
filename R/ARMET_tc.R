@@ -51,6 +51,7 @@ ARMET_tc = function(
 	if(!is.null(custom_ref))            ref = custom_ref 
 	else                                ref = if(!is_mix_microarray) ref_RNAseq else ref_array
 
+	if(save_report) write.csv(get_stats_on_ref(ref, tree), sprintf("%s/stats_on_ref.csv", output_dir))
 	
 	# Create trees
 	# library(jsonlite)
