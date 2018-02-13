@@ -488,14 +488,17 @@ prepare_input = function(ref, cell_types, markers){
 #' @param verbose A bool
 #' @return A averaged matrix
 get_mean_signature = function(df, do_log=F, verbose= T){
-	if(nrow(df)==0) stop("ARMET: in get_mean_signature the data set has not records. Check bug upstream")
 
+	if(nrow(df)==0) stop(sprintf("ARMET: in get_mean_signature the data set has not records for cell types %s. Check bug upstream", paste(colnames(df), collapse=" ")))
+	if(length(dim(df))==0) stop(sprintf("ARMET: There are not markers for %s", colnames(df)))
+	
 	if(max(df, na.rm=T)>50) do_log = T
 	if(do_log) df = log(df+1)
 	temp =                     data.frame(ct = colnames(df), t(df), row.names=NULL)
+	
+	
 	df.mean =                  do.call("cbind", by(temp, temp$ct, function(df) {
-		#print(unique(df[,1]))
-		matrixStats:::colMedians(as.matrix(df[,-1]), na.rm=T)
+		data.frame(matrixStats:::colMedians(as.matrix(df[,-1, drop=F]), na.rm=T))
 		}))
 	rownames(df.mean) =        rownames(df)
 	

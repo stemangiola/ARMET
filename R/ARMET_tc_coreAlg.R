@@ -41,7 +41,7 @@ ARMET_tc_coreAlg = function(
 	mix =                               mix[markers,, drop=FALSE]
 	ref =                               ref[markers,, drop=FALSE]
 	ref.mean =                          get_mean_signature(ref)
-	ref.mean =                          ref.mean[,order_cell_types]
+	ref.mean =                          ref.mean[,order_cell_types, drop=FALSE]
 	e.obj =                             prepare_input(ref, order_cell_types, markers)
 	
 	#/
@@ -67,7 +67,7 @@ ARMET_tc_coreAlg = function(
 		
 		beta_bg = t(as.data.frame(lapply(bg_trees, get_last_existing_leaves_with_annotation)))
 		bg = cbind(do.call("cbind", lapply(ref.obj$ct_background, function(ro) ro$df)))
-		bg = bg[markers,]
+		bg = bg[markers,,drop=F]
 		
 	} else {
 		bg = matrix(rep(0, length(markers)))
@@ -84,12 +84,12 @@ ARMET_tc_coreAlg = function(
 	
 	# R bug for t() for 1 colmn matrices
 	if(ncol(mix)==1) beta_bg = t(beta_bg)
-	
+
 	x_bg = get_mean_signature(bg)
 	bg.obj = prepare_input(bg, levels(factor(colnames(bg))), markers)
 
 	# Reorder the array same as the signatures
-	if(ncol(beta_bg)>1) beta_bg = beta_bg[,colnames(x_bg)]
+	if(ncol(beta_bg)>1) beta_bg = beta_bg[,colnames(x_bg),drop=F]
 
 	beta_bg = as.matrix(beta_bg)
 	
