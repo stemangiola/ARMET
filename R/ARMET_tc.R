@@ -48,19 +48,19 @@ ARMET_tc = function(
 	##########################################################
 
 	# Load reference
-	ref_seq = as.matrix(read.csv("~/PhD/deconvolution/ARMET_dev/ARMET_TME_signature_df_RNAseq.csv", header=T, row.names=1))
-	colnames(ref_seq) = as.vector(sapply(colnames(ref_seq), function(cn) strsplit(cn, ".", fixed=T)[[1]][1]))
-	dic = data.frame(sprintf("s%s", 1:ncol(ref_seq)), colnames(ref_seq))
-	colnames(ref_seq) = dic[,1]
-	ref_seq = tibble:::as_tibble(reshape:::melt(ref_seq)) %>% dplyr:::rename(gene=X1, sample=X2, value = value) %>% dplyr:::mutate(ct=dic[match(sample, dic[,1]),2])
-	save(ref_seq, file="data/ref_seq.rda")
-
-	ref_array = as.matrix(read.csv("~/PhD/deconvolution/ARMET_dev/ARMET_TME_signature_df_array.csv", header=T, row.names=1))
-	colnames(ref_array) = as.vector(sapply(colnames(ref_array), function(cn) strsplit(cn, ".", fixed=T)[[1]][1]))
-	dic = data.frame(sprintf("s%s", 1:ncol(ref_array)), colnames(ref_array))
-	colnames(ref_array) = dic[,1]
-	ref_array = tibble:::as_tibble(reshape:::melt(ref_array)) %>% dplyr:::rename(gene=X1, sample=X2, value = value) %>% dplyr:::mutate(ct=dic[match(sample, dic[,1]),2])
-	save(ref_array, file="data/ref_array.rda")
+	# ref_seq = as.matrix(read.csv("~/PhD/deconvolution/ARMET_dev/ARMET_TME_signature_df_RNAseq.csv", header=T, row.names=1))
+	# colnames(ref_seq) = as.vector(sapply(colnames(ref_seq), function(cn) strsplit(cn, ".", fixed=T)[[1]][1]))
+	# dic = data.frame(sprintf("s%s", 1:ncol(ref_seq)), colnames(ref_seq))
+	# colnames(ref_seq) = dic[,1]
+	# ref_seq = tibble:::as_tibble(reshape:::melt(ref_seq)) %>% dplyr:::rename(gene=X1, sample=X2, value = value) %>% dplyr:::mutate(ct=dic[match(sample, dic[,1]),2])
+	# save(ref_seq, file="data/ref_seq.rda")
+	# 
+	# ref_array = as.matrix(read.csv("~/PhD/deconvolution/ARMET_dev/ARMET_TME_signature_df_array.csv", header=T, row.names=1))
+	# colnames(ref_array) = as.vector(sapply(colnames(ref_array), function(cn) strsplit(cn, ".", fixed=T)[[1]][1]))
+	# dic = data.frame(sprintf("s%s", 1:ncol(ref_array)), colnames(ref_array))
+	# colnames(ref_array) = dic[,1]
+	# ref_array = tibble:::as_tibble(reshape:::melt(ref_array)) %>% dplyr:::rename(gene=X1, sample=X2, value = value) %>% dplyr:::mutate(ct=dic[match(sample, dic[,1]),2])
+	# save(ref_array, file="data/ref_array.rda")
 
 	if(!is.null(custom_ref))            ref = custom_ref
 	else                                ref = if(!is_mix_microarray) ref_seq else ref_array
