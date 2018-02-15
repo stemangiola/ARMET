@@ -42,14 +42,14 @@ ARMET_tc = function(
 	##########################################################
 
 	# Load reference
-	# ref_RNAseq = as.matrix(read.csv("~/PhD/deconvolution/ARMET_dev/ARMET_TME_signature_df_RNAseq.csv", header=T, row.names=1))
-	# colnames(ref_RNAseq) = as.vector(sapply(colnames(ref_RNAseq), function(cn) strsplit(cn, ".", fixed=T)[[1]][1]))
-	# save(ref_RNAseq, file="data/ref_RNAseq.rda")
+	# ref_seq = as.matrix(read.csv("~/PhD/deconvolution/ARMET_dev/ARMET_TME_signature_df_RNAseq.csv", header=T, row.names=1))
+	# colnames(ref_seq) = as.vector(sapply(colnames(ref_seq), function(cn) strsplit(cn, ".", fixed=T)[[1]][1]))
+	# save(ref_seq, file="data/ref_seq.rda")
 	# ref_array = as.matrix(read.csv("~/PhD/deconvolution/ARMET_dev/ARMET_TME_signature_df_array.csv", header=T, row.names=1))
 	# colnames(ref_array) = as.vector(sapply(colnames(ref_array), function(cn) strsplit(cn, ".", fixed=T)[[1]][1]))
 	# save(ref_array, file="data/ref_array.rda")
 	if(!is.null(custom_ref))            ref = custom_ref 
-	else                                ref = if(!is_mix_microarray) ref_RNAseq else ref_array
+	else                                ref = if(!is_mix_microarray) ref_seq else ref_array
 
 	if(save_report) write.csv(get_stats_on_ref(ref, tree), sprintf("%s/stats_on_ref.csv", output_dir))
 	
