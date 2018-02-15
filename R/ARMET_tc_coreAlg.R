@@ -95,7 +95,7 @@ ARMET_tc_coreAlg = function(
 	
 	# R bug for t() for 1 colmn matrices
 	if(ncol(mix)==1) beta_bg = t(beta_bg)
-	
+	print(beta_bg)
 	y_hat_background = as.matrix(beta_bg) %*% t(x_bg)
 	rownames(y_hat_background) = colnames(mix)
 	

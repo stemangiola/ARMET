@@ -68,7 +68,7 @@ average_duplicated_genes = function(ref, symbol){
 	temp = data.frame(symbol = symbol, ref)
 	temp = na.omit(temp)
 	us = unique(symbol)
-
+	
 	cl = parallel:::makeCluster(20)
 	parallel:::clusterExport(cl, "temp", envir = environment())
 	parallel:::clusterEvalQ(cl, library("matrixStats"))
@@ -94,18 +94,9 @@ average_duplicated_genes = function(ref, symbol){
 #' @return A ggplot
 plot_densities = function(df, color="0",  fill = "0", alpha = 0.30, do_log = T){
 	
-	df = as.matrix(df)
-	df.4plot = df
-	if(any(table(colnames(df.4plot))>1) | is.null(colnames(df.4plot))){
-		colnames(df.4plot) = paste0("#", 1:dim(df.4plot)[2])
-		warning("ARMET: colnames duplicated, replacing with dummy names.")
-	}
-	color_df = tibble:::tibble(X2 = factor(colnames(df.4plot)), color = color, fill = factor(fill))
-	df.4plot.melt = tibble:::as_tibble(reshape:::melt(df.4plot))
-	df.4plot.melt = dplyr:::left_join(df.4plot.melt, color_df, by="X2")
-	if(do_log) df.4plot.melt$value = df.4plot.melt$value + 0.1
-	
-	p = ggplot2:::ggplot(df.4plot.melt, ggplot2:::aes(value, group=X2, color = color, fill = fill)) +
+	if(do_log) df = df %>% dplyr:::mutate(value=value+0.1)
+	p = 
+		ggplot2:::ggplot(	df, ggplot2:::aes(value, group=sample, color = factor(color))) +
 		ggplot2:::geom_line(stat="density", alpha=alpha) +
 		ggplot2:::expand_limits(x=0.1) +
 		ggplot2:::theme_bw() +
@@ -115,6 +106,7 @@ plot_densities = function(df, color="0",  fill = "0", alpha = 0.30, do_log = T){
 			panel.grid.minor = ggplot2:::element_blank(),
 			axis.line = ggplot2:::element_line(colour = "black")
 		)
+	
 	if(do_log) p = p + ggplot2:::scale_x_log10()
 	
 	return( p )
@@ -235,20 +227,46 @@ check_if_sd_zero = function(df){
 #' @param prop A number
 #' @return A list including the filtered data frame and the normalization factors
 rnaseq_norm.calcNormFactor = function(df, reference = NULL, cpm_theshold = 0.5, prop = 3/4){
-	#print(dim(df))
 	
-	my_df = na.omit(df)
-	#print(dim(my_df))
-	if(max(my_df, na.rm = T) < 50) stop("ARMET: Both mixture and signatures have to be in count form, log tranformation detected")
+	if(max(df$value, na.rm = T) < 50) stop("ARMET: Both mixture and signatures have to be in count form, log tranformation detected")
 	
-	cn = colnames(my_df)
-	keep1 <- rowSums(edgeR:::cpm(my_df) > cpm_theshold) >= ceiling(ncol(my_df)*prop)
-	writeLines(sprintf("ARMET: %s genes on %s total genes have been filtered out for normalization", length(which(!keep1)), nrow(my_df)))
-	#print(dim(my_df))
-	#print(length(keep1))
-	my_df = my_df[keep1, , drop=FALSE]
+	df.filt = df %>% 
+	{ if("ct"%in%names(.)) dplyr:::select(-ct)	else .}	%>%
+		tidyr:::spread(sample, value) %>% 
+		tidyr:::drop_na() %>%
+		dplyr:::do(
+			(.) %>% 
+				dplyr:::filter(
+					rowSums(
+						edgeR:::cpm(
+							(.) %>% 
+								dplyr:::select(-gene)
+						) > cpm_theshold
+					) >= 
+						ceiling(ncol( 
+							(.) %>% dplyr:::select(-gene)
+						) * prop)
+				)
+		)
 	
-	list(nf=edgeR:::calcNormFactors(my_df, refColumn=reference), df=my_df)
+	list(
+		nf = tibble:::tibble(
+			sample = factor(colnames(df.filt %>% dplyr:::select(-gene))),
+			nf = edgeR:::calcNormFactors(df.filt %>% dplyr:::select(-gene), refColumn=reference)
+		),
+		df = df.filt %>% 
+			tidyr:::gather(sample, value, 2:ncol(.)) %>% 
+			dplyr:::mutate(sample = factor(sample)) %>%
+			{ 
+				if("ct"%in%names(.)) 
+					dplyr:::left_join(
+						df %>% dplyr:::distinct(sample, ct), 
+						by="sample"
+					) 
+				else 
+					.
+			}
+	)
 }
 
 #' Normalize a RNA seq data set using rnaseq_norm.calcNormFactor
@@ -260,27 +278,25 @@ rnaseq_norm.calcNormFactor = function(df, reference = NULL, cpm_theshold = 0.5, 
 #' @return A list including the filtered data frame and the normalization factors
 rnaseq_norm = function(df, reference = NULL, cpm_theshold = 0.5, prop = 3/4){
 	writeLines("Normalizing RNA-seq data with TMM")
-	#print(head(df))
+	
 	nf.obj = rnaseq_norm.calcNormFactor(df, reference, cpm_theshold, prop)
 	nf = nf.obj$nf
-	my_df = nf.obj$df
+	df.filt = nf.obj$df
 	
-	df.norm =
-		do.call(
-			"cbind",
-			lapply(
-				1:dim(df)[2],
-				function(i) df[,i] / (sum(my_df[,i], na.rm=T) * nf[i])
-			)
-		)
+	df %>% 
+		dplyr:::group_by(sample) %>% 
+		dplyr:::mutate(tot = sum(value, na.rm = T)) %>%
+		dplyr:::ungroup() %>%
+		dplyr:::left_join(nf, by="sample") %>%
+		dplyr:::left_join(
+			df.filt %>%
+				dplyr:::group_by(sample) %>%
+				dplyr:::summarise(tot_filt = sum(value, na.rm = T)),
+			"sample"
+		) %>%
+		dplyr:::mutate(value = value / (tot_filt * nf) * max(tot)) %>%
+		dplyr:::select(-tot, -nf, -tot_filt)
 	
-	if(is.null(reference)) reference_value = max(colSums(df, na.rm=T), na.rm = T)
-	else reference_value = sum(reference)
-	df.norm = df.norm * reference_value
-	colnames(df.norm) = colnames(my_df)
-	#p = plot_densities_double(reference,obj)
-	
-	return(df.norm)
 }
 
 #' Normalize ref to match mix using TMM
@@ -289,25 +305,67 @@ rnaseq_norm = function(df, reference = NULL, cpm_theshold = 0.5, prop = 3/4){
 #' @param mix A matrix
 #' @return A list including the ref and mix normalized and a ggplot
 rnaseq_norm_ref_mix = function(ref, mix){
-
-	mix_rn = rownames(mix)
-	ref_rn = rownames(ref)
 	
-	if(max(ref, na.rm=T) < 50 | max(mix) < 50) stop("ARMET: Both objects have to be in count form, log tranformation detected")
-	#print(head(mix))
+	if(max(ref$value, na.rm = T) < 50 | max(mix$value, na.rm = T) < 50) stop("ARMET: Both objects have to be in real scale, log tranformation detected")
+	
+	# Normalize the mix
 	mix = rnaseq_norm(mix)
-	#print(head(cbind(matrixStats:::rowMedians(mix), matrixStats:::rowMedians(ref, na.rm=T))))
-	nf.obj = rnaseq_norm.calcNormFactor(cbind(matrixStats:::rowMedians(mix), matrixStats:::rowMedians(ref, na.rm=T)), 1)
+	
+	# Calclate normalization factors for mix and ref => two numbers
+	nf.obj = rnaseq_norm.calcNormFactor(
+		rbind(
+			mix %>% 
+				dplyr:::group_by(gene) %>% 
+				dplyr:::summarise(value = median(value, na.rm=T)) %>% 
+				dplyr:::mutate(sample="mix"),
+			ref %>% 
+				dplyr:::group_by(gene) %>% 
+				dplyr:::summarise(value = median(value, na.rm=T)) %>% 
+				dplyr:::mutate(sample="ref")
+		), 
+		1)
+	
 	nf = nf.obj$nf
 	my_df = nf.obj$df
 	
-	mix = mix / (sum(my_df[,1], na.rm=T) * nf[1]) *  sum(my_df[,1], na.rm = T)
-	ref = ref / (sum(my_df[,2], na.rm=T) * nf[2]) *  sum(my_df[,1], na.rm = T)
+	tot_reference = (my_df %>%
+									 	dplyr:::filter(sample == "mix") %>% 
+									 	dplyr:::summarise(tot = sum(value, na.rm=T)))$tot 
 	
-	rownames(mix) = mix_rn 
-	rownames(ref) = ref_rn 
+	tot_other = (my_df %>%
+							 	dplyr:::filter(sample == "ref") %>% 
+							 	dplyr:::summarise(tot = sum(value, na.rm=T))
+	)$tot 
 	
-	p = plot_densities(cbind(ref,mix))
+	mix = mix %>%
+		dplyr:::mutate(tot_ref = tot_reference) %>%
+		dplyr:::mutate(nf = 
+									 	(nf %>%
+									 	 	dplyr:::filter(sample=="mix"))$nf
+		) %>%
+		dplyr:::mutate(tot = tot_ref) %>%
+		dplyr:::mutate(value = value / (tot * nf) * tot_ref) %>%
+		dplyr:::select(-tot, -tot_ref, -nf)
+	
+	ref = ref %>%
+		dplyr:::mutate(tot_ref = tot_reference) %>%
+		dplyr:::mutate(nf = 
+									 	(nf %>%
+									 	 	dplyr:::filter(sample=="ref"))$nf
+		) %>%
+		dplyr:::mutate(tot = tot_other) %>%
+		dplyr:::mutate(value = value / (tot * nf) * tot_ref) %>%
+		dplyr:::select(-tot, -tot_ref, -nf)
+	
+	p = plot_densities( 
+		rbind( 
+			ref %>% 
+				dplyr:::mutate(color=1) %>%
+				dplyr:::select(-ct),
+			mix %>% 
+				dplyr:::mutate(color=1)
+		)
+	)
 	
 	return(list(ref = ref, mix = mix,  plot = p))
 }
@@ -336,69 +394,30 @@ array_norm = function(ref, mix){
 #' @param target A matrix
 #' @param obj A matrix
 #' @return A list including the ref and mix normalized and a ggplot
-quant_norm_to_RNAseq = function(target, obj){
-	writeLines("Quantile norm to RNA seq..")
+quant_norm_to_target = function(obj, target){
+	writeLines("Quantile norm to target..")
 	
-	# source("~/PhD/deconvolution/ARMET_dev/ARMET_FI.R")
-	# res =  ARMET_FI(target)
-	# target = res$df
-	#if(!is.null(ncol(target))) if(ncol(target)>1) target = rnaseq_norm(target)
+	if(max(ref$value, na.rm = T) < 50 | max(mix$value, na.rm = T) < 50) stop("ARMET: Both objects have to be in real scale, log tranformation detected")
 	
-	do_log_mix =                     if(max(target, na.rm=T) > 50) T else F
-	do_log_ref =                     if(max(obj) > 50) T else F
+	list(
+		ref = target,
+		mix = obj %>%
+			dplyr:::group_by(sample) %>%
+			dplyr:::mutate(
+				value = exp(preprocessCore:::normalize.quantiles.use.target(
+					log(value+1), 
+					target=log(target$value+1)
+				))-1
+			) %>%
+			dplyr:::ungroup(),
+		plot = plot(1,1)
+	)
 	
-	if(do_log_mix) target =          log(target + 1)
-	if(do_log_ref) obj =             log(obj + 1)
-	
-	target = as.matrix(target)
-	obj = as.matrix(obj)
-	
-	rn = rownames(obj)
-	cn = colnames(obj)
-	obj = preprocessCore:::normalize.quantiles.use.target(obj, target=as.vector(target))
-	rownames(obj) = rn
-	colnames(obj) = cn
-	
-	if(do_log_ref) obj =             exp(obj) -1
-	if(do_log_mix) target =          exp(target) -1
-	
-	p = plot_densities_double(target,obj)
-	
-	return(list (ref = target, mix = obj, plot=p ))
 }
 
-#' Normalize RNAseq to match array
-#'
-#' @param target A matrix
-#' @param obj A matrix
-#' @return A list including the ref and mix normalized and a ggplot
-quant_norm_to_array = function(obj, target){
-	writeLines("Quantile norm..")
-	
-	target = as.matrix(target)
-	obj = as.matrix(obj)
-	
-	do_log_mix =                     if(max(target) > 50) T else F
-	do_log_ref =                     if(max(obj) > 50) T else F
-	
-	if(do_log_mix) target =          log(target + 1)
-	if(do_log_ref) obj =             log(obj + 1)
-	
-	rn = rownames(obj)
-	cn = colnames(obj)
-	obj = preprocessCore:::normalize.quantiles.use.target(obj, target=as.vector(target))
-	rownames(obj) = rn
-	colnames(obj) = cn
-	
-	if(do_log_ref) obj =             exp(obj) - 1
-	if(do_log_mix) target =             exp(target) - 1
-	obj[obj<0] = 0
-	target[target<0] = 0
-	
-	p = plot_densities_double(target,obj)
-	
-	return(list (ref = target, mix = obj,  plot = p ))
-}
+quant_norm_to_RNAseq = quant_norm_to_array = quant_norm_to_target
+
+
 
 #' Wrapper function for all normalization based on the current needs
 #'
@@ -411,7 +430,7 @@ wrapper_normalize_mix_ref = function(mix, ref, is_mix_microarray = F){
 		rnaseq_norm_ref_mix(ref, mix)
 	else
 		#quant_norm_to_array(mix, ref)
-		quant_norm_to_RNAseq(ref, mix)
+		quant_norm_to_RNAseq(mix, ref)
 }
 
 #' Subsample reference to try homogeneity
@@ -488,7 +507,7 @@ prepare_input = function(ref, cell_types, markers){
 #' @param verbose A bool
 #' @return A averaged matrix
 get_mean_signature = function(df, do_log=F, verbose= T){
-
+	
 	if(nrow(df)==0) stop(sprintf("ARMET: in get_mean_signature the data set has not records for cell types %s. Check bug upstream", paste(colnames(df), collapse=" ")))
 	if(length(dim(df))==0) stop(sprintf("ARMET: There are not markers for %s", colnames(df)))
 	
@@ -499,7 +518,7 @@ get_mean_signature = function(df, do_log=F, verbose= T){
 	
 	df.mean =                  do.call("cbind", by(temp, temp$ct, function(df) {
 		data.frame(matrixStats:::colMedians(as.matrix(df[,-1, drop=F]), na.rm=T))
-		}))
+	}))
 	rownames(df.mean) =        rownames(df)
 	
 	if(do_log) df.mean = exp(df.mean)-1
@@ -594,13 +613,13 @@ get_stats_on_ref = function(ref, tree){
 		foreach:::foreach(ct = get_leave_names(tree), .combine = rbind) %do% {
 			tibble:::tibble(
 				ct, 
-				count = length(which(get_leave_label(node_from_name(tree, ct), label = "markers") %in%	rownames(ref)	)),
+				count = length(which(get_leave_label(node_from_name(tree, ct), label = "markers") %in%	ref$gene	)),
 				val = "gene"
 			)
 		},
-		tibble:::as_tibble(table(colnames(ref))) %>%  
-		dplyr:::rename(ct=Var1, count = n) %>%   
-		dplyr:::mutate(val = "sample")
+		tibble:::as_tibble(table(ref$ct)) %>%  
+			dplyr:::rename(ct=Var1, count = n) %>%   
+			dplyr:::mutate(val = "sample")
 	)
 	
 }

@@ -258,10 +258,12 @@ get_hierarchy = function(node, ct){
 
 #' Get balanced sampling of samples for every node acros all its constituents
 node_to_balanced_sampling = function(tree, ct, df, keep_orig_names=F, do_replacement = F){
-	
-	ct_array = colnames(df)
+
+	ct_array = levels(df$ct)
 	
 	get_leave_names_recursive = function(node){
+		
+		#df %>% dplyr:::distinct(sample, ct) %>% dplyr:::filter(ct==node$name)
 		
 		my_cnt = length(which(ct_array==node$name))
 		my_sampling = which(ct_array==node$name)
@@ -274,9 +276,7 @@ node_to_balanced_sampling = function(tree, ct, df, keep_orig_names=F, do_replace
 			# Don't get teh min but the second min
 			if(length(all_cnt)==1) min_cnt = all_cnt
 			else min_cnt = round(mean(sort(all_cnt)[1:2]))
-			
-			max_cnt = max(all_cnt)
-			
+		
 			sum_cnt = min_cnt * length(all_cnt)
 			children = lapply(children, function(ch) {
 				ch$cnt = min_cnt
@@ -287,15 +287,9 @@ node_to_balanced_sampling = function(tree, ct, df, keep_orig_names=F, do_replace
 				my_sampling,
 				do.call("c", lapply(children, function(ch){
 					
-					# Check if cell type in data set
 					if(length(ch$sampling)==0) stop(sprintf("ARMET: %s not present in the data set.", ch$name))
 					
-					# For fraquentist
-					if(do_replacement) sample(ch$sampling , size = max_cnt, replace = T)
-					
-					# For Bayesian
-					#else sample(ch$sampling , size = min(length(ch$sampling), min_cnt))
-					else ch$sampling 
+					ch$sampling 
 					
 				}))
 			)
@@ -332,6 +326,7 @@ node_to_balanced_sampling = function(tree, ct, df, keep_orig_names=F, do_replace
 	
 	cts = get_ct_4_model(ct)
 	cts$ct_main= lapply(cts$ct_main, function(cm){
+		browser()
 		sampling = get_leave_names_recursive(node_from_name(tree, cm))$sampling
 		
 		my_df = df[,sampling, drop=F]
