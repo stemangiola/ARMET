@@ -64,7 +64,8 @@ ARMET_tc = function(
 
 	if(!is.null(custom_ref))            ref = custom_ref
 	else                                ref = if(!is_mix_microarray) ref_seq else ref_array
-
+	ref = ref %>% tidyr:::drop_na()
+	
 	if(save_report) write.csv(get_stats_on_ref(ref, tree), sprintf("%s/stats_on_ref.csv", output_dir))
 	
 	# Create trees
@@ -82,8 +83,8 @@ ARMET_tc = function(
 
 	# Normalize data
 	norm.obj = 													wrapper_normalize_mix_ref(mix, ref, is_mix_microarray)
-	ref = 															norm.obj$ref
-	mix = 															norm.obj$mix
+	ref = 															norm.obj$ref %>% dplyr:::mutate(value=round(value))
+	mix = 															norm.obj$mix %>% dplyr:::mutate(value=round(value))
 	
 	# Save density plot
 	if(save_report) ggplot2:::ggsave(sprintf("%s/densities.png", output_dir), plot=norm.obj$plot)

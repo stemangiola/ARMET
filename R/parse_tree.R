@@ -256,6 +256,52 @@ get_hierarchy = function(node, ct){
 	else NULL
 }
 
+get_child_and_group_background = function(node, ct){
+	
+	# get childred
+	ct_main = get_leave_names(node_from_name(node, ct), recursive=F)
+	
+	# get backgrounbd
+	get_background = function(ct){
+		ct_childrens = get_leave_names(node_from_name(node, ct), recursive=F)
+		ct_ancestor = rev(get_hierarchy(node, ct))[2]
+		if(length(ct_ancestor)>0) {
+			ancestor_leaves = get_background(ct_ancestor)
+			c(ct_childrens, ancestor_leaves[ancestor_leaves != ct])
+		}
+	}
+	ct_background = get_background(ct)
+	ct_background = ct_background[!ct_background%in%ct_main]
+	
+	list(
+		ct_main = ct_main,
+		ct_background = ct_background
+	)
+	
+}
+
+get_map_foreground_background = function(node, ct){
+	
+	fg_bg = get_child_and_group_background(node, ct)
+	fg_bg = fg_bg[lapply(fg_bg,length)>0]
+	
+	add_children_to_line = function(df){
+		no = node_from_name(node, df$ancestor)
+		children = if(length(no$children)>0) get_node_label_recursive(no)[-1] else no$name
+		do.call("rbind", lapply(1:length(children), function(dummy) df)) %>% 
+			dplyr:::mutate(ct = children)
+	}
+	
+	reshape:::melt(fg_bg) %>% 
+		tibble:::as_tibble() %>%
+		dplyr:::rename(ancestor=value, variable=L1) %>%
+		dplyr:::mutate(variable = gsub("ct_", "", variable)) %>%
+		dplyr:::group_by(ancestor) %>%
+		dplyr:::do(add_children_to_line(.)) %>%
+		dplyr:::ungroup() %>%
+		dplyr:::mutate(ancestor = as.character(ancestor))
+}
+
 #' Get balanced sampling of samples for every node acros all its constituents
 node_to_balanced_sampling = function(tree, ct, df, keep_orig_names=F, do_replacement = F){
 

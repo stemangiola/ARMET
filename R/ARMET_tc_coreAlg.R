@@ -22,87 +22,139 @@ ARMET_tc_coreAlg = function(
 	phi_hyper_sd =          obj.in$phi_hyper_sd
 	alpha_hyper_value =     obj.in$alpha_hyper_value
 	save_report =           obj.in$save_report
+	
+	# Get ref of the current level
+	ref = ref %>%
+		dplyr:::mutate(ct = as.character(ct)) %>%
+		dplyr:::left_join(get_map_foreground_background(tree, ct), by="ct") %>%
+		dplyr:::rename(ct_ = ct) %>%
+		dplyr:::filter(gene %in% 
+					 	get_node_label_level_specfic(
+					 		node_from_name(tree,  ct), 
+					 		label = "markers",
+					 		start_level = 1, 
+					 		stop_level = 1
+					 	)
+					) %>%
+		dplyr:::select(-ct_) %>%
+		dplyr:::rename(ct = ancestor) %>%
+		dplyr:::mutate_if(is.character, as.factor)
+		
+	
+	# Print stats on ref
+	get_stats_on_ref(ref,tree) %>% 
+		dplyr:::filter(ct %in% unique(ref$ct)) 
+	
+	# filter mix and add theta value
+	mix = mix %>%
+		dplyr:::group_by(sample) %>%
+		dplyr:::mutate(
+			theta=
+				length(which(value>0)) / 
+				n()
+		) %>%
+		ungroup() %>%
+		filter(gene %in% unique(ref$gene))
+	
 
-	# Calculate proportion of 0s
-	theta = apply(mix, 2, function(mc) length(which(mc>0)))
-	theta[theta==nrow(mix)] = theta[theta==nrow(mix)]-1
-	theta = theta/nrow(mix) 
-	theta = t(as.matrix(theta))
+	# Prepare input for full bayesian 
+	e.obj = prepare_input(
+		ref %>% 
+			dplyr:::filter(variable=="main"), 
+		tree
+	)
 	
-	ref.obj =   node_to_balanced_sampling(my_tree, ct, ref)
-	ref =       cbind(do.call("cbind", lapply(ref.obj$ct_main, function(ro) ro$df)))
-	markers =   unique(unlist(lapply(ref.obj$ct_main, function(ro) get_genes(node_from_name(my_tree, ro$name), recursive = F))))
-	ref.cell_types = factor(colnames(ref))
-	order_cell_types = levels(ref.cell_types)
-	if(any(!markers%in%rownames(mix)))
-		warning(sprintf("ARMET: The following markers were not present into the mixture dataset: %s Please reconsider the filtering process.\n", paste(markers[!markers%in%rownames(mix)])))
+	# Setup background
+	bg = ref %>% 
+		filter(variable=="background") %>%
+		{ 
+			if(nrow(.)==0) 
+				ref %>%
+					dplyr:::distinct(gene) %>%
+					dplyr:::mutate(
+						sample="s0",
+						value = 0,
+						ct = "NA",
+						variable = "background"
+					)
+			else . 
+		} %>%
+		dplyr:::mutate_if(is.character, as.factor)
 	
-	markers =                           markers[markers%in%rownames(ref) & markers%in%rownames(mix)]
-	mix =                               mix[markers,, drop=FALSE]
-	ref =                               ref[markers,, drop=FALSE]
-	ref.mean =                          get_mean_signature(ref)
-	ref.mean =                          ref.mean[,order_cell_types, drop=FALSE]
-	e.obj =                             prepare_input(ref, order_cell_types, markers)
-	
-	#/
-	#|--------------------------------------------------------------------------
-	#| Background
-	#|--------------------------------------------------------------------------
-	#|
-	#| If down the my_tree compile the background\
-	#\
-	
-	h = rev(rev(get_hierarchy(my_tree, ct))[-1])
-
-
+	# Set up background trees
 	bg_trees = divide_trees_proportion_across_many_trees(bg_tree)
 	bg_trees = lapply(bg_trees, add_absolute_proportions_to_tree)
 	
-	# 																										
-	# lapply(names(bg_trees), function(n) get_proportions_array(bg_trees[n], n))
-	# 
-	# get_node_label_level_specfic(bg_trees[[1]], label = "absolute_proportion", recursive = T, level= 0, start_level = 0, stop_level = 0)
-	# 
-	if(length(h) > 0) {
-		
-		beta_bg = t(as.data.frame(lapply(bg_trees, get_last_existing_leaves_with_annotation)))
-		bg = cbind(do.call("cbind", lapply(ref.obj$ct_background, function(ro) ro$df)))
-		bg = bg[markers,,drop=F]
-		
-	} else {
-		bg = matrix(rep(0, length(markers)))
-		rownames(bg) = markers
-		colnames(bg) = "nn"
-		
-		beta_bg = data.frame(rep(1, ncol(mix)), rep(0, ncol(mix))) 
-		colnames(beta_bg) = c(ct, "bg")
-		
-	}
+	# Set up the proportions of the background
+	beta_ancestor_run = as.data.frame(lapply(bg_trees, get_last_existing_leaves_with_annotation)) %>%
+		tibble:::as_tibble() %>%
+		{ 
+			if(nrow(.)==0) 
+				tibble:::tibble(rep(1, ncol(mix)), rep(0, ncol(mix))) %>%
+					stats:::setNames(., c(ct, "bg"))  %>%
+					dplyr:::mutate(
+						sample=
+							mix %>% 
+								dplyr:::pull(sample) %>% 
+								levels(.)
+						)
+			else . 
+		} %>%
+		dplyr:::select(sample, everything())
 	
-	p_target = t(beta_bg[,ct, drop=FALSE])
-	beta_bg = as.matrix(beta_bg[,!colnames(beta_bg)%in%ct])
-	
-	# R bug for t() for 1 colmn matrices
-	if(ncol(mix)==1) beta_bg = t(beta_bg)
+	# Background dataframe for full bayesian
+	bg.obj = prepare_input(
+		ref %>% 
+			dplyr:::filter(variable=="background"), 
+		tree
+	)
 
-	x_bg = get_mean_signature(bg)
-	bg.obj = prepare_input(bg, levels(factor(colnames(bg))), markers)
-
-	# Reorder the array same as the signatures
-	if(ncol(beta_bg)>1) beta_bg = beta_bg[,colnames(x_bg),drop=F]
-
-	beta_bg = as.matrix(beta_bg)
-	
-	# R bug for t() for 1 colmn matrices
-	if(ncol(mix)==1) beta_bg = t(beta_bg)
-	print(beta_bg)
-	y_hat_background = as.matrix(beta_bg) %*% t(x_bg)
-	rownames(y_hat_background) = colnames(mix)
-	
+	# Calculate the value of the genes for background
+	y_hat_background = 
+		as.matrix(
+			beta_ancestor_run %>% 
+			select(-sample, -!!rlang::sym(ct))
+		) %*% 
+		as.matrix(
+			bg %>% 
+			dplyr:::select(gene, value) %>%
+			tidyr:::spread(gene, value)
+		) %>%
+		tibble::as_tibble() %>%
+		dplyr:::mutate(sample = beta_ancestor_run %>% pull(sample))%>%
+		dplyr:::select(sample, everything())
+		
 	# balance the evidences
-	e_map_matrix_dim = table(e.obj$e$ct_num)
-	e_map_matrix_norm = median(e_map_matrix_dim)/e_map_matrix_dim
-	e_i_matrix = do.call(plyr:::rbind.fill, lapply(unique(sort(e.obj$e$ct_num)), function(ct) data.frame(t(data.frame(rownames(e.obj$e[e.obj$e$ct_num==ct,] ))))))
+	e_map_matrix_stats = 
+		e.obj$e %>% 
+			dplyr:::group_by(ct_num) %>%
+			dplyr:::summarise(dim = n()) %>%
+			dplyr:::mutate(norm_factor = median(dim)/dim)
+	
+	browser()
+	
+	e_i_matrix = 
+		do.call(
+			plyr:::rbind.fill, 
+			lapply(
+				unique(
+					sort(
+						e.obj$e %>% 
+							dplyr:::pull(ct_num)
+					)
+				), 
+				function(ct) data.frame(
+					t(
+						data.frame(
+							rownames(
+								e.obj$e[e.obj$e$ct_num==ct,] 
+							)
+						)
+					)
+				)
+			)
+		)
+	
 	e_i_matrix = apply(e_i_matrix, 2, function(mc) {
 		x = as.numeric(as.character(mc))
 		x[is.na(x)] = 0
@@ -128,7 +180,7 @@ ARMET_tc_coreAlg = function(
 		X =                               my_local_design,
 		x =                               ref.mean,
 		y_hat_background =                y_hat_background,
-		p_target =                        p_target,
+		p_target =                        beta_ancestor_run[,ct] ,
 		theta =                           theta,
 		sigma_hyper_sd =                  sigma_hyper_sd,
 		phi_hyper_sd =                    phi_hyper_sd,
@@ -164,7 +216,7 @@ ARMET_tc_coreAlg = function(
 		b =                               bg.obj$e$value,
 		map_bg_mu_gene =                  bg.obj$e_mu$gene_num,
 		map_bg_mu_ct =                    bg.obj$e_mu$ct_num,
-		beta_bg =                         beta_bg
+		beta_ancestor_run =               beta_ancestor_run[,-ct]
 		
 	)
 

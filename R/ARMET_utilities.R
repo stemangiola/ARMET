@@ -170,53 +170,78 @@ sanity_check_p = function(fit, do_show = F){
 	return( plot_chains )
 }
 
+error_if_log_transformed = function(x){
+	if(length(x$value)>0) if(max(x$value, na.rm=T)<50) 
+		stop("ARMET: The input was log transformed in: check_if_sd_zero_and_correct")
+}
+
 #' Checks if the standard deviation of a gene is 0
 #'
 #' @param df A matrix
-check_if_sd_zero = function(df){
+check_if_sd_zero_and_correct = function(df, node){
 	
-	if(is.null(df)) stop("ARMET: check_if_sd_zero: The input is null.. please debug")
-	if(max(df, na.rm=T)<50) stop("ARMET: check_if_sd_zero: The input was log transformed")
+	# Sanity check
+	error_if_log_transformed(df)
 	
-	# check if pathologic data with no sd
-	df = as.matrix(df)
-	df.melt =                        reshape:::melt(df)
-	colnames(df.melt) =              c("gene", "cell_type", "value")
-	#df.melt$gene.numeric =           match(df.melt$gene, rownames(df))
-	#df.melt$cell_type.numeric =      match(df.melt$cell_type, levels(cell_types))
-	df.melt.aggr = stats:::aggregate(log(df.melt$value+1), by=list(df.melt$gene, df.melt$cell_type), FUN=function(x) c(mean = mean(x, na.rm=T), sd = sd(x, na.rm=T) ))
+	# Function omit zeros
+	zero.omit = function(x) x[x>0]
 	
-	# Fix all NA problem
-	if(any(apply(is.na(df.melt.aggr$x[,1:2]), 1, function(mr) mr[1] | mr[2] )))
-		df.melt.aggr[apply(is.na(df.melt.aggr$x[,1:2]), 1, function(mr) mr[1] | mr[2] ),]$x[,1:2] = 0
+	# Summarize counts
+	df.summary = df %>%
+		dplyr:::group_by(gene, ct) %>%
+		dplyr:::summarise(log_sigma = sd(log(value+1)), log_avg = mean(log(value+1))) %>%
+		dplyr:::ungroup() %>%
+		dplyr:::mutate(to_recalculate = log_sigma==0) 
 	
-	if(any(df.melt.aggr[,3][,2]==0)){
+	find_closest_sd_uo_the_tree = function(my_ct, my_gene, tb){
 		
-		writeLines("ARMET: One of your markers has 0 variance, this is not compatible with MCMC inference.")
-		writeLines("The following genes will acquire a background variance.")
-		df.melt.aggr.2correct = df.melt.aggr[df.melt.aggr[,3][,2]==0,]
+		# Iterate upwards thoward root to get the sd from the closest group
+		hierarchy = get_hierarchy(node, my_ct)
+		ancestors = rev(hierarchy[1:(length(hierarchy)-1)])
 		
-		
-		
-		df.melt.aggr.2correct = t(apply(df.melt.aggr.2correct, 1, function(mr){
-			close = subset(df.melt.aggr, Group.1==mr[1])
-			close = close[order(abs(close[,3][,1] - as.numeric(mr[3]))),]
-			new_sd = mean(close[close[,3][,2]>0,][,3][,2][1:5])
-			new_sd = 0.1
-			c(mr[1:3],new_sd)
-		}))
-		
-		for(i in 1:dim(df.melt.aggr.2correct)[1]){
-			ml = length(df[rownames(df)==df.melt.aggr.2correct[i,1], colnames(df)==df.melt.aggr.2correct[i,2]])
-			new_log_mean = as.numeric(df.melt.aggr.2correct[i,3])
-			new_log_sd = as.numeric(df.melt.aggr.2correct[i,4])
-			#print(c(df.melt.aggr.2correct[i,], new_log_mean = new_log_mean, new_log_sd = new_log_sd))
-			df[rownames(df)==df.melt.aggr.2correct[i,1], colnames(df)==df.melt.aggr.2correct[i,2]] = exp(abs(rnorm(ml, new_log_mean , new_log_sd)))
+		for(h in ancestors){
+			
+			# Get first descendant of ancestor including the ancestor 
+			ct_to_consider = unlist(c(h, get_leave_label(node_from_name(node, h), recursive = F)))
+			
+			mean_log_sigma = tb %>% 
+				dplyr:::filter(ct %in% ct_to_consider & gene == my_gene) %>%
+				dplyr:::summarise(mean_log_sigma = mean(zero.omit(log_sigma)))
+			
+			if(mean_log_sigma>0) break
+			
 		}
+		
+		as.numeric(mean_log_sigma)
 	}
 	
-	df
+	# Add closest sd
+	df.summary = df.summary %>%
+		dplyr:::rowwise() %>%
+		dplyr:::mutate(
+			log_sigma = 
+				ifelse(
+					log_sigma==0,
+					find_closest_sd_uo_the_tree(ct, gene, df.summary),
+					log_sigma
+				)
+		) %>%
+		dplyr:::ungroup()
 	
+	if(nrow(df.summary %>% filter(to_recalculate))>0){
+		writeLines("ARMET: One of your markers has 0 variance, this is not compatible with MCMC inference.")
+		writeLines("The following genes will acquire a background variance.")
+		print( df.summary %>% filter(to_recalculate) )
+	}
+	
+	# Sample for sd == 0
+	df %>%
+		left_join(df.summary, by=c("gene", "ct")) %>%
+		dplyr:::rowwise() %>%
+		dplyr:::mutate(value = ifelse(to_recalculate, exp(rnorm(1, log_avg, log_sigma)), value)) %>%
+		dplyr:::ungroup() %>%
+		dplyr:::select(-log_sigma, -log_avg, -to_recalculate)
+
 }
 
 #' Calculate the norm factor with calcNormFactor from limma
@@ -483,20 +508,45 @@ mds_plot = function(mix, ref, cell_types){
 #' @param cell_types A char rvector
 #' @param markers A char vector
 #' @return A list including a two objects
-prepare_input = function(ref, cell_types, markers){
+prepare_input = function(ref, node){
+
+	# Sanity check
+	error_if_log_transformed(ref)
 	
 	# Check if sd == 0 for any marker
-	if(max(ref, na.rm=T)>0) ref = check_if_sd_zero(ref)
+	ref = check_if_sd_zero_and_correct(ref, node)
 	
-	e.obj = reshape:::melt(ref)
-	e.obj$gene_num = match(e.obj$X1, markers) 
-	e.obj$ct_num = match(e.obj$X2, cell_types)
+	# Check if sd == 0 for any marker
+	e.obj = ref %>%
+		dplyr:::left_join(
+			ref %>% 
+				distinct(gene) %>% 
+				mutate(gene_num = as.numeric(gene)) %>%
+				mutate(gene_num = order(gene_num)),
+			by = "gene"
+		) %>%
+		dplyr:::left_join(
+			ref %>% 
+				distinct(ct) %>% 
+				mutate(ct_num = as.numeric(ct)) %>%
+				mutate(ct_num = order(ct_num)),
+			by = "ct"
+		)
+
+	e_mu.obj = e.obj %>%
+		dplyr:::distinct(gene_num, ct_num)
 	
-	e_mu.obj = unique(e.obj[, c("gene_num", "ct_num")])
-	
-	e.obj$map_to_mu = match(paste(e.obj$gene_num, e.obj$ct_num), paste(e_mu.obj$gene_num, e_mu.obj$ct_num))
-	
-	return(list(e=e.obj, e_mu=e_mu.obj))
+	# Match e obj with mean e obj
+	e.obj = e.obj %>% 
+		mutate(
+			map_to_mu = 
+				match(
+					interaction( gene_num, ct_num),
+					interaction( e_mu.obj$gene_num, e_mu.obj$ct_num)
+				)
+		)
+		
+	list(e=e.obj, e_mu=e_mu.obj)
 	
 }
 
