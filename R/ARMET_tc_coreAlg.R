@@ -132,14 +132,6 @@ ARMET_tc_coreAlg = function(
 		dplyr:::mutate(sample = levels(beta_ancestor_run$sample)) %>%
 		dplyr:::select(sample, everything())
 		
-	# balance the evidences
-	e_map_matrix_stats = 
-		e.obj$e %>% 
-			dplyr:::group_by(ct_num) %>%
-			dplyr:::summarise(dim = n()) %>%
-			dplyr:::mutate(norm_factor = median(dim)/dim)
-	# e_i_matrix still to solve
-	
 	my_local_design = if(is.null(my_design)) matrix(rep(1, ncol(mix)), ncol=1) else my_design
 
 	# Create input object for the model
