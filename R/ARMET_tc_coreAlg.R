@@ -53,8 +53,8 @@ ARMET_tc_coreAlg = function(
 				length(which(value>0)) / 
 				n()
 		) %>%
-		ungroup() %>%
-		filter(gene %in% unique(ref$gene))
+		dplyr:::ungroup() %>%
+		dplyr:::filter(gene %in% unique(ref$gene))
 	
 	fg = ref %>% 
 		dplyr:::filter(variable=="main") %>%
@@ -68,19 +68,23 @@ ARMET_tc_coreAlg = function(
 		dplyr:::filter(variable=="background") %>%
 		droplevels()
 	
-	browser()
-	
 	# Set up background trees
 	bg_tree = add_absolute_proportions_to_tree(bg_tree)
+	
+	browser()
 	
 	# Get the probability table of the previous run
 	ancestor_run_prop_table = get_last_existing_leaves_with_annotation(bg_tree)
 	
 	# Get the probability table of my cell type
-	fg_prop = ancestor_run_prop_table %>%	dplyr:::filter(ct==!!ct)
+	fg_prop = ancestor_run_prop_table %>%	
+		dplyr:::filter(ct==!!ct) %>%
+		droplevels()
 	
 	# Get the probability table of the background
-	bg_prop = ancestor_run_prop_table %>% dplyr:::filter(ct != !!ct) 
+	bg_prop = ancestor_run_prop_table %>% 
+		dplyr:::filter(ct != !!ct) %>%
+		droplevels()
 
 	# Background dataframe for full bayesian
 	bg.obj = prepare_input(bg, tree)
@@ -129,9 +133,10 @@ ARMET_tc_coreAlg = function(
 				select(-ct)
 		) %>%
 		tibble::as_tibble() %>%
-		dplyr:::mutate(sample = levels(beta_ancestor_run$sample)) %>%
+		dplyr:::mutate(sample = levels(mix$sample)) %>%
 		dplyr:::select(sample, everything())
-		
+	
+	
 	my_local_design = if(is.null(my_design)) matrix(rep(1, ncol(mix)), ncol=1) else my_design
 
 	# Create input object for the model
@@ -170,32 +175,25 @@ ARMET_tc_coreAlg = function(
 		y_hat_background = y_hat_background %>%
 			dplyr:::select(-sample),
 		
-		p_target = beta_ancestor_run %>%
-			dplyr:::filter(ct==!!ct) %>%
-			dplyr:::pull(value),
+		p_target = fg_prop %>% 
+			dplyr:::pull(absolute_proportion),
 		
 		theta = mix %>%
 			dplyr:::distinct(sample, theta) %>%
 			dplyr:::pull(theta),
 		
-		sigma_hyper_sd = sigma_hyper_sd,
-		phi_hyper_sd = phi_hyper_sd,
-		alpha_hyper_value = alpha_hyper_value,
-		
-		
-		is_mix_microarray = as.numeric(is_mix_microarray)
-	
+		sigma_hyper_sd =     sigma_hyper_sd,
+		phi_hyper_sd =       phi_hyper_sd,
+		alpha_hyper_value =  alpha_hyper_value,
+		is_mix_microarray =  as.numeric(is_mix_microarray)
 	)
 
-
-	
+	# Save the raw model resul for debugging
 	if(save_report) save(model.in, file=sprintf("%s/%s_model_in.RData", output_dir, ct))
 
 	# Choose model
 	model = if(fully_bayesian) stanmodels$ARMET_tc_recursive else stanmodels$ARMET_tcFix_recursive
 
-
-	
 	# Run model
 	fit = 
 		rstan::sampling(

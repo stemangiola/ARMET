@@ -324,10 +324,11 @@ add_absolute_proportions_to_trees = function(trees){
 	lapply(trees, add_absolute_proportions_to_tree)
 }
 
-#' Run ARMET core algorithm recursively on the tree 
+#' Recursi internal function for run_coreAlg_though_tree
 #'
 #' @param node A node from the tree
 #' @param obj.in A object with the input
+#' @param bg_tree The background tree that tracks the evolution of the algoritm
 #' @return A probability array
 run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree){
 	
@@ -380,6 +381,11 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree){
 	node
 }
 
+#' Run ARMET core algorithm recursively on the tree 
+#'
+#' @param node A node from the tree
+#' @param obj.in A object with the input
+#' @return A probability array
 run_coreAlg_though_tree = function(tree, obj.in){
 	
 	# Add empty proportion table to all nodes
@@ -389,7 +395,7 @@ run_coreAlg_though_tree = function(tree, obj.in){
 				tree, 
 				ct = ct, 
 				label = "relative_proportion", 
-				value = tibble(
+				value = tibble:::tibble(
 					sample = factor(), 
 					ct = factor(), 
 					relative_proportion=double(), 
@@ -419,7 +425,6 @@ run_coreAlg_though_tree = function(tree, obj.in){
 	
 	tree
 }
-
 
 #' Select the proportions for one specific tree form the table of proportionsd
 #'
