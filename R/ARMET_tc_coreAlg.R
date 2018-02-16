@@ -68,39 +68,42 @@ ARMET_tc_coreAlg = function(
 		dplyr:::filter(variable=="background") %>%
 		droplevels()
 	
+	browser()
+	
 	# Set up background trees
-	bg_trees = divide_trees_proportion_across_many_trees(bg_tree)
-	bg_trees = lapply(bg_trees, add_absolute_proportions_to_tree)
+	bg_tree = add_absolute_proportions_to_tree(bg_tree)
 	
-	# Set up the proportions of the background
-	beta_ancestor_run = as.data.frame(lapply(bg_trees, get_last_existing_leaves_with_annotation)) %>%
-		tibble:::as_tibble() %>%
-		{ 
-			if(nrow(.)==0) 
-				tibble:::tibble(rep(1, ncol(mix)), rep(0, ncol(mix))) %>%
-					stats:::setNames(., c(ct, "bg"))  %>%
-					dplyr:::mutate(
-						sample=
-							mix %>% 
-								dplyr:::pull(sample) %>% 
-								levels(.)
-						)
-			else . 
-		} %>%
-		dplyr:::select(sample, everything()) %>%
-		tidyr:::gather(ct, value, -1) %>%
-		dplyr:::mutate_if(is.character, as.factor)
+	# Get the probability table of the previous run
+	ancestor_run_prop_table = get_last_existing_leaves_with_annotation(bg_tree)
 	
+	# Get the probability table of my cell type
+	fg_prop = ancestor_run_prop_table %>%	dplyr:::filter(ct==!!ct)
+	
+	# Get the probability table of the background
+	bg_prop = ancestor_run_prop_table %>% dplyr:::filter(ct != !!ct) 
+
 	# Background dataframe for full bayesian
 	bg.obj = prepare_input(bg, tree)
 	
-	# Calculate the value of the genes for background
-	# !!rlang::sym(ct)
+	# Calculate the value of the genes for background 
+	# !!rlang::sym(ct) -> for variable name without quotes
 	y_hat_background = 
 		as.matrix(
-			beta_ancestor_run %>% 
-				dplyr:::filter(ct != !!ct) %>%
-				tidyr:::spread(ct, value) %>%
+			bg_prop %>%
+				{ 
+					if(nrow(.)==0) 
+						bind_rows(
+							fg_prop %>%
+								mutate(
+									ct = factor("bg"), 
+									relative_proportion = 0, 
+									absolute_proportion = 0
+								)
+						)
+					else . 
+				} %>%
+				dplyr:::select(-relative_proportion) %>%
+				tidyr:::spread(ct, absolute_proportion) %>%
 				dplyr:::select(-sample)
 		) %*% 
 		as.matrix(
@@ -188,44 +191,19 @@ ARMET_tc_coreAlg = function(
 		alpha_hyper_value = alpha_hyper_value,
 		
 		
-		is_mix_microarray = as.numeric(is_mix_microarray),
-		
-		# For full Bayesian
-		
-		# Main node
-		E =                               nrow(e.obj$e),
-		E_MU =                            nrow(e.obj$e_mu),
-		map_e_genes =                     e.obj$e$gene_num,
-		map_e_ct =                        e.obj$e$ct_num,
-		map_e_to_mu =                     e.obj$e$map_to_mu,
-		e_ =                              e.obj$e$value,
-		map_e_mu_gene =                   e.obj$e_mu$gene_num,
-		map_e_mu_ct =                     e.obj$e_mu$ct_num,
-		
-		# e_i_matrix =                      e_i_matrix,
-		# e_map_matrix_dim =                e_map_matrix_dim,
-		# e_map_matrix_norm =               e_map_matrix_norm,
-		
-		
-		# Background
-		B =                               nrow(bg.obj$e),
-		B_MU =                            nrow(bg.obj$e_mu),
-		Q =                               length(unique(bg.obj$e$ct_num)),
-		map_bg_genes =                    bg.obj$e$gene_num,
-		map_bg_ct =                       bg.obj$e$ct_num,
-		map_bg_to_mu =                    bg.obj$e$map_to_mu,
-		b =                               bg.obj$e$value,
-		map_bg_mu_gene =                  bg.obj$e_mu$gene_num,
-		map_bg_mu_ct =                    bg.obj$e_mu$ct_num
+		is_mix_microarray = as.numeric(is_mix_microarray)
+	
 	)
 
-	browser()
+
 	
 	if(save_report) save(model.in, file=sprintf("%s/%s_model_in.RData", output_dir, ct))
 
 	# Choose model
 	model = if(fully_bayesian) stanmodels$ARMET_tc_recursive else stanmodels$ARMET_tcFix_recursive
 
+
+	
 	# Run model
 	fit = 
 		rstan::sampling(
@@ -236,16 +214,15 @@ ARMET_tc_coreAlg = function(
 			cores=4
 		)
 	
-	
 	# Parse results
-
-	proportions =                       t(parse_summary_vector_in_2D(apply( as.matrix(fit, pars = "beta"), 2, mean)))
-	proportions_sd =                    t(parse_summary_vector_in_2D(apply( as.matrix(fit, pars = "beta"), 2, sd)))
-	proportions_2.5 =                   t(parse_summary_vector_in_2D(apply( as.matrix(fit, pars = "beta"), 2, quantile, 0.025)))
-	proportions_97.5 =                  t(parse_summary_vector_in_2D(apply( as.matrix(fit, pars = "beta"), 2, quantile, 0.975)))
-	rownames(proportions) = rownames(proportions_2.5) = rownames(proportions_97.5) = rownames(proportions_sd) =  colnames(mix)
-	colnames(proportions) =  colnames(proportions_2.5) = colnames(proportions_97.5) = colnames(proportions_sd) = order_cell_types
-
+	proportions =  
+		parse_summary_vector_in_2D(apply( as.matrix(fit, pars = "beta"), 2, mean)) %>%
+		tibble:::as_tibble() %>%
+		setNames(levels(mix$sample)) %>%
+		dplyr:::mutate(ct = levels(ref$ct)) %>%
+		tidyr:::gather(sample, value, -ct) %>%
+		dplyr:::mutate_if(is.character, as.factor)
+	
 	# Save output
 	if(save_report) save(fit, file=sprintf("%s/%s_fit.RData", output_dir, ct))
 	p = rstan:::traceplot(fit, pars=c("alpha"), inc_warmup=F)
@@ -253,6 +230,5 @@ ARMET_tc_coreAlg = function(
 	#if(save_report) ggplot2:::ggsave(sprintf("%s_chains.png", ct), p)
 	if(save_report)	write.csv(proportions, sprintf("%s/%s_composition.csv", output_dir, ct))
 
-	
 	list(proportions = proportions)
 }
