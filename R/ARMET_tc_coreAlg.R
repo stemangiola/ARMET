@@ -2,10 +2,13 @@
 
 ARMET_tc_coreAlg = function(
 	obj.in, 
-	ct, 
+	node, 
 	real_prop_obj=NULL, 
 	is_test=F){
 
+	# Get ct
+	ct = node$name
+	
 	# Parse input
 	mix =                   obj.in$mix
 	ref =                   obj.in$ref
@@ -17,7 +20,6 @@ ARMET_tc_coreAlg = function(
 	my_tree =               obj.in$my_tree
 	is_mix_microarray =     obj.in$is_mix_microarray	
 	output_dir =            obj.in$output_dir
-	bg_tree =               obj.in$bg_tree
 	sigma_hyper_sd =        obj.in$sigma_hyper_sd
 	phi_hyper_sd =          obj.in$phi_hyper_sd
 	alpha_hyper_value =     obj.in$alpha_hyper_value
@@ -26,11 +28,11 @@ ARMET_tc_coreAlg = function(
 	# Get ref of the current level
 	ref = ref %>%
 		dplyr:::mutate(ct = as.character(ct)) %>%
-		dplyr:::left_join(get_map_foreground_background(tree, ct), by="ct") %>%
+		dplyr:::left_join(get_map_foreground_background(my_tree, ct), by="ct") %>%
 		dplyr:::rename(ct_ = ct) %>%
 		dplyr:::filter(gene %in% 
 					 	get_node_label_level_specfic(
-					 		node_from_name(tree,  ct), 
+					 		node_from_name(my_tree,  ct), 
 					 		label = "markers",
 					 		start_level = 1, 
 					 		stop_level = 1
@@ -42,7 +44,7 @@ ARMET_tc_coreAlg = function(
 		
 	
 	# Print stats on ref
-	get_stats_on_ref(ref,tree) %>% 
+	get_stats_on_ref(ref,my_tree) %>% 
 		dplyr:::filter(ct %in% unique(ref$ct)) 
 	
 	# filter mix and add theta value
@@ -60,21 +62,22 @@ ARMET_tc_coreAlg = function(
 		dplyr:::filter(variable=="main") %>%
 		droplevels()
 	
-	# Prepare input for full bayesian 
-	e.obj = prepare_input(fg, tree)
-	
 	# Setup background
 	bg = 	ref %>% 
 		dplyr:::filter(variable=="background") %>%
 		droplevels()
-	
-	# Set up background trees
-	bg_tree = add_absolute_proportions_to_tree(bg_tree)
-	
-	browser()
-	
+
 	# Get the probability table of the previous run
-	ancestor_run_prop_table = get_last_existing_leaves_with_annotation(bg_tree)
+	ancestor_run_prop_table = get_last_existing_leaves_with_annotation(my_tree)
+	
+	# Sanity check
+	if(
+		ancestor_run_prop_table %>% 
+		dplyr::group_by(sample) %>% 
+		dplyr::summarise(tot=sum(absolute_proportion)) %>%
+		dplyr::pull(tot) %>%
+		unique() != 1
+	) stop("ARMET: The absolute proportions are supposed to sum to 1 for each sample")
 	
 	# Get the probability table of my cell type
 	fg_prop = ancestor_run_prop_table %>%	
@@ -86,9 +89,10 @@ ARMET_tc_coreAlg = function(
 		dplyr:::filter(ct != !!ct) %>%
 		droplevels()
 
-	# Background dataframe for full bayesian
-	bg.obj = prepare_input(bg, tree)
-	
+	# Prepare input for full bayesian 
+	e.obj = prepare_input(fg, my_tree)
+	bg.obj = prepare_input(bg, my_tree)
+
 	# Calculate the value of the genes for background 
 	# !!rlang::sym(ct) -> for variable name without quotes
 	y_hat_background = 
@@ -96,9 +100,9 @@ ARMET_tc_coreAlg = function(
 			bg_prop %>%
 				{ 
 					if(nrow(.)==0) 
-						bind_rows(
+						dplyr:::bind_rows(
 							fg_prop %>%
-								mutate(
+								dplyr:::mutate(
 									ct = factor("bg"), 
 									relative_proportion = 0, 
 									absolute_proportion = 0
@@ -114,7 +118,7 @@ ARMET_tc_coreAlg = function(
 			bg %>% 
 				{ 
 					if(nrow(.)==0) 
-						ref %>%
+						fg %>%
 						dplyr:::distinct(gene) %>%
 						dplyr:::mutate(
 							sample="s0",
@@ -130,17 +134,16 @@ ARMET_tc_coreAlg = function(
 				dplyr:::summarise(value = mean(value)) %>%
 				dplyr:::ungroup() %>%
 				tidyr:::spread(gene, value) %>%
-				select(-ct)
+				dplyr:::select(-ct) %>%
+				dplyr:::mutate_all(dplyr:::funs(ifelse(is.na(.), 0, .)))
 		) %>%
 		tibble::as_tibble() %>%
 		dplyr:::mutate(sample = levels(mix$sample)) %>%
-		dplyr:::select(sample, everything())
-	
-	
-	my_local_design = if(is.null(my_design)) matrix(rep(1, ncol(mix)), ncol=1) else my_design
+		dplyr:::select(sample, dplyr:::everything())
 
 	# Create input object for the model
 	model.in = list(
+		
 		G = fg %>% 
 			dplyr:::distinct(gene) %>% 
 			nrow(),
@@ -153,7 +156,7 @@ ARMET_tc_coreAlg = function(
 			dplyr:::distinct(ct) %>% 
 			nrow(),
 		
-		R = my_local_design %>% 
+		R = my_design %>% 
 			ncol(),
 		
 		y = mix %>% 
@@ -161,7 +164,7 @@ ARMET_tc_coreAlg = function(
 			tidyr:::spread(gene, value) %>%
 			dplyr:::select(-sample), 
 		
-		X = my_local_design,
+		X = my_design,
 		
 		x = fg %>% 
 			dplyr:::select(gene, ct, value) %>%
@@ -170,22 +173,25 @@ ARMET_tc_coreAlg = function(
 			dplyr:::ungroup() %>%
 			tidyr:::spread(ct, value) %>%
 			dplyr:::select(-gene) %>%
-			dplyr:::mutate_all(funs(ifelse(is.na(.), 0, .))),
+			dplyr:::mutate_all(dplyr:::funs(ifelse(is.na(.), 0, .))),
 		
 		y_hat_background = y_hat_background %>%
 			dplyr:::select(-sample),
 		
 		p_target = fg_prop %>% 
-			dplyr:::pull(absolute_proportion),
+			dplyr:::pull(absolute_proportion) %>% 
+			as.array(),
 		
 		theta = mix %>%
 			dplyr:::distinct(sample, theta) %>%
-			dplyr:::pull(theta),
+			dplyr:::pull(theta) %>% 
+			as.array(),
 		
 		sigma_hyper_sd =     sigma_hyper_sd,
 		phi_hyper_sd =       phi_hyper_sd,
 		alpha_hyper_value =  alpha_hyper_value,
 		is_mix_microarray =  as.numeric(is_mix_microarray)
+		
 	)
 
 	# Save the raw model resul for debugging
@@ -203,15 +209,21 @@ ARMET_tc_coreAlg = function(
 			control =                         list(adapt_delta = 0.99, stepsize = 0.01, max_treedepth =15),
 			cores=4
 		)
-	
+
 	# Parse results
 	proportions =  
 		parse_summary_vector_in_2D(apply( as.matrix(fit, pars = "beta"), 2, mean)) %>%
 		tibble:::as_tibble() %>%
 		setNames(levels(mix$sample)) %>%
-		dplyr:::mutate(ct = levels(ref$ct)) %>%
-		tidyr:::gather(sample, value, -ct) %>%
+		dplyr:::mutate(ct = levels(fg$ct)) %>%
+		tidyr:::gather(sample, relative_proportion, -ct) %>%
 		dplyr:::mutate_if(is.character, as.factor)
+	
+	# Add info to the node
+	node = add_proportions_to_tree_from_table(node, proportions)
+	
+	# Set up background trees
+	node = add_absolute_proportions_to_tree(node)
 	
 	# Save output
 	if(save_report) save(fit, file=sprintf("%s/%s_fit.RData", output_dir, ct))
@@ -220,5 +232,5 @@ ARMET_tc_coreAlg = function(
 	#if(save_report) ggplot2:::ggsave(sprintf("%s_chains.png", ct), p)
 	if(save_report)	write.csv(proportions, sprintf("%s/%s_composition.csv", output_dir, ct))
 
-	list(proportions = proportions)
+	list(proportions = proportions, node = node)
 }

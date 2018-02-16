@@ -26,6 +26,9 @@ ARMET_tc = function(
 	multithread =                       T
 ){
 	
+	# Initialize pipe
+	`%>%` <- magrittr::`%>%`
+
 	#Read ini file for some options
 	get_ini()
 	
@@ -35,45 +38,33 @@ ARMET_tc = function(
 	# Create directory
 	output_dir = if(save_report)        create_temp_result_directory() else NULL
 	
-	# Initialize pipe
-	`%>%` <- magrittr::`%>%`
-
 	# Format input
 	mix = mix %>%	
 		tidyr:::gather("sample", "value", 2:ncol(mix)) %>%
 		dplyr:::mutate(gene = factor(gene), sample = factor(sample)) %>%
 		{ if(max((.)$value) < 50) dplyr:::mutate(value=exp(value)) else .}
 
-	
-	##########################################################
+	# Check if design matrix exists
+	if(is.null(my_design)) my_design = matrix(rep(1, nrow(mix %>% dplyr:::distinct(sample))), ncol=1)
 
-	# Load reference
-	# ref_seq = as.matrix(read.csv("~/PhD/deconvolution/ARMET_dev/ARMET_TME_signature_df_RNAseq.csv", header=T, row.names=1))
-	# colnames(ref_seq) = as.vector(sapply(colnames(ref_seq), function(cn) strsplit(cn, ".", fixed=T)[[1]][1]))
-	# dic = data.frame(sprintf("s%s", 1:ncol(ref_seq)), colnames(ref_seq))
-	# colnames(ref_seq) = dic[,1]
-	# ref_seq = tibble:::as_tibble(reshape:::melt(ref_seq)) %>% dplyr:::rename(gene=X1, sample=X2, value = value) %>% dplyr:::mutate(ct=dic[match(sample, dic[,1]),2])
-	# save(ref_seq, file="data/ref_seq.rda")
-	# 
-	# ref_array = as.matrix(read.csv("~/PhD/deconvolution/ARMET_dev/ARMET_TME_signature_df_array.csv", header=T, row.names=1))
-	# colnames(ref_array) = as.vector(sapply(colnames(ref_array), function(cn) strsplit(cn, ".", fixed=T)[[1]][1]))
-	# dic = data.frame(sprintf("s%s", 1:ncol(ref_array)), colnames(ref_array))
-	# colnames(ref_array) = dic[,1]
-	# ref_array = tibble:::as_tibble(reshape:::melt(ref_array)) %>% dplyr:::rename(gene=X1, sample=X2, value = value) %>% dplyr:::mutate(ct=dic[match(sample, dic[,1]),2])
-	# save(ref_array, file="data/ref_array.rda")
-
-	if(!is.null(custom_ref))            ref = custom_ref
-	else                                ref = if(!is_mix_microarray) ref_seq else ref_array
-	ref = ref %>% tidyr:::drop_na()
+	# Ref formatting
+	ref =
+		{ 
+			if(!is.null(custom_ref)) custom_ref
+			else 
+				if(!is_mix_microarray) ref_seq 
+				else ref_array
+		} %>% 
+		tidyr:::drop_na()
 	
+	# Calculate stats for ref
 	if(save_report) write.csv(get_stats_on_ref(ref, tree), sprintf("%s/stats_on_ref.csv", output_dir))
-	
-	# Create trees
-	# library(jsonlite)
-	# tree = read_json("/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/ARMET_dev/ARMET_TME_tree_RNAseq.json")
-	# save(tree, file="data/tree_json.rda")
+
+	# Format tree
 	data(tree_json)
-	my_tree =                           drop_node_from_tree(tree, ct_to_omit)
+	my_tree =                           format_tree(tree, mix, ct_to_omit)
+
+	# Filter ref
 	ref =                               ref %>% dplyr:::filter(ct%in%get_leave_label(my_tree, last_level = 0, label = "name"))
 	
 	# Make data sets comparable
@@ -116,22 +107,6 @@ ARMET_tc = function(
 	##############################################################################################
 	##############################################################################################
 
-	# Create one tree per sample
-	my_trees =                            divide_trees_proportion_across_many_trees(my_tree)
-	
-	# Calculate absolute proportions
-	my_trees = 														add_absolute_proportions_to_trees(my_trees)
-	
-	# Produce table proportions
-	proportions = 											  get_proportions_table(my_trees)
-	
-	# Check if markers were reliable
-	markers =                             intersect(intersect(get_genes(tree), rownames(ref)), rownames(mix))
-	signatures = 												  list()
-	signatures$orig = 									  get_mean_signature(ref[markers,], verbose = F)
-	signatures$orig =                     signatures$orig[,colnames(signatures$orig)%in%colnames(proportions)]
-	signatures$predicted =							  NULL
-	
 	# Create tree with hypothesis testing
 	if(!is.null(cov_to_test) & 0) {
 		data(osNode)
@@ -140,10 +115,29 @@ ARMET_tc = function(
 		save(tree.test, file=sprintf("%s/tree_pvalues.RData", output_dir))
 	}
 	
-	return(list(
-		proportions =                       proportions,
-		signatures =                        signatures,
-		mix =                               mix[markers,,drop=F]
-	))
+	# Return
+	list(
+		
+		proportions =	get_last_existing_leaves_with_annotation(my_tree) %>%
+			dplyr:::select(-relative_proportion) %>%
+			tidyr:::spread(ct, absolute_proportion),
+		
+		signatures = 
+			list(
+				orig =  
+					ref %>% 
+					dplyr:::select(gene, ct, value) %>%
+					dplyr:::group_by(gene, ct) %>%
+					dplyr:::summarise(value = mean(value)) %>%
+					dplyr:::ungroup() %>%
+					tidyr:::spread(ct, value),
+				predicted = NULL
+			),
+		
+		mix = mix %>% 
+			dplyr::filter(gene %in% get_genes(my_tree)) %>%
+			droplevels()
+		
+	)
 	
 }

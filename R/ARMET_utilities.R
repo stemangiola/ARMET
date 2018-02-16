@@ -1,4 +1,28 @@
 
+build_data_directory = function(){
+	
+	# Load reference
+	# ref_seq = as.matrix(read.csv("~/PhD/deconvolution/ARMET_dev/ARMET_TME_signature_df_RNAseq.csv", header=T, row.names=1))
+	# colnames(ref_seq) = as.vector(sapply(colnames(ref_seq), function(cn) strsplit(cn, ".", fixed=T)[[1]][1]))
+	# dic = data.frame(sprintf("s%s", 1:ncol(ref_seq)), colnames(ref_seq))
+	# colnames(ref_seq) = dic[,1]
+	# ref_seq = tibble:::as_tibble(reshape:::melt(ref_seq)) %>% dplyr:::rename(gene=X1, sample=X2, value = value) %>% dplyr:::mutate(ct=dic[match(sample, dic[,1]),2])
+	# save(ref_seq, file="data/ref_seq.rda")
+	# 
+	# ref_array = as.matrix(read.csv("~/PhD/deconvolution/ARMET_dev/ARMET_TME_signature_df_array.csv", header=T, row.names=1))
+	# colnames(ref_array) = as.vector(sapply(colnames(ref_array), function(cn) strsplit(cn, ".", fixed=T)[[1]][1]))
+	# dic = data.frame(sprintf("s%s", 1:ncol(ref_array)), colnames(ref_array))
+	# colnames(ref_array) = dic[,1]
+	# ref_array = tibble:::as_tibble(reshape:::melt(ref_array)) %>% dplyr:::rename(gene=X1, sample=X2, value = value) %>% dplyr:::mutate(ct=dic[match(sample, dic[,1]),2])
+	# save(ref_array, file="data/ref_array.rda")
+	
+	
+	# Create trees
+	# library(jsonlite)
+	# tree = read_json("/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/ARMET_dev/ARMET_TME_tree_RNAseq.json")
+	# save(tree, file="data/tree_json.rda")
+	
+}
 #' Check the input for anomalies
 check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd, custom_ref, tree){
 	# Check if duplicated names
@@ -228,15 +252,15 @@ check_if_sd_zero_and_correct = function(df, node){
 		) %>%
 		dplyr:::ungroup()
 	
-	if(nrow(df.summary %>% filter(to_recalculate))>0){
+	if(nrow(df.summary %>% dplyr:::filter(to_recalculate))>0){
 		writeLines("ARMET: One of your markers has 0 variance, this is not compatible with MCMC inference.")
 		writeLines("The following genes will acquire a background variance.")
-		print( df.summary %>% filter(to_recalculate) )
+		print( df.summary %>% dplyr:::filter(to_recalculate) )
 	}
 	
 	# Sample for sd == 0
 	df %>%
-		left_join(df.summary, by=c("gene", "ct")) %>%
+		dplyr:::left_join(df.summary, by=c("gene", "ct")) %>%
 		dplyr:::rowwise() %>%
 		dplyr:::mutate(value = ifelse(to_recalculate, exp(rnorm(1, log_avg, log_sigma)), value)) %>%
 		dplyr:::ungroup() %>%
@@ -520,16 +544,16 @@ prepare_input = function(ref, node){
 	e.obj = ref %>%
 		dplyr:::left_join(
 			ref %>% 
-				distinct(gene) %>% 
-				mutate(gene_num = as.numeric(gene)) %>%
-				mutate(gene_num = order(gene_num)),
+				dplyr:::distinct(gene) %>% 
+				dplyr:::mutate(gene_num = as.numeric(gene)) %>%
+				dplyr:::mutate(gene_num = order(gene_num)),
 			by = "gene"
 		) %>%
 		dplyr:::left_join(
 			ref %>% 
-				distinct(ct) %>% 
-				mutate(ct_num = as.numeric(ct)) %>%
-				mutate(ct_num = order(ct_num)),
+				dplyr:::distinct(ct) %>% 
+				dplyr:::mutate(ct_num = as.numeric(ct)) %>%
+				dplyr:::mutate(ct_num = order(ct_num)),
 			by = "ct"
 		)
 
@@ -538,7 +562,7 @@ prepare_input = function(ref, node){
 	
 	# Match e obj with mean e obj
 	e.obj = e.obj %>% 
-		mutate(
+		dplyr:::mutate(
 			map_to_mu = 
 				match(
 					interaction( gene_num, ct_num),

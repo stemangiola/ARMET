@@ -4,8 +4,16 @@ add_info_to_tree = function(node, ct, label, value, append = F){
 	if(is.na(ct)) stop("ARMET: cell type not provided. In add_info_to_tree")
 	
 	else if(node$name==ct) {
-		if(append) node[label] %>% dplyr:::bind_rows(value)
-		else node[label] = list(value)
+		if(append) 
+			node[[label]] =
+				node[[label]] %>% 
+					dplyr:::mutate_if(is.factor, as.character) %>%
+					dplyr:::bind_rows(
+						value %>% 
+							dplyr:::mutate_if(is.factor, as.character)
+					) %>%
+					dplyr:::mutate_if(is.character, as.factor)
+		else node[[label]] = value
 		node
 	}
 	else if(length(node$children)>0){
@@ -48,22 +56,6 @@ add_absolute_proportions_to_tree_from_leaves = function(node){
 	node
 }
 
-#' Put proportions on tree
-add_proportions_to_trees = function(trees, path="."){
-	# Add root proportion
-	for(i in 1:length(trees)) trees[[i]]$relative_proportion = 1
-	
-	for(l in get_node_names(trees[[1]], last_level=-1)){
-		#print(l)
-		p = read.csv(sprintf("%s/%s_composition.csv", path, l), row.names=1)
-		for(i in 1:length(trees)){
-			for(ll in colnames(p)){
-				trees[[i]] = add_info_to_tree(trees[[i]], ll, "relative_proportion", p[i, ll])
-			}
-		}
-	}
-	trees
-}
 
 
 
@@ -120,12 +112,12 @@ node_from_gene = function(node, gene){
 get_node_label_recursive = function(node, last_level = 0, label = "name"){
 	if(length(node$children)>0){
 		if(last_level<=0) c(
-			unlist(node[label]),
+			node[[label]],
 			do.call("c", lapply(node$children, get_node_label_recursive, last_level, label))
 		)
 		else if(last_level==1) do.call("c", lapply(node$children, get_node_label_recursive, last_level, label))
 	}
-	else if(last_level>=0) unlist(node[label])
+	else if(last_level>=0) node[[label]]
 }
 
 get_last_existing_leaves_with_annotation = function(node, what = "relative_proportion"){
@@ -141,7 +133,7 @@ get_last_existing_leaves_with_annotation = function(node, what = "relative_propo
 				(.) %>% 
 				dplyr:::mutate_if(is.factor, as.character) %>%
 				dplyr:::bind_rows(
-					node[what][[1]] %>%
+					node[[what]] %>%
 						dplyr:::mutate_if(is.factor, as.character)
 				) %>%
 				dplyr:::mutate_if(is.character, as.factor)
@@ -151,7 +143,7 @@ get_last_existing_leaves_with_annotation = function(node, what = "relative_propo
 	}	
 	
 	# If last leaf
-	else node[what][[1]]
+	else node[[what]]
 }
 
 #' Get leaves cell type names
@@ -190,7 +182,7 @@ get_node_label_level_specfic = function(node, label = "name", recursive = T, lev
 		if(level > start_level) my_mark = c(node[label], my_mark)
 		return(unlist(my_mark))
 	}
-	else return(unlist(node[label]))
+	else return(node[[label]])
 }
 
 #' Get genes from tree
@@ -319,18 +311,39 @@ add_absolute_proportions_to_tree = function(node, p_ancestor =  rep(1, nrow( nod
 	node
 }
 
-#' Put absolute proportions on trees
-add_absolute_proportions_to_trees = function(trees){
-	lapply(trees, add_absolute_proportions_to_tree)
+#' Put proportions on tree
+add_proportions_to_tree_from_table = function(tree, proportion){
+
+	# Update tree so it does not depend
+	for(
+		ll in 
+		proportion %>% 
+		dplyr:::pull(ct) %>% 
+		levels()
+	){
+		
+		tree = 
+			add_info_to_tree(
+				tree, 
+				ll, 
+				"relative_proportion", 
+				proportion %>% dplyr:::filter(ct == ll),
+				append = T
+			)
+		
+	}
+	
+	tree
 }
 
-#' Recursi internal function for run_coreAlg_though_tree
+
+#' Run ARMET core algorithm recursively on the tree 
 #'
 #' @param node A node from the tree
 #' @param obj.in A object with the input
 #' @param bg_tree The background tree that tracks the evolution of the algoritm
 #' @return A probability array
-run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree){
+run_coreAlg_though_tree = function(node, obj.in, bg_tree = node){
 	
 	# library(doFuture)
 	# doFuture:::registerDoFuture()
@@ -339,24 +352,14 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree){
 	
 	if(length(node$children)>0){
 		
-		obj.in$bg_tree = bg_tree
-		obj.out = ARMET_tc_coreAlg(obj.in, node$name)
+		obj.in$my_tree = bg_tree
+		obj.out = ARMET_tc_coreAlg(obj.in, node)
+		node = obj.out$node
+		# Update results for the background tree
+		bg_tree = add_proportions_to_tree_from_table(bg_tree, obj.out$proportion)
 		
-		for(
-			ll in 
-			obj.out$proportion %>% 
-				dplyr:::pull(ct) %>% 
-				levels()
-		){
-			node = 
-				add_info_to_tree(
-					node, 
-					ll, 
-					"relative_proportion", 
-					obj.out$proportion %>% dplyr:::filter(ct == ll),
-					append = T
-				)
-		}
+		# Set up background trees
+		bg_tree = add_absolute_proportions_to_tree(bg_tree)
 		
 		if(obj.in$multithread){
 			#n_cores = floor(detectCores() / 6)
@@ -367,26 +370,28 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree){
 			doParallel:::registerDoParallel(cl)
 			
 			node$children = foreach:::foreach(cc = node$children) %do% {
-				run_coreAlg_though_tree_recursive(cc, obj.in, bg_tree)
+				run_coreAlg_though_tree(cc, obj.in, bg_tree)
 			}
 			
 			parallel:::stopCluster(cl)
 			
 		} else {
 			node$children = lapply(node$children, function(cc){
-				run_coreAlg_though_tree_recursive(cc, obj.in, bg_tree) 
+				run_coreAlg_though_tree(cc, obj.in, bg_tree) 
 			})
 		}
+		
+		node
 	}
+	
 	node
 }
 
-#' Run ARMET core algorithm recursively on the tree 
-#'
-#' @param node A node from the tree
-#' @param obj.in A object with the input
-#' @return A probability array
-run_coreAlg_though_tree = function(tree, obj.in){
+format_tree = function(tree, mix, ct_to_omit){
+	
+	# Drop unwanted nodes
+	my_tree = drop_node_from_tree(tree, ct_to_omit)
+	
 	
 	# Add empty proportion table to all nodes
 	for(ct in get_leave_label(tree)) {
@@ -411,7 +416,7 @@ run_coreAlg_though_tree = function(tree, obj.in){
 			ct = tree$name,
 			label = "relative_proportion", 
 			value = (
-				obj.in$mix %>% 
+				mix %>% 
 					dplyr:::distinct(sample) %>%
 					dplyr:::mutate(
 						ct = factor(tree$name), 
@@ -420,11 +425,10 @@ run_coreAlg_though_tree = function(tree, obj.in){
 					)
 			)
 		)
-
-	tree = run_coreAlg_though_tree_recursive(tree, obj.in, tree)
 	
 	tree
 }
+
 
 #' Select the proportions for one specific tree form the table of proportionsd
 #'
