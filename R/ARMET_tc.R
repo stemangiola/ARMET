@@ -61,7 +61,6 @@ ARMET_tc = function(
 	if(save_report) write.csv(get_stats_on_ref(ref, tree), sprintf("%s/stats_on_ref.csv", output_dir))
 
 	# Format tree
-	data(tree_json)
 	my_tree =                           format_tree(tree, mix, ct_to_omit)
 
 	# Filter ref
