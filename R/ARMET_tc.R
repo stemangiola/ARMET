@@ -9,6 +9,9 @@
 #| Rownames are gene symbols, and colnames of ref are cell types
 #\
 
+# Initialize pipe
+`%>%` <- magrittr::`%>%`
+
 ARMET_tc = function(
 	mix,
 	my_design =                         NULL,
@@ -25,19 +28,16 @@ ARMET_tc = function(
 	custom_ref =                        NULL,
 	multithread =                       T
 ){
-	
-	# Initialize pipe
-	`%>%` <- magrittr::`%>%`
 
 	#Read ini file for some options
 	get_ini()
 	
 	# Check input
-	#check_input(mix, is_mix_microarray, my_design, cov_to_test, sigma_hyper_sd, custom_ref, tree)
+	check_input(mix, is_mix_microarray, my_design, cov_to_test, sigma_hyper_sd, custom_ref, tree)
 	
 	# Create directory
 	output_dir = if(save_report)        create_temp_result_directory() else NULL
-	
+
 	# Format input
 	mix = mix %>%	
 		tidyr:::gather("sample", "value", 2:ncol(mix)) %>%
@@ -64,12 +64,12 @@ ARMET_tc = function(
 	my_tree =                           format_tree(tree, mix, ct_to_omit)
 
 	# Filter ref
-	ref =                               ref %>% dplyr:::filter(ct%in%get_leave_label(my_tree, last_level = 0, label = "name"))
+	ref =                               ref %>% dplyr:::filter(ct%in%get_leave_label(my_tree, last_level = 0, label = "name")) %>% droplevels()
 	
 	# Make data sets comparable
-	common_genes =                      intersect(mix$gene, ref$gene)
-	mix =                               mix %>% dplyr:::filter(gene%in%common_genes)
-	ref =                               ref %>% dplyr:::filter(gene%in%common_genes)
+	common_genes =                      intersect(as.character(mix$gene), as.character(ref$gene))
+	mix =                               mix %>% dplyr:::filter(gene%in%common_genes) %>% droplevels()
+	ref =                               ref %>% dplyr:::filter(gene%in%common_genes) %>% droplevels()
 
 	# Normalize data
 	norm.obj = 													wrapper_normalize_mix_ref(mix, ref, is_mix_microarray)
@@ -102,7 +102,7 @@ ARMET_tc = function(
 			multithread =                   multithread
 		)
 	)
-		
+
 	##############################################################################################
 	##############################################################################################
 
