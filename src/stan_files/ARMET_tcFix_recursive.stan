@@ -6,10 +6,10 @@ data{
   matrix[S,R] X;                               // Array of covariates for hierarchical regresison
 	matrix<lower=0>[S,G] y;                      // Observed counts
 	matrix<lower=0>[G,P] x;                      // signature counts
-	vector<lower=0, upper=1>[S] p_target;      //This is the proportion of the whole taget -> simplex_beta * p_target
+	real<lower=0, upper=1> p_target[S];      //This is the proportion of the whole taget -> simplex_beta * p_target
 	matrix[S,G] y_hat_background;   // This is the matrix of background -> will be summed up with the matrix of the target
 	
-	vector<lower=0, upper=1>[S] theta;
+	real<lower=0, upper=1> theta[S];
 	int is_mix_microarray;
 	real<lower=0> sigma_hyper_sd; 
 	real<lower=0> phi_hyper_sd;
