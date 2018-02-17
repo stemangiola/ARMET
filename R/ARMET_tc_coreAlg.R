@@ -70,14 +70,24 @@ ARMET_tc_coreAlg = function(
 	# Get the probability table of the previous run
 	ancestor_run_prop_table = get_last_existing_leaves_with_annotation(my_tree)
 	
+
 	# Sanity check
 	if(
-		ancestor_run_prop_table %>% 
-		dplyr::group_by(sample) %>% 
-		dplyr::summarise(tot=sum(absolute_proportion)) %>%
-		dplyr::pull(tot) %>%
-		unique() != 1
-	) stop("ARMET: The absolute proportions are supposed to sum to 1 for each sample")
+		all(
+			ancestor_run_prop_table %>% 
+			dplyr::group_by(sample) %>% 
+			dplyr::summarise(tot=sum(absolute_proportion)) %>%
+			dplyr::pull(tot) != 1 
+		)
+	) {
+		writeLines("ARMET: The absolute proportions are supposed to sum to 1 for each sample")
+		print(
+			ancestor_run_prop_table %>% 
+				dplyr::group_by(sample) %>% 
+				dplyr::summarise(tot=sum(absolute_proportion))
+		)
+		#stop()
+	}
 	
 	# Get the probability table of my cell type
 	fg_prop = ancestor_run_prop_table %>%	
@@ -88,13 +98,14 @@ ARMET_tc_coreAlg = function(
 	bg_prop = ancestor_run_prop_table %>% 
 		dplyr:::filter(ct != !!ct) %>%
 		droplevels()
-
+	
 	# Prepare input for full bayesian 
 	e.obj = prepare_input(fg, my_tree)
 	bg.obj = prepare_input(bg, my_tree)
 
 	# Calculate the value of the genes for background 
 	# !!rlang::sym(ct) -> for variable name without quotes
+
 	y_hat_background = 
 		as.matrix(
 			bg_prop %>%

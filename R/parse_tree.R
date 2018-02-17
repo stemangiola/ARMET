@@ -81,7 +81,7 @@ get_proportions_table = function(trees){
 
 #' Get nome from cell type
 node_from_name = function(node, ct){
-	
+
 	if(is.na(ct)) NULL
 	else if(node$name==ct) node
 	else if(length(node$children)>0)
@@ -337,13 +337,20 @@ add_proportions_to_tree_from_table = function(tree, proportion){
 }
 
 
+
+Log <- function(text, ...) {
+	msg <- sprintf(paste0(as.character(Sys.time()), ": ", text, "\n"), ...)
+	cat(msg)
+	write.socket(log.socket, msg)
+}
+
 #' Run ARMET core algorithm recursively on the tree 
 #'
 #' @param node A node from the tree
 #' @param obj.in A object with the input
 #' @param bg_tree The background tree that tracks the evolution of the algoritm
 #' @return A probability array
-run_coreAlg_though_tree = function(node, obj.in, bg_tree = node){
+run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree, log.socket){
 	
 	# library(doFuture)
 	# doFuture:::registerDoFuture()
@@ -351,41 +358,65 @@ run_coreAlg_though_tree = function(node, obj.in, bg_tree = node){
 
 	
 	if(length(node$children)>0){
-		
-		obj.in$my_tree = bg_tree
+
 		obj.out = ARMET_tc_coreAlg(obj.in, node)
 		node = obj.out$node
+
+		#Log("ARMET: Predicted composition for %s", node$name)
+		
 		# Update results for the background tree
 		bg_tree = add_proportions_to_tree_from_table(bg_tree, obj.out$proportion)
 		
 		# Set up background trees
 		bg_tree = add_absolute_proportions_to_tree(bg_tree)
 		
+		obj.in$my_tree = bg_tree
+		
 		if(obj.in$multithread){
-			#n_cores = floor(detectCores() / 6)
-			n_cores = 4
+			n_cores = floor(parallel::detectCores() / 6)
 			cl <- parallel:::makeCluster(n_cores)
-			parallel:::clusterExport(cl, c("obj.in", "bg_tree"), environment())
-			#clusterEvalQ(cl, library("ARMET"))
+			parallel:::clusterExport(cl, c("obj.in", "bg_tree", "%>%", "log.socket"), environment())
 			doParallel:::registerDoParallel(cl)
-			
-			node$children = foreach:::foreach(cc = node$children) %do% {
-				run_coreAlg_though_tree(cc, obj.in, bg_tree)
-			}
-			
-			parallel:::stopCluster(cl)
-			
-		} else {
-			node$children = lapply(node$children, function(cc){
-				run_coreAlg_though_tree(cc, obj.in, bg_tree) 
-			})
 		}
 		
+		`%my_do%` <- if(obj.in$multithread) `%dopar%` else `%do%`
+
+		node$children = foreach:::foreach(cc = node$children) %my_do% {
+			run_coreAlg_though_tree_recursive(cc, obj.in, bg_tree, log.socket)
+		}
+			
+		if(obj.in$multithread)	parallel:::stopCluster(cl)
+			
 		node
 	}
 	
 	node
 }
+
+run_coreAlg_though_tree = function(node, obj.in){
+	
+	#log.socket <- utils::make.socket(port=4000)
+	
+	log.socket = NA
+	
+	if(obj.in$multithread){
+		n_cores = floor(parallel::detectCores() / 6)
+		cl <- parallel:::makeCluster(n_cores)
+		parallel:::clusterExport(cl, c("obj.in", "%>%", "log.socket"), environment())
+		doParallel:::registerDoParallel(cl)
+	}
+	
+	`%my_do%` <- if(obj.in$multithread) `%dopar%` else `%do%`
+	
+	node = foreach:::foreach(dummy = 1) %my_do% {
+		run_coreAlg_though_tree_recursive(node, obj.in, node, log.socket)
+	}
+	
+	if(obj.in$multithread)	parallel:::stopCluster(cl)
+	
+	node[[1]]
+}
+
 
 format_tree = function(tree, mix, ct_to_omit){
 	
@@ -417,7 +448,7 @@ format_tree = function(tree, mix, ct_to_omit){
 			label = "relative_proportion", 
 			value = (
 				mix %>% 
-					dplyr:::distinct(sample) %>%
+					dplyr:::distinct(sample) %>% 
 					dplyr:::mutate(
 						ct = factor(tree$name), 
 						relative_proportion = 1,
@@ -474,3 +505,45 @@ divide_trees_proportion_across_many_trees = function(node){
 	
 	trees
 }
+
+# run_coreAlg_though_tree = function(node, obj.in, bg_tree){
+# 	
+# 	# library(doFuture)
+# 	# doFuture:::registerDoFuture()
+# 	# future:::plan(future:::multiprocess)
+# 	
+# 	
+# 	
+# 	if(obj.in$multithread){
+# 		n_cores = floor(parallel::detectCores() / 6)
+# 		cl <- parallel:::makeCluster(n_cores)
+# 		parallel:::clusterExport(cl, c("obj.in", "bg_tree", "%>%"), environment())
+# 		doParallel:::registerDoParallel(cl)
+# 	}
+# 	
+# 	`%my_do%` <- if(obj.in$multithread) `%dopar%` else `%do%`
+# 	
+# 	foreach:::foreach(cc = node$children, .verbose = TRUE) %my_do% {
+# 		
+# 		if(length(node$children)==0) return(cc)
+# 		
+# 		obj.out = ARMET_tc_coreAlg(obj.in, cc)
+# 		
+# 		# Update results for the background tree
+# 		bg_tree = add_proportions_to_tree_from_table(bg_tree, obj.out$proportion)
+# 		
+# 		# Set up background trees
+# 		bg_tree = add_absolute_proportions_to_tree(bg_tree)
+# 		
+# 		obj.in$my_tree = bg_tree
+# 		
+# 		cc$children = run_coreAlg_though_tree(obj.out$node, obj.in, bg_tree)
+# 		
+# 		cc
+# 		
+# 	}
+# 	
+# 	if(obj.in$multithread)	parallel:::stopCluster(cl)
+# 	
+# 	
+# }

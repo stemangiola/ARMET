@@ -25,17 +25,31 @@ build_data_directory = function(){
 }
 #' Check the input for anomalies
 check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd, custom_ref, tree){
-	# Check if duplicated names
-	if(any(table(colnames(mix))>1)) stop("ARMET: you have duplicated column names in the mix data frame")
+	
+	if(!tibble::is_tibble(mix)) stop("ARMET: The mixture must be a tibble")
+	
+	# Check if custom ref is tibble
+	if(!is.null(custom_ref)){
+		if(!tibble::is_tibble(custom_ref)) 
+			stop("ARMET: The reference must be a tibble")
+		if(!all(colnames(ref_seq)%in%colnames(custom_ref))) 
+			stop(
+				sprinf(
+					"ARMET: The columns of the provided reference must be %s", 
+					paste(colnames(ref_seq), collapse=" ")
+				)
+			)
+	} 
 	
 	# Check if microarray data
 	if(is_mix_microarray) writeLines("ARMET: The input matrix is from microarray.")
-	
-	# Check if on Windows
-	if(!.Platform$OS.type == "unix") stop("ARMET: currenly ARMET works for GNU/Linux systems only.")
-	
+
 	# Check if NA in mix
-	if(any(is.na(as.vector(mix)))) stop("ARMET: NAs found in the query matrix")
+	if(
+		mix %>%	
+		dplyr::select_if(function(.) any(is.na(.))) %>% 
+		ncol() > 0
+	) stop("ARMET: NAs found in the query matrix")
 	
 	# This is how many conditions are in the study (e.g., treatment-vs-non-treatment)
 	if(!is.null(my_design)) {
@@ -43,21 +57,57 @@ check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd,
 		print(head(my_design))
 	}
 	
-	# Check if mix have colnames and rownames
-	if(is.null(colnames(mix)) | is.null(rownames(mix))) stop("ARMET: query data frame (mix expression) has to have colnames (sample names) and rownames (gene names)")
-	
 	# Set up the covariate to test if any
-	# if(
-	#   (is.null(cov_to_test) & ncol(my_design)>1) |
-	#   !cov_to_test%in%colnames(my_design)
-	# ) stop(sprintf("ARMET: you have to specify one or more covariate(s) to test for your design matrix among these: %s", paste(colnames(my_design), collapse=" ")))
 	if(is.null(my_design) & !is.null(cov_to_test)) stop("ARMET: you have specified a covariate to test but no design matrix")
 	
 	# Check prior sd
 	if(prior_sd<=0) stop("ARMET: prior_sd must be a positive number.")
 	
-	# Check custom reference
-	if(!is.null(custom_ref) & !all(get_leave_names(tree, last_level = 1)%in%colnames(custom_ref))) stop("ARMET: Some cell types within the tree are absent in your custom reference provided") 
+ 
+
+		# Check custom reference
+	if(
+		!is.null(custom_ref) &&
+		!all(get_leave_names(tree, last_level = 1) %in% (custom_ref %>% dplyr::distinct(ct)  %>% dplyr::pull(ct) %>% as.character()))
+	) {
+		writeLines("ARMET: Some cell types within the tree are absent in your custom reference provided") 
+		cts = get_leave_names(tree, last_level = 1) 
+		print( cts[!cts %in% (custom_ref %>% dplyr::distinct(ct) %>% dplyr::pull(ct) %>% as.character())	]	)
+		
+		stop()
+	}
+	
+	# Check if duplicated genes in mix
+	if(
+		mix %>%
+		dplyr::group_by(gene) %>%
+		dplyr::summarise(tot = n()) %>%
+		dplyr::filter(tot > 1) %>%
+		nrow() > 1
+	) {
+		writeLines("ARMET: There are duplicated genes n the provided mix. Genes will be summarised with medians.")
+		
+		dup_genes =
+			mix %>%
+			dplyr::group_by(gene) %>%
+			dplyr::summarise(tot = n()) %>%
+			dplyr::filter(tot > 1) %>%
+			dplyr::pull(gene) %>%
+			as.character()
+		
+		parent.frame()$mix = mix %>%
+			dplyr::mutate(gene = as.character(gene)) %>%
+			dplyr::filter(!gene %in% dup_genes) %>%
+			dplyr::bind_rows(
+				mix %>%
+					dplyr::mutate(gene = as.character(gene)) %>%
+					dplyr::filter(gene %in% dup_genes) %>%
+					dplyr::group_by(gene) %>%
+					dplyr::summarise_if(is.numeric, median) %>%
+					dplyr::ungroup()
+			)
+	}
+	
 	
 }
 
@@ -73,6 +123,7 @@ get_ini = function(){
 		}
 	}
 }
+
 #' Creates the directory needed for archive
 #'
 #' @param name A char
@@ -209,36 +260,55 @@ check_if_sd_zero_and_correct = function(df, node){
 	
 	# Function omit zeros
 	zero.omit = function(x) x[x>0]
-	
+
 	# Summarize counts
 	df.summary = df %>%
 		dplyr:::group_by(gene, ct) %>%
-		dplyr:::summarise(log_sigma = sd(log(value+1)), log_avg = mean(log(value+1))) %>%
+		dplyr:::summarise(
+			log_sigma = stats::mad(log(value+1)), 
+			log_avg = mean(log(value+1))
+		) %>%
 		dplyr:::ungroup() %>%
 		dplyr:::mutate(to_recalculate = log_sigma==0) 
 	
 	find_closest_sd_uo_the_tree = function(my_ct, my_gene, tb){
-		
+	#	print(my_ct)
+	#	print(my_gene)
+
 		# Iterate upwards thoward root to get the sd from the closest group
 		hierarchy = get_hierarchy(node, my_ct)
 		ancestors = rev(hierarchy[1:(length(hierarchy)-1)])
 		
 		for(h in ancestors){
-			
+
 			# Get first descendant of ancestor including the ancestor 
 			ct_to_consider = unlist(c(h, get_leave_label(node_from_name(node, h), recursive = F)))
 			
 			mean_log_sigma = tb %>% 
-				dplyr:::filter(ct %in% ct_to_consider & gene == my_gene) %>%
-				dplyr:::summarise(mean_log_sigma = mean(zero.omit(log_sigma)))
-			
+				dplyr:::filter(
+					ct %in% ct_to_consider & 
+					gene == my_gene & 
+					log_sigma > 0) %>%
+				
+				{
+					
+					# Exception if I have only one sample per cell type
+					if((.) %>% nrow() == 0) 
+						(.) %>% dplyr:::summarise(mean_log_sigma = 0)
+					else 
+						(.) %>% dplyr:::summarise(mean_log_sigma = mean(log_sigma))
+						
+				}
+
 			if(mean_log_sigma>0) break
 			
 		}
 		
-		as.numeric(mean_log_sigma)
+		# If I have only one sample per cell type output 1 as SD
+		ifelse(mean_log_sigma == 0, 1, as.numeric(mean_log_sigma))
+		
 	}
-	
+
 	# Add closest sd
 	df.summary = df.summary %>%
 		dplyr:::rowwise() %>%
@@ -356,7 +426,7 @@ rnaseq_norm = function(df, reference = NULL, cpm_theshold = 0.5, prop = 3/4){
 rnaseq_norm_ref_mix = function(ref, mix){
 	
 	if(max(ref$value, na.rm = T) < 50 | max(mix$value, na.rm = T) < 50) stop("ARMET: Both objects have to be in real scale, log tranformation detected")
-	
+
 	# Normalize the mix
 	mix = rnaseq_norm(mix)
 	
