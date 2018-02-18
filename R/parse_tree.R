@@ -367,7 +367,7 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree, log.ARMET){
 		
 		if(obj.in$multithread){
 			n_cores = floor(parallel::detectCores() / 6)
-			cl <- parallel::makeCluster(n_cores, outfile="")
+			cl <- parallel::makeCluster(n_cores)
 			parallel::clusterExport(cl, c("obj.in", "bg_tree", "%>%", "log.ARMET"), environment())
 			doParallel::registerDoParallel(cl)
 		}
@@ -392,12 +392,33 @@ run_coreAlg_though_tree = function(node, obj.in){
 	
 	log.ARMET = ".ARMET.log"
 	
+	writeLines("ARMET: starting deconvolution")
+	
 	if (file.exists(log.ARMET)) file.remove(log.ARMET)
 	file.create(log.ARMET)
 
-	node.filled = future::future(
-		run_coreAlg_though_tree_recursive(node, obj.in, node, log.ARMET)
-	)
+	exec_hide_std_out = function(node, obj.in, log.ARMET){
+		
+		if(obj.in$multithread){
+			cl <- parallel:::makeCluster(2)
+			parallel:::clusterExport(cl, c("obj.in", "node", "%>%", "log.ARMET"), environment())
+			doParallel:::registerDoParallel(cl)
+		}
+		
+		`%my_do%` <- if(obj.in$multithread) `%dopar%` else `%do%`
+		
+		node.filled = foreach:::foreach(dummy = 1) %my_do% {
+			run_coreAlg_though_tree_recursive(node, obj.in, node, log.ARMET)
+		}
+		
+		if(obj.in$multithread)	parallel:::stopCluster(cl)
+		
+		return(node.filled[[1]])
+	}
+	
+	node.filled = future::future(	
+		exec_hide_std_out(node, obj.in, log.ARMET) 
+		)
 	
 	log.array = c()
 	done = F

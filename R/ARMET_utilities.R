@@ -398,7 +398,7 @@ rnaseq_norm.calcNormFactor = function(df, reference = NULL, cpm_theshold = 0.5, 
 #' @param prop A number
 #' @return A list including the filtered data frame and the normalization factors
 rnaseq_norm = function(df, reference = NULL, cpm_theshold = 0.5, prop = 3/4){
-	writeLines("Normalizing RNA-seq data with TMM")
+	#if(verbose) writeLines("Normalizing RNA-seq data with TMM")
 	
 	nf.obj = rnaseq_norm.calcNormFactor(df, reference, cpm_theshold, prop)
 	nf = nf.obj$nf

@@ -223,7 +223,7 @@ ARMET_tc_coreAlg = function(
 			model,
 			data=                             model.in,
 			iter=                             1000 ,
-			control =                         list(adapt_delta = 0.99, stepsize = 0.01, max_treedepth =15),
+			#control =                         list(adapt_delta = 0.99, stepsize = 0.01, max_treedepth =15),
 			cores=4
 		)
 
