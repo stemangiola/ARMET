@@ -45,7 +45,11 @@ ARMET_tc = function(
 		{ if(max((.)$value) < 50) dplyr:::mutate(value=exp(value)) else .}
 
 	# Check if design matrix exists
-	if(is.null(my_design)) my_design = matrix(rep(1, nrow(mix %>% dplyr:::distinct(sample))), ncol=1)
+	if(is.null(my_design)) 
+		my_design = matrix(rep(1, nrow(mix %>% dplyr:::distinct(sample))), ncol=1)
+
+	# Format tree
+	my_tree = format_tree(tree, mix, ct_to_omit)
 
 	# Ref formatting
 	ref =
@@ -55,17 +59,19 @@ ARMET_tc = function(
 				if(!is_mix_microarray) ref_seq 
 				else ref_array
 		} %>% 
-		tidyr:::drop_na()
+		tidyr:::drop_na() %>% 
+		dplyr:::filter(
+			ct %in% 
+			get_leave_label(my_tree, last_level = 0, label = "name")
+		) %>% 
+		droplevels()
+	
 	
 	# Calculate stats for ref
 	if(save_report) write.csv(get_stats_on_ref(ref, tree), sprintf("%s/stats_on_ref.csv", output_dir))
 
-	# Format tree
-	my_tree =                           format_tree(tree, mix, ct_to_omit)
 
-	# Filter ref
-	ref =                               ref %>% dplyr:::filter(ct%in%get_leave_label(my_tree, last_level = 0, label = "name")) %>% droplevels()
-	
+
 	# Make data sets comparable
 	common_genes =                      intersect(as.character(mix$gene), as.character(ref$gene))
 	mix =                               mix %>% dplyr:::filter(gene%in%common_genes) %>% droplevels()

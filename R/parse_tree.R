@@ -23,15 +23,7 @@ add_info_to_tree = function(node, ct, label, value, append = F){
 	else node
 }
 
-#' Drop a node from the tree
-drop_node_from_tree = function(node, ct){
-	if( !node$name%in%ct) {
-		node$children = Filter(Negate(is.null), 
-													 lapply(node$children, drop_node_from_tree, ct)
-		)
-		node
-	}
-}
+
 
 #' Put proportions of cell types into the tree
 prop_array_to_tree = function(tree, p_array){
@@ -374,7 +366,7 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree, log.socket){
 		
 		if(obj.in$multithread){
 			n_cores = floor(parallel::detectCores() / 6)
-			cl <- parallel:::makeCluster(n_cores)
+			cl <- parallel:::makeCluster(n_cores, outfile="")
 			parallel:::clusterExport(cl, c("obj.in", "bg_tree", "%>%", "log.socket"), environment())
 			doParallel:::registerDoParallel(cl)
 		}
@@ -401,7 +393,7 @@ run_coreAlg_though_tree = function(node, obj.in){
 	
 	if(obj.in$multithread){
 		n_cores = floor(parallel::detectCores() / 6)
-		cl <- parallel:::makeCluster(n_cores)
+		cl <- parallel:::makeCluster(n_cores, outfile="")
 		parallel:::clusterExport(cl, c("obj.in", "%>%", "log.socket"), environment())
 		doParallel:::registerDoParallel(cl)
 	}
@@ -418,10 +410,28 @@ run_coreAlg_though_tree = function(node, obj.in){
 }
 
 
+# drop_node_from_tree = function(node, ct){
+# 	
+# 	if( !node$name%in%ct){
+# 		node$children = lapply(node$children, drop_node_from_tree, ct)
+# 		node
+# 	}
+# }
+
 format_tree = function(tree, mix, ct_to_omit){
 	
+	#' Drop a node from the tree
+	drop_node_from_tree = function(node, ct){
+		if( !node$name%in%ct) {
+			node$children = Filter(Negate(is.null), 
+														 lapply(node$children, drop_node_from_tree, ct)
+			)
+			node
+		}
+	}
+	
 	# Drop unwanted nodes
-	my_tree = drop_node_from_tree(tree, ct_to_omit)
+	tree = drop_node_from_tree(tree, ct_to_omit)
 	
 	
 	# Add empty proportion table to all nodes

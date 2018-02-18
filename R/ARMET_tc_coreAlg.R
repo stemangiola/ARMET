@@ -142,7 +142,7 @@ ARMET_tc_coreAlg = function(
 				dplyr:::mutate_if(is.character, as.factor) %>%
 				dplyr:::select(gene, ct, value) %>%
 				dplyr:::group_by(gene, ct) %>%
-				dplyr:::summarise(value = mean(value)) %>%
+				dplyr:::summarise(value = median(value)) %>%
 				dplyr:::ungroup() %>%
 				tidyr:::spread(gene, value) %>%
 				dplyr:::select(-ct) %>%
@@ -151,7 +151,7 @@ ARMET_tc_coreAlg = function(
 		tibble::as_tibble() %>%
 		dplyr:::mutate(sample = levels(mix$sample)) %>%
 		dplyr:::select(sample, dplyr:::everything())
-
+	
 	# Create input object for the model
 	model.in = list(
 		
@@ -177,14 +177,20 @@ ARMET_tc_coreAlg = function(
 		
 		X = my_design,
 		
+		x_genes = fg %>% 
+			dplyr:::pull(gene) %>%
+			levels() %>%
+			tibble::as_tibble() %>%
+			dplyr::rename(gene = value),
+		
 		x = fg %>% 
 			dplyr:::select(gene, ct, value) %>%
 			dplyr:::group_by(gene, ct) %>%
-			dplyr:::summarise(value = mean(value)) %>%
+			dplyr:::summarise(value = median(value)) %>%
 			dplyr:::ungroup() %>%
 			tidyr:::spread(ct, value) %>%
-			dplyr:::select(-gene) %>%
-			dplyr:::mutate_all(dplyr:::funs(ifelse(is.na(.), 0, .))),
+			dplyr:::mutate_if(is.numeric, dplyr:::funs(ifelse(is.na(.), 0, .))) %>%
+			dplyr:::select(-gene),
 		
 		y_hat_background = y_hat_background %>%
 			dplyr:::select(-sample),
