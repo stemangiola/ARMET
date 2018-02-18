@@ -27,10 +27,10 @@ ARMET_tc_coreAlg = function(
 	
 	# Get ref of the current level
 	ref = ref %>%
-		dplyr:::mutate(ct = as.character(ct)) %>%
-		dplyr:::left_join(get_map_foreground_background(my_tree, ct), by="ct") %>%
-		dplyr:::rename(ct_ = ct) %>%
-		dplyr:::filter(gene %in% 
+		dplyr::mutate(ct = as.character(ct)) %>%
+		dplyr::left_join(get_map_foreground_background(my_tree, ct), by="ct") %>%
+		dplyr::rename(ct_ = ct) %>%
+		dplyr::filter(gene %in% 
 					 	get_node_label_level_specfic(
 					 		node_from_name(my_tree,  ct), 
 					 		label = "markers",
@@ -38,33 +38,33 @@ ARMET_tc_coreAlg = function(
 					 		stop_level = 1
 					 	)
 					) %>%
-		dplyr:::select(-ct_) %>%
-		dplyr:::rename(ct = ancestor) %>%
-		dplyr:::mutate_if(is.character, as.factor)
+		dplyr::select(-ct_) %>%
+		dplyr::rename(ct = ancestor) %>%
+		dplyr::mutate_if(is.character, as.factor)
 		
 	
 	# Print stats on ref
 	get_stats_on_ref(ref,my_tree) %>% 
-		dplyr:::filter(ct %in% unique(ref$ct)) 
+		dplyr::filter(ct %in% unique(ref$ct)) 
 	
 	# filter mix and add theta value
 	mix = mix %>%
-		dplyr:::group_by(sample) %>%
-		dplyr:::mutate(
+		dplyr::group_by(sample) %>%
+		dplyr::mutate(
 			theta=
 				length(which(value>0)) / 
 				n()
 		) %>%
-		dplyr:::ungroup() %>%
-		dplyr:::filter(gene %in% unique(ref$gene))
+		dplyr::ungroup() %>%
+		dplyr::filter(gene %in% unique(ref$gene))
 	
 	fg = ref %>% 
-		dplyr:::filter(variable=="main") %>%
+		dplyr::filter(variable=="main") %>%
 		droplevels()
 	
 	# Setup background
 	bg = 	ref %>% 
-		dplyr:::filter(variable=="background") %>%
+		dplyr::filter(variable=="background") %>%
 		droplevels()
 
 	# Get the probability table of the previous run
@@ -91,12 +91,12 @@ ARMET_tc_coreAlg = function(
 	
 	# Get the probability table of my cell type
 	fg_prop = ancestor_run_prop_table %>%	
-		dplyr:::filter(ct==!!ct) %>%
+		dplyr::filter(ct==!!ct) %>%
 		droplevels()
 	
 	# Get the probability table of the background
 	bg_prop = ancestor_run_prop_table %>% 
-		dplyr:::filter(ct != !!ct) %>%
+		dplyr::filter(ct != !!ct) %>%
 		droplevels()
 	
 	# Prepare input for full bayesian 
@@ -111,9 +111,9 @@ ARMET_tc_coreAlg = function(
 			bg_prop %>%
 				{ 
 					if(nrow(.)==0) 
-						dplyr:::bind_rows(
+						dplyr::bind_rows(
 							fg_prop %>%
-								dplyr:::mutate(
+								dplyr::mutate(
 									ct = factor("bg"), 
 									relative_proportion = 0, 
 									absolute_proportion = 0
@@ -121,17 +121,17 @@ ARMET_tc_coreAlg = function(
 						)
 					else . 
 				} %>%
-				dplyr:::select(-relative_proportion) %>%
-				tidyr:::spread(ct, absolute_proportion) %>%
-				dplyr:::select(-sample)
+				dplyr::select(-relative_proportion) %>%
+				tidyr::spread(ct, absolute_proportion) %>%
+				dplyr::select(-sample)
 		) %*% 
 		as.matrix(
 			bg %>% 
 				{ 
 					if(nrow(.)==0) 
 						fg %>%
-						dplyr:::distinct(gene) %>%
-						dplyr:::mutate(
+						dplyr::distinct(gene) %>%
+						dplyr::mutate(
 							sample="s0",
 							value = 0,
 							ct = "bg",
@@ -139,69 +139,69 @@ ARMET_tc_coreAlg = function(
 						)
 					else . 
 				} %>%
-				dplyr:::mutate_if(is.character, as.factor) %>%
-				dplyr:::select(gene, ct, value) %>%
-				dplyr:::group_by(gene, ct) %>%
-				dplyr:::summarise(value = median(value)) %>%
-				dplyr:::ungroup() %>%
-				tidyr:::spread(gene, value) %>%
-				dplyr:::select(-ct) %>%
-				dplyr:::mutate_all(dplyr:::funs(ifelse(is.na(.), 0, .)))
+				dplyr::mutate_if(is.character, as.factor) %>%
+				dplyr::select(gene, ct, value) %>%
+				dplyr::group_by(gene, ct) %>%
+				dplyr::summarise(value = median(value)) %>%
+				dplyr::ungroup() %>%
+				tidyr::spread(gene, value) %>%
+				dplyr::select(-ct) %>%
+				dplyr::mutate_all(dplyr::funs(ifelse(is.na(.), 0, .)))
 		) %>%
 		tibble::as_tibble() %>%
-		dplyr:::mutate(sample = levels(mix$sample)) %>%
-		dplyr:::select(sample, dplyr:::everything())
+		dplyr::mutate(sample = levels(mix$sample)) %>%
+		dplyr::select(sample, dplyr::everything())
 	
 	# Create input object for the model
 	model.in = list(
 		
 		G = fg %>% 
-			dplyr:::distinct(gene) %>% 
+			dplyr::distinct(gene) %>% 
 			nrow(),
 		
 		S = mix %>% 
-			dplyr:::distinct(sample) %>% 
+			dplyr::distinct(sample) %>% 
 			nrow(),
 		
 		P = fg %>% 
-			dplyr:::distinct(ct) %>% 
+			dplyr::distinct(ct) %>% 
 			nrow(),
 		
 		R = my_design %>% 
 			ncol(),
 		
 		y = mix %>% 
-			dplyr:::select(gene, sample, value) %>% 
-			tidyr:::spread(gene, value) %>%
-			dplyr:::select(-sample), 
+			dplyr::select(gene, sample, value) %>% 
+			tidyr::spread(gene, value) %>%
+			dplyr::select(-sample), 
 		
 		X = my_design,
 		
 		x_genes = fg %>% 
-			dplyr:::pull(gene) %>%
+			dplyr::pull(gene) %>%
 			levels() %>%
 			tibble::as_tibble() %>%
 			dplyr::rename(gene = value),
 		
 		x = fg %>% 
-			dplyr:::select(gene, ct, value) %>%
-			dplyr:::group_by(gene, ct) %>%
-			dplyr:::summarise(value = median(value)) %>%
-			dplyr:::ungroup() %>%
-			tidyr:::spread(ct, value) %>%
-			dplyr:::mutate_if(is.numeric, dplyr:::funs(ifelse(is.na(.), 0, .))) %>%
-			dplyr:::select(-gene),
+			dplyr::select(gene, ct, value) %>%
+			dplyr::group_by(gene, ct) %>%
+			dplyr::summarise(value = median(value)) %>%
+			dplyr::ungroup() %>%
+			tidyr::spread(ct, value) %>%
+			dplyr::mutate_if(is.numeric, dplyr::funs(ifelse(is.na(.), 0, .))) %>%
+			dplyr::select(-gene),
 		
 		y_hat_background = y_hat_background %>%
-			dplyr:::select(-sample),
+			dplyr::select(-sample),
 		
 		p_target = fg_prop %>% 
-			dplyr:::pull(absolute_proportion) %>% 
+			dplyr::pull(absolute_proportion) %>% 
 			as.array(),
 		
 		theta = mix %>%
-			dplyr:::distinct(sample, theta) %>%
-			dplyr:::pull(theta) %>% 
+			dplyr::distinct(sample, theta) %>%
+			dplyr::pull(theta) %>% 
 			as.array(),
 		
 		sigma_hyper_sd =     sigma_hyper_sd,
@@ -230,11 +230,11 @@ ARMET_tc_coreAlg = function(
 	# Parse results
 	proportions =  
 		parse_summary_vector_in_2D(apply( as.matrix(fit, pars = "beta"), 2, mean)) %>%
-		tibble:::as_tibble() %>%
+		tibble::as_tibble() %>%
 		setNames(levels(mix$sample)) %>%
-		dplyr:::mutate(ct = levels(fg$ct)) %>%
-		tidyr:::gather(sample, relative_proportion, -ct) %>%
-		dplyr:::mutate_if(is.character, as.factor)
+		dplyr::mutate(ct = levels(fg$ct)) %>%
+		tidyr::gather(sample, relative_proportion, -ct) %>%
+		dplyr::mutate_if(is.character, as.factor)
 	
 	# Add info to the node
 	node = add_proportions_to_tree_from_table(node, proportions)
@@ -244,9 +244,9 @@ ARMET_tc_coreAlg = function(
 	
 	# Save output
 	if(save_report) save(fit, file=sprintf("%s/%s_fit.RData", output_dir, ct))
-	p = rstan:::traceplot(fit, pars=c("alpha"), inc_warmup=F)
+	p = rstan::traceplot(fit, pars=c("alpha"), inc_warmup=F)
 		
-	#if(save_report) ggplot2:::ggsave(sprintf("%s_chains.png", ct), p)
+	#if(save_report) ggplot2::ggsave(sprintf("%s_chains.png", ct), p)
 	if(save_report)	write.csv(proportions, sprintf("%s/%s_composition.csv", output_dir, ct))
 
 	list(proportions = proportions, node = node)

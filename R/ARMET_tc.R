@@ -40,13 +40,13 @@ ARMET_tc = function(
 
 	# Format input
 	mix = mix %>%	
-		tidyr:::gather("sample", "value", 2:ncol(mix)) %>%
-		dplyr:::mutate(gene = factor(gene), sample = factor(sample)) %>%
-		{ if(max((.)$value) < 50) dplyr:::mutate(value=exp(value)) else .}
+		tidyr::gather("sample", "value", 2:ncol(mix)) %>%
+		dplyr::mutate(gene = factor(gene), sample = factor(sample)) %>%
+		{ if(max((.)$value) < 50) dplyr::mutate(value=exp(value)) else .}
 
 	# Check if design matrix exists
 	if(is.null(my_design)) 
-		my_design = matrix(rep(1, nrow(mix %>% dplyr:::distinct(sample))), ncol=1)
+		my_design = matrix(rep(1, nrow(mix %>% dplyr::distinct(sample))), ncol=1)
 
 	# Format tree
 	my_tree = format_tree(tree, mix, ct_to_omit)
@@ -59,8 +59,8 @@ ARMET_tc = function(
 				if(!is_mix_microarray) ref_seq 
 				else ref_array
 		} %>% 
-		tidyr:::drop_na() %>% 
-		dplyr:::filter(
+		tidyr::drop_na() %>% 
+		dplyr::filter(
 			ct %in% 
 			get_leave_label(my_tree, last_level = 0, label = "name")
 		) %>% 
@@ -74,39 +74,41 @@ ARMET_tc = function(
 
 	# Make data sets comparable
 	common_genes =                      intersect(as.character(mix$gene), as.character(ref$gene))
-	mix =                               mix %>% dplyr:::filter(gene%in%common_genes) %>% droplevels()
-	ref =                               ref %>% dplyr:::filter(gene%in%common_genes) %>% droplevels()
+	mix =                               mix %>% dplyr::filter(gene%in%common_genes) %>% droplevels()
+	ref =                               ref %>% dplyr::filter(gene%in%common_genes) %>% droplevels()
 
 	# Normalize data
 	norm.obj = 													wrapper_normalize_mix_ref(mix, ref, is_mix_microarray)
-	ref = 															norm.obj$ref %>% dplyr:::mutate(value=round(value))
-	mix = 															norm.obj$mix %>% dplyr:::mutate(value=round(value))
+	ref = 															norm.obj$ref %>% dplyr::mutate(value=round(value))
+	mix = 															norm.obj$mix %>% dplyr::mutate(value=round(value))
 	
 	# Save density plot
-	if(save_report) ggplot2:::ggsave(sprintf("%s/densities.png", output_dir), plot=norm.obj$plot)
+	if(save_report) ggplot2::ggsave(sprintf("%s/densities.png", output_dir), plot=norm.obj$plot)
 	
 	## Execute core ##############################################################################
 	##############################################################################################
 	
-	my_tree = run_coreAlg_though_tree(
-		my_tree, 
-		list(
-			mix =                           mix, 
-			ref =                           ref, 
-			my_design=                      my_design, 
-			cov_to_test =                   cov_to_test, 
-			fully_bayesian =                fully_bayesian,
-			observed_prop =                 observed_prop, 
-			ct_to_omit =                    ct_to_omit, 
-			my_tree =                       my_tree, 
-			is_mix_microarray =             is_mix_microarray,
-			save_report =                   save_report,
-			output_dir =                    output_dir,
-			sigma_hyper_sd =                sigma_hyper_sd,
-			phi_hyper_sd =                  phi_hyper_sd,
-			alpha_hyper_value =             alpha_hyper_value,
-			multithread =                   multithread
-		)
+	
+	my_tree = 
+		run_coreAlg_though_tree(
+			my_tree, 
+			list(
+				mix =                           mix, 
+				ref =                           ref, 
+				my_design=                      my_design, 
+				cov_to_test =                   cov_to_test, 
+				fully_bayesian =                fully_bayesian,
+				observed_prop =                 observed_prop, 
+				ct_to_omit =                    ct_to_omit, 
+				my_tree =                       my_tree, 
+				is_mix_microarray =             is_mix_microarray,
+				save_report =                   save_report,
+				output_dir =                    output_dir,
+				sigma_hyper_sd =                sigma_hyper_sd,
+				phi_hyper_sd =                  phi_hyper_sd,
+				alpha_hyper_value =             alpha_hyper_value,
+				multithread =                   multithread
+			)
 	)
 
 	##############################################################################################
@@ -123,24 +125,24 @@ ARMET_tc = function(
 	# Return
 	list(
 		
-		proportions =	get_last_existing_leaves_with_annotation(my_tree) %>%
-			dplyr:::select(-relative_proportion) %>%
-			tidyr:::spread(ct, absolute_proportion),
+		proportions =	get_last_existing_leaves_with_annotation( my_tree ) %>%
+			dplyr::select(-relative_proportion) %>%
+			tidyr::spread(ct, absolute_proportion),
 		
 		signatures = 
 			list(
 				orig =  
 					ref %>% 
-					dplyr:::select(gene, ct, value) %>%
-					dplyr:::group_by(gene, ct) %>%
-					dplyr:::summarise(value = mean(value)) %>%
-					dplyr:::ungroup() %>%
-					tidyr:::spread(ct, value),
+					dplyr::select(gene, ct, value) %>%
+					dplyr::group_by(gene, ct) %>%
+					dplyr::summarise(value = mean(value)) %>%
+					dplyr::ungroup() %>%
+					tidyr::spread(ct, value),
 				predicted = NULL
 			),
 		
 		mix = mix %>% 
-			dplyr::filter(gene %in% get_genes(my_tree)) %>%
+			dplyr::filter(gene %in% get_genes( my_tree )) %>%
 			droplevels()
 		
 	)

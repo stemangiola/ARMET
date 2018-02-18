@@ -7,12 +7,12 @@ add_info_to_tree = function(node, ct, label, value, append = F){
 		if(append) 
 			node[[label]] =
 				node[[label]] %>% 
-					dplyr:::mutate_if(is.factor, as.character) %>%
-					dplyr:::bind_rows(
+					dplyr::mutate_if(is.factor, as.character) %>%
+					dplyr::bind_rows(
 						value %>% 
-							dplyr:::mutate_if(is.factor, as.character)
+							dplyr::mutate_if(is.factor, as.character)
 					) %>%
-					dplyr:::mutate_if(is.character, as.factor)
+					dplyr::mutate_if(is.character, as.factor)
 		else node[[label]] = value
 		node
 	}
@@ -123,12 +123,12 @@ get_last_existing_leaves_with_annotation = function(node, what = "relative_propo
 		{ 
 			if(nrow(.)==0) 
 				(.) %>% 
-				dplyr:::mutate_if(is.factor, as.character) %>%
-				dplyr:::bind_rows(
+				dplyr::mutate_if(is.factor, as.character) %>%
+				dplyr::bind_rows(
 					node[[what]] %>%
-						dplyr:::mutate_if(is.factor, as.character)
+						dplyr::mutate_if(is.factor, as.character)
 				) %>%
-				dplyr:::mutate_if(is.character, as.factor)
+				dplyr::mutate_if(is.character, as.factor)
 			else 
 				.
 		}
@@ -268,17 +268,17 @@ get_map_foreground_background = function(node, ct){
 		no = node_from_name(node, df$ancestor)
 		children = if(length(no$children)>0) get_node_label_recursive(no)[-1] else no$name
 		do.call("rbind", lapply(1:length(children), function(dummy) df)) %>% 
-			dplyr:::mutate(ct = children)
+			dplyr::mutate(ct = children)
 	}
 	
-	reshape:::melt(fg_bg) %>% 
-		tibble:::as_tibble() %>%
-		dplyr:::rename(ancestor=value, variable=L1) %>%
-		dplyr:::mutate(variable = gsub("ct_", "", variable)) %>%
-		dplyr:::group_by(ancestor) %>%
-		dplyr:::do(add_children_to_line(.)) %>%
-		dplyr:::ungroup() %>%
-		dplyr:::mutate(ancestor = as.character(ancestor))
+	reshape::melt(fg_bg) %>% 
+		tibble::as_tibble() %>%
+		dplyr::rename(ancestor=value, variable=L1) %>%
+		dplyr::mutate(variable = gsub("ct_", "", variable)) %>%
+		dplyr::group_by(ancestor) %>%
+		dplyr::do(add_children_to_line(.)) %>%
+		dplyr::ungroup() %>%
+		dplyr::mutate(ancestor = as.character(ancestor))
 }
 
 #' Put absolute proportions on tree
@@ -286,7 +286,7 @@ add_absolute_proportions_to_tree = function(node, p_ancestor =  rep(1, nrow( nod
 
 	node$relative_proportion = 
 		node$relative_proportion %>% 
-		dplyr:::mutate(
+		dplyr::mutate(
 			absolute_proportion = 
 				relative_proportion * 
 				p_ancestor
@@ -297,7 +297,7 @@ add_absolute_proportions_to_tree = function(node, p_ancestor =  rep(1, nrow( nod
 			lapply(
 				node$children, 
 				add_absolute_proportions_to_tree, 
-				node$relative_proportion %>% dplyr:::pull(absolute_proportion)
+				node$relative_proportion %>% dplyr::pull(absolute_proportion)
 			)
 	}
 	node
@@ -310,7 +310,7 @@ add_proportions_to_tree_from_table = function(tree, proportion){
 	for(
 		ll in 
 		proportion %>% 
-		dplyr:::pull(ct) %>% 
+		dplyr::pull(ct) %>% 
 		levels()
 	){
 		
@@ -319,7 +319,7 @@ add_proportions_to_tree_from_table = function(tree, proportion){
 				tree, 
 				ll, 
 				"relative_proportion", 
-				proportion %>% dplyr:::filter(ct == ll),
+				proportion %>% dplyr::filter(ct == ll),
 				append = T
 			)
 		
@@ -342,19 +342,20 @@ Log <- function(text, ...) {
 #' @param obj.in A object with the input
 #' @param bg_tree The background tree that tracks the evolution of the algoritm
 #' @return A probability array
-run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree, log.socket){
+run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree, log.ARMET){
 	
 	# library(doFuture)
-	# doFuture:::registerDoFuture()
-	# future:::plan(future:::multiprocess)
+	# doFuture::registerDoFuture()
+	# future::plan(future::multiprocess)
 
 	
 	if(length(node$children)>0){
 
+		
 		obj.out = ARMET_tc_coreAlg(obj.in, node)
 		node = obj.out$node
 
-		#Log("ARMET: Predicted composition for %s", node$name)
+		write(node$name,file=log.ARMET,append=TRUE)
 		
 		# Update results for the background tree
 		bg_tree = add_proportions_to_tree_from_table(bg_tree, obj.out$proportion)
@@ -366,18 +367,18 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree, log.socket){
 		
 		if(obj.in$multithread){
 			n_cores = floor(parallel::detectCores() / 6)
-			cl <- parallel:::makeCluster(n_cores, outfile="")
-			parallel:::clusterExport(cl, c("obj.in", "bg_tree", "%>%", "log.socket"), environment())
-			doParallel:::registerDoParallel(cl)
+			cl <- parallel::makeCluster(n_cores, outfile="")
+			parallel::clusterExport(cl, c("obj.in", "bg_tree", "%>%", "log.ARMET"), environment())
+			doParallel::registerDoParallel(cl)
 		}
 		
 		`%my_do%` <- if(obj.in$multithread) `%dopar%` else `%do%`
 
-		node$children = foreach:::foreach(cc = node$children) %my_do% {
-			run_coreAlg_though_tree_recursive(cc, obj.in, bg_tree, log.socket)
+		node$children = foreach::foreach(cc = node$children) %my_do% {
+			run_coreAlg_though_tree_recursive(cc, obj.in, bg_tree, log.ARMET)
 		}
 			
-		if(obj.in$multithread)	parallel:::stopCluster(cl)
+		if(obj.in$multithread)	parallel::stopCluster(cl)
 			
 		node
 	}
@@ -387,26 +388,40 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree, log.socket){
 
 run_coreAlg_though_tree = function(node, obj.in){
 	
-	#log.socket <- utils::make.socket(port=4000)
+	future::plan(future::multiprocess)
 	
-	log.socket = NA
+	log.ARMET = ".ARMET.log"
 	
-	if(obj.in$multithread){
-		n_cores = floor(parallel::detectCores() / 6)
-		cl <- parallel:::makeCluster(n_cores, outfile="")
-		parallel:::clusterExport(cl, c("obj.in", "%>%", "log.socket"), environment())
-		doParallel:::registerDoParallel(cl)
+	if (file.exists(log.ARMET)) file.remove(log.ARMET)
+	file.create(log.ARMET)
+
+	node.filled = future::future(
+		run_coreAlg_though_tree_recursive(node, obj.in, node, log.ARMET)
+	)
+	
+	log.array = c()
+	done = F
+	
+	while(1){
+		
+		Sys.sleep(2)
+		
+		temp = readLines(".ARMET.log")
+
+		new = setdiff(temp, log.array)
+
+		if(length(new)>0) {
+			writeLines(sprintf("ARMET: %s deconvolution completed", new))
+			log.array = c(log.array, new)
+		}
+
+		
+		if(all( get_leave_label(node, last_level = -1) %in% log.array)) break
 	}
 	
-	`%my_do%` <- if(obj.in$multithread) `%dopar%` else `%do%`
+	return(future::value(node.filled))
 	
-	node = foreach:::foreach(dummy = 1) %my_do% {
-		run_coreAlg_though_tree_recursive(node, obj.in, node, log.socket)
-	}
-	
-	if(obj.in$multithread)	parallel:::stopCluster(cl)
-	
-	node[[1]]
+
 }
 
 
@@ -441,7 +456,7 @@ format_tree = function(tree, mix, ct_to_omit){
 				tree, 
 				ct = ct, 
 				label = "relative_proportion", 
-				value = tibble:::tibble(
+				value = tibble::tibble(
 					sample = factor(), 
 					ct = factor(), 
 					relative_proportion=double(), 
@@ -458,8 +473,8 @@ format_tree = function(tree, mix, ct_to_omit){
 			label = "relative_proportion", 
 			value = (
 				mix %>% 
-					dplyr:::distinct(sample) %>% 
-					dplyr:::mutate(
+					dplyr::distinct(sample) %>% 
+					dplyr::mutate(
 						ct = factor(tree$name), 
 						relative_proportion = 1,
 						absolute_proportion = 1
@@ -481,7 +496,7 @@ pick_proportion_for_specific_tree = function(node, name){
 	# If the children has proportion information
 	node$relative_proportion = 
 		node$relative_proportion %>%
-			dplyr:::filter(sample == name)
+			dplyr::filter(sample == name)
 
 	# Recursive selection
 	if(length(node$children)>0)
@@ -502,7 +517,7 @@ divide_trees_proportion_across_many_trees = function(node){
 	
 	my_tree_names = 
 		node$relative_proportion %>% 
-		dplyr:::pull(sample) %>% 
+		dplyr::pull(sample) %>% 
 		levels()
 
 	trees = 
@@ -519,21 +534,21 @@ divide_trees_proportion_across_many_trees = function(node){
 # run_coreAlg_though_tree = function(node, obj.in, bg_tree){
 # 	
 # 	# library(doFuture)
-# 	# doFuture:::registerDoFuture()
-# 	# future:::plan(future:::multiprocess)
+# 	# doFuture::registerDoFuture()
+# 	# future::plan(future::multiprocess)
 # 	
 # 	
 # 	
 # 	if(obj.in$multithread){
 # 		n_cores = floor(parallel::detectCores() / 6)
-# 		cl <- parallel:::makeCluster(n_cores)
-# 		parallel:::clusterExport(cl, c("obj.in", "bg_tree", "%>%"), environment())
-# 		doParallel:::registerDoParallel(cl)
+# 		cl <- parallel::makeCluster(n_cores)
+# 		parallel::clusterExport(cl, c("obj.in", "bg_tree", "%>%"), environment())
+# 		doParallel::registerDoParallel(cl)
 # 	}
 # 	
 # 	`%my_do%` <- if(obj.in$multithread) `%dopar%` else `%do%`
 # 	
-# 	foreach:::foreach(cc = node$children, .verbose = TRUE) %my_do% {
+# 	foreach::foreach(cc = node$children, .verbose = TRUE) %my_do% {
 # 		
 # 		if(length(node$children)==0) return(cc)
 # 		
@@ -553,7 +568,7 @@ divide_trees_proportion_across_many_trees = function(node){
 # 		
 # 	}
 # 	
-# 	if(obj.in$multithread)	parallel:::stopCluster(cl)
+# 	if(obj.in$multithread)	parallel::stopCluster(cl)
 # 	
 # 	
 # }
