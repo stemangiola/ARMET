@@ -47,4 +47,5 @@ Temporary Items
 .apdisk
 
 *.Rproj*
-ref_array*
+*.o
+*.hpp

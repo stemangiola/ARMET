@@ -24,6 +24,7 @@ Imports:
 	tibble (>= 1.4.2),
 	tidyr (>= 0.7.2),
 	parallel (>= 3.4.3),
+	future,
 	edgeR,
 	limma,
 	data.tree,

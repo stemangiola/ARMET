@@ -21,7 +21,6 @@ Maintainer: \packageMaintainer{ARMET}
 \references{
 bla
 }
-bla
 \keyword{ package }
 \seealso{
 bla
