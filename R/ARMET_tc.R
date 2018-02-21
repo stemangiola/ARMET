@@ -26,17 +26,29 @@ ARMET_tc = function(
 	alpha_hyper_value =                 10,
 	save_report =                       F,
 	custom_ref =                        NULL,
-	multithread =                       T
+	multithread =                       T,
+	do_debug =                          F,
+	cell_type_root =                    "TME"
 ){
 
+	writeLines("ARMET: Started data processing")
+	
 	#Read ini file for some options
 	get_ini()
 	
 	# Check input
-	check_input(mix, is_mix_microarray, my_design, cov_to_test, sigma_hyper_sd, custom_ref, tree)
+	check_input(
+		mix, 
+		is_mix_microarray, 
+		my_design, 
+		cov_to_test, 
+		sigma_hyper_sd, 
+		custom_ref, 
+		drop_node_from_tree(node_from_name(tree, cell_type_root), ct_to_omit) 
+	)
 	
 	# Create directory
-	output_dir = if(save_report)        create_temp_result_directory() else NULL
+	output_dir = if(save_report)  create_temp_result_directory() else NULL
 
 	# Format input
 	mix = mix %>%	
@@ -49,7 +61,7 @@ ARMET_tc = function(
 		my_design = matrix(rep(1, nrow(mix %>% dplyr::distinct(sample))), ncol=1)
 
 	# Format tree
-	my_tree = format_tree(tree, mix, ct_to_omit)
+	my_tree =  format_tree( node_from_name(tree, cell_type_root), mix, ct_to_omit)
 
 	# Ref formatting
 	ref =
@@ -68,7 +80,7 @@ ARMET_tc = function(
 	
 	
 	# Calculate stats for ref
-	if(save_report) write.csv(get_stats_on_ref(ref, tree), sprintf("%s/stats_on_ref.csv", output_dir))
+	if(save_report) write.csv(get_stats_on_ref(ref, my_tree), sprintf("%s/stats_on_ref.csv", output_dir))
 
 
 
@@ -79,15 +91,21 @@ ARMET_tc = function(
 
 	# Normalize data
 	norm.obj = 													wrapper_normalize_mix_ref(mix, ref, is_mix_microarray)
-	ref = 															norm.obj$ref %>% dplyr::mutate(value=round(value))
-	mix = 															norm.obj$mix %>% dplyr::mutate(value=round(value))
+	ref = 															norm.obj$ref 
+	mix = 															norm.obj$mix
+	
+	# Round if RNA seq
+	if(!is_mix_microarray) ref = 				ref %>% dplyr::mutate(value=round(value))
+	if(!is_mix_microarray) mix = 				mix %>% dplyr::mutate(value=round(value))
+	
+	# Plot densities
+	#plot_densities(df)
 	
 	# Save density plot
 	if(save_report) ggplot2::ggsave(sprintf("%s/densities.png", output_dir), plot=norm.obj$plot)
 	
 	## Execute core ##############################################################################
 	##############################################################################################
-	
 	
 	my_tree = 
 		run_coreAlg_though_tree(
@@ -107,7 +125,8 @@ ARMET_tc = function(
 				sigma_hyper_sd =                sigma_hyper_sd,
 				phi_hyper_sd =                  phi_hyper_sd,
 				alpha_hyper_value =             alpha_hyper_value,
-				multithread =                   multithread
+				multithread =                   multithread,
+				do_debug =                      do_debug
 			)
 	)
 

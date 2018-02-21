@@ -23,6 +23,31 @@ build_data_directory = function(){
 	# save(tree, file="data/tree_json.rda")
 	
 }
+
+average_duplicated_genes_tibble_spreaded = function(tbl){
+
+	dup_genes =
+		tbl %>%
+		dplyr::group_by(gene) %>%
+		dplyr::summarise(tot = n()) %>%
+		dplyr::filter(tot > 1) %>%
+		dplyr::pull(gene) %>%
+		as.character()
+
+	tbl %>%
+		dplyr::mutate(gene = as.character(gene)) %>%
+		dplyr::filter(!gene %in% dup_genes) %>%
+		dplyr::bind_rows(
+			tbl %>%
+				dplyr::mutate(gene = as.character(gene)) %>%
+				dplyr::filter(gene %in% dup_genes) %>%
+				dplyr::group_by(gene) %>%
+				dplyr::summarise_if(is.numeric, median) %>%
+				dplyr::ungroup()
+		)
+	
+}
+
 #' Check the input for anomalies
 check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd, custom_ref, tree){
 	
@@ -87,27 +112,9 @@ check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd,
 	) {
 		writeLines("ARMET: There are duplicated genes n the provided mix. Genes will be summarised with medians.")
 		
-		dup_genes =
-			mix %>%
-			dplyr::group_by(gene) %>%
-			dplyr::summarise(tot = n()) %>%
-			dplyr::filter(tot > 1) %>%
-			dplyr::pull(gene) %>%
-			as.character()
-		
 		pf = parent.frame()
 		
-		pf$mix = mix %>%
-			dplyr::mutate(gene = as.character(gene)) %>%
-			dplyr::filter(!gene %in% dup_genes) %>%
-			dplyr::bind_rows(
-				mix %>%
-					dplyr::mutate(gene = as.character(gene)) %>%
-					dplyr::filter(gene %in% dup_genes) %>%
-					dplyr::group_by(gene) %>%
-					dplyr::summarise_if(is.numeric, median) %>%
-					dplyr::ungroup()
-			)
+		pf$mix = average_duplicated_genes_tibble_spreaded(mix)
 	}
 	
 	
@@ -117,14 +124,16 @@ check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd,
 get_ini = function(){
 	if(file.exists("ARMET.ini")) {
 		pars =  ini::read.ini("ARMET.ini")$ARMET
-		writeLines("Importing parameters from .ini file..")
+		writeLines("ARMET: Importing parameters from .ini file..")
 		for(n in names(pars)){
 			if(pars[n]%in%c("T", "F", "TRUE", "FALSE"))
 				pars[n] = as.logical(pars[n])
+			else 	pars[n] = strsplit(as.character(pars[n]), ",")
 			assign(n, unlist(pars[n]))
 		}
 	}
 }
+
 
 #' Creates the directory needed for archive
 #'
@@ -425,24 +434,25 @@ rnaseq_norm = function(df, reference = NULL, cpm_theshold = 0.5, prop = 3/4){
 #' @param ref A matrix
 #' @param mix A matrix
 #' @return A list including the ref and mix normalized and a ggplot
-rnaseq_norm_ref_mix = function(ref, mix){
+rnaseq_norm_ref_mix = function(obj, target){
 	
-	if(max(ref$value, na.rm = T) < 50 | max(mix$value, na.rm = T) < 50) stop("ARMET: Both objects have to be in real scale, log tranformation detected")
+	error_if_log_transformed(target)
+	error_if_log_transformed(obj)
 
-	# Normalize the mix
-	mix = rnaseq_norm(mix)
+	# Normalize the obj
+	obj = rnaseq_norm(obj)
 	
-	# Calclate normalization factors for mix and ref => two numbers
+	# Calclate normalization factors for obj and target => two numbers
 	nf.obj = rnaseq_norm.calcNormFactor(
 		rbind(
-			mix %>% 
+			obj %>% 
 				dplyr::group_by(gene) %>% 
 				dplyr::summarise(value = median(value, na.rm=T)) %>% 
-				dplyr::mutate(sample="mix"),
-			ref %>% 
+				dplyr::mutate(sample="obj"),
+			target %>% 
 				dplyr::group_by(gene) %>% 
 				dplyr::summarise(value = median(value, na.rm=T)) %>% 
-				dplyr::mutate(sample="ref")
+				dplyr::mutate(sample="target")
 		), 
 		1)
 	
@@ -450,29 +460,29 @@ rnaseq_norm_ref_mix = function(ref, mix){
 	my_df = nf.obj$df
 	
 	tot_reference = (my_df %>%
-									 	dplyr::filter(sample == "mix") %>% 
+									 	dplyr::filter(sample == "obj") %>% 
 									 	dplyr::summarise(tot = sum(value, na.rm=T)))$tot 
 	
 	tot_other = (my_df %>%
-							 	dplyr::filter(sample == "ref") %>% 
+							 	dplyr::filter(sample == "target") %>% 
 							 	dplyr::summarise(tot = sum(value, na.rm=T))
 	)$tot 
 	
-	mix = mix %>%
+	obj = obj %>%
 		dplyr::mutate(tot_ref = tot_reference) %>%
 		dplyr::mutate(nf = 
 									 	(nf %>%
-									 	 	dplyr::filter(sample=="mix"))$nf
+									 	 	dplyr::filter(sample=="obj"))$nf
 		) %>%
 		dplyr::mutate(tot = tot_ref) %>%
 		dplyr::mutate(value = value / (tot * nf) * tot_ref) %>%
 		dplyr::select(-tot, -tot_ref, -nf)
 	
-	ref = ref %>%
+	target = target %>%
 		dplyr::mutate(tot_ref = tot_reference) %>%
 		dplyr::mutate(nf = 
 									 	(nf %>%
-									 	 	dplyr::filter(sample=="ref"))$nf
+									 	 	dplyr::filter(sample=="target"))$nf
 		) %>%
 		dplyr::mutate(tot = tot_other) %>%
 		dplyr::mutate(value = value / (tot * nf) * tot_ref) %>%
@@ -480,34 +490,15 @@ rnaseq_norm_ref_mix = function(ref, mix){
 	
 	p = plot_densities( 
 		rbind( 
-			ref %>% 
+			target %>% 
 				dplyr::mutate(color=1) %>%
 				dplyr::select(-ct),
-			mix %>% 
+			obj %>% 
 				dplyr::mutate(color=1)
 		)
 	)
 	
-	return(list(ref = ref, mix = mix,  plot = p))
-}
-
-#' Normalize array data of ref and mix
-#'
-#' @param ref A matrix
-#' @param mix A matrix
-#' @return A list including the ref and mix normalized and a ggplot
-array_norm = function(ref, mix){
-	
-	writeLines("Normalizing Array data")
-	log_ex = log(cbind(ref, mix)+1)
-	log_ex.norm = limma::normalizeBetweenArrays(log_ex)
-	ref = exp(log_ex.norm[,1:dim(ref)[2]])
-	mix = exp(log_ex.norm[,(dim(ref)[2]+1):dim(log_ex.norm)[2]])
-	
-	# Build plot
-	p = plot_densities(cbind(ref,mix))
-	
-	return(list(ref=ref, mix=mix, plot=p))
+	return(list(target = target, obj = obj,  plot = p))
 }
 
 #' Normalize array to match RNAseq
@@ -516,42 +507,55 @@ array_norm = function(ref, mix){
 #' @param obj A matrix
 #' @return A list including the ref and mix normalized and a ggplot
 quant_norm_to_target = function(obj, target){
-	writeLines("Quantile norm to target..")
+	#writeLines("ARMET: Quantile normalization")
+
+	error_if_log_transformed(obj)
+	error_if_log_transformed(target)
+
+	# Needed for: Transform tibble in matrix and normalize because is faster
+	obj = obj %>%
+		tidyr::spread(sample, value)
 	
-	if(max(ref$value, na.rm = T) < 50 | max(mix$value, na.rm = T) < 50) stop("ARMET: Both objects have to be in real scale, log tranformation detected")
+	obj = dplyr::bind_cols(
+		obj %>% dplyr::select(gene),
+		
+		data.frame(
+			exp(preprocessCore::normalize.quantiles.use.target(
+				as.matrix(log(obj[,-1]+1)), 
+				target=log(target$value+1)
+			)) - 1
+		) %>% 
+			tibble::as_tibble()
+	) %>%
+		magrittr::set_colnames(colnames(obj)) %>%
+		tidyr::gather(sample, value, -gene) %>%
+		dplyr::mutate_if(is.character, as.factor)
 	
 	list(
-		ref = target,
-		mix = obj %>%
-			dplyr::group_by(sample) %>%
-			dplyr::mutate(
-				value = exp(preprocessCore::normalize.quantiles.use.target(
-					log(value+1), 
-					target=log(target$value+1)
-				))-1
-			) %>%
-			dplyr::ungroup(),
+		target = target,
+		obj = obj,
 		plot = plot(1,1)
 	)
 	
 }
-
-quant_norm_to_RNAseq = quant_norm_to_array = quant_norm_to_target
-
-
 
 #' Wrapper function for all normalization based on the current needs
 #'
 #' @param ref A matrix
 #' @param mix A matrix
 #' @param is_mix_microarray A cool
-#' @return Same list of rnaseq_norm_ref_mix, quant_norm_to_RNAseq
-wrapper_normalize_mix_ref = function(mix, ref, is_mix_microarray = F){
-	if(!is_mix_microarray)
-		rnaseq_norm_ref_mix(ref, mix)
-	else
-		#quant_norm_to_array(mix, ref)
-		quant_norm_to_RNAseq(mix, ref)
+#' @return Same list of rnaseq_norm_ref_mix, quant_norm_to_target
+wrapper_normalize_mix_ref = function(mix, ref, is_mix_microarray){
+	if(!is_mix_microarray) {
+		norm = rnaseq_norm_ref_mix(mix, ref)
+		list(mix=norm$obj, ref=norm$target)
+	}
+	else {
+		norm = quant_norm_to_target(mix, ref)
+		list(mix=norm$obj, ref=norm$target)
+	}
+	
+	
 }
 
 #' Subsample reference to try homogeneity
@@ -754,7 +758,7 @@ parse_summary_vector_in_2D = function(f){
 }
 
 get_stats_on_ref = function(ref, tree){
-	`%>%` <- magrittr::`%>%`
+
 	rbind(
 		foreach::foreach(ct = get_leave_names(tree), .combine = rbind) %do% {
 			tibble::tibble(
