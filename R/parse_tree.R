@@ -266,7 +266,7 @@ get_map_foreground_background = function(node, ct){
 	
 	add_children_to_line = function(df){
 		no = node_from_name(node, df$ancestor)
-		children = if(length(no$children)>0) get_node_label_recursive(no)[-1] else no$name
+		children = if(length(no$children)>0) get_node_label_recursive(no) else no$name
 		do.call("rbind", lapply(1:length(children), function(dummy) df)) %>% 
 			dplyr::mutate(ct = children)
 	}
@@ -328,14 +328,6 @@ add_proportions_to_tree_from_table = function(tree, proportion){
 	tree
 }
 
-
-
-Log <- function(text, ...) {
-	msg <- sprintf(paste0(as.character(Sys.time()), ": ", text, "\n"), ...)
-	cat(msg)
-	write.socket(log.socket, msg)
-}
-
 #' Run ARMET core algorithm recursively on the tree 
 #'
 #' @param node A node from the tree
@@ -351,6 +343,8 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree, log.ARMET){
 	
 	if(length(node$children)>0){
 
+		# Initialize pipe
+		`%>%` <- magrittr::`%>%`
 		
 		obj.out = ARMET_tc_coreAlg(obj.in, node)
 		node = obj.out$node
@@ -365,20 +359,22 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree, log.ARMET){
 		
 		obj.in$my_tree = bg_tree
 		
-		if(obj.in$multithread){
-			n_cores = floor(parallel::detectCores() / 6)
+		if(obj.in$multithread & !obj.in$do_debug){
+			n_cores = length(node$children)
+
 			cl <- parallel::makeCluster(n_cores)
 			parallel::clusterExport(cl, c("obj.in", "bg_tree", "%>%", "log.ARMET"), environment())
 			doParallel::registerDoParallel(cl)
 		}
 		
-		`%my_do%` <- if(obj.in$multithread) `%dopar%` else `%do%`
+		`%my_do%` <- if(obj.in$multithread & !obj.in$do_debug) `%dopar%` else `%do%`
 
 		node$children = foreach::foreach(cc = node$children) %my_do% {
+			
 			run_coreAlg_though_tree_recursive(cc, obj.in, bg_tree, log.ARMET)
 		}
 			
-		if(obj.in$multithread)	parallel::stopCluster(cl)
+		if(obj.in$multithread & !obj.in$do_debug)	parallel::stopCluster(cl)
 			
 		node
 	}
@@ -390,58 +386,66 @@ run_coreAlg_though_tree = function(node, obj.in){
 	
 	future::plan(future::multiprocess)
 	
-	log.ARMET = ".ARMET.log"
 	
-	writeLines("ARMET: starting deconvolution")
-	
+	writeLines("ARMET: Starting deconvolution")
+
+	log.ARMET = sprintf("%s%s", tempfile(), Sys.getpid())
 	if (file.exists(log.ARMET)) file.remove(log.ARMET)
 	file.create(log.ARMET)
-
+	
 	exec_hide_std_out = function(node, obj.in, log.ARMET){
 		
-		if(obj.in$multithread){
+		if(obj.in$multithread & !obj.in$do_debug){
 			cl <- parallel:::makeCluster(2)
 			parallel:::clusterExport(cl, c("obj.in", "node", "%>%", "log.ARMET"), environment())
 			doParallel:::registerDoParallel(cl)
 		}
 		
-		`%my_do%` <- if(obj.in$multithread) `%dopar%` else `%do%`
-		
+		`%my_do%` <- if(obj.in$multithread & !obj.in$do_debug) `%dopar%` else `%do%`
+
 		node.filled = foreach:::foreach(dummy = 1) %my_do% {
+
 			run_coreAlg_though_tree_recursive(node, obj.in, node, log.ARMET)
 		}
 		
-		if(obj.in$multithread)	parallel:::stopCluster(cl)
+		if(obj.in$multithread & !obj.in$do_debug)	parallel:::stopCluster(cl)
 		
 		return(node.filled[[1]])
 	}
-	
-	node.filled = future::future(	
-		exec_hide_std_out(node, obj.in, log.ARMET) 
-		)
-	
-	log.array = c()
-	done = F
-	
-	while(1){
-		
-		Sys.sleep(2)
-		
-		temp = readLines(".ARMET.log")
 
-		new = setdiff(temp, log.array)
+	if(!obj.in$do_debug & 0)
+	{
+		node.filled = future::future(		exec_hide_std_out(node, obj.in, log.ARMET) 		)
+	
 
-		if(length(new)>0) {
-			writeLines(sprintf("ARMET: %s deconvolution completed", new))
-			log.array = c(log.array, new)
+		
+		log.array = c()
+		done = F
+		
+		while(1){
+			
+			Sys.sleep(2)
+			
+			temp = readLines(log.ARMET)
+	
+			new = setdiff(temp, log.array)
+	
+			if(length(new)>0) {
+				writeLines(sprintf("ARMET: %s deconvolution completed", new))
+				log.array = c(log.array, new)
+			}
+	
+			
+			if(all( get_leave_label(node, last_level = -1) %in% log.array)) break
 		}
-
 		
-		if(all( get_leave_label(node, last_level = -1) %in% log.array)) break
+		file.remove(log.ARMET)
+		
+		return(future::value(node.filled))
+	
+	} else {
+		return( exec_hide_std_out(node, obj.in, log.ARMET) )
 	}
-	
-	return(future::value(node.filled))
-	
 
 }
 
@@ -454,17 +458,19 @@ run_coreAlg_though_tree = function(node, obj.in){
 # 	}
 # }
 
+#' Drop a node from the tree
+drop_node_from_tree = function(node, ct){
+	if( !node$name%in%ct) {
+		node$children = Filter(Negate(is.null), 
+													 lapply(node$children, drop_node_from_tree, ct)
+		)
+		node
+	}
+}
+
 format_tree = function(tree, mix, ct_to_omit){
 	
-	#' Drop a node from the tree
-	drop_node_from_tree = function(node, ct){
-		if( !node$name%in%ct) {
-			node$children = Filter(Negate(is.null), 
-														 lapply(node$children, drop_node_from_tree, ct)
-			)
-			node
-		}
-	}
+	
 	
 	# Drop unwanted nodes
 	tree = drop_node_from_tree(tree, ct_to_omit)
