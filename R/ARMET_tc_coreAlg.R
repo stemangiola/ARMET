@@ -67,6 +67,10 @@ ARMET_tc_coreAlg = function(
 		dplyr::filter(variable=="background") %>%
 		droplevels()
 
+	# Garbage collection
+	rm(ref)
+	gc()
+	
 	# Get the probability table of the previous run
 	ancestor_run_prop_table = get_last_existing_leaves_with_annotation(my_tree)
 	
