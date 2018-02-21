@@ -6,10 +6,10 @@ data{
   matrix[S,R] X;                               // Array of covariates for hierarchical regresison
 	matrix<lower=0>[S,G] y;                      // Observed counts
 	matrix<lower=0>[G,P] x;                      // signature counts
-	vector<lower=0, upper=1>[S] p_target[1];      //This is the proportion of the whole taget -> simplex_beta * p_target
+	real<lower=0, upper=1> p_target[S];      //This is the proportion of the whole taget -> simplex_beta * p_target
 	matrix[S,G] y_hat_background;   // This is the matrix of background -> will be summed up with the matrix of the target
 	
-	vector<lower=0, upper=1>[S] theta[1];
+	real<lower=0, upper=1> theta[S];
 	int is_mix_microarray;
 	real<lower=0> sigma_hyper_sd; 
 	real<lower=0> phi_hyper_sd;
@@ -32,8 +32,8 @@ transformed data{
 	if(mult<1) mult = 1;
 	for(p in 1:P) alpha_hyper[p] = alpha_hyper_value;
 	
-	bern_0 = bernoulli_lpmf(0 | theta[1]);
-	bern_1 = bernoulli_lpmf(1 | theta[1]);
+	bern_0 = bernoulli_lpmf(0 | theta);
+	bern_1 = bernoulli_lpmf(1 | theta);
 	
 	for(s in 1:S) for(g in 1:G) if(y[s,g]==0) how_many_0s += 1;
 	if(how_many_0s/(G*S) < 0.05) skip_0_inflation = 1;
@@ -60,7 +60,7 @@ transformed parameters{
 	vector[P] beta_hat_hat[S];                    // Predicted proportions in the hierachical linear model
 
 	
-	for(s in 1:S) beta_target[s] = to_row_vector(beta[s]) * p_target[1,s];
+	for(s in 1:S) beta_target[s] = to_row_vector(beta[s]) * p_target[s];
 	y_hat_target = beta_target * x';
 	y_hat = y_hat_target + y_hat_background;
 	

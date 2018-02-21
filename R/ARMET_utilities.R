@@ -1,17 +1,80 @@
 
+build_data_directory = function(){
+	
+	# Load reference
+	# ref_seq = as.matrix(read.csv("~/PhD/deconvolution/ARMET_dev/ARMET_TME_signature_df_RNAseq.csv", header=T, row.names=1))
+	# colnames(ref_seq) = as.vector(sapply(colnames(ref_seq), function(cn) strsplit(cn, ".", fixed=T)[[1]][1]))
+	# dic = data.frame(sprintf("s%s", 1:ncol(ref_seq)), colnames(ref_seq))
+	# colnames(ref_seq) = dic[,1]
+	# ref_seq = tibble::as_tibble(reshape::melt(ref_seq)) %>% dplyr::rename(gene=X1, sample=X2, value = value) %>% dplyr::mutate(ct=dic[match(sample, dic[,1]),2])
+	# save(ref_seq, file="data/ref_seq.rda")
+	# 
+	# ref_array = as.matrix(read.csv("~/PhD/deconvolution/ARMET_dev/ARMET_TME_signature_df_array.csv", header=T, row.names=1))
+	# colnames(ref_array) = as.vector(sapply(colnames(ref_array), function(cn) strsplit(cn, ".", fixed=T)[[1]][1]))
+	# dic = data.frame(sprintf("s%s", 1:ncol(ref_array)), colnames(ref_array))
+	# colnames(ref_array) = dic[,1]
+	# ref_array = tibble::as_tibble(reshape::melt(ref_array)) %>% dplyr::rename(gene=X1, sample=X2, value = value) %>% dplyr::mutate(ct=dic[match(sample, dic[,1]),2])
+	# save(ref_array, file="data/ref_array.rda")
+	
+	
+	# Create trees
+	# library(jsonlite)
+	# tree = read_json("/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/ARMET_dev/ARMET_TME_tree_RNAseq.json")
+	# save(tree, file="data/tree_json.rda")
+	
+}
+
+average_duplicated_genes_tibble_spreaded = function(tbl){
+
+	dup_genes =
+		tbl %>%
+		dplyr::group_by(gene) %>%
+		dplyr::summarise(tot = n()) %>%
+		dplyr::filter(tot > 1) %>%
+		dplyr::pull(gene) %>%
+		as.character()
+
+	tbl %>%
+		dplyr::mutate(gene = as.character(gene)) %>%
+		dplyr::filter(!gene %in% dup_genes) %>%
+		dplyr::bind_rows(
+			tbl %>%
+				dplyr::mutate(gene = as.character(gene)) %>%
+				dplyr::filter(gene %in% dup_genes) %>%
+				dplyr::group_by(gene) %>%
+				dplyr::summarise_if(is.numeric, median) %>%
+				dplyr::ungroup()
+		)
+	
+}
+
 #' Check the input for anomalies
 check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd, custom_ref, tree){
-	# Check if duplicated names
-	if(any(table(colnames(mix))>1)) stop("ARMET: you have duplicated column names in the mix data frame")
+	
+	if(!tibble::is_tibble(mix)) stop("ARMET: The mixture must be a tibble")
+	
+	# Check if custom ref is tibble
+	if(!is.null(custom_ref)){
+		if(!tibble::is_tibble(custom_ref)) 
+			stop("ARMET: The reference must be a tibble")
+		if(!all(colnames(ref_seq)%in%colnames(custom_ref))) 
+			stop(
+				sprinf(
+					"ARMET: The columns of the provided reference must be %s", 
+					paste(colnames(ref_seq), collapse=" ")
+				)
+			)
+	} 
 	
 	# Check if microarray data
 	if(is_mix_microarray) writeLines("ARMET: The input matrix is from microarray.")
-	
-	# Check if on Windows
-	if(!.Platform$OS.type == "unix") stop("ARMET: currenly ARMET works for GNU/Linux systems only.")
-	
+
 	# Check if NA in mix
-	if(any(is.na(as.vector(mix)))) stop("ARMET: NAs found in the query matrix")
+	if(
+		mix %>%	
+		dplyr::select_if(function(.) any(is.na(.))) %>% 
+		ncol() > 0
+	) stop("ARMET: NAs found in the query matrix")
 	
 	# This is how many conditions are in the study (e.g., treatment-vs-non-treatment)
 	if(!is.null(my_design)) {
@@ -19,36 +82,59 @@ check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd,
 		print(head(my_design))
 	}
 	
-	# Check if mix have colnames and rownames
-	if(is.null(colnames(mix)) | is.null(rownames(mix))) stop("ARMET: query data frame (mix expression) has to have colnames (sample names) and rownames (gene names)")
-	
 	# Set up the covariate to test if any
-	# if(
-	#   (is.null(cov_to_test) & ncol(my_design)>1) |
-	#   !cov_to_test%in%colnames(my_design)
-	# ) stop(sprintf("ARMET: you have to specify one or more covariate(s) to test for your design matrix among these: %s", paste(colnames(my_design), collapse=" ")))
 	if(is.null(my_design) & !is.null(cov_to_test)) stop("ARMET: you have specified a covariate to test but no design matrix")
 	
 	# Check prior sd
 	if(prior_sd<=0) stop("ARMET: prior_sd must be a positive number.")
 	
-	# Check custom reference
-	if(!is.null(custom_ref) & !all(get_leave_names(tree, last_level = 1)%in%colnames(custom_ref))) stop("ARMET: Some cell types within the tree are absent in your custom reference provided") 
+ 
+
+		# Check custom reference
+	if(
+		!is.null(custom_ref) &&
+		!all(get_leave_names(tree, last_level = 1) %in% (custom_ref %>% dplyr::distinct(ct)  %>% dplyr::pull(ct) %>% as.character()))
+	) {
+		writeLines("ARMET: Some cell types within the tree are absent in your custom reference provided") 
+		cts = get_leave_names(tree, last_level = 1) 
+		print( cts[!cts %in% (custom_ref %>% dplyr::distinct(ct) %>% dplyr::pull(ct) %>% as.character())	]	)
+		
+		stop()
+	}
+	
+	# Check if duplicated genes in mix
+	if(
+		mix %>%
+		dplyr::group_by(gene) %>%
+		dplyr::summarise(tot = n()) %>%
+		dplyr::filter(tot > 1) %>%
+		nrow() > 1
+	) {
+		writeLines("ARMET: There are duplicated genes n the provided mix. Genes will be summarised with medians.")
+		
+		pf = parent.frame()
+		
+		pf$mix = average_duplicated_genes_tibble_spreaded(mix)
+	}
+	
 	
 }
 
 #' Get parameters from ini file if it exists
 get_ini = function(){
 	if(file.exists("ARMET.ini")) {
-		pars =  ini:::read.ini("ARMET.ini")$ARMET
-		writeLines("Importing parameters from .ini file..")
+		pars =  ini::read.ini("ARMET.ini")$ARMET
+		writeLines("ARMET: Importing parameters from .ini file..")
 		for(n in names(pars)){
 			if(pars[n]%in%c("T", "F", "TRUE", "FALSE"))
 				pars[n] = as.logical(pars[n])
+			else 	pars[n] = strsplit(as.character(pars[n]), ",")
 			assign(n, unlist(pars[n]))
 		}
 	}
 }
+
+
 #' Creates the directory needed for archive
 #'
 #' @param name A char
@@ -68,15 +154,15 @@ average_duplicated_genes = function(ref, symbol){
 	temp = data.frame(symbol = symbol, ref)
 	temp = na.omit(temp)
 	us = unique(symbol)
-
-	cl = parallel:::makeCluster(20)
-	parallel:::clusterExport(cl, "temp", envir = environment())
-	parallel:::clusterEvalQ(cl, library("matrixStats"))
 	
-	ref.symbol = do.call("rbind", parallel:::parLapply(cl, us, function(tt) {
-		matrixStats:::colMedians(as.matrix(temp[temp$symbol==tt,-1]))
+	cl = parallel::makeCluster(20)
+	parallel::clusterExport(cl, "temp", envir = environment())
+	parallel::clusterEvalQ(cl, library("matrixStats"))
+	
+	ref.symbol = do.call("rbind", parallel::parLapply(cl, us, function(tt) {
+		matrixStats::colMedians(as.matrix(temp[temp$symbol==tt,-1]))
 	}))
-	parallel:::stopCluster(cl)
+	parallel::stopCluster(cl)
 	
 	colnames(ref.symbol) = colnames(ref)
 	rownames(ref.symbol) = us
@@ -94,28 +180,20 @@ average_duplicated_genes = function(ref, symbol){
 #' @return A ggplot
 plot_densities = function(df, color="0",  fill = "0", alpha = 0.30, do_log = T){
 	
-	df = as.matrix(df)
-	df.4plot = df
-	if(any(table(colnames(df.4plot))>1) | is.null(colnames(df.4plot))){
-		colnames(df.4plot) = paste0("#", 1:dim(df.4plot)[2])
-		warning("ARMET: colnames duplicated, replacing with dummy names.")
-	}
-	color_df = tibble:::tibble(X2 = factor(colnames(df.4plot)), color = color, fill = factor(fill))
-	df.4plot.melt = tibble:::as_tibble(reshape:::melt(df.4plot))
-	df.4plot.melt = dplyr:::left_join(df.4plot.melt, color_df, by="X2")
-	if(do_log) df.4plot.melt$value = df.4plot.melt$value + 0.1
-	
-	p = ggplot2:::ggplot(df.4plot.melt, ggplot2:::aes(value, group=X2, color = color, fill = fill)) +
-		ggplot2:::geom_line(stat="density", alpha=alpha) +
-		ggplot2:::expand_limits(x=0.1) +
-		ggplot2:::theme_bw() +
-		ggplot2:::theme(
-			panel.border = ggplot2:::element_blank(),
-			panel.grid.major = ggplot2:::element_blank(),
-			panel.grid.minor = ggplot2:::element_blank(),
-			axis.line = ggplot2:::element_line(colour = "black")
+	if(do_log) df = df %>% dplyr::mutate(value=value+0.1)
+	p = 
+		ggplot2::ggplot(	df, ggplot2::aes(value, group=sample, color = factor(color))) +
+		ggplot2::geom_line(stat="density", alpha=alpha) +
+		ggplot2::expand_limits(x=0.1) +
+		ggplot2::theme_bw() +
+		ggplot2::theme(
+			panel.border = ggplot2::element_blank(),
+			panel.grid.major = ggplot2::element_blank(),
+			panel.grid.minor = ggplot2::element_blank(),
+			axis.line = ggplot2::element_line(colour = "black")
 		)
-	if(do_log) p = p + ggplot2:::scale_x_log10()
+	
+	if(do_log) p = p + ggplot2::scale_x_log10()
 	
 	return( p )
 }
@@ -126,16 +204,16 @@ plot_densities = function(df, color="0",  fill = "0", alpha = 0.30, do_log = T){
 #' @return A ggplot
 plot_densities_from_melted = function(df_melted){
 	
-	p = ggplot2:::ggplot(df_melted, ggplot2:::aes(value+0.1, group=X2, color=source)) +
-		ggplot2:::geom_line(stat="density", alpha=0.15) +
-		ggplot2:::scale_x_log10() +
-		ggplot2:::expand_limits(x=0.1) +
-		ggplot2:::theme_bw() +
-		ggplot2:::theme(
-			panel.border = ggplot2:::element_blank(),
-			panel.grid.major = ggplot2:::element_blank(),
-			panel.grid.minor = ggplot2:::element_blank(),
-			axis.line = ggplot2:::element_line(colour = "black")
+	p = ggplot2::ggplot(df_melted, ggplot2::aes(value+0.1, group=X2, color=source)) +
+		ggplot2::geom_line(stat="density", alpha=0.15) +
+		ggplot2::scale_x_log10() +
+		ggplot2::expand_limits(x=0.1) +
+		ggplot2::theme_bw() +
+		ggplot2::theme(
+			panel.border = ggplot2::element_blank(),
+			panel.grid.major = ggplot2::element_blank(),
+			panel.grid.minor = ggplot2::element_blank(),
+			axis.line = ggplot2::element_line(colour = "black")
 		)
 	return( p )
 }
@@ -153,10 +231,10 @@ plot_densities_double = function(reference,obj){
 	# Build data fraes for plotting
 	reference.4plot = reference
 	colnames(reference.4plot) = paste0("r", 1:dim(reference.4plot)[2])
-	reference.4plot = data.frame(reshape:::melt(reference.4plot), source="reference")
+	reference.4plot = data.frame(reshape::melt(reference.4plot), source="reference")
 	obj.4plot = obj
 	colnames(obj.4plot) = paste0("r", 1:dim(obj.4plot)[2])
-	obj.4plot = data.frame(reshape:::melt(obj.4plot), source="obj")
+	obj.4plot = data.frame(reshape::melt(obj.4plot), source="obj")
 	
 	# Build plot
 	p = plot_densities_from_melted(rbind(reference.4plot, obj.4plot))
@@ -172,59 +250,103 @@ plot_densities_double = function(reference,obj){
 #' @return A ggplot
 sanity_check_p = function(fit, do_show = F){
 	
-	plot_chains = rstan:::traceplot(fit, inc_warmup = FALSE, pars="alpha")
+	plot_chains = rstan::traceplot(fit, inc_warmup = FALSE, pars="alpha")
 	if(do_show) plot(plot_chains)
 	
 	return( plot_chains )
 }
 
+error_if_log_transformed = function(x){
+	if(length(x$value)>0) if(max(x$value, na.rm=T)<50) 
+		stop("ARMET: The input was log transformed in: check_if_sd_zero_and_correct")
+}
+
 #' Checks if the standard deviation of a gene is 0
 #'
 #' @param df A matrix
-check_if_sd_zero = function(df){
+check_if_sd_zero_and_correct = function(df, node){
 	
-	if(is.null(df)) stop("ARMET: check_if_sd_zero: The input is null.. please debug")
-	if(max(df, na.rm=T)<50) stop("ARMET: check_if_sd_zero: The input was log transformed")
+	# Sanity check
+	error_if_log_transformed(df)
 	
-	# check if pathologic data with no sd
-	df = as.matrix(df)
-	df.melt =                        reshape:::melt(df)
-	colnames(df.melt) =              c("gene", "cell_type", "value")
-	#df.melt$gene.numeric =           match(df.melt$gene, rownames(df))
-	#df.melt$cell_type.numeric =      match(df.melt$cell_type, levels(cell_types))
-	df.melt.aggr = stats:::aggregate(log(df.melt$value+1), by=list(df.melt$gene, df.melt$cell_type), FUN=function(x) c(mean = mean(x, na.rm=T), sd = sd(x, na.rm=T) ))
+	# Function omit zeros
+	zero.omit = function(x) x[x>0]
+
+	# Summarize counts
+	df.summary = df %>%
+		dplyr::group_by(gene, ct) %>%
+		dplyr::summarise(
+			log_sigma = stats::mad(log(value+1)), 
+			log_avg = mean(log(value+1))
+		) %>%
+		dplyr::ungroup() %>%
+		dplyr::mutate(to_recalculate = log_sigma==0) 
 	
-	# Fix all NA problem
-	if(any(apply(is.na(df.melt.aggr$x[,1:2]), 1, function(mr) mr[1] | mr[2] )))
-		df.melt.aggr[apply(is.na(df.melt.aggr$x[,1:2]), 1, function(mr) mr[1] | mr[2] ),]$x[,1:2] = 0
-	
-	if(any(df.melt.aggr[,3][,2]==0)){
+	find_closest_sd_uo_the_tree = function(my_ct, my_gene, tb){
+	#	print(my_ct)
+	#	print(my_gene)
+
+		# Iterate upwards thoward root to get the sd from the closest group
+		hierarchy = get_hierarchy(node, my_ct)
+		ancestors = rev(hierarchy[1:(length(hierarchy)-1)])
 		
+		for(h in ancestors){
+
+			# Get first descendant of ancestor including the ancestor 
+			ct_to_consider = unlist(c(h, get_leave_label(node_from_name(node, h), recursive = F)))
+			
+			mean_log_sigma = tb %>% 
+				dplyr::filter(
+					ct %in% ct_to_consider & 
+					gene == my_gene & 
+					log_sigma > 0) %>%
+				
+				{
+					
+					# Exception if I have only one sample per cell type
+					if((.) %>% nrow() == 0) 
+						(.) %>% dplyr::summarise(mean_log_sigma = 0)
+					else 
+						(.) %>% dplyr::summarise(mean_log_sigma = mean(log_sigma))
+						
+				}
+
+			if(mean_log_sigma>0) break
+			
+		}
+		
+		# If I have only one sample per cell type output 1 as SD
+		ifelse(mean_log_sigma == 0, 1, as.numeric(mean_log_sigma))
+		
+	}
+
+	# Add closest sd
+	df.summary = df.summary %>%
+		dplyr::rowwise() %>%
+		dplyr::mutate(
+			log_sigma = 
+				ifelse(
+					log_sigma==0,
+					find_closest_sd_uo_the_tree(ct, gene, df.summary),
+					log_sigma
+				)
+		) %>%
+		dplyr::ungroup()
+	
+	if(nrow(df.summary %>% dplyr::filter(to_recalculate))>0){
 		writeLines("ARMET: One of your markers has 0 variance, this is not compatible with MCMC inference.")
 		writeLines("The following genes will acquire a background variance.")
-		df.melt.aggr.2correct = df.melt.aggr[df.melt.aggr[,3][,2]==0,]
-		
-		
-		
-		df.melt.aggr.2correct = t(apply(df.melt.aggr.2correct, 1, function(mr){
-			close = subset(df.melt.aggr, Group.1==mr[1])
-			close = close[order(abs(close[,3][,1] - as.numeric(mr[3]))),]
-			new_sd = mean(close[close[,3][,2]>0,][,3][,2][1:5])
-			new_sd = 0.1
-			c(mr[1:3],new_sd)
-		}))
-		
-		for(i in 1:dim(df.melt.aggr.2correct)[1]){
-			ml = length(df[rownames(df)==df.melt.aggr.2correct[i,1], colnames(df)==df.melt.aggr.2correct[i,2]])
-			new_log_mean = as.numeric(df.melt.aggr.2correct[i,3])
-			new_log_sd = as.numeric(df.melt.aggr.2correct[i,4])
-			#print(c(df.melt.aggr.2correct[i,], new_log_mean = new_log_mean, new_log_sd = new_log_sd))
-			df[rownames(df)==df.melt.aggr.2correct[i,1], colnames(df)==df.melt.aggr.2correct[i,2]] = exp(abs(rnorm(ml, new_log_mean , new_log_sd)))
-		}
+		print( df.summary %>% dplyr::filter(to_recalculate) )
 	}
 	
-	df
-	
+	# Sample for sd == 0
+	df %>%
+		dplyr::left_join(df.summary, by=c("gene", "ct")) %>%
+		dplyr::rowwise() %>%
+		dplyr::mutate(value = ifelse(to_recalculate, exp(rnorm(1, log_avg, log_sigma)), value)) %>%
+		dplyr::ungroup() %>%
+		dplyr::select(-log_sigma, -log_avg, -to_recalculate)
+
 }
 
 #' Calculate the norm factor with calcNormFactor from limma
@@ -235,20 +357,46 @@ check_if_sd_zero = function(df){
 #' @param prop A number
 #' @return A list including the filtered data frame and the normalization factors
 rnaseq_norm.calcNormFactor = function(df, reference = NULL, cpm_theshold = 0.5, prop = 3/4){
-	#print(dim(df))
 	
-	my_df = na.omit(df)
-	#print(dim(my_df))
-	if(max(my_df, na.rm = T) < 50) stop("ARMET: Both mixture and signatures have to be in count form, log tranformation detected")
+	if(max(df$value, na.rm = T) < 50) stop("ARMET: Both mixture and signatures have to be in count form, log tranformation detected")
 	
-	cn = colnames(my_df)
-	keep1 <- rowSums(edgeR:::cpm(my_df) > cpm_theshold) >= ceiling(ncol(my_df)*prop)
-	writeLines(sprintf("ARMET: %s genes on %s total genes have been filtered out for normalization", length(which(!keep1)), nrow(my_df)))
-	#print(dim(my_df))
-	#print(length(keep1))
-	my_df = my_df[keep1, , drop=FALSE]
+	df.filt = df %>% 
+	{ if("ct"%in%names(.)) dplyr::select(-ct)	else .}	%>%
+		tidyr::spread(sample, value) %>% 
+		tidyr::drop_na() %>%
+		dplyr::do(
+			(.) %>% 
+				dplyr::filter(
+					rowSums(
+						edgeR::cpm(
+							(.) %>% 
+								dplyr::select(-gene)
+						) > cpm_theshold
+					) >= 
+						ceiling(ncol( 
+							(.) %>% dplyr::select(-gene)
+						) * prop)
+				)
+		)
 	
-	list(nf=edgeR:::calcNormFactors(my_df, refColumn=reference), df=my_df)
+	list(
+		nf = tibble::tibble(
+			sample = factor(colnames(df.filt %>% dplyr::select(-gene))),
+			nf = edgeR::calcNormFactors(df.filt %>% dplyr::select(-gene), refColumn=reference)
+		),
+		df = df.filt %>% 
+			tidyr::gather(sample, value, 2:ncol(.)) %>% 
+			dplyr::mutate(sample = factor(sample)) %>%
+			{ 
+				if("ct"%in%names(.)) 
+					dplyr::left_join(
+						df %>% dplyr::distinct(sample, ct), 
+						by="sample"
+					) 
+				else 
+					.
+			}
+	)
 }
 
 #' Normalize a RNA seq data set using rnaseq_norm.calcNormFactor
@@ -259,28 +407,26 @@ rnaseq_norm.calcNormFactor = function(df, reference = NULL, cpm_theshold = 0.5, 
 #' @param prop A number
 #' @return A list including the filtered data frame and the normalization factors
 rnaseq_norm = function(df, reference = NULL, cpm_theshold = 0.5, prop = 3/4){
-	writeLines("Normalizing RNA-seq data with TMM")
-	#print(head(df))
+	#if(verbose) writeLines("Normalizing RNA-seq data with TMM")
+	
 	nf.obj = rnaseq_norm.calcNormFactor(df, reference, cpm_theshold, prop)
 	nf = nf.obj$nf
-	my_df = nf.obj$df
+	df.filt = nf.obj$df
 	
-	df.norm =
-		do.call(
-			"cbind",
-			lapply(
-				1:dim(df)[2],
-				function(i) df[,i] / (sum(my_df[,i], na.rm=T) * nf[i])
-			)
-		)
+	df %>% 
+		dplyr::group_by(sample) %>% 
+		dplyr::mutate(tot = sum(value, na.rm = T)) %>%
+		dplyr::ungroup() %>%
+		dplyr::left_join(nf, by="sample") %>%
+		dplyr::left_join(
+			df.filt %>%
+				dplyr::group_by(sample) %>%
+				dplyr::summarise(tot_filt = sum(value, na.rm = T)),
+			"sample"
+		) %>%
+		dplyr::mutate(value = value / (tot_filt * nf) * max(tot)) %>%
+		dplyr::select(-tot, -nf, -tot_filt)
 	
-	if(is.null(reference)) reference_value = max(colSums(df, na.rm=T), na.rm = T)
-	else reference_value = sum(reference)
-	df.norm = df.norm * reference_value
-	colnames(df.norm) = colnames(my_df)
-	#p = plot_densities_double(reference,obj)
-	
-	return(df.norm)
 }
 
 #' Normalize ref to match mix using TMM
@@ -288,47 +434,71 @@ rnaseq_norm = function(df, reference = NULL, cpm_theshold = 0.5, prop = 3/4){
 #' @param ref A matrix
 #' @param mix A matrix
 #' @return A list including the ref and mix normalized and a ggplot
-rnaseq_norm_ref_mix = function(ref, mix){
-
-	mix_rn = rownames(mix)
-	ref_rn = rownames(ref)
+rnaseq_norm_ref_mix = function(obj, target){
 	
-	if(max(ref, na.rm=T) < 50 | max(mix) < 50) stop("ARMET: Both objects have to be in count form, log tranformation detected")
-	#print(head(mix))
-	mix = rnaseq_norm(mix)
-	#print(head(cbind(matrixStats:::rowMedians(mix), matrixStats:::rowMedians(ref, na.rm=T))))
-	nf.obj = rnaseq_norm.calcNormFactor(cbind(matrixStats:::rowMedians(mix), matrixStats:::rowMedians(ref, na.rm=T)), 1)
+	error_if_log_transformed(target)
+	error_if_log_transformed(obj)
+
+	# Normalize the obj
+	obj = rnaseq_norm(obj)
+	
+	# Calclate normalization factors for obj and target => two numbers
+	nf.obj = rnaseq_norm.calcNormFactor(
+		rbind(
+			obj %>% 
+				dplyr::group_by(gene) %>% 
+				dplyr::summarise(value = median(value, na.rm=T)) %>% 
+				dplyr::mutate(sample="obj"),
+			target %>% 
+				dplyr::group_by(gene) %>% 
+				dplyr::summarise(value = median(value, na.rm=T)) %>% 
+				dplyr::mutate(sample="target")
+		), 
+		1)
+	
 	nf = nf.obj$nf
 	my_df = nf.obj$df
 	
-	mix = mix / (sum(my_df[,1], na.rm=T) * nf[1]) *  sum(my_df[,1], na.rm = T)
-	ref = ref / (sum(my_df[,2], na.rm=T) * nf[2]) *  sum(my_df[,1], na.rm = T)
+	tot_reference = (my_df %>%
+									 	dplyr::filter(sample == "obj") %>% 
+									 	dplyr::summarise(tot = sum(value, na.rm=T)))$tot 
 	
-	rownames(mix) = mix_rn 
-	rownames(ref) = ref_rn 
+	tot_other = (my_df %>%
+							 	dplyr::filter(sample == "target") %>% 
+							 	dplyr::summarise(tot = sum(value, na.rm=T))
+	)$tot 
 	
-	p = plot_densities(cbind(ref,mix))
+	obj = obj %>%
+		dplyr::mutate(tot_ref = tot_reference) %>%
+		dplyr::mutate(nf = 
+									 	(nf %>%
+									 	 	dplyr::filter(sample=="obj"))$nf
+		) %>%
+		dplyr::mutate(tot = tot_ref) %>%
+		dplyr::mutate(value = value / (tot * nf) * tot_ref) %>%
+		dplyr::select(-tot, -tot_ref, -nf)
 	
-	return(list(ref = ref, mix = mix,  plot = p))
-}
-
-#' Normalize array data of ref and mix
-#'
-#' @param ref A matrix
-#' @param mix A matrix
-#' @return A list including the ref and mix normalized and a ggplot
-array_norm = function(ref, mix){
+	target = target %>%
+		dplyr::mutate(tot_ref = tot_reference) %>%
+		dplyr::mutate(nf = 
+									 	(nf %>%
+									 	 	dplyr::filter(sample=="target"))$nf
+		) %>%
+		dplyr::mutate(tot = tot_other) %>%
+		dplyr::mutate(value = value / (tot * nf) * tot_ref) %>%
+		dplyr::select(-tot, -tot_ref, -nf)
 	
-	writeLines("Normalizing Array data")
-	log_ex = log(cbind(ref, mix)+1)
-	log_ex.norm = limma:::normalizeBetweenArrays(log_ex)
-	ref = exp(log_ex.norm[,1:dim(ref)[2]])
-	mix = exp(log_ex.norm[,(dim(ref)[2]+1):dim(log_ex.norm)[2]])
+	p = plot_densities( 
+		rbind( 
+			target %>% 
+				dplyr::mutate(color=1) %>%
+				dplyr::select(-ct),
+			obj %>% 
+				dplyr::mutate(color=1)
+		)
+	)
 	
-	# Build plot
-	p = plot_densities(cbind(ref,mix))
-	
-	return(list(ref=ref, mix=mix, plot=p))
+	return(list(target = target, obj = obj,  plot = p))
 }
 
 #' Normalize array to match RNAseq
@@ -336,68 +506,37 @@ array_norm = function(ref, mix){
 #' @param target A matrix
 #' @param obj A matrix
 #' @return A list including the ref and mix normalized and a ggplot
-quant_norm_to_RNAseq = function(target, obj){
-	writeLines("Quantile norm to RNA seq..")
-	
-	# source("~/PhD/deconvolution/ARMET_dev/ARMET_FI.R")
-	# res =  ARMET_FI(target)
-	# target = res$df
-	#if(!is.null(ncol(target))) if(ncol(target)>1) target = rnaseq_norm(target)
-	
-	do_log_mix =                     if(max(target, na.rm=T) > 50) T else F
-	do_log_ref =                     if(max(obj) > 50) T else F
-	
-	if(do_log_mix) target =          log(target + 1)
-	if(do_log_ref) obj =             log(obj + 1)
-	
-	target = as.matrix(target)
-	obj = as.matrix(obj)
-	
-	rn = rownames(obj)
-	cn = colnames(obj)
-	obj = preprocessCore:::normalize.quantiles.use.target(obj, target=as.vector(target))
-	rownames(obj) = rn
-	colnames(obj) = cn
-	
-	if(do_log_ref) obj =             exp(obj) -1
-	if(do_log_mix) target =          exp(target) -1
-	
-	p = plot_densities_double(target,obj)
-	
-	return(list (ref = target, mix = obj, plot=p ))
-}
+quant_norm_to_target = function(obj, target){
+	#writeLines("ARMET: Quantile normalization")
 
-#' Normalize RNAseq to match array
-#'
-#' @param target A matrix
-#' @param obj A matrix
-#' @return A list including the ref and mix normalized and a ggplot
-quant_norm_to_array = function(obj, target){
-	writeLines("Quantile norm..")
+	error_if_log_transformed(obj)
+	error_if_log_transformed(target)
+
+	# Needed for: Transform tibble in matrix and normalize because is faster
+	obj = obj %>%
+		tidyr::spread(sample, value)
 	
-	target = as.matrix(target)
-	obj = as.matrix(obj)
+	obj = dplyr::bind_cols(
+		obj %>% dplyr::select(gene),
+		
+		data.frame(
+			exp(preprocessCore::normalize.quantiles.use.target(
+				as.matrix(log(obj[,-1]+1)), 
+				target=log(target$value+1)
+			)) - 1
+		) %>% 
+			tibble::as_tibble()
+	) %>%
+		magrittr::set_colnames(colnames(obj)) %>%
+		tidyr::gather(sample, value, -gene) %>%
+		dplyr::mutate_if(is.character, as.factor)
 	
-	do_log_mix =                     if(max(target) > 50) T else F
-	do_log_ref =                     if(max(obj) > 50) T else F
+	list(
+		target = target,
+		obj = obj,
+		plot = plot(1,1)
+	)
 	
-	if(do_log_mix) target =          log(target + 1)
-	if(do_log_ref) obj =             log(obj + 1)
-	
-	rn = rownames(obj)
-	cn = colnames(obj)
-	obj = preprocessCore:::normalize.quantiles.use.target(obj, target=as.vector(target))
-	rownames(obj) = rn
-	colnames(obj) = cn
-	
-	if(do_log_ref) obj =             exp(obj) - 1
-	if(do_log_mix) target =             exp(target) - 1
-	obj[obj<0] = 0
-	target[target<0] = 0
-	
-	p = plot_densities_double(target,obj)
-	
-	return(list (ref = target, mix = obj,  plot = p ))
 }
 
 #' Wrapper function for all normalization based on the current needs
@@ -405,13 +544,18 @@ quant_norm_to_array = function(obj, target){
 #' @param ref A matrix
 #' @param mix A matrix
 #' @param is_mix_microarray A cool
-#' @return Same list of rnaseq_norm_ref_mix, quant_norm_to_RNAseq
-wrapper_normalize_mix_ref = function(mix, ref, is_mix_microarray = F){
-	if(!is_mix_microarray)
-		rnaseq_norm_ref_mix(ref, mix)
-	else
-		#quant_norm_to_array(mix, ref)
-		quant_norm_to_RNAseq(ref, mix)
+#' @return Same list of rnaseq_norm_ref_mix, quant_norm_to_target
+wrapper_normalize_mix_ref = function(mix, ref, is_mix_microarray){
+	if(!is_mix_microarray) {
+		norm = rnaseq_norm_ref_mix(mix, ref)
+		list(mix=norm$obj, ref=norm$target)
+	}
+	else {
+		norm = quant_norm_to_target(mix, ref)
+		list(mix=norm$obj, ref=norm$target)
+	}
+	
+	
 }
 
 #' Subsample reference to try homogeneity
@@ -464,20 +608,45 @@ mds_plot = function(mix, ref, cell_types){
 #' @param cell_types A char rvector
 #' @param markers A char vector
 #' @return A list including a two objects
-prepare_input = function(ref, cell_types, markers){
+prepare_input = function(ref, node){
+
+	# Sanity check
+	error_if_log_transformed(ref)
 	
 	# Check if sd == 0 for any marker
-	if(max(ref, na.rm=T)>0) ref = check_if_sd_zero(ref)
+	ref = check_if_sd_zero_and_correct(ref, node)
 	
-	e.obj = reshape:::melt(ref)
-	e.obj$gene_num = match(e.obj$X1, markers) 
-	e.obj$ct_num = match(e.obj$X2, cell_types)
+	# Check if sd == 0 for any marker
+	e.obj = ref %>%
+		dplyr::left_join(
+			ref %>% 
+				dplyr::distinct(gene) %>% 
+				dplyr::mutate(gene_num = as.numeric(gene)) %>%
+				dplyr::mutate(gene_num = order(gene_num)),
+			by = "gene"
+		) %>%
+		dplyr::left_join(
+			ref %>% 
+				dplyr::distinct(ct) %>% 
+				dplyr::mutate(ct_num = as.numeric(ct)) %>%
+				dplyr::mutate(ct_num = order(ct_num)),
+			by = "ct"
+		)
+
+	e_mu.obj = e.obj %>%
+		dplyr::distinct(gene_num, ct_num)
 	
-	e_mu.obj = unique(e.obj[, c("gene_num", "ct_num")])
-	
-	e.obj$map_to_mu = match(paste(e.obj$gene_num, e.obj$ct_num), paste(e_mu.obj$gene_num, e_mu.obj$ct_num))
-	
-	return(list(e=e.obj, e_mu=e_mu.obj))
+	# Match e obj with mean e obj
+	e.obj = e.obj %>% 
+		dplyr::mutate(
+			map_to_mu = 
+				match(
+					interaction( gene_num, ct_num),
+					interaction( e_mu.obj$gene_num, e_mu.obj$ct_num)
+				)
+		)
+		
+	list(e=e.obj, e_mu=e_mu.obj)
 	
 }
 
@@ -488,7 +657,7 @@ prepare_input = function(ref, cell_types, markers){
 #' @param verbose A bool
 #' @return A averaged matrix
 get_mean_signature = function(df, do_log=F, verbose= T){
-
+	
 	if(nrow(df)==0) stop(sprintf("ARMET: in get_mean_signature the data set has not records for cell types %s. Check bug upstream", paste(colnames(df), collapse=" ")))
 	if(length(dim(df))==0) stop(sprintf("ARMET: There are not markers for %s", colnames(df)))
 	
@@ -498,8 +667,8 @@ get_mean_signature = function(df, do_log=F, verbose= T){
 	
 	
 	df.mean =                  do.call("cbind", by(temp, temp$ct, function(df) {
-		data.frame(matrixStats:::colMedians(as.matrix(df[,-1, drop=F]), na.rm=T))
-		}))
+		data.frame(matrixStats::colMedians(as.matrix(df[,-1, drop=F]), na.rm=T))
+	}))
 	rownames(df.mean) =        rownames(df)
 	
 	if(do_log) df.mean = exp(df.mean)-1
@@ -581,7 +750,7 @@ parse_summary_vector_in_2D = function(f){
 			mean =                          f
 		)
 	
-	f =                                 reshape:::cast(f, gene ~ topic, value="mean")
+	f =                                 reshape::cast(f, gene ~ topic, value="mean")
 	rownames(f) =                       f$gene
 	f =                                 data.frame(f[, -1])
 	
@@ -589,18 +758,166 @@ parse_summary_vector_in_2D = function(f){
 }
 
 get_stats_on_ref = function(ref, tree){
-	`%>%` <- magrittr::`%>%`
+
 	rbind(
-		foreach:::foreach(ct = get_leave_names(tree), .combine = rbind) %do% {
-			tibble:::tibble(
+		foreach::foreach(ct = get_leave_names(tree), .combine = rbind) %do% {
+			tibble::tibble(
 				ct, 
-				count = length(which(get_leave_label(node_from_name(tree, ct), label = "markers") %in%	rownames(ref)	)),
+				count = length(which(get_leave_label(node_from_name(tree, ct), label = "markers") %in%	ref$gene	)),
 				val = "gene"
 			)
 		},
-		tibble:::as_tibble(table(colnames(ref))) %>%  
-		dplyr:::rename(ct=Var1, count = n) %>%   
-		dplyr:::mutate(val = "sample")
+		tibble::as_tibble(table(ref$ct)) %>%  
+			dplyr::rename(ct=Var1, count = n) %>%   
+			dplyr::mutate(val = "sample")
 	)
+	
+}
+
+plot_model_results = function(){
+	
+	proportions_4_plot = as.data.frame(proportions)
+	proportions_4_plot$sample = rownames(proportions_4_plot)
+	proportions_4_plot$cov = if(length(cov_to_test)>0) my_design[,"cov"] else 1
+	proportions_4_plot = reshape::melt(proportions_4_plot, id.vars=c("sample", "cov"))
+	proportions_4_plot$perc_1 = reshape::melt(proportions_2.5)$value
+	proportions_4_plot$perc_2 = reshape::melt(proportions_97.5)$value
+	proportions_4_plot$minus_sd = proportions_4_plot$value - reshape::melt(proportions_sd)$value
+	proportions_4_plot$plus_sd = proportions_4_plot$value + reshape::melt(proportions_sd)$value
+	p = ggplot2::ggplot( proportions_4_plot, ggplot2::aes(x=jitter(cov), y=value,fill=factor(variable)))+ 
+		ggplot2::geom_boxplot(coef = 6) + 
+		ggplot2::geom_point(size=0.1) +
+		ggplot2::geom_linerange(ggplot2::aes(ymin = perc_1, ymax = perc_2),  alpha=0.05) +
+		ggplot2::geom_errorbar(ggplot2::aes(ymin = minus_sd, ymax = plus_sd),width=.2,  alpha=0.2) +
+		ggplot2::facet_grid(~variable) +
+		ggplot2::theme(
+			axis.text.x= ggplot2::element_text(angle=90, vjust=0.4,hjust=1), 
+			panel.background = ggplot2::element_blank()
+		)
+	
+	#if(save_report) ggplot2::ggsave(sprintf("%s/%s_proportions.pdf", output_dir, ct), useDingbats=FALSE,plot=p)
+	
+	if(length(cov_to_test)>0){
+		#plot generate quantities
+		gq <- as.matrix(fit, pars = c("beta_gen"))[1,]
+		gq= parse_summary_vector_in_2D(gq)
+		colnames(gq) = colnames(mix)
+		rownames(gq) = colnames(model.in$x)
+		gq = as.data.frame(t(gq))
+		gq$cov = my_design[,"cov"]
+		gq$sample = rownames(gq)
+		gq = reshape::melt(gq, id.vars=c("sample", "cov"))
+		p = ggplot2::ggplot( gq, ggplot2::aes(x=factor(cov), y=value,fill=factor(variable)))+
+			ggplot2::geom_boxplot()+ 
+			ggplot2::geom_jitter(position=position_dodge(width=0.75), ggplot2::aes(group=variable)) +
+			ggplot2::facet_grid(~variable) + 
+			ggplot2::theme(axis.text.x=ggplot2::element_text(angle=90, vjust=0.4,hjust=1))
+		
+		#if(save_report) ggplot2::ggsave(sprintf("%s/%s_proportions_posterior.pdf", output_dir, ct), useDingbats=FALSE,plot=p)
+	}
+	# Calculate predicted values
+	#pred.df=as.matrix(ref[markers,])%*%t(as.matrix(res.df))
+	
+	
+	# about means
+	df_4_plot = data.frame(
+		merge(
+			reshape::melt(mix+1), 
+			reshape::melt(t(proportions %*% t(ref.mean)+1)), 
+			by=c("X1", "X2")
+		)
+	)
+	colnames(df_4_plot)[3:4] = c("value", "predicted")
+	df_4_plot$ct = sapply(df_4_plot$X1, function(x1) node_from_gene(my_tree, x1)$name )
+	df_4_plot$bg = apply(df_4_plot, 1, function(mr) 	y_hat_background[mr[2], mr[1]] )
+	df_4_plot$bg_prop = df_4_plot$bg /df_4_plot$value
+	df_4_plot$bg_prop[df_4_plot$bg_prop >10] = 10
+	
+	
+	df_4_plot = df_4_plot[df_4_plot$X2%in%unique(df_4_plot$X2)[1:20], ]
+	#df_4_plot = df_4_plot[grep("CD8", df_4_plot$X2), ]
+	
+	p = ggplot2::ggplot(df_4_plot, ggplot2::aes(predicted, value, label = X1, size=bg_prop,color = factor(ct))) + 
+		ggplot2::geom_point(alpha=0.5) + 
+		ggplot2::scale_size(range = c(0, 5)) + 
+		ggplot2::expand_limits(x = 0.1, y = 0.1) +
+		ggplot2::geom_abline(intercept=0, slope=1) + 
+		ggplot2::scale_x_log10() + 
+		ggplot2::scale_y_log10() +
+		ggrepel::geom_text_repel(
+			ggplot2::aes(color = ct),
+			size = 2,
+			segment.alpha= 0.2) +
+		ggplot2::facet_wrap( ~ X2, nrow=5) +
+		ggplot2::coord_fixed() +
+		ggplot2::theme(
+			panel.background = ggplot2::element_blank(), 
+			legend.text=ggplot2::element_text(size=30)
+		)
+	
+	#if(save_report) ggplot2::ggsave(sprintf("%s/%s_predicted_values.pdf", output_dir, ct), useDingbats=FALSE, width = 80, height = 80, units = "cm", plot=p)
+	
+	
+	if(!is.null(observed_prop) & 0) {
+		writeLines("ARMET: start plotting expected gene vallues")
+		link = tibble::as_tibble(do.call("rbind", lapply(unique(colnames(observed_prop)), function(op) {
+			ct = get_hierarchy(my_tree, ct=op)
+			c(op, ct[ct%in%colnames(ref.mean)])
+		})))
+		if(ncol(link)>=2){
+			colnames(link) = c("ct", "ct_new")
+			observed_prop = tibble::as_tibble(reshape::melt(observed_prop))
+			colnames(observed_prop) = c("sample", "ct", "value")
+			
+			observed_prop = 
+				dplyr::left_join(observed_prop, link, by="ct") %>% 
+				dplyr::select(-ct) %>% 
+				dplyr::group_by(sample, ct_new) %>% 
+				dplyr::summarise(value = sum(value, na.rm=TRUE)) %>% 
+				tidyr::spread(ct_new, value)
+			
+			for(r in colnames(ref.mean)[!colnames(ref.mean)%in%colnames(observed_prop)]) {
+				my_df = matrix(rep(0, nrow(observed_prop)))
+				colnames(my_df) = r
+				observed_prop = observed_prop %>% dplyr::bind_cols(as_tibble(my_df)) 
+			}
+			
+			observed_prop = as.data.frame(observed_prop)
+			rownames(observed_prop) = observed_prop[,1]
+			observed_prop = observed_prop[,-1]
+			observed_prop = as.matrix(observed_prop)
+			observed_prop = observed_prop[,colnames(ref.mean)]
+			
+			print(proportions)
+			
+			df_4_plot = data.frame(merge(reshape::melt(mix+1), reshape::melt(t(observed_prop %*% t(ref.mean)+1)), by=c("X1", "X2")))
+			colnames(df_4_plot)[3:4] = c("value", "predicted")
+			df_4_plot$ct = sapply(df_4_plot$X1, function(x1) node_from_gene(my_tree, x1)$name )
+			df_4_plot$bg = apply(df_4_plot, 1, function(mr) 	y_hat_background[mr[2], mr[1]] )
+			df_4_plot$bg_prop = df_4_plot$bg /df_4_plot$value
+			df_4_plot$bg_prop[df_4_plot$bg_prop >10] = 10
+			
+			p = ggplot2::ggplot( df_4_plot[df_4_plot$X2%in%unique(df_4_plot$X2)[1:20], ], ggplot2::aes(predicted, value, label = X1, size=bg_prop)) + 
+				ggplot2::geom_point(alpha=0.5) + 
+				ggplot2::scale_size(range = c(0, 5)) + 
+				ggplot2::expand_limits(x = 0.1, y = 0.1) +
+				ggplot2::geom_abline(intercept=0, slope=1) + 
+				ggplot2::scale_x_log10() + 
+				ggplot2::scale_y_log10() +
+				ggrepel::geom_text_repel(
+					aes(color = ct),
+					size = 2,
+					segment.alpha= 0.2) +
+				ggplot2::facet_wrap( ~ X2, nrow=5) +
+				ggplot2::coord_fixed() +
+				ggplot2::theme(
+					panel.background = ggplot2::element_blank(), 
+					legend.text=ggplot2::element_text(size=30)
+				)
+			
+			#if(save_report) ggplot2::ggsave(sprintf("%s/%s_predicted_values_observed_prop.pdf", output_dir, ct), useDingbats=FALSE, width = 80, height = 80, units = "cm", plot=p)
+		}
+		
+	}
 	
 }
