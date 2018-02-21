@@ -28,7 +28,8 @@ ARMET_tc = function(
 	custom_ref =                        NULL,
 	multithread =                       T,
 	do_debug =                          F,
-	cell_type_root =                    "TME"
+	cell_type_root =                    "TME",
+	choose_internal_ref =               NULL
 ){
 
 	writeLines("ARMET: Started data processing")
@@ -68,7 +69,7 @@ ARMET_tc = function(
 		{ 
 			if(!is.null(custom_ref)) custom_ref
 			else 
-				if(!is_mix_microarray) ref_seq 
+				if(!is_mix_microarray | (!is.null(choose_internal_ref) && choose_internal_ref == "ARNA")  ) ref_seq 
 				else ref_array
 		} %>% 
 		tidyr::drop_na() %>% 
