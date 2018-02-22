@@ -338,7 +338,7 @@ check_if_sd_zero_and_correct = function(df, node){
 	
 	if(nrow(df.summary %>% dplyr::filter(to_recalculate))>0){
 		writeLines("ARMET: One of your markers has 0 variance, this is not compatible with MCMC inference.")
-		writeLines("The following genes will acquire a background variance.")
+		writeLines("ARMET: The following genes will acquire a background variance.")
 		print( df.summary %>% dplyr::filter(to_recalculate) )
 	}
 	
