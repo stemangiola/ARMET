@@ -368,7 +368,7 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree, log.ARMET){
 			doParallel::registerDoParallel(cl)
 		}
 		
-		`%my_do%` <- if(obj.in$multithread & !obj.in$do_debug) `%dopar%` else `%do%`
+		`%my_do%` = ifelse(obj.in$multithread & !obj.in$do_debug), `%dopar%`, `%do%`)
 		verbose = ifelse(obj.in$multithread & !obj.in$do_debug, F, T)
 		
 		node$children = foreach::foreach(cc = node$children, .verbose = verbose) %my_do% {

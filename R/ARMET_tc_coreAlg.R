@@ -223,7 +223,7 @@ ARMET_tc_coreAlg = function(
 	if(save_report) save(model.in, file=sprintf("%s/%s_model_in.RData", output_dir, ct))
 	
 	# Choose model
-	model = if(fully_bayesian) stanmodels$ARMET_tc_recursive else stanmodels$ARMET_tcFix_recursive
+	model = switch(fully_bayesian + 1, stanmodels$ARMET_tcFix_recursive, stanmodels$ARMET_tc_recursive) 
 	
 	# Run model
 	fit = 
