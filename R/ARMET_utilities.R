@@ -23,7 +23,7 @@ build_data_directory = function(){
 	# save(tree, file="data/tree_json.rda")
 	
 }
-
+	
 average_duplicated_genes_tibble_spreaded = function(tbl){
 
 	dup_genes =
@@ -33,7 +33,7 @@ average_duplicated_genes_tibble_spreaded = function(tbl){
 		dplyr::filter(tot > 1) %>%
 		dplyr::pull(gene) %>%
 		as.character()
-
+	
 	tbl %>%
 		dplyr::mutate(gene = as.character(gene)) %>%
 		dplyr::filter(!gene %in% dup_genes) %>%
@@ -68,13 +68,16 @@ check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd,
 	
 	# Check if microarray data
 	if(is_mix_microarray) writeLines("ARMET: The input matrix is from microarray.")
-
+	
 	# Check if NA in mix
 	if(
 		mix %>%	
 		dplyr::select_if(function(.) any(is.na(.))) %>% 
 		ncol() > 0
 	) stop("ARMET: NAs found in the query matrix")
+	
+	# Check if design is tibble
+	if(!tibble::is_tibble(my_design)) stop("ARMET: The design matrix must be a tibble")
 	
 	# This is how many conditions are in the study (e.g., treatment-vs-non-treatment)
 	if(!is.null(my_design)) {
@@ -88,9 +91,9 @@ check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd,
 	# Check prior sd
 	if(prior_sd<=0) stop("ARMET: prior_sd must be a positive number.")
 	
- 
-
-		# Check custom reference
+	
+	
+	# Check custom reference
 	if(
 		!is.null(custom_ref) &&
 		!all(get_leave_names(tree, last_level = 1) %in% (custom_ref %>% dplyr::distinct(ct)  %>% dplyr::pull(ct) %>% as.character()))
@@ -271,7 +274,7 @@ check_if_sd_zero_and_correct = function(df, node){
 	
 	# Function omit zeros
 	zero.omit = function(x) x[x>0]
-
+	
 	# Summarize counts
 	df.summary = df %>%
 		dplyr::group_by(gene, ct) %>%
@@ -283,34 +286,34 @@ check_if_sd_zero_and_correct = function(df, node){
 		dplyr::mutate(to_recalculate = log_sigma==0) 
 	
 	find_closest_sd_uo_the_tree = function(my_ct, my_gene, tb){
-	#	print(my_ct)
-	#	print(my_gene)
-
+		#	print(my_ct)
+		#	print(my_gene)
+		
 		# Iterate upwards thoward root to get the sd from the closest group
 		hierarchy = get_hierarchy(node, my_ct)
 		ancestors = rev(hierarchy[1:(length(hierarchy)-1)])
 		
 		for(h in ancestors){
-
+			
 			# Get first descendant of ancestor including the ancestor 
 			ct_to_consider = unlist(c(h, get_leave_label(node_from_name(node, h), recursive = F)))
 			
 			mean_log_sigma = tb %>% 
 				dplyr::filter(
 					ct %in% ct_to_consider & 
-					gene == my_gene & 
-					log_sigma > 0) %>%
+						gene == my_gene & 
+						log_sigma > 0) %>%
 				
-				{
-					
-					# Exception if I have only one sample per cell type
-					if((.) %>% nrow() == 0) 
-						(.) %>% dplyr::summarise(mean_log_sigma = 0)
-					else 
-						(.) %>% dplyr::summarise(mean_log_sigma = mean(log_sigma))
-						
-				}
-
+						{
+							
+							# Exception if I have only one sample per cell type
+							if((.) %>% nrow() == 0) 
+								(.) %>% dplyr::summarise(mean_log_sigma = 0)
+							else 
+								(.) %>% dplyr::summarise(mean_log_sigma = mean(log_sigma))
+							
+						}
+			
 			if(mean_log_sigma>0) break
 			
 		}
@@ -319,7 +322,7 @@ check_if_sd_zero_and_correct = function(df, node){
 		ifelse(mean_log_sigma == 0, 1, as.numeric(mean_log_sigma))
 		
 	}
-
+	
 	# Add closest sd
 	df.summary = df.summary %>%
 		dplyr::rowwise() %>%
@@ -346,7 +349,7 @@ check_if_sd_zero_and_correct = function(df, node){
 		dplyr::mutate(value = ifelse(to_recalculate, exp(rnorm(1, log_avg, log_sigma)), value)) %>%
 		dplyr::ungroup() %>%
 		dplyr::select(-log_sigma, -log_avg, -to_recalculate)
-
+	
 }
 
 #' Calculate the norm factor with calcNormFactor from limma
@@ -438,7 +441,7 @@ rnaseq_norm_ref_mix = function(obj, target){
 	
 	error_if_log_transformed(target)
 	error_if_log_transformed(obj)
-
+	
 	# Normalize the obj
 	obj = rnaseq_norm(obj)
 	
@@ -471,8 +474,8 @@ rnaseq_norm_ref_mix = function(obj, target){
 	obj = obj %>%
 		dplyr::mutate(tot_ref = tot_reference) %>%
 		dplyr::mutate(nf = 
-									 	(nf %>%
-									 	 	dplyr::filter(sample=="obj"))$nf
+										(nf %>%
+										 	dplyr::filter(sample=="obj"))$nf
 		) %>%
 		dplyr::mutate(tot = tot_ref) %>%
 		dplyr::mutate(value = value / (tot * nf) * tot_ref) %>%
@@ -481,8 +484,8 @@ rnaseq_norm_ref_mix = function(obj, target){
 	target = target %>%
 		dplyr::mutate(tot_ref = tot_reference) %>%
 		dplyr::mutate(nf = 
-									 	(nf %>%
-									 	 	dplyr::filter(sample=="target"))$nf
+										(nf %>%
+										 	dplyr::filter(sample=="target"))$nf
 		) %>%
 		dplyr::mutate(tot = tot_other) %>%
 		dplyr::mutate(value = value / (tot * nf) * tot_ref) %>%
@@ -508,10 +511,10 @@ rnaseq_norm_ref_mix = function(obj, target){
 #' @return A list including the ref and mix normalized and a ggplot
 quant_norm_to_target = function(obj, target){
 	#writeLines("ARMET: Quantile normalization")
-
+	
 	error_if_log_transformed(obj)
 	error_if_log_transformed(target)
-
+	
 	# Needed for: Transform tibble in matrix and normalize because is faster
 	obj = obj %>%
 		tidyr::spread(sample, value)
@@ -609,7 +612,7 @@ mds_plot = function(mix, ref, cell_types){
 #' @param markers A char vector
 #' @return A list including a two objects
 prepare_input = function(ref, node){
-
+	
 	# Sanity check
 	error_if_log_transformed(ref)
 	
@@ -632,7 +635,7 @@ prepare_input = function(ref, node){
 				dplyr::mutate(ct_num = order(ct_num)),
 			by = "ct"
 		)
-
+	
 	e_mu.obj = e.obj %>%
 		dplyr::distinct(gene_num, ct_num)
 	
@@ -645,7 +648,7 @@ prepare_input = function(ref, node){
 					interaction( e_mu.obj$gene_num, e_mu.obj$ct_num)
 				)
 		)
-		
+	
 	list(e=e.obj, e_mu=e_mu.obj)
 	
 }
@@ -756,7 +759,7 @@ parse_summary_vector_in_2D = function(f){
 	
 	return(f)
 }
-
+	
 get_stats_on_ref = function(ref, tree){
 
 	rbind(
@@ -919,5 +922,266 @@ plot_model_results = function(){
 		}
 		
 	}
+	
+}
+
+
+
+get_center_bg = function(coef_ang_posterior){
+	
+	my_sd = matrixStats::colSds(coef_ang_posterior)
+	names(my_sd) = colnames(coef_ang_posterior)
+	my_mean = colMeans(coef_ang_posterior)
+	if(length(my_mean) <= 2) return(list(mean =mean(my_mean), sd= sum(my_sd)))
+	
+	my_dist = stats::dist(my_mean, diag = T, upper = T)
+	my_dist.m = as.matrix(my_dist)
+	my_clust = stats::hclust(my_dist)
+	
+	w = which(my_dist.m==min(my_dist.m[my_dist.m>0])  )[1]
+	my_row = floor(w/ncol(my_dist.m))
+	if(w-(my_row*ncol(my_dist.m)) == 0) {
+		my_col =  ncol(my_dist.m)
+	} else {
+		my_col =  w - my_row*ncol(my_dist.m)
+		my_row = my_row + 1
+	}
+	
+	my_couple = as.data.frame(my_dist.m[my_row, my_col, drop=F])
+	my_couple = c(rownames(my_couple), colnames(my_couple))
+	
+	# Find value of the supposely background standard deviation
+	my_hierarchical_sd = sum(my_sd[my_couple])
+	
+	# Cue the tree for cluster closer than 95 percentile of that standard deviation
+	my_cut = stats::cutree(my_clust, h=my_hierarchical_sd*2)
+	
+	# Calculate cluster size
+	my_table = table(my_cut)
+	#print(my_table)
+	
+	# Check if anything clustered at all
+	
+	if(any(my_table>1)) {
+		
+		# Get bg cluster among possibly many
+		my_c = unique(my_cut[names(my_cut)%in%my_couple])
+		
+		# Get elements in that cluster
+		my_elem = names(my_cut)[my_cut==my_c]
+		
+		if(length(my_c)>1) stop("ARMET: the closest samples do not form cluster even though a cluster is present")
+		
+		my_new_table = my_table
+		my_table_check = NULL
+		while(any(my_new_table>1) & length(my_new_table)>2 & any(my_table_check != my_new_table)){
+			my_table_check = my_new_table
+			my_ancestor = mean(my_mean[my_couple])
+			names(my_ancestor) = paste(my_couple, collapse="_")
+			my_new_mean = c(my_mean[!names(my_mean)%in%my_couple], my_ancestor)
+			my_new_dist = stats::dist(my_new_mean, diag = T, upper = T)
+			my_new_dist.m = as.matrix(my_new_dist)
+			my_new_clust = stats::hclust(my_new_dist)
+			my_new_cut = stats::cutree(my_new_clust, h=my_hierarchical_sd*2)
+			my_new_c = my_new_cut[names(my_new_cut)%in%names(my_ancestor)]
+			my_new_elem = names(my_new_cut)[my_new_cut==my_new_c]
+			my_elem = c(my_elem, my_new_elem[!my_new_elem%in%names(my_ancestor)])
+			my_new_table = table(my_new_cut)
+			my_hierarchical_sd = sum(my_sd[my_elem])
+		}
+		list(mean = mean(my_mean[my_elem]), sd= my_hierarchical_sd)
+	}
+	else list(mean = median(my_mean), sd = my_sd[my_couple])
+	
+}
+
+#' Hipotesis test for the covariate of choice
+#' @rdname dirReg_test
+#'
+#' Prints a report of the hipothesis testing
+#'
+#' @param fit stan fit object 
+#' @param my_design design matrix
+#' @param cov_to_test character variable indicating the column name of the design matrix to test
+#' @param which_cov_to_test for internal usage
+#'
+#' @return a vector including
+#'     pvalues of the intercepts
+#'     pvalues of the angular coefficients
+#'     sign of the angular coefficient
+#'
+#' @examples
+#'  dirReg_test(fit, my_design, cov_to_test)
+#' @export
+dirReg_test = function(fit, my_design, cov_to_test = NULL, which_cov_to_test = 2, names_groups = NULL){
+
+	logit_adj <- function(v, t=0.5) -log(t*(v-1) / ((t-1)*v));
+	
+	# Decide which covariate to check
+	if(!is.null(cov_to_test)) which_cov_to_test = which(colnames( my_design %>% dplyr::select(-sample) ) == cov_to_test )
+	
+	# Get the posterior distributions
+	alpha_posterior = as.matrix(as.data.frame(rstan:::extract( fit, "alpha")))
+	coef_ang_posterior = as.matrix(alpha_posterior[,grep(sprintf("alpha.%s", which_cov_to_test), colnames(alpha_posterior), fixed=T)])
+	interc_posterior = as.matrix(alpha_posterior[,grep("alpha.1", colnames(alpha_posterior), fixed=T)])
+	
+	K = ncol(interc_posterior)
+	gcb = get_center_bg(coef_ang_posterior)
+	m = gcb$mean
+	
+	# plot = plot_densities(logit_adj(coef_ang_posterior, m)  , do_log = F, color="0",  fill = 1:K) +
+	# 	ggtitle("Causal trends - posterior distribution of angular coeff. - Simplex regression")
+	# 
+	stats = do.call("rbind", lapply(1:K, function(i){
+		
+		mcap = mean(coef_ang_posterior[,i])
+		scap = sd(coef_ang_posterior[,i])
+		ecap = scap/sqrt(nrow(alpha_posterior))
+		mip = mean(interc_posterior[,i])
+		sip = sd(interc_posterior[,i])
+		eip = sip/sqrt(nrow(alpha_posterior))
+		pcap = min( 2*(1-pnorm(m, mcap, scap)), 2*(1-pnorm(m, mcap, scap, lower.tail = F)))
+		pip = min ( 2*(1-pnorm(1/K, mip, sip)), 2*(1-pnorm(1/K, mip, sip, lower.tail = F)))
+		
+		pcap = min( 2*(1-pnorm(mcap, gcb$mean, gcb$sd)), 2*(1-pnorm(mcap, gcb$mean, gcb$sd, lower.tail = F)))
+		
+		mip_human_readable = mip
+		mcap_human_readable = logit_adj(mcap, m)
+		pcap_human_readable = if(pcap<0.01 & pcap>0) formatC(pcap, format = "e", digits = 2) else round(pcap, 2)
+		pip_human_readable = if(pip<0.01& pip>0) formatC(pip, format = "e", digits = 2) else round(pip, 2)
+		
+		tibble::tibble(
+			m = m,
+			mcap = mcap,
+			scap = scap,
+			ecap = ecap,
+			mip = mip,
+			sip = sip,
+			eip = eip,
+			pcap = pcap,
+			pip = pip,
+			mip_human_readable = mip_human_readable,
+			mcap_human_readable = mcap_human_readable,
+			pcap_human_readable = pcap_human_readable,
+			pip_human_readable = pip_human_readable,
+			symbol_pcap = if(pcap<0.001) "***" else if(pcap<0.01) "**" else if(pcap<0.05) "*" else if(pcap<0.1) "." else "",
+			symbol_pip = if(pip<0.001) "***" else if(pip<0.01) "**" else if(pip<0.05) "*" else if(pip<0.1) "." else "",
+			direction = if(mcap_human_readable>0) "+" else if(mcap_human_readable<0) "-" else "0"
+		)
+		
+	}))
+	stats$ct = names_groups
+	
+	stats = stats %>% dplyr::mutate_if(is.character, as.factor)
+	
+	list(stats=stats, plot=plot)
+}
+
+parse_extract_2D <- function(fit, param, fun)	apply(rstan::extract(fit, param)[[1]], c(2,3), fun )
+
+#' @rdname beta_reg_hierarchical
+#' @export
+beta_reg_hierarchical = function(fit, my_design){
+	browser()
+	
+	writeLines("ARMET: Starting inference beta reg..")
+	
+	beta_posterior_mu = parse_extract_2D(fit, "beta", mean)
+	beta_posterior_sd = parse_extract_2D(fit, "beta", sd)
+	beta_posterior = aperm(rstan::extract(fit, "beta")[[1]], c(2,3,1))
+	beta_posterior = beta_posterior[,,1:100]
+	
+	rstan:::sampling( stanmodels$beta_reg_hierarchical, 
+										#stan(file="~/PhD/simplexRegression/src/stan_files/beta_reg_hierarchical.stan",
+										data=list(
+											I = dim(beta_posterior)[3],
+											K=ncol(beta_posterior_mu),
+											N=nrow(beta_posterior_mu),
+											X=my_design,
+											R=ncol(my_design),
+											beta_posterior = beta_posterior,
+											beta_mu=beta_posterior_mu,
+											beta_sd = beta_posterior_sd
+										),
+										cores=4,
+										iter = 1000,
+										refresh = 0
+	)
+}
+
+#' Hipotesis test for the covariate of choice
+#' @rdname betaReg_test
+#'
+#' Prints a report of the hipothesis testing
+#'
+#' @param fit stan fit object 
+#' @param my_design design matrix
+#' @param cov_to_test character variable indicating the column name of the design matrix to test
+#' @param which_cov_to_test for internal usage
+#'
+#' @return a vector including
+#'     pvalues of the intercepts
+#'     pvalues of the angular coefficients
+#'     sign of the angular coefficient
+#'
+#' @examples
+#'  betaReg_test(fit, my_design, cov_to_test)
+#' @export
+betaReg_test = function(fit, my_design, cov_to_test = NULL, which_cov_to_test = 2, names_groups = NULL){
+	browser()
+	# Decide which covariate to check
+	if(!is.null(cov_to_test)) which_cov_to_test = which(colnames( my_design %>% dplyr::select(-sample) ) == cov_to_test )
+	
+	# Get the posterior distributions
+	alpha_posterior = as.data.frame(rstan:::extract( fit, "alpha2"))
+	coef_ang_posterior = as.matrix(alpha_posterior[,grep(sprintf("alpha2.%s", which_cov_to_test), colnames(alpha_posterior), fixed=T)])
+	interc_posterior = as.matrix(alpha_posterior[,grep("alpha2.1", colnames(alpha_posterior), fixed=T)])
+	
+	K = ncol(interc_posterior)
+	m = 0
+	
+	plot = plot_densities(coef_ang_posterior , do_log = F, color="0",  fill = 1:K) +
+		ggtitle("Effectual trends - posterior distribution of angular coeff. - Beta regression")
+	
+	stats = 	do.call("rbind", lapply(1:K, function(i){
+		
+		mcap = mean(coef_ang_posterior[,i])
+		scap = sd(coef_ang_posterior[,i])
+		ecap = scap/sqrt(nrow(alpha_posterior))
+		mip = mean(interc_posterior[,i])
+		sip = sd(interc_posterior[,i])
+		eip = sip/sqrt(nrow(alpha_posterior))
+		pcap = min( 2*(1-pnorm(m, mcap, scap)), 2*(1-pnorm(m, mcap, scap, lower.tail = F)))
+		pip = min ( 2*(1-pnorm(1/K, mip, sip)), 2*(1-pnorm(1/K, mip, sip, lower.tail = F)))
+		mip_human_readable = inv_logit(mip)
+		mcap_human_readable = mcap
+		pcap_human_readable = if(pcap<0.01 & pcap>0) formatC(pcap, format = "e", digits = 2) else round(pcap, 2)
+		pip_human_readable = if(pip<0.01& pip>0) formatC(pip, format = "e", digits = 2) else round(pip, 2)
+		
+		tibble(
+			m = m,
+			mcap = mcap,
+			scap = scap,
+			ecap = ecap,
+			mip = mip,
+			sip = sip,
+			eip = eip,
+			pcap = pcap,
+			pip = pip,
+			mip_human_readable = mip_human_readable,
+			mcap_human_readable = mcap_human_readable,
+			pcap_human_readable = pcap_human_readable,
+			pip_human_readable = pip_human_readable,
+			symbol_pcap = if(pcap<0.001) "***" else if(pcap<0.01) "**" else if(pcap<0.05) "*" else if(pcap<0.1) "." else "",
+			symbol_pip = if(pip<0.001) "***" else if(pip<0.01) "**" else if(pip<0.05) "*" else if(pip<0.1) "." else "",
+			direction = if(mcap_human_readable>0) "+" else if(mcap_human_readable<0) "-" else "0"
+		)
+		
+	}))
+	stats$ct = names_groups
+	
+	stats = stats %>% dplyr::mutate_if(is.character, as.factor)
+	
+	list(stats=stats, plot=plot)
 	
 }

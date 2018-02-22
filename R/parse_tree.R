@@ -7,12 +7,12 @@ add_info_to_tree = function(node, ct, label, value, append = F){
 		if(append) 
 			node[[label]] =
 				node[[label]] %>% 
-					dplyr::mutate_if(is.factor, as.character) %>%
-					dplyr::bind_rows(
-						value %>% 
-							dplyr::mutate_if(is.factor, as.character)
-					) %>%
-					dplyr::mutate_if(is.character, as.factor)
+				dplyr::mutate_if(is.factor, as.character) %>%
+				dplyr::bind_rows(
+					value %>% 
+						dplyr::mutate_if(is.factor, as.character)
+				) %>%
+				dplyr::mutate_if(is.character, as.factor)
 		else node[[label]] = value
 		node
 	}
@@ -73,7 +73,7 @@ get_proportions_table = function(trees){
 
 #' Get nome from cell type
 node_from_name = function(node, ct){
-
+	
 	if(is.na(ct)) NULL
 	else if(node$name==ct) node
 	else if(length(node$children)>0)
@@ -283,7 +283,7 @@ get_map_foreground_background = function(node, ct){
 
 #' Put absolute proportions on tree
 add_absolute_proportions_to_tree = function(node, p_ancestor =  rep(1, nrow( node$relative_proportion )) ){
-
+	
 	node$relative_proportion = 
 		node$relative_proportion %>% 
 		dplyr::mutate(
@@ -304,8 +304,8 @@ add_absolute_proportions_to_tree = function(node, p_ancestor =  rep(1, nrow( nod
 }
 
 #' Put proportions on tree
-add_proportions_to_tree_from_table = function(tree, proportion){
-
+add_data_to_tree_from_table = function(tree, proportion, label, append  ){
+	
 	# Update tree so it does not depend
 	for(
 		ll in 
@@ -318,15 +318,16 @@ add_proportions_to_tree_from_table = function(tree, proportion){
 			add_info_to_tree(
 				tree, 
 				ll, 
-				"relative_proportion", 
+				label, 
 				proportion %>% dplyr::filter(ct == ll),
-				append = T
+				append = append
 			)
 		
 	}
 	
 	tree
 }
+
 
 #' Run ARMET core algorithm recursively on the tree 
 #'
@@ -339,20 +340,20 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree, log.ARMET){
 	# library(doFuture)
 	# doFuture::registerDoFuture()
 	# future::plan(future::multiprocess)
-
+	
 	
 	if(length(node$children)>0){
-
+		
 		# Initialize pipe
 		`%>%` <- magrittr::`%>%`
 		
 		obj.out = ARMET_tc_coreAlg(obj.in, node)
 		node = obj.out$node
-
+		
 		write(node$name,file=log.ARMET,append=TRUE)
 		
 		# Update results for the background tree
-		bg_tree = add_proportions_to_tree_from_table(bg_tree, obj.out$proportion)
+		bg_tree = add_data_to_tree_from_table(bg_tree, obj.out$proportion, label = "relative_proportion", append = T)
 		
 		# Set up background trees
 		bg_tree = add_absolute_proportions_to_tree(bg_tree)
@@ -361,21 +362,22 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree, log.ARMET){
 		
 		if(obj.in$multithread & !obj.in$do_debug){
 			n_cores = length(node$children)
-
+			
 			cl <- parallel::makeCluster(n_cores)
 			parallel::clusterExport(cl, c("obj.in", "bg_tree", "%>%", "log.ARMET"), environment())
 			doParallel::registerDoParallel(cl)
 		}
 		
 		`%my_do%` <- if(obj.in$multithread & !obj.in$do_debug) `%dopar%` else `%do%`
-
-		node$children = foreach::foreach(cc = node$children) %my_do% {
+		verbose = ifelse(obj.in$multithread & !obj.in$do_debug, F, T)
+		
+		node$children = foreach::foreach(cc = node$children, .verbose = verbose) %my_do% {
 			
 			run_coreAlg_though_tree_recursive(cc, obj.in, bg_tree, log.ARMET)
 		}
-			
+		
 		if(obj.in$multithread & !obj.in$do_debug)	parallel::stopCluster(cl)
-			
+		
 		node
 	}
 	
@@ -388,7 +390,7 @@ run_coreAlg_though_tree = function(node, obj.in){
 	
 	
 	writeLines("ARMET: Starting deconvolution")
-
+	
 	log.ARMET = sprintf("%s%s", tempfile(), Sys.getpid())
 	if (file.exists(log.ARMET)) file.remove(log.ARMET)
 	file.create(log.ARMET)
@@ -402,9 +404,9 @@ run_coreAlg_though_tree = function(node, obj.in){
 		}
 		
 		`%my_do%` <- if(obj.in$multithread & !obj.in$do_debug) `%dopar%` else `%do%`
-
+		
 		node.filled = foreach:::foreach(dummy = 1) %my_do% {
-
+			
 			run_coreAlg_though_tree_recursive(node, obj.in, node, log.ARMET)
 		}
 		
@@ -412,12 +414,12 @@ run_coreAlg_though_tree = function(node, obj.in){
 		
 		return(node.filled[[1]])
 	}
-
+	
 	if(!obj.in$do_debug & 0)
 	{
 		node.filled = future::future(		exec_hide_std_out(node, obj.in, log.ARMET) 		)
-	
-
+		
+		
 		
 		log.array = c()
 		done = F
@@ -427,14 +429,14 @@ run_coreAlg_though_tree = function(node, obj.in){
 			Sys.sleep(2)
 			
 			temp = readLines(log.ARMET)
-	
+			
 			new = setdiff(temp, log.array)
-	
+			
 			if(length(new)>0) {
 				writeLines(sprintf("ARMET: %s deconvolution completed", new))
 				log.array = c(log.array, new)
 			}
-	
+			
 			
 			if(all( get_leave_label(node, last_level = -1) %in% log.array)) break
 		}
@@ -442,11 +444,11 @@ run_coreAlg_though_tree = function(node, obj.in){
 		file.remove(log.ARMET)
 		
 		return(future::value(node.filled))
-	
+		
 	} else {
-		return( exec_hide_std_out(node, obj.in, log.ARMET) )
+		return( run_coreAlg_though_tree_recursive(node, obj.in, node, log.ARMET) )
 	}
-
+	
 }
 
 
@@ -519,12 +521,12 @@ format_tree = function(tree, mix, ct_to_omit){
 #' @param name A char
 #' @return A tree
 pick_proportion_for_specific_tree = function(node, name){
-
+	
 	# If the children has proportion information
 	node$relative_proportion = 
 		node$relative_proportion %>%
-			dplyr::filter(sample == name)
-
+		dplyr::filter(sample == name)
+	
 	# Recursive selection
 	if(length(node$children)>0)
 		node$children = 
@@ -546,56 +548,37 @@ divide_trees_proportion_across_many_trees = function(node){
 		node$relative_proportion %>% 
 		dplyr::pull(sample) %>% 
 		levels()
-
+	
 	trees = 
 		lapply(
 			my_tree_names, 
 			function(m)  pick_proportion_for_specific_tree(node, m)
 		)
-
+	
 	names(trees) = my_tree_names
 	
 	trees
 }
 
-# run_coreAlg_though_tree = function(node, obj.in, bg_tree){
-# 	
-# 	# library(doFuture)
-# 	# doFuture::registerDoFuture()
-# 	# future::plan(future::multiprocess)
-# 	
-# 	
-# 	
-# 	if(obj.in$multithread){
-# 		n_cores = floor(parallel::detectCores() / 6)
-# 		cl <- parallel::makeCluster(n_cores)
-# 		parallel::clusterExport(cl, c("obj.in", "bg_tree", "%>%"), environment())
-# 		doParallel::registerDoParallel(cl)
-# 	}
-# 	
-# 	`%my_do%` <- if(obj.in$multithread) `%dopar%` else `%do%`
-# 	
-# 	foreach::foreach(cc = node$children, .verbose = TRUE) %my_do% {
-# 		
-# 		if(length(node$children)==0) return(cc)
-# 		
-# 		obj.out = ARMET_tc_coreAlg(obj.in, cc)
-# 		
-# 		# Update results for the background tree
-# 		bg_tree = add_proportions_to_tree_from_table(bg_tree, obj.out$proportion)
-# 		
-# 		# Set up background trees
-# 		bg_tree = add_absolute_proportions_to_tree(bg_tree)
-# 		
-# 		obj.in$my_tree = bg_tree
-# 		
-# 		cc$children = run_coreAlg_though_tree(obj.out$node, obj.in, bg_tree)
-# 		
-# 		cc
-# 		
-# 	}
-# 	
-# 	if(obj.in$multithread)	parallel::stopCluster(cl)
-# 	
-# 	
-# }
+get_tree_hypoth_test = function(tree_out, tree_in){
+	
+	for( ct in tree_out$Get('name') ){
+		
+		if(ct %in% c("dendritic","TME")) next
+		ti = node_from_name(tree_in, ct)
+		if(length(ti[["stats"]])==0) next
+		s = ti[["stats"]] %>% dplyr::mutate_if(is.factor, as.character)
+		
+		data.tree::FindNode(tree_out, ct)$Set(estimate_extrinsic =      round(s$mcap_human_readable, 2), filterFun = function(x) x$name == ct)
+		data.tree::FindNode(tree_out, ct)$Set(std_error_extrinsic =     round( s$ecap,2), filterFun = function(x) x$name == ct)
+		data.tree::FindNode(tree_out, ct)$Set(direction_extrinsic =     s$direction, filterFun = function(x) x$name == ct)
+		data.tree::FindNode(tree_out, ct)$Set(pvalue_extrinsic =        s$pcap_human_readable, filterFun = function(x) x$name == ct)
+		data.tree::FindNode(tree_out, ct)$Set(significance_extrinsic =  s$symbol_pcap, filterFun = function(x) x$name == ct)
+
+	}
+	
+	tree_out
+	
+}
+
+

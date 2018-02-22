@@ -133,13 +133,15 @@ ARMET_tc = function(
 	##############################################################################################
 
 	# Create tree with hypothesis testing
-	if(!is.null(cov_to_test) & 0) {
-		data(osNode)
-		tree.test = get_tree_hypoth_test(osNode, path=output_dir, cov_to_test)
-		print(tree.test, "significance_causal", "pvalue_causal", "direction_causal", "significance_effectual", "pvalue_effectual", "direction_effectual")
-		save(tree.test, file=sprintf("%s/tree_pvalues.RData", output_dir))
-	}
-	
+	osNode.stat = 
+		switch(
+			(!is.null(cov_to_test)) + 1,
+			NULL,
+			get_tree_hypoth_test(osNode, my_tree)
+		)
+		
+	if(save_report) save(osNode.stat, file=sprintf("%s/tree_pvalues.RData", output_dir))
+
 	# Return
 	list(
 		
@@ -161,8 +163,9 @@ ARMET_tc = function(
 		
 		mix = mix %>% 
 			dplyr::filter(gene %in% get_genes( my_tree )) %>%
-			droplevels()
+			droplevels(),
 		
+		stats = osNode.stat
 	)
 	
 }

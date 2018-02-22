@@ -5,7 +5,7 @@ ARMET_tc_coreAlg = function(
 	node, 
 	real_prop_obj=NULL, 
 	is_test=F){
-
+	
 	# Get ct
 	ct = node$name
 	
@@ -31,17 +31,17 @@ ARMET_tc_coreAlg = function(
 		dplyr::left_join(get_map_foreground_background(my_tree, ct), by="ct") %>%
 		dplyr::rename(ct_ = ct) %>%
 		dplyr::filter(gene %in% 
-					 	get_node_label_level_specfic(
-					 		node_from_name(my_tree,  ct), 
-					 		label = "markers",
-					 		start_level = 1, 
-					 		stop_level = 1
-					 	)
-					) %>%
+										get_node_label_level_specfic(
+											node_from_name(my_tree,  ct), 
+											label = "markers",
+											start_level = 1, 
+											stop_level = 1
+										)
+		) %>%
 		dplyr::select(-ct_) %>%
 		dplyr::rename(ct = ancestor) %>%
 		dplyr::mutate_if(is.character, as.factor)
-		
+	
 	
 	# Print stats on ref
 	get_stats_on_ref(ref,my_tree) %>% 
@@ -66,7 +66,7 @@ ARMET_tc_coreAlg = function(
 	bg = 	ref %>% 
 		dplyr::filter(variable=="background") %>%
 		droplevels()
-
+	
 	# Garbage collection
 	rm(ref)
 	gc()
@@ -74,7 +74,7 @@ ARMET_tc_coreAlg = function(
 	# Get the probability table of the previous run
 	ancestor_run_prop_table = get_last_existing_leaves_with_annotation(my_tree)
 	
-
+	
 	# Sanity check
 	if(
 		all(
@@ -109,40 +109,40 @@ ARMET_tc_coreAlg = function(
 
 	# Calculate the value of the genes for background 
 	# !!rlang::sym(ct) -> for variable name without quotes
-
+	
 	y_hat_background = 
 		as.matrix(
 			bg_prop %>%
-				{ 
-					if(nrow(.)==0) 
-						dplyr::bind_rows(
-							fg_prop %>%
-								dplyr::mutate(
-									ct = factor("bg"), 
-									relative_proportion = 0, 
-									absolute_proportion = 0
-								)
-						)
-					else . 
-				} %>%
+			{ 
+				if(nrow(.)==0) 
+					dplyr::bind_rows(
+						fg_prop %>%
+							dplyr::mutate(
+								ct = factor("bg"), 
+								relative_proportion = 0, 
+								absolute_proportion = 0
+							)
+					)
+				else . 
+			} %>%
 				dplyr::select(-relative_proportion) %>%
 				tidyr::spread(ct, absolute_proportion) %>%
 				dplyr::select(-sample)
 		) %*% 
 		as.matrix(
 			bg %>% 
-				{ 
-					if(nrow(.)==0) 
-						fg %>%
-						dplyr::distinct(gene) %>%
-						dplyr::mutate(
-							sample="s0",
-							value = 0,
-							ct = "bg",
-							variable = "background"
-						)
-					else . 
-				} %>%
+			{ 
+				if(nrow(.)==0) 
+					fg %>%
+					dplyr::distinct(gene) %>%
+					dplyr::mutate(
+						sample="s0",
+						value = 0,
+						ct = "bg",
+						variable = "background"
+					)
+				else . 
+			} %>%
 				dplyr::mutate_if(is.character, as.factor) %>%
 				dplyr::select(gene, ct, value) %>%
 				dplyr::group_by(gene, ct) %>%
@@ -172,14 +172,18 @@ ARMET_tc_coreAlg = function(
 			nrow(),
 		
 		R = my_design %>% 
+			dplyr::select(-sample) %>%
 			ncol(),
 		
 		y = mix %>% 
 			dplyr::select(gene, sample, value) %>% 
 			tidyr::spread(gene, value) %>%
+			dplyr::arrange(sample) %>%
 			dplyr::select(-sample), 
 		
-		X = my_design,
+		X = my_design %>% 
+			dplyr::arrange(sample) %>%
+			dplyr::select(-sample),
 		
 		x_genes = fg %>% 
 			dplyr::pull(gene) %>%
@@ -214,13 +218,13 @@ ARMET_tc_coreAlg = function(
 		is_mix_microarray =  as.numeric(is_mix_microarray)
 		
 	)
-
+	
 	# Save the raw model resul for debugging
 	if(save_report) save(model.in, file=sprintf("%s/%s_model_in.RData", output_dir, ct))
-
+	
 	# Choose model
 	model = if(fully_bayesian) stanmodels$ARMET_tc_recursive else stanmodels$ARMET_tcFix_recursive
-
+	
 	# Run model
 	fit = 
 		rstan::sampling(
@@ -241,17 +245,35 @@ ARMET_tc_coreAlg = function(
 		dplyr::mutate_if(is.character, as.factor)
 	
 	# Add info to the node
-	node = add_proportions_to_tree_from_table(node, proportions)
+	node = add_data_to_tree_from_table(node, proportions, "relative_proportion", append = T)
 	
 	# Set up background trees
 	node = add_absolute_proportions_to_tree(node)
+
+	# Add hypothesis testing
+	node = 
+		if(!is.null(cov_to_test))
+			add_data_to_tree_from_table(
+				node,
+				dirReg_test(
+					fit, 
+					my_design, 
+					cov_to_test, 
+					names_groups = levels(fg$ct) 
+				)$stats,
+				"stats",
+				append = F
+			)
+		else node
+
 	
 	# Save output
 	if(save_report) save(fit, file=sprintf("%s/%s_fit.RData", output_dir, ct))
-	p = rstan::traceplot(fit, pars=c("alpha"), inc_warmup=F)
-		
+	# p = rstan::traceplot(fit, pars=c("alpha"), inc_warmup=F)
+	# 	
 	#if(save_report) ggplot2::ggsave(sprintf("%s_chains.png", ct), p)
 	if(save_report)	write.csv(proportions, sprintf("%s/%s_composition.csv", output_dir, ct))
-
+	
+	
 	list(proportions = proportions, node = node)
 }
