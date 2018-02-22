@@ -446,7 +446,7 @@ run_coreAlg_though_tree = function(node, obj.in){
 		return(future::value(node.filled))
 		
 	} else {
-		return( run_coreAlg_though_tree_recursive(node, obj.in, node, log.ARMET) )
+		return( exec_hide_std_out(node, obj.in, node, log.ARMET) )
 	}
 	
 }
@@ -574,7 +574,7 @@ get_tree_hypoth_test = function(tree_out, tree_in){
 		data.tree::FindNode(tree_out, ct)$Set(direction_extrinsic =     s$direction, filterFun = function(x) x$name == ct)
 		data.tree::FindNode(tree_out, ct)$Set(pvalue_extrinsic =        s$pcap_human_readable, filterFun = function(x) x$name == ct)
 		data.tree::FindNode(tree_out, ct)$Set(significance_extrinsic =  s$symbol_pcap, filterFun = function(x) x$name == ct)
-
+		
 	}
 	
 	tree_out
