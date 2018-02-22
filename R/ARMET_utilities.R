@@ -23,9 +23,9 @@ build_data_directory = function(){
 	# save(tree, file="data/tree_json.rda")
 	
 }
-	
-average_duplicated_genes_tibble_spreaded = function(tbl){
 
+average_duplicated_genes_tibble_spreaded = function(tbl){
+	
 	dup_genes =
 		tbl %>%
 		dplyr::group_by(gene) %>%
@@ -81,7 +81,7 @@ check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd,
 	
 	# This is how many conditions are in the study (e.g., treatment-vs-non-treatment)
 	if(!is.null(my_design)) {
-		writeLines("The design matrix is :")
+		writeLines("ARMET: The design matrix is :")
 		print(head(my_design))
 	}
 	
@@ -759,9 +759,9 @@ parse_summary_vector_in_2D = function(f){
 	
 	return(f)
 }
-	
-get_stats_on_ref = function(ref, tree){
 
+get_stats_on_ref = function(ref, tree){
+	
 	rbind(
 		foreach::foreach(ct = get_leave_names(tree), .combine = rbind) %do% {
 			tibble::tibble(

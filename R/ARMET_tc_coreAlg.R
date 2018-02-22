@@ -104,9 +104,9 @@ ARMET_tc_coreAlg = function(
 		droplevels()
 	
 	# Prepare input for full bayesian 
-	e.obj = prepare_input(fg, my_tree)
-	bg.obj = prepare_input(bg, my_tree)
-
+	# e.obj = prepare_input(fg, my_tree)
+	# bg.obj = prepare_input(bg, my_tree)
+	
 	# Calculate the value of the genes for background 
 	# !!rlang::sym(ct) -> for variable name without quotes
 	
