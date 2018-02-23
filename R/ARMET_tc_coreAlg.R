@@ -155,7 +155,7 @@ ARMET_tc_coreAlg = function(
 		tibble::as_tibble() %>%
 		dplyr::mutate(sample = levels(mix$sample)) %>%
 		dplyr::select(sample, dplyr::everything())
-	
+
 	# Create input object for the model
 	model.in = list(
 		

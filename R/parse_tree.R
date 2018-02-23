@@ -368,7 +368,7 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree, log.ARMET){
 			doParallel::registerDoParallel(cl)
 		}
 		
-		`%my_do%` = ifelse(obj.in$multithread & !obj.in$do_debug), `%dopar%`, `%do%`)
+		`%my_do%` = ifelse(obj.in$multithread & !obj.in$do_debug, `%dopar%`, `%do%`)
 		verbose = ifelse(obj.in$multithread & !obj.in$do_debug, F, T)
 		
 		node$children = foreach::foreach(cc = node$children, .verbose = verbose) %my_do% {
@@ -415,7 +415,7 @@ run_coreAlg_though_tree = function(node, obj.in){
 		return(node.filled[[1]])
 	}
 	
-	if(!obj.in$do_debug & 0)
+	if(!obj.in$do_debug)
 	{
 		node.filled = future::future(		exec_hide_std_out(node, obj.in, log.ARMET) 		)
 		
@@ -446,7 +446,7 @@ run_coreAlg_though_tree = function(node, obj.in){
 		return(future::value(node.filled))
 		
 	} else {
-		return( exec_hide_std_out(node, obj.in, node, log.ARMET) )
+		return( run_coreAlg_though_tree_recursive(node, obj.in, node, log.ARMET) )
 	}
 	
 }

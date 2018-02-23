@@ -77,7 +77,7 @@ check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd,
 	) stop("ARMET: NAs found in the query matrix")
 	
 	# Check if design is tibble
-	if(!tibble::is_tibble(my_design)) stop("ARMET: The design matrix must be a tibble")
+	if(!is.null(cov_to_test) && !tibble::is_tibble(my_design)) stop("ARMET: The design matrix must be a tibble")
 	
 	# This is how many conditions are in the study (e.g., treatment-vs-non-treatment)
 	if(!is.null(my_design)) {

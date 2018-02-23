@@ -59,8 +59,12 @@ ARMET_tc = function(
 
 	# Check if design matrix exists
 	if(is.null(my_design)) 
-		my_design = matrix(rep(1, nrow(mix %>% dplyr::distinct(sample))), ncol=1)
-
+		my_design = tibble::tibble(
+			sample = levels(mix$sample),
+			`(intercept)` = 1
+		) %>%
+		dplyr::mutate_if(is.character, as.factor)
+		
 	# Format tree
 	my_tree =  format_tree( node_from_name(tree, cell_type_root), mix, ct_to_omit)
 
