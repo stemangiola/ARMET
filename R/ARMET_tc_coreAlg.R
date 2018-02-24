@@ -224,7 +224,7 @@ ARMET_tc_coreAlg = function(
 	
 	# Choose model
 	model = switch(fully_bayesian + 1, stanmodels$ARMET_tcFix_recursive, stanmodels$ARMET_tc_recursive) 
-	
+
 	# Run model
 	fit = 
 		rstan::sampling(

@@ -169,7 +169,9 @@ ARMET_tc = function(
 			dplyr::filter(gene %in% get_genes( my_tree )) %>%
 			droplevels(),
 		
-		stats = osNode.stat
+		stats = osNode.stat,
+		
+		tree = my_tree
 	)
 	
 }
