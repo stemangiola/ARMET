@@ -582,4 +582,63 @@ get_tree_hypoth_test = function(tree_out, tree_in){
 	
 }
 
+#' Get information from tree recursively for every node
+get_distributions_from_tree = function(node){
+	
+	
+	
+	if(length(node$children)>0){
+
+			node[["summary"]] %>%
+			dplyr::bind_rows(
+				do.call(dplyr::bind_rows, lapply(node$children, get_distributions_from_tree))
+			)
+
+	}
+	else node[["summary"]]
+}
+
+get_gene_distributons_recursive = function(node, ref_tbl){
+
+	if(length(node$children)>0){
+		
+		doParallel::registerDoParallel(length(node$children))
+		
+		node$children = foreach(nn = node$children) %do% {
+				get_gene_distributons_recursive(nn, ref_tbl)
+		}
+		
+		node$summary =
+				do.call(dplyr::bind_rows, lapply(node$children, function(n) n$summary)) %>% 
+					dplyr::group_by(gene) %>%
+					# Safer alternative to calculation if NA are present
+					dplyr::summarise(
+						log_mean =  ifelse(
+							all(is.na(log_sd)), 
+							NA, 
+							mean(log_mean, na.rm = T)  
+						),
+						log_sd = ifelse(
+							all(is.na(log_sd)), 
+							NA, 
+							sqrt( sum(log_sd^2, na.rm = T))  
+						),
+						ct = node$name
+					) %>%
+					dplyr::ungroup() %>%
+					dplyr::mutate(original = F)
+	}
+	
+	else {
+		node$summary = 
+			ref_tbl %>% 
+				dplyr::filter(ct == node$name) %>%
+				dplyr::mutate(ct = as.character(ct)) %>%
+				dplyr::mutate(original = T)
+	}
+	
+	node
+}
+
+
 

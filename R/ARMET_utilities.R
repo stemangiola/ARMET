@@ -82,7 +82,7 @@ check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd,
 	# This is how many conditions are in the study (e.g., treatment-vs-non-treatment)
 	if(!is.null(my_design)) {
 		writeLines("ARMET: The design matrix is :")
-		print(head(my_design))
+		print(my_design)
 	}
 	
 	# Set up the covariate to test if any
@@ -1014,7 +1014,7 @@ get_center_bg = function(coef_ang_posterior){
 #'  dirReg_test(fit, my_design, cov_to_test)
 #' @export
 dirReg_test = function(fit, my_design, cov_to_test = NULL, which_cov_to_test = 2, names_groups = NULL){
-
+	
 	logit_adj <- function(v, t=0.5) -log(t*(v-1) / ((t-1)*v));
 	
 	# Decide which covariate to check
