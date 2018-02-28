@@ -1220,4 +1220,29 @@ betaReg_test = function(fit, my_design, cov_to_test = NULL, which_cov_to_test = 
 	list(stats=stats, plot=plot)
 	
 }
+
+ref_to_summary_ref = function(tree, ref){
+
+	# cl <- multidplyr::create_cluster(parallel::detectCores()-2)
+	# multidplyr::set_default_cluster(cl)
+	
+	get_distributions_from_tree(
+		get_gene_distributons_recursive(
+			tree, 
+			# Get full matrix expression
+			ref %>%
+				#Get summary statistics in parallel
+				#multidplyr::partition(ct, gene) %>%
+				dplyr::group_by(ct, gene) %>%
+				dplyr::summarise(
+					log_mean = median(log(value+1), na.rm = T), 
+					log_sd =   mad(log(value+1), na.rm = T)
+				) %>%
+				#dplyr::collect() %>%
+				dplyr::ungroup()
+		)
+	) %>%
+		dplyr::mutate(value = exp(log_mean))
+	
+	# parallel::stopCluster(cl)
 }
