@@ -250,22 +250,67 @@ ARMET_tc_coreAlg = function(
 	# Set up background trees
 	node = add_absolute_proportions_to_tree(node)
 
+	test = switch (
+		is.null(cov_to_test) + 1,
+		dirReg_test(
+			fit, 
+			my_design, 
+			cov_to_test, 
+			names_groups = levels(fg$ct) 
+		),
+		NULL
+	) 
+	
 	# Add hypothesis testing
-	node = 
-		if(!is.null(cov_to_test))
-			add_data_to_tree_from_table(
-				node,
-				dirReg_test(
-					fit, 
-					my_design, 
-					cov_to_test, 
-					names_groups = levels(fg$ct) 
-				)$stats,
-				"stats",
-				append = F
-			)
-		else node
+	node = switch(
+		is.null(cov_to_test) + 1,
+		add_data_to_tree_from_table(
+			node,
+			test$stats,
+			"stats",
+			append = F
+		),
+		node
+	)
 
+	# Add hypothesis testing
+	node = switch(
+		is.null(cov_to_test) + 1,
+		add_info_to_tree(
+			node, 
+			ct, 
+			"plot_props", 
+			test$plot_props,
+			append = F
+		),
+		node
+	)
+	
+	# Add hypothesis testing
+	node = switch(
+		is.null(cov_to_test) + 1,
+		add_info_to_tree(
+			node, 
+			ct, 
+			"plot_coef_ang", 
+			test$plot_coef_ang,
+			append = F
+		),
+		node
+	)
+	
+	# Add hypothesis testing
+	node = switch(
+		is.null(cov_to_test) + 1,
+		add_info_to_tree(
+			node, 
+			ct, 
+			"estimate_prop_with_uncertanties", 
+			test$estimate_prop_with_uncertanties,
+			append = F
+		),
+		node
+	)
 	
 	# Save output
 	if(save_report) save(fit, file=sprintf("%s/%s_fit.RData", output_dir, ct))

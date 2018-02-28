@@ -1029,9 +1029,45 @@ dirReg_test = function(fit, my_design, cov_to_test = NULL, which_cov_to_test = 2
 	gcb = get_center_bg(coef_ang_posterior)
 	m = gcb$mean
 	
-	# plot = plot_densities(logit_adj(coef_ang_posterior, m)  , do_log = F, color="0",  fill = 1:K) +
-	# 	ggtitle("Causal trends - posterior distribution of angular coeff. - Simplex regression")
-	# 
+	parse_fit = function(fit, q, label){
+		data.frame(apply(rstan::extract(fit, "beta")[[1]], c(2,3), quantile, q )) %>%
+			tibble::as_tibble() %>%
+			stats::setNames(names_groups) %>%
+			dplyr::mutate(sample = levels(my_design$sample)) %>%
+			tidyr::gather(ct, !!label, -sample) %>%
+			dplyr::mutate_if(is.character, as.factor) 
+	}
+	
+	estimate_prop_with_uncertanties = 
+		parse_fit(fit, 0.5, "mean") %>%
+		dplyr::left_join(	parse_fit(fit, 0.95, "upper"), by=c("sample", "ct")) %>%
+		dplyr::left_join(	parse_fit(fit, 0.05, "lower"), by=c("sample", "ct")) %>%
+		dplyr::left_join(	my_design %>% dplyr::select(-`(Intercept)`), by="sample")
+	
+	pd <- ggplot2::position_dodge(0.02)
+	plot_props = ggplot2::ggplot(estimate_prop_with_uncertanties, ggplot2::aes(x=cov, y=mean, colour=ct, group=ct)) + 
+		ggplot2::geom_point(position=pd) +
+		ggplot2::geom_errorbar(
+			ggplot2::aes(ymin=lower, ymax=upper, colour=ct), 
+			width=0, alpha=0.4 ,
+			position=pd, 
+		) +
+		ggplot2::theme_bw()
+	
+	plot_coef_ang = ggplot2::ggplot(
+		data.frame(logit_adj(coef_ang_posterior, m)) %>%
+			tibble::as_tibble() %>%
+			stats::setNames(names_groups) %>%
+			tidyr::gather(ct, value), ggplot2::aes(value, group=ct, color=ct)) +
+		ggplot2::geom_line(stat="density") +
+		ggplot2::expand_limits(x=0.1) +
+		ggplot2::theme_bw() +
+		ggplot2::theme(
+			panel.border = ggplot2::element_blank(),
+			axis.line = ggplot2::element_line(colour = "black")
+		) +
+		ggplot2::ggtitle("Causal trends - posterior distribution of angular coeff. - Simplex regression")
+	
 	stats = do.call("rbind", lapply(1:K, function(i){
 		
 		mcap = mean(coef_ang_posterior[,i])
@@ -1069,12 +1105,11 @@ dirReg_test = function(fit, my_design, cov_to_test = NULL, which_cov_to_test = 2
 			direction = if(mcap_human_readable>0) "+" else if(mcap_human_readable<0) "-" else "0"
 		)
 		
-	}))
-	stats$ct = names_groups
+	})) %>%
+		dplyr::mutate(ct = names_groups ) %>%
+		dplyr::mutate_if(is.character, as.factor)
 	
-	stats = stats %>% dplyr::mutate_if(is.character, as.factor)
-	
-	list(stats=stats, plot=plot)
+	list(stats=stats, plot_props=plot_props, plot_coef_ang=plot_coef_ang, estimate_prop_with_uncertanties = estimate_prop_with_uncertanties)
 }
 
 parse_extract_2D <- function(fit, param, fun)	apply(rstan::extract(fit, param)[[1]], c(2,3), fun )
@@ -1184,4 +1219,5 @@ betaReg_test = function(fit, my_design, cov_to_test = NULL, which_cov_to_test = 
 	
 	list(stats=stats, plot=plot)
 	
+}
 }
