@@ -979,10 +979,13 @@ plot_model_results = function(){
 
 get_center_bg = function(coef_ang_posterior){
 	
+	# Define euclidean sum
+	sum_euclidean = function(x) sqrt(sum(x^2))
+	
 	my_sd = matrixStats::colSds(coef_ang_posterior)
 	names(my_sd) = colnames(coef_ang_posterior)
 	my_mean = colMeans(coef_ang_posterior)
-	if(length(my_mean) <= 2) return(list(mean =mean(my_mean), sd= sum(my_sd)))
+	if(length(my_mean) <= 2) return(list(mean =mean(my_mean), sd= sum_euclidean(my_sd)))
 	
 	my_dist = stats::dist(my_mean, diag = T, upper = T)
 	my_dist.m = as.matrix(my_dist)
@@ -1001,7 +1004,7 @@ get_center_bg = function(coef_ang_posterior){
 	my_couple = c(rownames(my_couple), colnames(my_couple))
 	
 	# Find value of the supposely background standard deviation
-	my_hierarchical_sd = sum(my_sd[my_couple])
+	my_hierarchical_sd = sum_euclidean(my_sd[my_couple])
 	
 	# Cue the tree for cluster closer than 95 percentile of that standard deviation
 	my_cut = stats::cutree(my_clust, h=my_hierarchical_sd*2)
@@ -1037,7 +1040,7 @@ get_center_bg = function(coef_ang_posterior){
 			my_new_elem = names(my_new_cut)[my_new_cut==my_new_c]
 			my_elem = c(my_elem, my_new_elem[!my_new_elem%in%names(my_ancestor)])
 			my_new_table = table(my_new_cut)
-			my_hierarchical_sd = sum(my_sd[my_elem])
+			my_hierarchical_sd = sum_euclidean(my_sd[my_elem])
 		}
 		list(mean = mean(my_mean[my_elem]), sd= my_hierarchical_sd)
 	}
