@@ -51,6 +51,7 @@ average_duplicated_genes_tibble_spreaded = function(tbl){
 #' Check the input for anomalies
 check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd, custom_ref, tree){
 	
+	# Check if mix is a tibble
 	if(!tibble::is_tibble(mix)) stop("ARMET: The mixture must be a tibble")
 	
 	# Check if custom ref is tibble
@@ -66,15 +67,29 @@ check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd,
 			)
 	} 
 	
+	# Check columns of design matrix
+	if(!"sample" %in% colnames(my_design)) 
+		stop("ARMET: The design matrix should have a column called 'sample' being a factor")
+	
 	# Check if microarray data
 	if(is_mix_microarray) writeLines("ARMET: The input matrix is from microarray.")
 	
 	# Check if NA in mix
 	if(
 		mix %>%	
+		dplyr::select(-gene) %>%
 		dplyr::select_if(function(.) any(is.na(.))) %>% 
 		ncol() > 0
 	) stop("ARMET: NAs found in the query matrix")
+	
+	# Check if NA in mix genes
+	if(
+		mix %>%	
+		dplyr::select(gene) %>%
+		dplyr::select_if(function(.) any(is.na(.))) %>% 
+		ncol() > 0
+	) stop("ARMET: NAs found in the gene names")
+	
 	
 	# Check if negative numbers in the matrix
 	if(
