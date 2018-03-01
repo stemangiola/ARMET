@@ -69,13 +69,27 @@ ARMET_tc = function(
 	my_tree =  format_tree( node_from_name(tree, cell_type_root), mix, ct_to_omit)
 
 	# Ref formatting
-	ref =
-		{ 
-			if(!is.null(custom_ref)) custom_ref
-			else 
-				if(!is_mix_microarray | (!is.null(choose_internal_ref) && choose_internal_ref == "ARNA")  ) ref_seq 
-				else ref_array
-		} %>% 
+	ref = 
+		# See if custom ref is provided
+		switch(
+			is.null(custom_ref) + 1,
+			custom_ref,
+			# See if choose internal ref is provided
+			switch(
+				is.null(choose_internal_ref) + 1,
+				switch(
+					(choose_internal_ref == "ARNA") + 1,
+					ref_array,
+					ref_seq
+				),
+				# if npthing set choose default
+				switch(
+					(!is_mix_microarray) + 1,
+					ref_array,
+					ref_seq
+				)
+			)
+		) %>% 
 		tidyr::drop_na() %>% 
 		dplyr::filter(
 			ct %in% 
@@ -109,7 +123,7 @@ ARMET_tc = function(
 	
 	## Execute core ##############################################################################
 	##############################################################################################
-	
+
 	my_tree = 
 		run_coreAlg_though_tree(
 			my_tree, 
@@ -135,7 +149,9 @@ ARMET_tc = function(
 
 	##############################################################################################
 	##############################################################################################
-
+	
+	writeLines("ARMET: inference complete")
+	
 	# Create tree with hypothesis testing
 	osNode.stat = 
 		switch(
@@ -149,10 +165,12 @@ ARMET_tc = function(
 	# Return
 	list(
 		
+		# Matrix of proportions
 		proportions =	get_last_existing_leaves_with_annotation( my_tree ) %>%
 			dplyr::select(-relative_proportion) %>%
 			tidyr::spread(ct, absolute_proportion),
 		
+		# What signatures were used by the model after normalization
 		signatures = 
 			list(
 				orig =  
@@ -165,12 +183,15 @@ ARMET_tc = function(
 				predicted = NULL
 			),
 		
+		# What mixture was used by the model after normalization
 		mix = mix %>% 
 			dplyr::filter(gene %in% get_genes( my_tree )) %>%
 			droplevels(),
 		
+		# Return the statistics
 		stats = osNode.stat,
 		
+		# Return the annotated tree
 		tree = my_tree
 	)
 	
