@@ -6,6 +6,7 @@ data{
   matrix[S,R] X;                               // Array of covariates for hierarchical regresison
 	matrix<lower=0>[S,G] y;                      // Observed counts
 	matrix<lower=0>[G,P] x;                      // signature counts
+	int omit_regression;
 	real<lower=0, upper=1> p_target[S];      //This is the proportion of the whole taget -> simplex_beta * p_target
 	matrix[S,G] y_hat_background;   // This is the matrix of background -> will be summed up with the matrix of the target
 	
@@ -113,7 +114,7 @@ model {
 	}
 	
  
-  for(s in 1:S) beta[s] ~ dirichlet(beta_hat_hat[s]);
+  if(omit_regression == 0) for(s in 1:S) beta[s] ~ dirichlet(beta_hat_hat[s]);
   for(r in 1:R) alpha[r] ~ dirichlet(alpha_hyper * phi_phi);
 
 }

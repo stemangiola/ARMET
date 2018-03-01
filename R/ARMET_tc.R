@@ -29,7 +29,8 @@ ARMET_tc = function(
 	multithread =                       T,
 	do_debug =                          F,
 	cell_type_root =                    "TME",
-	choose_internal_ref =               NULL
+	choose_internal_ref =               NULL,
+	omit_regression =                   F
 ){
 
 	writeLines("ARMET: Started data processing")
@@ -143,7 +144,8 @@ ARMET_tc = function(
 				phi_hyper_sd =                  phi_hyper_sd,
 				alpha_hyper_value =             alpha_hyper_value,
 				multithread =                   multithread,
-				do_debug =                      do_debug
+				do_debug =                      do_debug,
+				omit_regression =               omit_regression
 			)
 	)
 

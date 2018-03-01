@@ -24,6 +24,7 @@ ARMET_tc_coreAlg = function(
 	phi_hyper_sd =          obj.in$phi_hyper_sd
 	alpha_hyper_value =     obj.in$alpha_hyper_value
 	save_report =           obj.in$save_report
+	omit_regression =       obj.in$omit_regression
 	
 	# Get ref of the current level
 	ref = ref %>%
@@ -215,7 +216,8 @@ ARMET_tc_coreAlg = function(
 		sigma_hyper_sd =     sigma_hyper_sd,
 		phi_hyper_sd =       phi_hyper_sd,
 		alpha_hyper_value =  alpha_hyper_value,
-		is_mix_microarray =  as.numeric(is_mix_microarray)
+		is_mix_microarray =  as.numeric(is_mix_microarray),
+		omit_regression =    as.numeric(omit_regression)
 		
 	)
 	
