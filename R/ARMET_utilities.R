@@ -76,6 +76,14 @@ check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd,
 		ncol() > 0
 	) stop("ARMET: NAs found in the query matrix")
 	
+	# Check if negative numbers in the matrix
+	if(
+		mix %>%	
+		dplyr::select_if(function(.) any((.)<0)) %>% 
+		ncol() > 0
+	) stop("ARMET: negative numbers found in query matrix")
+	
+	
 	# Check if design is tibble
 	if(!is.null(cov_to_test) && !tibble::is_tibble(my_design)) stop("ARMET: The design matrix must be a tibble")
 	
@@ -352,18 +360,22 @@ check_if_sd_zero_and_correct = function(df, node){
 	
 }
 
-#' Calculate the norm factor with calcNormFactor from limma
-#'
-#' @param df A matrix
-#' @param reference A reference matrix
-#' @param cpm_theshold A number
-#' @param prop A number
-#' @return A list including the filtered data frame and the normalization factors
-rnaseq_norm.calcNormFactor = function(df, reference = NULL, cpm_theshold = 0.5, prop = 3/4){
+
+rnaseq_norm.filter_low_expressed = function(df,cpm_theshold = 0.5, prop = 3/4){
 	
-	if(max(df$value, na.rm = T) < 50) stop("ARMET: Both mixture and signatures have to be in count form, log tranformation detected")
+	cpm_theshold = 
+		cpm_theshold / 
+		(
+			df %>%
+			dplyr::group_by(sample) %>%
+			dplyr::summarise(s = sum(value)) %>%
+			dplyr::ungroup() %>%
+			dplyr::summarise(m =median(s)) %>%
+			dplyr::pull(m) /
+			1e6
+		)
 	
-	df.filt = df %>% 
+	df %>% 
 	{ if("ct"%in%names(.)) dplyr::select(-ct)	else .}	%>%
 		tidyr::spread(sample, value) %>% 
 		tidyr::drop_na() %>%
@@ -382,6 +394,23 @@ rnaseq_norm.calcNormFactor = function(df, reference = NULL, cpm_theshold = 0.5, 
 				)
 		)
 	
+}
+
+#' Calculate the norm factor with calcNormFactor from limma
+#'
+#' @param df A matrix
+#' @param reference A reference matrix
+#' @param cpm_theshold A number
+#' @param prop A number
+#' @return A list including the filtered data frame and the normalization factors
+rnaseq_norm.calcNormFactor = function(df, reference = NULL, cpm_theshold = 0.5, prop = 3/4){
+	
+	if(max(df$value, na.rm = T) < 50) stop("ARMET: Both mixture and signatures have to be in count form, log tranformation detected")
+	
+	df.filt = rnaseq_norm.filter_low_expressed(df,cpm_theshold = cpm_theshold, prop = prop)
+	
+	if(nrow(df.filt) == 0) stop("ARMET: The gene expression matrix has been filtered completely for lowly expressed genes")
+
 	list(
 		nf = tibble::tibble(
 			sample = factor(colnames(df.filt %>% dplyr::select(-gene))),
@@ -411,10 +440,16 @@ rnaseq_norm.calcNormFactor = function(df, reference = NULL, cpm_theshold = 0.5, 
 #' @return A list including the filtered data frame and the normalization factors
 rnaseq_norm = function(df, reference = NULL, cpm_theshold = 0.5, prop = 3/4){
 	#if(verbose) writeLines("Normalizing RNA-seq data with TMM")
-	
+
 	nf.obj = rnaseq_norm.calcNormFactor(df, reference, cpm_theshold, prop)
 	nf = nf.obj$nf
 	df.filt = nf.obj$df
+	
+	# print("Norm factors")
+	# print(nf)
+	# 
+	# print("Data frame filtered for noralization")
+	# print(df.filt)
 	
 	df %>% 
 		dplyr::group_by(sample) %>% 
@@ -438,7 +473,7 @@ rnaseq_norm = function(df, reference = NULL, cpm_theshold = 0.5, prop = 3/4){
 #' @param mix A matrix
 #' @return A list including the ref and mix normalized and a ggplot
 rnaseq_norm_ref_mix = function(obj, target){
-	
+
 	error_if_log_transformed(target)
 	error_if_log_transformed(obj)
 	
@@ -995,7 +1030,7 @@ get_center_bg = function(coef_ang_posterior){
 	
 }
 
-#' Hipotesis test for the covariate of choice
+#' hypothesis test for the covariate of choice
 #' @rdname dirReg_test
 #'
 #' Prints a report of the hipothesis testing
@@ -1050,7 +1085,7 @@ dirReg_test = function(fit, my_design, cov_to_test = NULL, which_cov_to_test = 2
 		ggplot2::geom_errorbar(
 			ggplot2::aes(ymin=lower, ymax=upper, colour=ct), 
 			width=0, alpha=0.4 ,
-			position=pd, 
+			position=pd
 		) +
 		ggplot2::theme_bw()
 	
@@ -1144,7 +1179,7 @@ beta_reg_hierarchical = function(fit, my_design){
 	)
 }
 
-#' Hipotesis test for the covariate of choice
+#' hypothesis test for the covariate of choice
 #' @rdname betaReg_test
 #'
 #' Prints a report of the hipothesis testing
@@ -1163,7 +1198,7 @@ beta_reg_hierarchical = function(fit, my_design){
 #'  betaReg_test(fit, my_design, cov_to_test)
 #' @export
 betaReg_test = function(fit, my_design, cov_to_test = NULL, which_cov_to_test = 2, names_groups = NULL){
-	browser()
+
 	# Decide which covariate to check
 	if(!is.null(cov_to_test)) which_cov_to_test = which(colnames( my_design %>% dplyr::select(-sample) ) == cov_to_test )
 	

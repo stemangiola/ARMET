@@ -371,10 +371,19 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree, log.ARMET){
 		`%my_do%` = ifelse(obj.in$multithread & !obj.in$do_debug, `%dopar%`, `%do%`)
 		verbose = ifelse(obj.in$multithread & !obj.in$do_debug, F, T)
 		
-		node$children = foreach::foreach(cc = node$children, .verbose = verbose) %my_do% {
+		#################################
+		## Debug
+		#################################
+		if(obj.in$do_debug)
+		node$children = lapply (node$children, function(cc)  {
 			
 			run_coreAlg_though_tree_recursive(cc, obj.in, bg_tree, log.ARMET)
-		}
+		})
+		else 
+			node$children = foreach::foreach(cc = node$children, .verbose = verbose) %my_do% {
+	
+				run_coreAlg_though_tree_recursive(cc, obj.in, bg_tree, log.ARMET)
+			}
 		
 		if(obj.in$multithread & !obj.in$do_debug)	parallel::stopCluster(cl)
 		
@@ -407,7 +416,7 @@ run_coreAlg_though_tree = function(node, obj.in){
 		verbose = ifelse(obj.in$multithread & !obj.in$do_debug, F, T)
 		
 		node.filled = foreach:::foreach(dummy = 1, .verbose = verbose) %my_do% {
-			
+		
 			run_coreAlg_though_tree_recursive(node, obj.in, node, log.ARMET)
 		}
 		
@@ -621,7 +630,7 @@ get_gene_distributons_recursive = function(node, ref_tbl){
 						log_sd = ifelse(
 							all(is.na(log_sd)), 
 							NA, 
-							sqrt( sum(log_sd^2, na.rm = T))  
+							mean(log_sd, na.rm = T)  # sqrt( sum(log_sd^2, na.rm = T))  
 						),
 						ct = node$name
 					) %>%
