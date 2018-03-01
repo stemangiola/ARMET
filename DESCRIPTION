@@ -16,7 +16,6 @@ Imports:
 	reshape (>= 0.8.7),
 	matrixStats (>= 0.53),
 	ini,
-	jsonlite (>= 1.5),
 	preprocessCore,
 	ggplot2 (>= 2.2.1),
 	magrittr,
@@ -26,12 +25,7 @@ Imports:
 	parallel (>= 3.4.3),
 	future,
 	edgeR,
-	limma,
 	data.tree,
-	jsonlite,
-	yaml,
-	ggrepel,
-	RColorBrewer,
 	foreach,
 	doParallel
 LinkingTo: 
