@@ -101,6 +101,7 @@ node_from_gene = function(node, gene){
 }
 
 #' Get information from tree recursively for every node
+#' @export
 get_node_label_recursive = function(node, last_level = 0, label = "name"){
 	if(length(node$children)>0){
 		if(last_level<=0) c(
