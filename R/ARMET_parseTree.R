@@ -650,5 +650,25 @@ get_gene_distributons_recursive = function(node, ref_tbl){
 	node
 }
 
-
-
+#' Parse the annotated tree
+#' @rdname ARMET_getFit
+#'
+#' Prints a report of the hipothesis testing
+#'
+#' @param ARMET-tc object 
+#'
+#' @return a print out of the hierarchy
+#'
+#' @examples
+#'  ARMET_getFit(ARMET_tc_result)
+#' @export
+ARMET_getFit = function(obj){
+	print(
+		obj$stats,
+		"estimate_extrinsic" ,
+		"std_error_extrinsic" ,
+		"direction_extrinsic" ,
+		"pvalue_extrinsic" ,
+		"significance_extrinsic"
+	)
+}
