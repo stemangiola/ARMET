@@ -256,7 +256,7 @@ check_if_sd_zero_and_correct = function(df, node){
 		for(h in ancestors){
 			
 			# Get first descendant of ancestor including the ancestor 
-			ct_to_consider = unlist(c(h, get_leave_label(node_from_name(node, h), recursive = F)))
+			ct_to_consider = unlist(c(h, get_leave_label(get_node_from_name(node, h), recursive = F)))
 			
 			mean_log_sigma = tb %>% 
 				dplyr::filter(
@@ -386,7 +386,7 @@ get_stats_on_ref = function(ref, tree){
 		foreach::foreach(ct = get_leave_names(tree), .combine = rbind) %do% {
 			tibble::tibble(
 				ct, 
-				count = length(which(get_leave_label(node_from_name(tree, ct), label = "markers") %in%	ref$gene	)),
+				count = length(which(get_leave_label(get_node_from_name(tree, ct), label = "markers") %in%	ref$gene	)),
 				val = "gene"
 			)
 		},

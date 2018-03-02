@@ -24,13 +24,13 @@ add_info_to_tree = function(node, ct, label, value, append = F){
 }
 
 #' Get nome from cell type
-node_from_name = function(node, ct){
+get_node_from_name = function(node, ct){
 	
 	if(is.na(ct)) NULL
 	else if(node$name==ct) node
 	else if(length(node$children)>0)
 		do.call("c", lapply(node$children, function(n){
-			x = node_from_name(n, ct)
+			x = get_node_from_name(n, ct)
 			if(!is.null(x)) x
 			else NULL
 		})
@@ -39,12 +39,12 @@ node_from_name = function(node, ct){
 }
 
 #' Get nome from gene
-node_from_gene = function(node, gene){
+get_node_from_gene = function(node, gene){
 	if(is.na(gene)) NULL
 	else if(any(node$markers==gene)) node
 	else if(length(node$children)>0)
 		do.call("c", lapply(node$children, function(n){
-			x = node_from_gene(n, gene)
+			x = get_node_from_gene(n, gene)
 			if(!is.null(x)) x
 			else NULL
 		})
@@ -155,11 +155,11 @@ get_hierarchy = function(node, ct){
 get_child_and_group_background = function(node, ct){
 	
 	# get childred
-	ct_main = get_leave_names(node_from_name(node, ct), recursive=F)
+	ct_main = get_leave_names(get_node_from_name(node, ct), recursive=F)
 	
 	# get backgrounbd
 	get_background = function(ct){
-		ct_childrens = get_leave_names(node_from_name(node, ct), recursive=F)
+		ct_childrens = get_leave_names(get_node_from_name(node, ct), recursive=F)
 		ct_ancestor = rev(get_hierarchy(node, ct))[2]
 		if(length(ct_ancestor)>0) {
 			ancestor_leaves = get_background(ct_ancestor)
@@ -183,7 +183,7 @@ get_map_foreground_background = function(node, ct){
 	fg_bg = fg_bg[lapply(fg_bg,length)>0]
 	
 	add_children_to_line = function(df){
-		no = node_from_name(node, df$ancestor)
+		no = get_node_from_name(node, df$ancestor)
 		children = if(length(no$children)>0) get_node_label_recursive(no) else no$name
 		do.call("rbind", lapply(1:length(children), function(dummy) df)) %>% 
 			dplyr::mutate(ct = children)
@@ -245,7 +245,6 @@ add_data_to_tree_from_table = function(tree, proportion, label, append  ){
 	
 	tree
 }
-
 
 #' Run ARMET core algorithm recursively on the tree 
 #'
@@ -391,8 +390,6 @@ drop_node_from_tree = function(node, ct){
 
 format_tree = function(tree, mix, ct_to_omit){
 	
-	
-	
 	# Drop unwanted nodes
 	tree = drop_node_from_tree(tree, ct_to_omit)
 	
@@ -438,7 +435,7 @@ get_tree_hypoth_test = function(tree_out, tree_in){
 	for( ct in tree_out$Get('name') ){
 		
 		if(ct %in% c("dendritic","TME")) next
-		ti = node_from_name(tree_in, ct)
+		ti = get_node_from_name(tree_in, ct)
 		if(length(ti[["stats"]])==0) next
 		s = ti[["stats"]] %>% dplyr::mutate_if(is.factor, as.character)
 		
