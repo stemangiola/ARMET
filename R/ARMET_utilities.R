@@ -102,11 +102,11 @@ check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd,
 	# Check if design is tibble
 	if(!is.null(cov_to_test) && !tibble::is_tibble(my_design)) stop("ARMET: The design matrix must be a tibble")
 	
-	# This is how many conditions are in the study (e.g., treatment-vs-non-treatment)
-	if(!is.null(my_design)) {
-		writeLines("ARMET: The design matrix is :")
-		print(my_design)
-	}
+	# # This is how many conditions are in the study (e.g., treatment-vs-non-treatment)
+	# if(!is.null(my_design)) {
+	# 	writeLines("ARMET: The design matrix is :")
+	# 	print(my_design)
+	# }
 	
 	# Set up the covariate to test if any
 	if(is.null(my_design) & !is.null(cov_to_test)) stop("ARMET: you have specified a covariate to test but no design matrix")
