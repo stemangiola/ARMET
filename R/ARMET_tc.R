@@ -46,7 +46,7 @@ ARMET_tc = function(
 		cov_to_test, 
 		sigma_hyper_sd, 
 		custom_ref, 
-		drop_node_from_tree(node_from_name(tree, cell_type_root), ct_to_omit) 
+		drop_node_from_tree(get_node_from_name(tree, cell_type_root), ct_to_omit) 
 	)
 	
 	# Create directory
@@ -55,19 +55,20 @@ ARMET_tc = function(
 	# Format input
 	mix = mix %>%	
 		tidyr::gather("sample", "value", 2:ncol(mix)) %>%
-		dplyr::mutate(gene = factor(gene), sample = factor(sample)) %>%
+		dplyr::mutate_if(is.character, as.factor) %>% 
 		{ if(max((.)$value) < 50) dplyr::mutate(value=exp(value)) else .}
 
 	# Check if design matrix exists
-	if(is.null(my_design)) 
-		my_design = tibble::tibble(
-			sample = levels(mix$sample),
-			`(intercept)` = 1
+	my_design = 
+		switch(
+			is.null(my_design) + 1,
+			my_design,
+			tibble::tibble(	sample = levels(mix$sample),	`(intercept)` = 1	)
 		) %>%
 		dplyr::mutate_if(is.character, as.factor)
 		
 	# Format tree
-	my_tree =  format_tree( node_from_name(tree, cell_type_root), mix, ct_to_omit)
+	my_tree =  format_tree( get_node_from_name(tree, cell_type_root), mix, ct_to_omit)
 
 	# Ref formatting
 	ref = 
@@ -81,13 +82,13 @@ ARMET_tc = function(
 				switch(
 					(choose_internal_ref == "ARNA") + 1,
 					ref_array,
-					ref_seq
+					ref_RNAseq_recursive_summary
 				),
 				# if npthing set choose default
 				switch(
 					(!is_mix_microarray) + 1,
 					ref_array,
-					ref_seq
+					ref_RNAseq_recursive_summary
 				)
 			)
 		) %>% 
@@ -108,9 +109,14 @@ ARMET_tc = function(
 	ref =                               ref %>% dplyr::filter(gene%in%common_genes) %>% droplevels()
 
 	# Normalize data
-	norm.obj = 													wrapper_normalize_mix_ref(mix, ref, is_mix_microarray)
-	ref = 															norm.obj$ref 
-	mix = 															norm.obj$mix
+	mix = 													wrapper_normalize_mix_ref(mix, ref, is_mix_microarray)
+
+	# plot_densities(
+	# 	bind_rows(
+	# 		mix %>% mutate(color="red", sample = as.character(sample)),
+	# 		ref %>% mutate(color="blue", sample = as.character(sample))
+	# 	)
+	# )
 	
 	# Round if RNA seq
 	if(!is_mix_microarray) ref = 				ref %>% dplyr::mutate(value=round(value))
@@ -172,18 +178,18 @@ ARMET_tc = function(
 			dplyr::select(-relative_proportion) %>%
 			tidyr::spread(ct, absolute_proportion),
 		
-		# What signatures were used by the model after normalization
-		signatures = 
-			list(
-				orig =  
-					ref %>% 
-					dplyr::select(gene, ct, value) %>%
-					dplyr::group_by(gene, ct) %>%
-					dplyr::summarise(value = mean(value)) %>%
-					dplyr::ungroup() %>%
-					tidyr::spread(ct, value),
-				predicted = NULL
-			),
+		# # What signatures were used by the model after normalization
+		# signatures = 
+		# 	list(
+		# 		orig =  
+		# 			ref %>% 
+		# 			dplyr::select(gene, ct, value) %>%
+		# 			dplyr::group_by(gene, ct) %>%
+		# 			dplyr::summarise(value = mean(value)) %>%
+		# 			dplyr::ungroup() %>%
+		# 			tidyr::spread(ct, value),
+		# 		predicted = NULL
+		# 	),
 		
 		# What mixture was used by the model after normalization
 		mix = mix %>% 
@@ -194,7 +200,10 @@ ARMET_tc = function(
 		stats = osNode.stat,
 		
 		# Return the annotated tree
-		tree = my_tree
+		tree = my_tree,
+		
+		# Return the input itself
+		input = as.list(match.call())
 	)
 	
 }
