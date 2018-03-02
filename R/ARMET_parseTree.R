@@ -23,54 +23,6 @@ add_info_to_tree = function(node, ct, label, value, append = F){
 	else node
 }
 
-
-
-#' Put proportions of cell types into the tree
-prop_array_to_tree = function(tree, p_array){
-	for(nn in names(p_array)) tree = add_info_to_tree(tree, nn, "absolute_proportion", p_array[nn])
-	add_absolute_proportions_to_tree_from_leaves(tree)
-}
-
-#' Calculate absolute proportions from relative proportions
-add_absolute_proportions_to_tree_from_leaves = function(node){
-	
-	if(length(node$children) == 0){
-		if(length(node$absolute_proportion)==0) node$absolute_proportion = NA
-	}
-	else {
-		node$children = lapply(node$children, add_absolute_proportions_to_tree_from_leaves)
-		sum_array = unlist(lapply(node$children, function(nn) nn$absolute_proportion))
-		#If middle node has result
-		if(length(node$absolute_proportion)==0) node$absolute_proportion = if(length(na.omit(sum_array))==0) NA else  sum(na.omit(sum_array))
-		# Through error if botha node have a sum and children have sum
-		else if(length(na.omit(sum_array))>0) stop(sprintf("ARMET: in calculating proportion in tree results that both children and ancestor have been given proportions which represent a contraddiction. The node is %s", node$children))
-	}
-	node
-}
-
-
-
-
-#' Put absolute proportions on trees
-get_ancestor_ct = function(node, ct){
-	rev(get_hierarchy(node, ct))[2]
-}
-
-#' Get proportions from tree
-get_proportions_array = function(node, sample, label="absolute_proportion"){
-	
-	p = as.data.frame(get_leave_label(node, last_level = 1, label = "absolute_proportion"))
-	rownames(p) = get_leave_label(node, last_level = 1, label = "name")
-	colnames(p) = sample
-	p
-	
-}
-
-#' Get proportions table from trees
-get_proportions_table = function(trees){
-	t(do.call("cbind", lapply(names(trees), function(na) get_proportions_array(trees[na][[1]], na) )))
-}
-
 #' Get nome from cell type
 node_from_name = function(node, ct){
 	
@@ -161,12 +113,6 @@ get_leave_label = function(node, recursive = T, last_level = 0, label = "name"){
 	else do.call("c", lapply(node$children, function(n) n[label]))
 }
 
-#' Get cell type names
-get_node_names = function(node, recursive = T, last_level = 0){
-	if(recursive) get_node_label_recursive(node, last_level)
-	else do.call("c", lapply(node$children, function(n) n$name))
-}
-
 #' Get cell type names from a specific level of the tree
 get_node_label_level_specfic = function(node, label = "name", recursive = T, level= 0, start_level = 0, stop_level = 0){
 	if(length(node$children)>0 & recursive & (level < stop_level | stop_level == 0)){
@@ -188,35 +134,6 @@ get_genes = function(node, label = "markers", recursive = T, level= 0, start_lev
 		start_level = start_level, 
 		stop_level = stop_level
 	)
-}
-
-#' Get prop table with proportions summarising at a selected level from a tree
-tree_to_leveled_prop = function(tree, level = 999){
-	start_level = stop_level = level
-	df = data.frame(t(get_node_label_level_specfic(tree, label="absolute_proportion", start_level = start_level, stop_level = stop_level)))
-	colnames(df) = get_node_label_level_specfic(tree, start_level = start_level, stop_level = stop_level)
-	as_tibble(df)
-}
-
-#' Get prop table with proportions summarising at a selected level from another table
-prop_table_to_leveled_prop_table = function(tree, df, level = 999){
-	cn = df[,1]
-	df = df[,-1] 
-	df = do.call("rbind" , apply(df , 1, function(mr)
-		tree_to_leveled_prop(prop_array_to_tree(tree, mr ), level = level)
-	))
-	
-	bind_cols(cn, df)
-}
-
-#' Get prop table with proportions summarising at a selected level from trees
-prop_treeList_to_leveled_prop_table = function(treeList, level = 999){
-	
-	df = do.call("bind_rows" , lapply(treeList, function(tree)
-		tree_to_leveled_prop(tree, level)
-	))
-	bind_cols(tibble(X1 = names(treeList)), df)
-	
 }
 
 #' Get cell type hierarchy of a node
@@ -462,15 +379,6 @@ run_coreAlg_though_tree = function(node, obj.in){
 	
 }
 
-
-# drop_node_from_tree = function(node, ct){
-# 	
-# 	if( !node$name%in%ct){
-# 		node$children = lapply(node$children, drop_node_from_tree, ct)
-# 		node
-# 	}
-# }
-
 #' Drop a node from the tree
 drop_node_from_tree = function(node, ct){
 	if( !node$name%in%ct) {
@@ -523,52 +431,6 @@ format_tree = function(tree, mix, ct_to_omit){
 		)
 	
 	tree
-}
-
-
-#' Select the proportions for one specific tree form the table of proportionsd
-#'
-#' @param node A node from the tree
-#' @param name A char
-#' @return A tree
-pick_proportion_for_specific_tree = function(node, name){
-	
-	# If the children has proportion information
-	node$relative_proportion = 
-		node$relative_proportion %>%
-		dplyr::filter(sample == name)
-	
-	# Recursive selection
-	if(length(node$children)>0)
-		node$children = 
-			lapply(
-				node$children, 
-				pick_proportion_for_specific_tree, 
-				name
-			)
-	node
-}
-
-#' Divide one tree with probability tables in many trees with probability reals
-#'
-#' @param node A node from the tree
-#' @return A list of trees
-divide_trees_proportion_across_many_trees = function(node){
-	
-	my_tree_names = 
-		node$relative_proportion %>% 
-		dplyr::pull(sample) %>% 
-		levels()
-	
-	trees = 
-		lapply(
-			my_tree_names, 
-			function(m)  pick_proportion_for_specific_tree(node, m)
-		)
-	
-	names(trees) = my_tree_names
-	
-	trees
 }
 
 get_tree_hypoth_test = function(tree_out, tree_in){
@@ -648,27 +510,4 @@ get_gene_distributons_recursive = function(node, ref_tbl){
 	}
 	
 	node
-}
-
-#' Parse the annotated tree
-#' @rdname ARMET_getFit
-#'
-#' Prints a report of the hipothesis testing
-#'
-#' @param ARMET-tc object 
-#'
-#' @return a print out of the hierarchy
-#'
-#' @examples
-#'  ARMET_getFit(ARMET_tc_result)
-#' @export
-ARMET_getFit = function(obj){
-	print(
-		obj$stats,
-		"estimate_extrinsic" ,
-		"std_error_extrinsic" ,
-		"direction_extrinsic" ,
-		"pvalue_extrinsic" ,
-		"significance_extrinsic"
-	)
 }
