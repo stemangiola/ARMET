@@ -25,24 +25,34 @@ ARMET_tc_coreAlg = function(
 	alpha_hyper_value =     obj.in$alpha_hyper_value
 	save_report =           obj.in$save_report
 	omit_regression =       obj.in$omit_regression
-	
+	do_debug =              obj.in$do_debug
+
 	# Get ref of the current level
-	ref = ref %>%
+	ref = 
+		ref %>%
+		# Get cell type just for this recursive peers and descendants
 		dplyr::mutate(ct = as.character(ct)) %>%
-		dplyr::left_join(get_map_foreground_background(my_tree, ct), by="ct") %>%
-		dplyr::rename(ct_ = ct) %>%
-		dplyr::filter(gene %in% 
-										get_node_label_level_specfic(
-											node_from_name(my_tree,  ct), 
-											label = "markers",
-											start_level = 1, 
-											stop_level = 1
-										)
+		dplyr::left_join(
+			get_map_foreground_background(tree, ct) %>% 
+				dplyr::select(-ct) %>%
+				dplyr::rename(ct=ancestor) %>%
+				dplyr::distinct(), 
+			by="ct"
 		) %>%
-		dplyr::select(-ct_) %>%
-		dplyr::rename(ct = ancestor) %>%
-		dplyr::mutate_if(is.character, as.factor)
-	
+		# Filter non used cell types
+		dplyr::filter(!is.na(variable)) %>%
+		# Filter non used genes
+		dplyr::filter(
+			gene %in% 
+			get_node_label_level_specfic(
+				get_node_from_name(my_tree,  !!ct), 
+				label = "markers",
+				start_level = 1, 
+				stop_level = 1
+			)
+		) %>%
+		dplyr::mutate_if(is.character, as.factor) %>%
+		droplevels() 
 	
 	# Print stats on ref
 	get_stats_on_ref(ref,my_tree) %>% 
@@ -75,10 +85,9 @@ ARMET_tc_coreAlg = function(
 	# Get the probability table of the previous run
 	ancestor_run_prop_table = get_last_existing_leaves_with_annotation(my_tree)
 	
-	
 	# Sanity check
 	if(
-		all(
+		any(
 			ancestor_run_prop_table %>% 
 			dplyr::group_by(sample) %>% 
 			dplyr::summarise(tot=sum(absolute_proportion)) %>%
@@ -110,7 +119,7 @@ ARMET_tc_coreAlg = function(
 	
 	# Calculate the value of the genes for background 
 	# !!rlang::sym(ct) -> for variable name without quotes
-	
+
 	y_hat_background = 
 		as.matrix(
 			bg_prop %>%
@@ -134,6 +143,7 @@ ARMET_tc_coreAlg = function(
 			bg %>% 
 			{ 
 				if(nrow(.)==0) 
+					# Take fg as template
 					fg %>%
 					dplyr::distinct(gene) %>%
 					dplyr::mutate(
@@ -146,9 +156,6 @@ ARMET_tc_coreAlg = function(
 			} %>%
 				dplyr::mutate_if(is.character, as.factor) %>%
 				dplyr::select(gene, ct, value) %>%
-				dplyr::group_by(gene, ct) %>%
-				dplyr::summarise(value = median(value)) %>%
-				dplyr::ungroup() %>%
 				tidyr::spread(gene, value) %>%
 				dplyr::select(-ct) %>%
 				dplyr::mutate_all(dplyr::funs(ifelse(is.na(.), 0, .)))
@@ -194,9 +201,6 @@ ARMET_tc_coreAlg = function(
 		
 		x = fg %>% 
 			dplyr::select(gene, ct, value) %>%
-			dplyr::group_by(gene, ct) %>%
-			dplyr::summarise(value = median(value)) %>%
-			dplyr::ungroup() %>%
 			tidyr::spread(ct, value) %>%
 			dplyr::mutate_if(is.numeric, dplyr::funs(ifelse(is.na(.), 0, .))) %>%
 			dplyr::select(-gene),
@@ -236,7 +240,9 @@ ARMET_tc_coreAlg = function(
 			#control =                         list(adapt_delta = 0.99, stepsize = 0.01, max_treedepth =15),
 			cores=4
 		)
-
+	
+	#if(do_debug) browser()
+	
 	# Parse results
 	proportions =  
 		parse_summary_vector_in_2D(apply( as.matrix(fit, pars = "beta"), 2, mean)) %>%
