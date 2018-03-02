@@ -18,6 +18,7 @@ Imports:
 	ini,
 	preprocessCore,
 	ggplot2 (>= 2.2.1),
+	gridExtra,
 	magrittr,
 	dplyr (>=  0.7.4),
 	tibble (>= 1.4.2),
