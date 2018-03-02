@@ -618,6 +618,72 @@ get_center_bg = function(coef_ang_posterior){
 	
 }
 
+#' Parse the annotated tree
+#' @rdname ARMET_getFit
+#'
+#' Prints a report of the hipothesis testing
+#'
+#' @param ARMET-tc object 
+#'
+#' @return a print out of the hierarchy
+#'
+#' @examples
+#'  ARMET_getFit(ARMET_tc_result)
+#' @export
+ARMET_getFit = function(obj){
+	print(
+		obj$stats,
+		"estimate_extrinsic" ,
+		"std_error_extrinsic" ,
+		"direction_extrinsic" ,
+		"pvalue_extrinsic" ,
+		"significance_extrinsic"
+	)
+}
+
+#' Parse the annotated tree
+#' @rdname ARMET_plotFit
+#'
+#' Prints a report of the hipothesis testing
+#'
+#' @param ARMET-tc object 
+#' @param cell type string 
+#'
+#' @return a grid pbject
+#'
+#' @examples
+#'  ARMET_plotFit(ARMET_tc_result, ct = "TME")
+#' @export
+ARMET_plotFit = function(obj, ct = "TME"){
+	
+	node_info = get_node_from_name(obj$tree, ct)
+	
+	pd <- ggplot2::position_dodge(0.02)
+	plot_props = ggplot2::ggplot(
+		node_info$estimate_prop_with_uncertanties, ggplot2::aes(x=get(obj$input$cov_to_test), y=mean, colour=ct, group=ct)) + 
+		ggplot2::geom_point(position=pd) +
+		ggplot2::geom_errorbar(
+			ggplot2::aes(ymin=lower, ymax=upper, colour=ct), 
+			width=0, alpha=0.4 ,
+			position=pd
+		) +
+		ggplot2::theme_bw()
+	
+	plot_coef_ang = ggplot2::ggplot(
+		node_info$coef_ang_posterior_adj, ggplot2::aes(value, group=ct, color=ct)) +
+		ggplot2::geom_line(stat="density") +
+		ggplot2::expand_limits(x=0.1) +
+		ggplot2::theme_bw() +
+		ggplot2::theme(
+			panel.border = ggplot2::element_blank(),
+			axis.line = ggplot2::element_line(colour = "black")
+		) +
+		ggplot2::ggtitle("Causal trends - posterior distribution of angular coeff. - Simplex regression")
+	
+	gridExtra::grid.arrange(plot_props, plot_coef_ang, nrow=2)
+	
+}
+
 #' hypothesis test for the covariate of choice
 #' @rdname dirReg_test
 #'
@@ -651,6 +717,11 @@ dirReg_test = function(fit, my_design, cov_to_test = NULL, which_cov_to_test = 2
 	K = ncol(interc_posterior)
 	gcb = get_center_bg(coef_ang_posterior)
 	m = gcb$mean
+	coef_ang_posterior_adj = 
+		data.frame(logit_adj(coef_ang_posterior, m)) %>%
+		tibble::as_tibble() %>%
+		stats::setNames(names_groups) %>%
+		tidyr::gather(ct, value)
 	
 	parse_fit = function(fit, q, label){
 		data.frame(apply(rstan::extract(fit, "beta")[[1]], c(2,3), quantile, q )) %>%
@@ -666,30 +737,6 @@ dirReg_test = function(fit, my_design, cov_to_test = NULL, which_cov_to_test = 2
 		dplyr::left_join(	parse_fit(fit, 0.95, "upper"), by=c("sample", "ct")) %>%
 		dplyr::left_join(	parse_fit(fit, 0.05, "lower"), by=c("sample", "ct")) %>%
 		dplyr::left_join(	my_design %>% dplyr::select(-`(Intercept)`), by="sample")
-	
-	pd <- ggplot2::position_dodge(0.02)
-	plot_props = ggplot2::ggplot(estimate_prop_with_uncertanties, ggplot2::aes(x=cov, y=mean, colour=ct, group=ct)) + 
-		ggplot2::geom_point(position=pd) +
-		ggplot2::geom_errorbar(
-			ggplot2::aes(ymin=lower, ymax=upper, colour=ct), 
-			width=0, alpha=0.4 ,
-			position=pd
-		) +
-		ggplot2::theme_bw()
-	
-	plot_coef_ang = ggplot2::ggplot(
-		data.frame(logit_adj(coef_ang_posterior, m)) %>%
-			tibble::as_tibble() %>%
-			stats::setNames(names_groups) %>%
-			tidyr::gather(ct, value), ggplot2::aes(value, group=ct, color=ct)) +
-		ggplot2::geom_line(stat="density") +
-		ggplot2::expand_limits(x=0.1) +
-		ggplot2::theme_bw() +
-		ggplot2::theme(
-			panel.border = ggplot2::element_blank(),
-			axis.line = ggplot2::element_line(colour = "black")
-		) +
-		ggplot2::ggtitle("Causal trends - posterior distribution of angular coeff. - Simplex regression")
 	
 	stats = do.call("rbind", lapply(1:K, function(i){
 		
@@ -732,7 +779,11 @@ dirReg_test = function(fit, my_design, cov_to_test = NULL, which_cov_to_test = 2
 		dplyr::mutate(ct = names_groups ) %>%
 		dplyr::mutate_if(is.character, as.factor)
 	
-	list(stats=stats, plot_props=plot_props, plot_coef_ang=plot_coef_ang, estimate_prop_with_uncertanties = estimate_prop_with_uncertanties)
+	list(
+		stats=stats, 
+		estimate_prop_with_uncertanties = estimate_prop_with_uncertanties,
+		coef_ang_posterior_adj = coef_ang_posterior_adj
+	)
 }
 
 parse_extract_2D <- function(fit, param, fun)	apply(rstan::extract(fit, param)[[1]], c(2,3), fun )
@@ -740,7 +791,6 @@ parse_extract_2D <- function(fit, param, fun)	apply(rstan::extract(fit, param)[[
 #' @rdname beta_reg_hierarchical
 #' @export
 beta_reg_hierarchical = function(fit, my_design){
-	browser()
 	
 	writeLines("ARMET: Starting inference beta reg..")
 	

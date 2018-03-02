@@ -314,6 +314,19 @@ ARMET_tc_coreAlg = function(
 		node
 	)
 	
+	# Add hypothesis testing
+	node = switch(
+		is.null(cov_to_test) + 1,
+		add_info_to_tree(
+			node, 
+			ct, 
+			"coef_ang_posterior_adj", 
+			test$coef_ang_posterior_adj,
+			append = F
+		),
+		node
+	)
+	
 	# Save output
 	if(save_report) save(fit, file=sprintf("%s/%s_fit.RData", output_dir, ct))
 	# p = rstan::traceplot(fit, pars=c("alpha"), inc_warmup=F)
