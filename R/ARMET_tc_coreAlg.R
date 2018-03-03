@@ -191,7 +191,10 @@ ARMET_tc_coreAlg = function(
 		
 		X = my_design %>% 
 			dplyr::arrange(sample) %>%
-			dplyr::select(-sample),
+			dplyr::select(-sample) %>%
+			# transform factors into numeric safely
+			mutate_if(is.factor, as.character) %>%
+			mutate_if(is.character, as.numeric),
 		
 		x_genes = fg %>% 
 			dplyr::pull(gene) %>%
