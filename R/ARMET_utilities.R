@@ -397,226 +397,154 @@ get_stats_on_ref = function(ref, tree){
 	
 }
 
-plot_model_results = function(){
-	
-	proportions_4_plot = as.data.frame(proportions)
-	proportions_4_plot$sample = rownames(proportions_4_plot)
-	proportions_4_plot$cov = if(length(cov_to_test)>0) my_design[,"cov"] else 1
-	proportions_4_plot = reshape::melt(proportions_4_plot, id.vars=c("sample", "cov"))
-	proportions_4_plot$perc_1 = reshape::melt(proportions_2.5)$value
-	proportions_4_plot$perc_2 = reshape::melt(proportions_97.5)$value
-	proportions_4_plot$minus_sd = proportions_4_plot$value - reshape::melt(proportions_sd)$value
-	proportions_4_plot$plus_sd = proportions_4_plot$value + reshape::melt(proportions_sd)$value
-	p = ggplot2::ggplot( proportions_4_plot, ggplot2::aes(x=jitter(cov), y=value,fill=factor(variable)))+ 
-		ggplot2::geom_boxplot(coef = 6) + 
-		ggplot2::geom_point(size=0.1) +
-		ggplot2::geom_linerange(ggplot2::aes(ymin = perc_1, ymax = perc_2),  alpha=0.05) +
-		ggplot2::geom_errorbar(ggplot2::aes(ymin = minus_sd, ymax = plus_sd),width=.2,  alpha=0.2) +
-		ggplot2::facet_grid(~variable) +
-		ggplot2::theme(
-			axis.text.x= ggplot2::element_text(angle=90, vjust=0.4,hjust=1), 
-			panel.background = ggplot2::element_blank()
-		)
-	
-	#if(save_report) ggplot2::ggsave(sprintf("%s/%s_proportions.pdf", output_dir, ct), useDingbats=FALSE,plot=p)
-	
-	if(length(cov_to_test)>0){
-		#plot generate quantities
-		gq <- as.matrix(fit, pars = c("beta_gen"))[1,]
-		gq= parse_summary_vector_in_2D(gq)
-		colnames(gq) = colnames(mix)
-		rownames(gq) = colnames(model.in$x)
-		gq = as.data.frame(t(gq))
-		gq$cov = my_design[,"cov"]
-		gq$sample = rownames(gq)
-		gq = reshape::melt(gq, id.vars=c("sample", "cov"))
-		p = ggplot2::ggplot( gq, ggplot2::aes(x=factor(cov), y=value,fill=factor(variable)))+
-			ggplot2::geom_boxplot()+ 
-			ggplot2::geom_jitter(position=position_dodge(width=0.75), ggplot2::aes(group=variable)) +
-			ggplot2::facet_grid(~variable) + 
-			ggplot2::theme(axis.text.x=ggplot2::element_text(angle=90, vjust=0.4,hjust=1))
-		
-		#if(save_report) ggplot2::ggsave(sprintf("%s/%s_proportions_posterior.pdf", output_dir, ct), useDingbats=FALSE,plot=p)
-	}
-	# Calculate predicted values
-	#pred.df=as.matrix(ref[markers,])%*%t(as.matrix(res.df))
-	
-	
-	# about means
-	df_4_plot = data.frame(
-		merge(
-			reshape::melt(mix+1), 
-			reshape::melt(t(proportions %*% t(ref.mean)+1)), 
-			by=c("X1", "X2")
-		)
-	)
-	colnames(df_4_plot)[3:4] = c("value", "predicted")
-	df_4_plot$ct = sapply(df_4_plot$X1, function(x1) node_from_gene(my_tree, x1)$name )
-	df_4_plot$bg = apply(df_4_plot, 1, function(mr) 	y_hat_background[mr[2], mr[1]] )
-	df_4_plot$bg_prop = df_4_plot$bg /df_4_plot$value
-	df_4_plot$bg_prop[df_4_plot$bg_prop >10] = 10
-	
-	
-	df_4_plot = df_4_plot[df_4_plot$X2%in%unique(df_4_plot$X2)[1:20], ]
-	#df_4_plot = df_4_plot[grep("CD8", df_4_plot$X2), ]
-	
-	p = ggplot2::ggplot(df_4_plot, ggplot2::aes(predicted, value, label = X1, size=bg_prop,color = factor(ct))) + 
-		ggplot2::geom_point(alpha=0.5) + 
-		ggplot2::scale_size(range = c(0, 5)) + 
-		ggplot2::expand_limits(x = 0.1, y = 0.1) +
-		ggplot2::geom_abline(intercept=0, slope=1) + 
-		ggplot2::scale_x_log10() + 
-		ggplot2::scale_y_log10() +
-		ggrepel::geom_text_repel(
-			ggplot2::aes(color = ct),
-			size = 2,
-			segment.alpha= 0.2) +
-		ggplot2::facet_wrap( ~ X2, nrow=5) +
-		ggplot2::coord_fixed() +
-		ggplot2::theme(
-			panel.background = ggplot2::element_blank(), 
-			legend.text=ggplot2::element_text(size=30)
-		)
-	
-	#if(save_report) ggplot2::ggsave(sprintf("%s/%s_predicted_values.pdf", output_dir, ct), useDingbats=FALSE, width = 80, height = 80, units = "cm", plot=p)
-	
-	
-	if(!is.null(observed_prop) & 0) {
-		writeLines("ARMET: start plotting expected gene vallues")
-		link = tibble::as_tibble(do.call("rbind", lapply(unique(colnames(observed_prop)), function(op) {
-			ct = get_hierarchy(my_tree, ct=op)
-			c(op, ct[ct%in%colnames(ref.mean)])
-		})))
-		if(ncol(link)>=2){
-			colnames(link) = c("ct", "ct_new")
-			observed_prop = tibble::as_tibble(reshape::melt(observed_prop))
-			colnames(observed_prop) = c("sample", "ct", "value")
-			
-			observed_prop = 
-				dplyr::left_join(observed_prop, link, by="ct") %>% 
-				dplyr::select(-ct) %>% 
-				dplyr::group_by(sample, ct_new) %>% 
-				dplyr::summarise(value = sum(value, na.rm=TRUE)) %>% 
-				tidyr::spread(ct_new, value)
-			
-			for(r in colnames(ref.mean)[!colnames(ref.mean)%in%colnames(observed_prop)]) {
-				my_df = matrix(rep(0, nrow(observed_prop)))
-				colnames(my_df) = r
-				observed_prop = observed_prop %>% dplyr::bind_cols(as_tibble(my_df)) 
-			}
-			
-			observed_prop = as.data.frame(observed_prop)
-			rownames(observed_prop) = observed_prop[,1]
-			observed_prop = observed_prop[,-1]
-			observed_prop = as.matrix(observed_prop)
-			observed_prop = observed_prop[,colnames(ref.mean)]
-			
-			print(proportions)
-			
-			df_4_plot = data.frame(merge(reshape::melt(mix+1), reshape::melt(t(observed_prop %*% t(ref.mean)+1)), by=c("X1", "X2")))
-			colnames(df_4_plot)[3:4] = c("value", "predicted")
-			df_4_plot$ct = sapply(df_4_plot$X1, function(x1) node_from_gene(my_tree, x1)$name )
-			df_4_plot$bg = apply(df_4_plot, 1, function(mr) 	y_hat_background[mr[2], mr[1]] )
-			df_4_plot$bg_prop = df_4_plot$bg /df_4_plot$value
-			df_4_plot$bg_prop[df_4_plot$bg_prop >10] = 10
-			
-			p = ggplot2::ggplot( df_4_plot[df_4_plot$X2%in%unique(df_4_plot$X2)[1:20], ], ggplot2::aes(predicted, value, label = X1, size=bg_prop)) + 
-				ggplot2::geom_point(alpha=0.5) + 
-				ggplot2::scale_size(range = c(0, 5)) + 
-				ggplot2::expand_limits(x = 0.1, y = 0.1) +
-				ggplot2::geom_abline(intercept=0, slope=1) + 
-				ggplot2::scale_x_log10() + 
-				ggplot2::scale_y_log10() +
-				ggrepel::geom_text_repel(
-					aes(color = ct),
-					size = 2,
-					segment.alpha= 0.2) +
-				ggplot2::facet_wrap( ~ X2, nrow=5) +
-				ggplot2::coord_fixed() +
-				ggplot2::theme(
-					panel.background = ggplot2::element_blank(), 
-					legend.text=ggplot2::element_text(size=30)
-				)
-			
-			#if(save_report) ggplot2::ggsave(sprintf("%s/%s_predicted_values_observed_prop.pdf", output_dir, ct), useDingbats=FALSE, width = 80, height = 80, units = "cm", plot=p)
-		}
-		
-	}
-	
-}
+# plot_model_results = function(){
+# 	
+# 	proportions_4_plot = as.data.frame(proportions)
+# 	proportions_4_plot$sample = rownames(proportions_4_plot)
+# 	proportions_4_plot$cov = if(length(cov_to_test)>0) my_design[,"cov"] else 1
+# 	proportions_4_plot = reshape::melt(proportions_4_plot, id.vars=c("sample", "cov"))
+# 	proportions_4_plot$perc_1 = reshape::melt(proportions_2.5)$value
+# 	proportions_4_plot$perc_2 = reshape::melt(proportions_97.5)$value
+# 	proportions_4_plot$minus_sd = proportions_4_plot$value - reshape::melt(proportions_sd)$value
+# 	proportions_4_plot$plus_sd = proportions_4_plot$value + reshape::melt(proportions_sd)$value
+# 	p = ggplot2::ggplot( proportions_4_plot, ggplot2::aes(x=jitter(cov), y=value,fill=factor(variable)))+ 
+# 		ggplot2::geom_boxplot(coef = 6) + 
+# 		ggplot2::geom_point(size=0.1) +
+# 		ggplot2::geom_linerange(ggplot2::aes(ymin = perc_1, ymax = perc_2),  alpha=0.05) +
+# 		ggplot2::geom_errorbar(ggplot2::aes(ymin = minus_sd, ymax = plus_sd),width=.2,  alpha=0.2) +
+# 		ggplot2::facet_grid(~variable) +
+# 		ggplot2::theme(
+# 			axis.text.x= ggplot2::element_text(angle=90, vjust=0.4,hjust=1), 
+# 			panel.background = ggplot2::element_blank()
+# 		)
+# 	
+# 	#if(save_report) ggplot2::ggsave(sprintf("%s/%s_proportions.pdf", output_dir, ct), useDingbats=FALSE,plot=p)
+# 	
+# 	if(length(cov_to_test)>0){
+# 		#plot generate quantities
+# 		gq <- as.matrix(fit, pars = c("beta_gen"))[1,]
+# 		gq= parse_summary_vector_in_2D(gq)
+# 		colnames(gq) = colnames(mix)
+# 		rownames(gq) = colnames(model.in$x)
+# 		gq = as.data.frame(t(gq))
+# 		gq$cov = my_design[,"cov"]
+# 		gq$sample = rownames(gq)
+# 		gq = reshape::melt(gq, id.vars=c("sample", "cov"))
+# 		p = ggplot2::ggplot( gq, ggplot2::aes(x=factor(cov), y=value,fill=factor(variable)))+
+# 			ggplot2::geom_boxplot()+ 
+# 			ggplot2::geom_jitter(position=position_dodge(width=0.75), ggplot2::aes(group=variable)) +
+# 			ggplot2::facet_grid(~variable) + 
+# 			ggplot2::theme(axis.text.x=ggplot2::element_text(angle=90, vjust=0.4,hjust=1))
+# 		
+# 		#if(save_report) ggplot2::ggsave(sprintf("%s/%s_proportions_posterior.pdf", output_dir, ct), useDingbats=FALSE,plot=p)
+# 	}
+# 	# Calculate predicted values
+# 	#pred.df=as.matrix(ref[markers,])%*%t(as.matrix(res.df))
+# 	
+# 	
+# 	# about means
+# 	df_4_plot = data.frame(
+# 		merge(
+# 			reshape::melt(mix+1), 
+# 			reshape::melt(t(proportions %*% t(ref.mean)+1)), 
+# 			by=c("X1", "X2")
+# 		)
+# 	)
+# 	colnames(df_4_plot)[3:4] = c("value", "predicted")
+# 	df_4_plot$ct = sapply(df_4_plot$X1, function(x1) node_from_gene(my_tree, x1)$name )
+# 	df_4_plot$bg = apply(df_4_plot, 1, function(mr) 	y_hat_background[mr[2], mr[1]] )
+# 	df_4_plot$bg_prop = df_4_plot$bg /df_4_plot$value
+# 	df_4_plot$bg_prop[df_4_plot$bg_prop >10] = 10
+# 	
+# 	
+# 	df_4_plot = df_4_plot[df_4_plot$X2%in%unique(df_4_plot$X2)[1:20], ]
+# 	#df_4_plot = df_4_plot[grep("CD8", df_4_plot$X2), ]
+# 	
+# 	p = ggplot2::ggplot(df_4_plot, ggplot2::aes(predicted, value, label = X1, size=bg_prop,color = factor(ct))) + 
+# 		ggplot2::geom_point(alpha=0.5) + 
+# 		ggplot2::scale_size(range = c(0, 5)) + 
+# 		ggplot2::expand_limits(x = 0.1, y = 0.1) +
+# 		ggplot2::geom_abline(intercept=0, slope=1) + 
+# 		ggplot2::scale_x_log10() + 
+# 		ggplot2::scale_y_log10() +
+# 		ggrepel::geom_text_repel(
+# 			ggplot2::aes(color = ct),
+# 			size = 2,
+# 			segment.alpha= 0.2) +
+# 		ggplot2::facet_wrap( ~ X2, nrow=5) +
+# 		ggplot2::coord_fixed() +
+# 		ggplot2::theme(
+# 			panel.background = ggplot2::element_blank(), 
+# 			legend.text=ggplot2::element_text(size=30)
+# 		)
+# 	
+# 	#if(save_report) ggplot2::ggsave(sprintf("%s/%s_predicted_values.pdf", output_dir, ct), useDingbats=FALSE, width = 80, height = 80, units = "cm", plot=p)
+# 	
+# 	
+# 	if(!is.null(observed_prop) & 0) {
+# 		writeLines("ARMET: start plotting expected gene vallues")
+# 		link = tibble::as_tibble(do.call("rbind", lapply(unique(colnames(observed_prop)), function(op) {
+# 			ct = get_hierarchy(my_tree, ct=op)
+# 			c(op, ct[ct%in%colnames(ref.mean)])
+# 		})))
+# 		if(ncol(link)>=2){
+# 			colnames(link) = c("ct", "ct_new")
+# 			observed_prop = tibble::as_tibble(reshape::melt(observed_prop))
+# 			colnames(observed_prop) = c("sample", "ct", "value")
+# 			
+# 			observed_prop = 
+# 				dplyr::left_join(observed_prop, link, by="ct") %>% 
+# 				dplyr::select(-ct) %>% 
+# 				dplyr::group_by(sample, ct_new) %>% 
+# 				dplyr::summarise(value = sum(value, na.rm=TRUE)) %>% 
+# 				tidyr::spread(ct_new, value)
+# 			
+# 			for(r in colnames(ref.mean)[!colnames(ref.mean)%in%colnames(observed_prop)]) {
+# 				my_df = matrix(rep(0, nrow(observed_prop)))
+# 				colnames(my_df) = r
+# 				observed_prop = observed_prop %>% dplyr::bind_cols(as_tibble(my_df)) 
+# 			}
+# 			
+# 			observed_prop = as.data.frame(observed_prop)
+# 			rownames(observed_prop) = observed_prop[,1]
+# 			observed_prop = observed_prop[,-1]
+# 			observed_prop = as.matrix(observed_prop)
+# 			observed_prop = observed_prop[,colnames(ref.mean)]
+# 			
+# 			print(proportions)
+# 			
+# 			df_4_plot = data.frame(merge(reshape::melt(mix+1), reshape::melt(t(observed_prop %*% t(ref.mean)+1)), by=c("X1", "X2")))
+# 			colnames(df_4_plot)[3:4] = c("value", "predicted")
+# 			df_4_plot$ct = sapply(df_4_plot$X1, function(x1) node_from_gene(my_tree, x1)$name )
+# 			df_4_plot$bg = apply(df_4_plot, 1, function(mr) 	y_hat_background[mr[2], mr[1]] )
+# 			df_4_plot$bg_prop = df_4_plot$bg /df_4_plot$value
+# 			df_4_plot$bg_prop[df_4_plot$bg_prop >10] = 10
+# 			
+# 			p = ggplot2::ggplot( df_4_plot[df_4_plot$X2%in%unique(df_4_plot$X2)[1:20], ], ggplot2::aes(predicted, value, label = X1, size=bg_prop)) + 
+# 				ggplot2::geom_point(alpha=0.5) + 
+# 				ggplot2::scale_size(range = c(0, 5)) + 
+# 				ggplot2::expand_limits(x = 0.1, y = 0.1) +
+# 				ggplot2::geom_abline(intercept=0, slope=1) + 
+# 				ggplot2::scale_x_log10() + 
+# 				ggplot2::scale_y_log10() +
+# 				ggrepel::geom_text_repel(
+# 					aes(color = ct),
+# 					size = 2,
+# 					segment.alpha= 0.2) +
+# 				ggplot2::facet_wrap( ~ X2, nrow=5) +
+# 				ggplot2::coord_fixed() +
+# 				ggplot2::theme(
+# 					panel.background = ggplot2::element_blank(), 
+# 					legend.text=ggplot2::element_text(size=30)
+# 				)
+# 			
+# 			#if(save_report) ggplot2::ggsave(sprintf("%s/%s_predicted_values_observed_prop.pdf", output_dir, ct), useDingbats=FALSE, width = 80, height = 80, units = "cm", plot=p)
+# 		}
+# 		
+# 	}
+# 	
+# }
 
-
-
-get_center_bg = function(coef_ang_posterior){
-	
-	# Define euclidean sum
-	sum_euclidean = function(x) sqrt(sum(x^2))
-	
-	my_sd = matrixStats::colSds(coef_ang_posterior)
-	names(my_sd) = colnames(coef_ang_posterior)
-	my_mean = colMeans(coef_ang_posterior)
-	if(length(my_mean) <= 2) return(list(mean =mean(my_mean), sd= sum_euclidean(my_sd)))
-	
-	my_dist = stats::dist(my_mean, diag = T, upper = T)
-	my_dist.m = as.matrix(my_dist)
-	my_clust = stats::hclust(my_dist)
-	
-	w = which(my_dist.m==min(my_dist.m[my_dist.m>0])  )[1]
-	my_row = floor(w/ncol(my_dist.m))
-	if(w-(my_row*ncol(my_dist.m)) == 0) {
-		my_col =  ncol(my_dist.m)
-	} else {
-		my_col =  w - my_row*ncol(my_dist.m)
-		my_row = my_row + 1
-	}
-	
-	my_couple = as.data.frame(my_dist.m[my_row, my_col, drop=F])
-	my_couple = c(rownames(my_couple), colnames(my_couple))
-	
-	# Find value of the supposely background standard deviation
-	my_hierarchical_sd = sum_euclidean(my_sd[my_couple])
-	
-	# Cue the tree for cluster closer than 95 percentile of that standard deviation
-	my_cut = stats::cutree(my_clust, h=my_hierarchical_sd*2)
-	
-	# Calculate cluster size
-	my_table = table(my_cut)
-	#print(my_table)
-	
-	# Check if anything clustered at all
-	
-	if(any(my_table>1)) {
-		
-		# Get bg cluster among possibly many
-		my_c = unique(my_cut[names(my_cut)%in%my_couple])
-		
-		# Get elements in that cluster
-		my_elem = names(my_cut)[my_cut==my_c]
-		
-		if(length(my_c)>1) stop("ARMET: the closest samples do not form cluster even though a cluster is present")
-		
-		my_new_table = my_table
-		my_table_check = NULL
-		while(any(my_new_table>1) & length(my_new_table)>2 & any(my_table_check != my_new_table)){
-			my_table_check = my_new_table
-			my_ancestor = mean(my_mean[my_couple])
-			names(my_ancestor) = paste(my_couple, collapse="_")
-			my_new_mean = c(my_mean[!names(my_mean)%in%my_couple], my_ancestor)
-			my_new_dist = stats::dist(my_new_mean, diag = T, upper = T)
-			my_new_dist.m = as.matrix(my_new_dist)
-			my_new_clust = stats::hclust(my_new_dist)
-			my_new_cut = stats::cutree(my_new_clust, h=my_hierarchical_sd*2)
-			my_new_c = my_new_cut[names(my_new_cut)%in%names(my_ancestor)]
-			my_new_elem = names(my_new_cut)[my_new_cut==my_new_c]
-			my_elem = c(my_elem, my_new_elem[!my_new_elem%in%names(my_ancestor)])
-			my_new_table = table(my_new_cut)
-			my_hierarchical_sd = sum_euclidean(my_sd[my_elem])
-		}
-		list(mean = mean(my_mean[my_elem]), sd= my_hierarchical_sd)
-	}
-	else list(mean = median(my_mean), sd = my_sd[my_couple])
-	
-}
 
 #' Parse the annotated tree
 #' @rdname ARMET_getFit
@@ -684,218 +612,9 @@ ARMET_plotFit = function(obj, ct = "TME"){
 	
 }
 
-#' hypothesis test for the covariate of choice
-#' @rdname dirReg_test
-#'
-#' Prints a report of the hipothesis testing
-#'
-#' @param fit stan fit object 
-#' @param my_design design matrix
-#' @param cov_to_test character variable indicating the column name of the design matrix to test
-#' @param which_cov_to_test for internal usage
-#'
-#' @return a vector including
-#'     pvalues of the intercepts
-#'     pvalues of the angular coefficients
-#'     sign of the angular coefficient
-#'
-#' @examples
-#'  dirReg_test(fit, my_design, cov_to_test)
-#' @export
-dirReg_test = function(fit, my_design, cov_to_test = NULL, which_cov_to_test = 2, names_groups = NULL){
-	
-	logit_adj <- function(v, t=0.5) -log(t*(v-1) / ((t-1)*v));
-	
-	# Decide which covariate to check
-	if(!is.null(cov_to_test)) which_cov_to_test = which(colnames( my_design %>% dplyr::select(-sample) ) == cov_to_test )
-	
-	# Get the posterior distributions
-	alpha_posterior = as.matrix(as.data.frame(rstan:::extract( fit, "alpha")))
-	coef_ang_posterior = as.matrix(alpha_posterior[,grep(sprintf("alpha.%s", which_cov_to_test), colnames(alpha_posterior), fixed=T)])
-	interc_posterior = as.matrix(alpha_posterior[,grep("alpha.1", colnames(alpha_posterior), fixed=T)])
-	
-	K = ncol(interc_posterior)
-	gcb = get_center_bg(coef_ang_posterior)
-	m = gcb$mean
-	coef_ang_posterior_adj = 
-		data.frame(logit_adj(coef_ang_posterior, m)) %>%
-		tibble::as_tibble() %>%
-		stats::setNames(names_groups) %>%
-		tidyr::gather(ct, value)
-	
-	parse_fit = function(fit, q, label){
-		data.frame(apply(rstan::extract(fit, "beta")[[1]], c(2,3), quantile, q )) %>%
-			tibble::as_tibble() %>%
-			stats::setNames(names_groups) %>%
-			dplyr::mutate(sample = levels(my_design$sample)) %>%
-			tidyr::gather(ct, !!label, -sample) %>%
-			dplyr::mutate_if(is.character, as.factor) 
-	}
-	
-	estimate_prop_with_uncertanties = 
-		parse_fit(fit, 0.5, "mean") %>%
-		dplyr::left_join(	parse_fit(fit, 0.95, "upper"), by=c("sample", "ct")) %>%
-		dplyr::left_join(	parse_fit(fit, 0.05, "lower"), by=c("sample", "ct")) %>%
-		dplyr::left_join(	my_design %>% dplyr::select(-`(Intercept)`), by="sample")
-	
-	stats = do.call("rbind", lapply(1:K, function(i){
-		
-		mcap = mean(coef_ang_posterior[,i])
-		scap = sd(coef_ang_posterior[,i])
-		ecap = scap/sqrt(nrow(alpha_posterior))
-		mip = mean(interc_posterior[,i])
-		sip = sd(interc_posterior[,i])
-		eip = sip/sqrt(nrow(alpha_posterior))
-		pcap = min( 2*(1-pnorm(m, mcap, scap)), 2*(1-pnorm(m, mcap, scap, lower.tail = F)))
-		pip = min ( 2*(1-pnorm(1/K, mip, sip)), 2*(1-pnorm(1/K, mip, sip, lower.tail = F)))
-		
-		pcap = min( 2*(1-pnorm(mcap, gcb$mean, gcb$sd)), 2*(1-pnorm(mcap, gcb$mean, gcb$sd, lower.tail = F)))
-		
-		mip_human_readable = mip
-		mcap_human_readable = logit_adj(mcap, m)
-		pcap_human_readable = if(pcap<0.01 & pcap>0) formatC(pcap, format = "e", digits = 2) else round(pcap, 2)
-		pip_human_readable = if(pip<0.01& pip>0) formatC(pip, format = "e", digits = 2) else round(pip, 2)
-		
-		tibble::tibble(
-			m = m,
-			mcap = mcap,
-			scap = scap,
-			ecap = ecap,
-			mip = mip,
-			sip = sip,
-			eip = eip,
-			pcap = pcap,
-			pip = pip,
-			mip_human_readable = mip_human_readable,
-			mcap_human_readable = mcap_human_readable,
-			pcap_human_readable = pcap_human_readable,
-			pip_human_readable = pip_human_readable,
-			symbol_pcap = if(pcap<0.001) "***" else if(pcap<0.01) "**" else if(pcap<0.05) "*" else if(pcap<0.1) "." else "",
-			symbol_pip = if(pip<0.001) "***" else if(pip<0.01) "**" else if(pip<0.05) "*" else if(pip<0.1) "." else "",
-			direction = if(mcap_human_readable>0) "+" else if(mcap_human_readable<0) "-" else "0"
-		)
-		
-	})) %>%
-		dplyr::mutate(ct = names_groups ) %>%
-		dplyr::mutate_if(is.character, as.factor)
-	
-	list(
-		stats=stats, 
-		estimate_prop_with_uncertanties = estimate_prop_with_uncertanties,
-		coef_ang_posterior_adj = coef_ang_posterior_adj
-	)
-}
-
-parse_extract_2D <- function(fit, param, fun)	apply(rstan::extract(fit, param)[[1]], c(2,3), fun )
-
-#' @rdname beta_reg_hierarchical
-#' @export
-beta_reg_hierarchical = function(fit, my_design){
-	
-	writeLines("ARMET: Starting inference beta reg..")
-	
-	beta_posterior_mu = parse_extract_2D(fit, "beta", mean)
-	beta_posterior_sd = parse_extract_2D(fit, "beta", sd)
-	beta_posterior = aperm(rstan::extract(fit, "beta")[[1]], c(2,3,1))
-	beta_posterior = beta_posterior[,,1:100]
-	
-	rstan:::sampling( stanmodels$beta_reg_hierarchical, 
-										#stan(file="~/PhD/simplexRegression/src/stan_files/beta_reg_hierarchical.stan",
-										data=list(
-											I = dim(beta_posterior)[3],
-											K=ncol(beta_posterior_mu),
-											N=nrow(beta_posterior_mu),
-											X=my_design,
-											R=ncol(my_design),
-											beta_posterior = beta_posterior,
-											beta_mu=beta_posterior_mu,
-											beta_sd = beta_posterior_sd
-										),
-										cores=4,
-										iter = 1000,
-										refresh = 0
-	)
-}
-
-#' hypothesis test for the covariate of choice
-#' @rdname betaReg_test
-#'
-#' Prints a report of the hipothesis testing
-#'
-#' @param fit stan fit object 
-#' @param my_design design matrix
-#' @param cov_to_test character variable indicating the column name of the design matrix to test
-#' @param which_cov_to_test for internal usage
-#'
-#' @return a vector including
-#'     pvalues of the intercepts
-#'     pvalues of the angular coefficients
-#'     sign of the angular coefficient
-#'
-#' @examples
-#'  betaReg_test(fit, my_design, cov_to_test)
-#' @export
-betaReg_test = function(fit, my_design, cov_to_test = NULL, which_cov_to_test = 2, names_groups = NULL){
-
-	# Decide which covariate to check
-	if(!is.null(cov_to_test)) which_cov_to_test = which(colnames( my_design %>% dplyr::select(-sample) ) == cov_to_test )
-	
-	# Get the posterior distributions
-	alpha_posterior = as.data.frame(rstan:::extract( fit, "alpha2"))
-	coef_ang_posterior = as.matrix(alpha_posterior[,grep(sprintf("alpha2.%s", which_cov_to_test), colnames(alpha_posterior), fixed=T)])
-	interc_posterior = as.matrix(alpha_posterior[,grep("alpha2.1", colnames(alpha_posterior), fixed=T)])
-	
-	K = ncol(interc_posterior)
-	m = 0
-	
-	plot = plot_densities(coef_ang_posterior , do_log = F, color="0",  fill = 1:K) +
-		ggtitle("Effectual trends - posterior distribution of angular coeff. - Beta regression")
-	
-	stats = 	do.call("rbind", lapply(1:K, function(i){
-		
-		mcap = mean(coef_ang_posterior[,i])
-		scap = sd(coef_ang_posterior[,i])
-		ecap = scap/sqrt(nrow(alpha_posterior))
-		mip = mean(interc_posterior[,i])
-		sip = sd(interc_posterior[,i])
-		eip = sip/sqrt(nrow(alpha_posterior))
-		pcap = min( 2*(1-pnorm(m, mcap, scap)), 2*(1-pnorm(m, mcap, scap, lower.tail = F)))
-		pip = min ( 2*(1-pnorm(1/K, mip, sip)), 2*(1-pnorm(1/K, mip, sip, lower.tail = F)))
-		mip_human_readable = inv_logit(mip)
-		mcap_human_readable = mcap
-		pcap_human_readable = if(pcap<0.01 & pcap>0) formatC(pcap, format = "e", digits = 2) else round(pcap, 2)
-		pip_human_readable = if(pip<0.01& pip>0) formatC(pip, format = "e", digits = 2) else round(pip, 2)
-		
-		tibble(
-			m = m,
-			mcap = mcap,
-			scap = scap,
-			ecap = ecap,
-			mip = mip,
-			sip = sip,
-			eip = eip,
-			pcap = pcap,
-			pip = pip,
-			mip_human_readable = mip_human_readable,
-			mcap_human_readable = mcap_human_readable,
-			pcap_human_readable = pcap_human_readable,
-			pip_human_readable = pip_human_readable,
-			symbol_pcap = if(pcap<0.001) "***" else if(pcap<0.01) "**" else if(pcap<0.05) "*" else if(pcap<0.1) "." else "",
-			symbol_pip = if(pip<0.001) "***" else if(pip<0.01) "**" else if(pip<0.05) "*" else if(pip<0.1) "." else "",
-			direction = if(mcap_human_readable>0) "+" else if(mcap_human_readable<0) "-" else "0"
-		)
-		
-	}))
-	stats$ct = names_groups
-	
-	stats = stats %>% dplyr::mutate_if(is.character, as.factor)
-	
-	list(stats=stats, plot=plot)
-	
-}
 
 ref_to_summary_ref = function(tree, ref){
-
+	
 	# cl <- multidplyr::create_cluster(parallel::detectCores()-2)
 	# multidplyr::set_default_cluster(cl)
 	
@@ -918,4 +637,4 @@ ref_to_summary_ref = function(tree, ref){
 		dplyr::mutate(value = exp(log_mean))
 	
 	# parallel::stopCluster(cl)
-}
+}      
