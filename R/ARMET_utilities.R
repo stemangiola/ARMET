@@ -638,3 +638,13 @@ ref_to_summary_ref = function(tree, ref){
 	
 	# parallel::stopCluster(cl)
 }      
+
+# Add hypothesis testing
+parse_fit_for_quantiles = function(fit, q, label){
+	data.frame(apply(rstan::extract(fit, "beta")[[1]], c(2,3), quantile, q )) %>%
+		tibble::as_tibble() %>%
+		stats::setNames(names_groups) %>%
+		dplyr::mutate(sample = levels(my_design$sample)) %>%
+		tidyr::gather(ct, !!label, -sample) %>%
+		dplyr::mutate_if(is.character, as.factor) 
+}

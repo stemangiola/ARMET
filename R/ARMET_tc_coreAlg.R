@@ -310,14 +310,16 @@ ARMET_tc_coreAlg = function(
 		node
 	)
 	
-	# Add hypothesis testing
 	node = switch(
 		is.null(cov_to_test) + 1,
 		add_info_to_tree(
 			node, 
 			ct, 
 			"estimate_prop_with_uncertanties", 
-			test$estimate_prop_with_uncertanties,
+			parse_fit_for_quantiles(fit, 0.5, "mean") %>%
+				dplyr::left_join(	parse_fit_for_quantiles(fit, 0.95, "upper"), by=c("sample", "ct")) %>%
+				dplyr::left_join(	parse_fit_for_quantiles(fit, 0.05, "lower"), by=c("sample", "ct")) %>%
+				dplyr::left_join(	my_design %>% dplyr::select(-`(Intercept)`), by="sample"),
 			append = F
 		),
 		node
