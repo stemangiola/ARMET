@@ -81,7 +81,7 @@ ARMET_tc_coreAlg = function(
 	# Garbage collection
 	rm(ref)
 	gc()
-	
+
 	# Get the probability table of the previous run
 	ancestor_run_prop_table = get_last_existing_leaves_with_annotation(my_tree)
 	
@@ -243,8 +243,6 @@ ARMET_tc_coreAlg = function(
 			#control =                         list(adapt_delta = 0.99, stepsize = 0.01, max_treedepth =15),
 			cores=4
 		)
-	
-	#if(do_debug) browser()
 	
 	# Parse results
 	proportions =  
