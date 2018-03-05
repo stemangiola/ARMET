@@ -120,7 +120,7 @@ rnaseq_norm = function(df, reference = NULL, cpm_theshold = 0.5, prop = 3/4){
 		
 	df %>% 
 		dplyr::mutate(sample = as.factor(as.character(sample))) %>%
-		left_join( nf, by = "sample") %>%
+		dplyr::left_join( nf, by = "sample") %>%
 		dplyr::mutate(
 			value_original = value, 
 			value = value * multiplier

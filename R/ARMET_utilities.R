@@ -68,7 +68,7 @@ check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd,
 	} 
 	
 	# Check columns of design matrix
-	if(!"sample" %in% colnames(my_design)) 
+	if(!is.null(my_design) && !"sample" %in% colnames(my_design)) 
 		stop("ARMET: The design matrix should have a column called 'sample' being a factor")
 	
 	# Check if microarray data
@@ -640,7 +640,7 @@ ref_to_summary_ref = function(tree, ref){
 }      
 
 # Add hypothesis testing
-parse_fit_for_quantiles = function(fit, q, label){
+parse_fit_for_quantiles = function(fit, q, label, my_design, names_groups){
 	data.frame(apply(rstan::extract(fit, "beta")[[1]], c(2,3), quantile, q )) %>%
 		tibble::as_tibble() %>%
 		stats::setNames(names_groups) %>%

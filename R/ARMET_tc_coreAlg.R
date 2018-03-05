@@ -193,8 +193,8 @@ ARMET_tc_coreAlg = function(
 			dplyr::arrange(sample) %>%
 			dplyr::select(-sample) %>%
 			# transform factors into numeric safely
-			mutate_if(is.factor, as.character) %>%
-			mutate_if(is.character, as.numeric),
+			dplyr::mutate_if(is.factor, as.character) %>%
+			dplyr::mutate_if(is.character, as.numeric),
 		
 		x_genes = fg %>% 
 			dplyr::pull(gene) %>%
@@ -316,9 +316,9 @@ ARMET_tc_coreAlg = function(
 			node, 
 			ct, 
 			"estimate_prop_with_uncertanties", 
-			parse_fit_for_quantiles(fit, 0.5, "mean") %>%
-				dplyr::left_join(	parse_fit_for_quantiles(fit, 0.95, "upper"), by=c("sample", "ct")) %>%
-				dplyr::left_join(	parse_fit_for_quantiles(fit, 0.05, "lower"), by=c("sample", "ct")) %>%
+			parse_fit_for_quantiles(fit, 0.5, "mean", my_design, levels(fg$ct)) %>%
+				dplyr::left_join(	parse_fit_for_quantiles(fit, 0.95, "upper", my_design, levels(fg$ct)), by=c("sample", "ct")) %>%
+				dplyr::left_join(	parse_fit_for_quantiles(fit, 0.05, "lower", my_design, levels(fg$ct)), by=c("sample", "ct")) %>%
 				dplyr::left_join(	my_design %>% dplyr::select(-`(Intercept)`), by="sample"),
 			append = F
 		),
