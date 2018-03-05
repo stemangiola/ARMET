@@ -112,7 +112,7 @@ ARMET_tc = function(
 	mix = 													wrapper_normalize_mix_ref(mix, ref, is_mix_microarray)
 
 	# plot_densities(
-	# 	bind_rows(
+	# 	dplyr::bind_rows(
 	# 		mix %>% mutate(color="red", sample = as.character(sample)),
 	# 		ref %>% mutate(color="blue", sample = as.character(sample))
 	# 	)
