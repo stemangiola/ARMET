@@ -23,6 +23,17 @@ add_info_to_tree = function(node, ct, label, value, append = F){
 	else node
 }
 
+replace_node_from_tree = function(node_orig, node_new){
+
+	if(node_orig$name == node_new$name  ) 
+		node_orig = node_new
+	else if(length(node_orig$children)>0) 
+		node_orig$children = lapply(node_orig$children, replace_node_from_tree, node_new)
+	
+	node_orig
+	
+}
+
 #' Get nome from cell type
 get_node_from_name = function(node, ct){
 	
@@ -200,15 +211,16 @@ get_map_foreground_background = function(node, ct){
 }
 
 #' Put absolute proportions on tree
-add_absolute_proportions_to_tree = function(node, p_ancestor =  rep(1, nrow( node$relative_proportion )) ){
+add_absolute_proportions_to_tree = function(node, p_ancestor =  NULL ){
 	
-	node$relative_proportion = 
-		node$relative_proportion %>% 
-		dplyr::mutate(
-			absolute_proportion = 
-				relative_proportion * 
-				p_ancestor
-		) 
+	if(!is.null(p_ancestor))
+		node$relative_proportion = 
+			node$relative_proportion %>% 
+			dplyr::mutate(
+				absolute_proportion = 
+					relative_proportion * 
+					p_ancestor
+			)
 	
 	if(length(node$children)>0){
 		node$children = 
@@ -269,11 +281,8 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree, log.ARMET){
 		
 		write(node$name,file=log.ARMET,append=TRUE)
 		
-		# Update results for the background tree
-		bg_tree = add_data_to_tree_from_table(bg_tree, obj.out$proportion, label = "relative_proportion", append = T)
-		
-		# Set up background trees
-		bg_tree = add_absolute_proportions_to_tree(bg_tree)
+		# Update tree
+		bg_tree = replace_node_from_tree(bg_tree, node)
 		
 		obj.in$my_tree = bg_tree
 		
@@ -410,6 +419,7 @@ format_tree = function(tree, mix, ct_to_omit){
 			)
 	}
 	
+
 	# Add the first proportions to tree
 	tree = 
 		add_info_to_tree(
@@ -423,7 +433,9 @@ format_tree = function(tree, mix, ct_to_omit){
 						ct = factor(tree$name), 
 						relative_proportion = 1,
 						absolute_proportion = 1
-					)
+					) %>%
+					dplyr::arrange(sample)
+					
 			)
 		)
 	
