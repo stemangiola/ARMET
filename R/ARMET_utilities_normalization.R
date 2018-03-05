@@ -5,7 +5,7 @@
 #' @param prop A number
 #' @return A tibble filtered
 rnaseq_norm.get_low_expressed = function(df,cpm_theshold = 0.5, prop = 3/4){
-	
+
 	cpm_theshold = 
 		cpm_theshold / 
 		(
@@ -48,16 +48,22 @@ rnaseq_norm.get_low_expressed = function(df,cpm_theshold = 0.5, prop = 3/4){
 #' @param cpm_theshold A number
 #' @param prop A number
 #' @return A list including the filtered data frame and the normalization factors
-rnaseq_norm.calcNormFactor = function(df, reference = NULL, cpm_theshold = 0.5, prop = 3/4){
+rnaseq_norm.calcNormFactor = function(df, reference = NULL, cpm_theshold = 0.5, prop = 3/4, genes_to_keep = c()){
 	
 	error_if_log_transformed(df)
 	
+	# Get list of low transcribed genes
 	gene_to_exclude = 
 		rnaseq_norm.get_low_expressed(
 			df %>% dplyr::filter(sample!="reference") ,
 			cpm_theshold = cpm_theshold, 
 			prop = prop
 		)
+	
+	if(length(gene_to_exclude) == df %>% dplyr::distinct(gene) %>% nrow()) stop("ARMET: The gene expression matrix has been filtered completely for lowly expressed genes")
+	
+	# Keep genes that are forced 
+	gene_to_exclude = gene_to_exclude[!gene_to_exclude %in% genes_to_keep]
 	
 	writeLines(sprintf("ARMET: %s genes excluded for normalization", length(gene_to_exclude)))
 	
@@ -66,24 +72,26 @@ rnaseq_norm.calcNormFactor = function(df, reference = NULL, cpm_theshold = 0.5, 
 		dplyr::filter(!gene %in% gene_to_exclude) %>%
 		droplevels()
 	
-	if(nrow(df.filt) == 0) stop("ARMET: The gene expression matrix has been filtered completely for lowly expressed genes")
-
-	tibble::tibble(
-		sample = factor(levels(df.filt$sample)),
-		nf = edgeR::calcNormFactors(
-			df.filt %>% 
-				tidyr::spread(sample, value) %>% 
-				dplyr::select(-gene), 
-			refColumn=reference, 
-			method="TMM"
-		),
-	) %>%
-	dplyr::left_join(
-		df.filt %>%
-			dplyr::group_by(sample) %>%
-			dplyr::summarise(tot_filt = sum(value, na.rm = T)) %>%
-			dplyr::mutate(sample = as.factor(as.character(sample))),
-		by = "sample"
+	list(
+		gene_to_exclude = gene_to_exclude,
+		nf = 
+			tibble::tibble(
+				sample = factor(levels(df.filt$sample)),
+				nf = edgeR::calcNormFactors(
+					df.filt %>% 
+						tidyr::spread(sample, value) %>% 
+						dplyr::select(-gene), 
+					refColumn=reference, 
+					method="TMM"
+				),
+			) %>%
+			dplyr::left_join(
+				df.filt %>%
+					dplyr::group_by(sample) %>%
+					dplyr::summarise(tot_filt = sum(value, na.rm = T)) %>%
+					dplyr::mutate(sample = as.factor(as.character(sample))),
+				by = "sample"
+			)
 	)
 }
 
@@ -94,12 +102,16 @@ rnaseq_norm.calcNormFactor = function(df, reference = NULL, cpm_theshold = 0.5, 
 #' @param cpm_theshold A number
 #' @param prop A number
 #' @return A list including the filtered data frame and the normalization factors
-rnaseq_norm = function(df, reference = NULL, cpm_theshold = 0.5, prop = 3/4){
+rnaseq_norm = function(df, reference = NULL, cpm_theshold = 0.5, prop = 3/4, genes_to_keep = c()){
 	#if(verbose) writeLines("Normalizing RNA-seq data with TMM")
 	
+	if(length(intersect( c("sample", "gene"), colnames(df))) < 2 ) stop("ARMET: input table is not correctly formatted as gene, sample")
+
+	# Get norm factor object
+	nf_obj = rnaseq_norm.calcNormFactor(df, reference, cpm_theshold, prop, genes_to_keep = genes_to_keep)
+	
 	# Calculate normalization factors
-	nf = 
-		rnaseq_norm.calcNormFactor(df, reference, cpm_theshold, prop) %>%
+	nf = nf_obj$nf %>%
 		dplyr::left_join(
 			df %>% 
 				dplyr::group_by(sample) %>% 
@@ -108,15 +120,20 @@ rnaseq_norm = function(df, reference = NULL, cpm_theshold = 0.5, prop = 3/4){
 			by = "sample"
 		) %>%
 		dplyr::mutate(multiplier = 1 / (tot_filt * nf) * max(tot) ) %>%
-		# I have correct the strange behaviour of edgeR of reference 
-		# sample not being 1
-		dplyr::mutate(
-			multiplier = 
-				multiplier / 
-				(.) %>% 
-				dplyr::filter(sample == "reference") %>% 
-				dplyr::pull(multiplier)
-		) 
+		{
+			# I have correct the strange behaviour of edgeR of reference 
+			# sample not being 1
+			if("reference" %in% ( (.) %>% pull(sample) ))
+				dplyr::mutate(
+					multiplier = 
+						multiplier / 
+						(.) %>% 
+						dplyr::filter(sample == "reference") %>% 
+						dplyr::pull(multiplier)
+				) 
+			else
+				(.)
+		}
 		
 	df %>% 
 		dplyr::mutate(sample = as.factor(as.character(sample))) %>%
@@ -125,6 +142,7 @@ rnaseq_norm = function(df, reference = NULL, cpm_theshold = 0.5, prop = 3/4){
 			value_original = value, 
 			value = value * multiplier
 		) %>%
+		dplyr::mutate(filtered_out = gene %in% nf_obj$gene_to_exclude) %>%
 		dplyr::select(-tot, -nf, -tot_filt)
 	
 }
