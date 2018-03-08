@@ -123,7 +123,8 @@ rnaseq_norm = function(df, reference = NULL, cpm_theshold = 0.5, prop = 3/4, gen
 		{
 			# I have correct the strange behaviour of edgeR of reference 
 			# sample not being 1
-			if("reference" %in% ( (.) %>% pull(sample) ))
+			if("reference" %in% ( (.) %>% dplyr::pull(sample) ))
+				(.) %>% 
 				dplyr::mutate(
 					multiplier = 
 						multiplier / 
