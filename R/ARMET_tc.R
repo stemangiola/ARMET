@@ -30,9 +30,12 @@ ARMET_tc = function(
 	do_debug =                          F,
 	cell_type_root =                    "TME",
 	choose_internal_ref =               NULL,
-	omit_regression =                   F
+	omit_regression =                   F,
+	save_fit =                          F
 ){
 
+	input = c(as.list(environment()))
+	
 	writeLines("ARMET: Started data processing")
 	
 	#Read ini file for some options
@@ -151,7 +154,8 @@ ARMET_tc = function(
 				alpha_hyper_value =             alpha_hyper_value,
 				multithread =                   multithread,
 				do_debug =                      do_debug,
-				omit_regression =               omit_regression
+				omit_regression =               omit_regression,
+				save_fit =                      save_fit
 			)
 	)
 
@@ -203,7 +207,7 @@ ARMET_tc = function(
 		tree = my_tree,
 		
 		# Return the input itself
-		input = as.list(match.call())
+		input = input
 	)
 	
 }
