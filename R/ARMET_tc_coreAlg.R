@@ -26,6 +26,7 @@ ARMET_tc_coreAlg = function(
 	save_report =           obj.in$save_report
 	omit_regression =       obj.in$omit_regression
 	do_debug =              obj.in$do_debug
+	save_fit =              obj.in$save_fit
 
 	# Get ref of the current level
 	ref = 
@@ -303,6 +304,19 @@ ARMET_tc_coreAlg = function(
 			ct, 
 			"plot_coef_ang", 
 			test$plot_coef_ang,
+			append = F
+		),
+		node
+	)
+	
+	# Add hypothesis testing
+	node = switch(
+		(!save_fit) + 1,
+		add_info_to_tree(
+			node, 
+			ct, 
+			"fit", 
+			fit,
 			append = F
 		),
 		node
