@@ -1,3 +1,10 @@
+	functions{
+		vector my_non_linear_scale(vector x, int P) { 
+			vector[num_elements(x)] x_hat;
+			for(i in 1:num_elements(x)) x_hat[i] = x[i] ^ (log(0.5)/log(1.0/P)); 
+			return x_hat;
+		}
+	}
 data{
 	int G;                                       // Number of marker genes
 	int P;                                       // Number of cell types
@@ -46,7 +53,6 @@ parameters {
 	simplex[P] alpha[R];
 	real<lower=1> phi;
 	real<lower=1> phi_phi;
-	
 
 }
 transformed parameters{
@@ -75,7 +81,7 @@ transformed parameters{
 		for(s in 1:S)	sigma1[s] = 0;
 	}
 	
-	for(r in 1:R) alpha_mat[r] =  logit(to_row_vector(alpha[r]));
+	for(r in 1:R) alpha_mat[r] =   logit( to_row_vector( my_non_linear_scale( alpha[r], P) ) ) * 20; # to_row_vector( ( alpha[r] - 1.0/P) * multip ); #
 	beta_hat =  X * alpha_mat;
 	for(s in 1:S) beta_hat_hat[s] = softmax(to_vector(beta_hat[s])) * phi + 1;
 
@@ -85,8 +91,9 @@ model {
 	matrix[S,G] y_hat_log; 
 	matrix[S,G] y_err; 
 
+	//multip ~ cauchy(1, 2.5);
 	sigma0 ~ normal(0, sigma_hyper_sd);
-	phi_phi ~ cauchy(1,2);
+	phi_phi ~ cauchy(1,2); # Tried normally distributed and not converge on some data
 	phi ~ normal(1,phi_hyper_sd);
 	
 	y_hat_log = log(y_hat+1);
@@ -116,6 +123,7 @@ model {
  
   if(omit_regression == 0) for(s in 1:S) beta[s] ~ dirichlet(beta_hat_hat[s]);
   for(r in 1:R) alpha[r] ~ dirichlet(alpha_hyper * phi_phi);
+  #for(r in 1:R) alpha_mat[r] ~ normal(0, phi_phi);
 
 }
 generated quantities{

@@ -18,9 +18,9 @@ build_data_directory = function(){
 	
 	
 	# Create trees
-	# library(jsonlite)
-	# tree = read_json("/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/ARMET_dev/ARMET_TME_tree_RNAseq.json")
-	# save(tree, file="data/tree_json.rda")
+	library(jsonlite)
+	tree = read_json("/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/ARMET_dev/ARMET_TME_tree_RNAseq.json")
+	save(tree, file="data/tree_json.rda")
 	
 }
 
@@ -48,6 +48,11 @@ average_duplicated_genes_tibble_spreaded = function(tbl){
 	
 }
 
+error_if_log_transformed = function(x){
+	if(length(x$value)>0) if(max(x$value, na.rm=T)<50) 
+		stop("ARMET: The input was log transformed in: check_if_sd_zero_and_correct")
+}
+
 #' Check the input for anomalies
 check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd, custom_ref, tree){
 	
@@ -70,6 +75,10 @@ check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd,
 	# Check columns of design matrix
 	if(!is.null(my_design) && !"sample" %in% colnames(my_design)) 
 		stop("ARMET: The design matrix should have a column called 'sample' being a factor")
+	
+	# Check if cov to check in design
+	if(!is.null(cov_to_test) && !cov_to_test%in%colnames(my_design))
+		stop("ARMET: cov_to_test should be among the column names of the design matrix")
 	
 	# Check if microarray data
 	if(is_mix_microarray) writeLines("ARMET: The input matrix is from microarray.")
@@ -94,6 +103,7 @@ check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd,
 	# Check if negative numbers in the matrix
 	if(
 		mix %>%	
+		dplyr::select(-gene) %>%
 		dplyr::select_if(function(.) any((.)<0)) %>% 
 		ncol() > 0
 	) stop("ARMET: negative numbers found in query matrix")
@@ -217,11 +227,6 @@ plot_densities_from_melted = function(df_melted){
 			axis.line = ggplot2::element_line(colour = "black")
 		)
 	return( p )
-}
-
-error_if_log_transformed = function(x){
-	if(length(x$value)>0) if(max(x$value, na.rm=T)<50) 
-		stop("ARMET: The input was log transformed in: check_if_sd_zero_and_correct")
 }
 
 #' Checks if the standard deviation of a gene is 0
@@ -582,24 +587,38 @@ ARMET_getFit = function(obj){
 #' @examples
 #'  ARMET_plotFit(ARMET_tc_result, ct = "TME")
 #' @export
-ARMET_plotFit = function(obj, ct = "TME"){
-	
+ARMET_plotFit = function(obj, ct = "TME", param = "estimate_prop_with_uncertanties", dodge = 0){
+
 	node_info = get_node_from_name(obj$tree, ct)
 	
-	pd <- ggplot2::position_dodge(0.02)
+	is_categorical = all(
+		obj$input$my_design %>% 
+			tibble::as_tibble() %>% 
+			dplyr::select(!!obj$input$cov_to_test) %>%
+			dplyr::pull() %>% unique() %>% sort() == c(0,1)
+	)
+	
+	my_noise = rnorm( nrow(node_info[[param]]), 0, dodge	)
+	
+	my_method = ifelse(is_categorical, "lm", "loess")
+	
 	plot_props = ggplot2::ggplot(
-		node_info$estimate_prop_with_uncertanties, ggplot2::aes(x=get(obj$input$cov_to_test), y=mean, colour=ct, group=ct)) + 
-		ggplot2::geom_point(position=pd) +
+		node_info[[param]], ggplot2::aes(x=get(obj$input$cov_to_test)+my_noise, y=mean, colour=ct, fill=ct, group=ct)) + 
+		ggplot2::geom_point() +
 		ggplot2::geom_errorbar(
 			ggplot2::aes(ymin=lower, ymax=upper, colour=ct), 
-			width=0, alpha=0.4 ,
-			position=pd
+			width=0, alpha=0.4 
 		) +
+		scale_colour_brewer(palette = "Set1") +
+		scale_fill_brewer(palette = "Set1") +
+		ggplot2::geom_smooth(method = my_method, alpha = 0.05) +
 		ggplot2::theme_bw()
 	
 	plot_coef_ang = ggplot2::ggplot(
 		node_info$coef_ang_posterior_adj, ggplot2::aes(value, group=ct, color=ct)) +
-		ggplot2::geom_line(stat="density") +
+		ggplot2::geom_line(stat="density", size=1) +
+		scale_colour_brewer(palette = "Set1") +
+		scale_fill_brewer(palette = "Set1") +
 		ggplot2::expand_limits(x=0.1) +
 		ggplot2::theme_bw() +
 		ggplot2::theme(
@@ -640,8 +659,8 @@ ref_to_summary_ref = function(tree, ref){
 }      
 
 # Add hypothesis testing
-parse_fit_for_quantiles = function(fit, q, label, my_design, names_groups){
-	data.frame(apply(rstan::extract(fit, "beta")[[1]], c(2,3), quantile, q )) %>%
+parse_fit_for_quantiles = function(fit, param = "beta", q, label, my_design, names_groups){
+	data.frame(apply(rstan::extract(fit, param)[[1]], c(2,3), quantile, q )) %>%
 		tibble::as_tibble() %>%
 		stats::setNames(names_groups) %>%
 		dplyr::mutate(sample = levels(my_design$sample)) %>%
