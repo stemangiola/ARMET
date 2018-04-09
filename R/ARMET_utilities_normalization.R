@@ -1,13 +1,13 @@
 #' Eliminate lowly tanscribed genes for normalization
 #'
 #' @param df A matrix
-#' @param cpm_theshold A number
+#' @param cpm_threshold A number
 #' @param prop A number
 #' @return A tibble filtered
-rnaseq_norm.get_low_expressed = function(df,cpm_theshold = 0.5, prop = 3/4){
-
-	cpm_theshold = 
-		cpm_theshold / 
+rnaseq_norm.get_cpm = function(df,cpm_threshold = 0.5){
+	
+	cpm_threshold = 
+		cpm_threshold / 
 		(
 			df %>%
 				dplyr::group_by(sample) %>%
@@ -17,9 +17,47 @@ rnaseq_norm.get_low_expressed = function(df,cpm_theshold = 0.5, prop = 3/4){
 				dplyr::pull(m) /
 				1e6
 		)
-	
+
 	df %>% 
 	{ if("ct"%in%names(.)) dplyr::select(-ct)	else .}	%>%
+		dplyr::select(gene, sample, value) %>% 
+		tidyr::spread(sample, value) %>% 
+		tidyr::drop_na() %>%
+		dplyr::do(
+			dplyr::bind_cols(
+				gene = (.)$gene,
+				tibble::as_tibble( edgeR::cpm(	(.) %>% dplyr::select(-gene) ) )
+			)
+		) %>%
+		tidyr::gather(sample, cpm, -gene) %>%
+		dplyr::mutate(cpm_threshold = cpm_threshold)
+	
+}
+
+
+#' Eliminate lowly tanscribed genes for normalization
+#'
+#' @param df A matrix
+#' @param cpm_threshold A number
+#' @param prop A number
+#' @return A tibble filtered
+rnaseq_norm.get_low_expressed = function(df,cpm_threshold = 0.5, prop = 3/4){
+
+	cpm_threshold = 
+		cpm_threshold / 
+		(
+			df %>%
+				dplyr::group_by(sample) %>%
+				dplyr::summarise(s = sum(value)) %>%
+				dplyr::ungroup() %>%
+				dplyr::summarise(m =median(s)) %>%
+				dplyr::pull(m) /
+				1e6
+		)
+
+	df %>% 
+	{ if("ct"%in%names(.)) dplyr::select(-ct)	else .}	%>%
+		dplyr::select(gene, sample, value) %>% 
 		tidyr::spread(sample, value) %>% 
 		tidyr::drop_na() %>%
 		dplyr::do(
@@ -29,9 +67,9 @@ rnaseq_norm.get_low_expressed = function(df,cpm_theshold = 0.5, prop = 3/4){
 						edgeR::cpm(
 							(.) %>% 
 								dplyr::select(-gene)
-						) > cpm_theshold
+						) > cpm_threshold
 					) <
-						ceiling(ncol( 
+						floor(ncol( 
 							(.) %>% dplyr::select(-gene)
 						) * prop)
 				)
@@ -41,14 +79,19 @@ rnaseq_norm.get_low_expressed = function(df,cpm_theshold = 0.5, prop = 3/4){
 		as.character()
 }
 
+error_if_log_transformed = function(x){
+	if(length(x$value)>0) if(max(x$value, na.rm=T)<50) 
+		stop("ARMET: The input was log transformed in: check_if_sd_zero_and_correct")
+}
+
 #' Calculate the norm factor with calcNormFactor from limma
 #'
 #' @param df A matrix
 #' @param reference A reference matrix
-#' @param cpm_theshold A number
+#' @param cpm_threshold A number
 #' @param prop A number
 #' @return A list including the filtered data frame and the normalization factors
-rnaseq_norm.calcNormFactor = function(df, reference = NULL, cpm_theshold = 0.5, prop = 3/4, genes_to_keep = c()){
+rnaseq_norm.calcNormFactor = function(df, reference = NULL, cpm_threshold = 0.5, prop = 3/4, genes_to_keep = c()){
 	
 	error_if_log_transformed(df)
 	
@@ -56,7 +99,7 @@ rnaseq_norm.calcNormFactor = function(df, reference = NULL, cpm_theshold = 0.5, 
 	gene_to_exclude = 
 		rnaseq_norm.get_low_expressed(
 			df %>% dplyr::filter(sample!="reference") ,
-			cpm_theshold = cpm_theshold, 
+			cpm_threshold = cpm_threshold, 
 			prop = prop
 		)
 	
@@ -99,16 +142,16 @@ rnaseq_norm.calcNormFactor = function(df, reference = NULL, cpm_theshold = 0.5, 
 #'
 #' @param df A matrix
 #' @param reference A reference matrix
-#' @param cpm_theshold A number
+#' @param cpm_threshold A number
 #' @param prop A number
 #' @return A list including the filtered data frame and the normalization factors
-rnaseq_norm = function(df, reference = NULL, cpm_theshold = 0.5, prop = 3/4, genes_to_keep = c()){
+rnaseq_norm = function(df, reference = NULL, cpm_threshold = 0.5, prop = 3/4, genes_to_keep = c()){
 	#if(verbose) writeLines("Normalizing RNA-seq data with TMM")
 	
 	if(length(intersect( c("sample", "gene"), colnames(df))) < 2 ) stop("ARMET: input table is not correctly formatted as gene, sample")
 
 	# Get norm factor object
-	nf_obj = rnaseq_norm.calcNormFactor(df, reference, cpm_theshold, prop, genes_to_keep = genes_to_keep)
+	nf_obj = rnaseq_norm.calcNormFactor(df, reference, cpm_threshold, prop, genes_to_keep = genes_to_keep)
 	
 	# Calculate normalization factors
 	nf = nf_obj$nf %>%

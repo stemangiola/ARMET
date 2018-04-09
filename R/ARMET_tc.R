@@ -31,7 +31,8 @@ ARMET_tc = function(
 	cell_type_root =                    "TME",
 	choose_internal_ref =               NULL,
 	omit_regression =                   F,
-	save_fit =                          F
+	save_fit =                          F,
+	seed =                              NULL
 ){
 
 	input = c(as.list(environment()))
@@ -40,7 +41,7 @@ ARMET_tc = function(
 	
 	#Read ini file for some options
 	get_ini()
-	
+
 	# Check input
 	check_input(
 		mix, 
@@ -59,6 +60,7 @@ ARMET_tc = function(
 	mix = mix %>%	
 		tidyr::gather("sample", "value", 2:ncol(mix)) %>%
 		dplyr::mutate_if(is.character, as.factor) %>% 
+		dplyr::mutate_if(is.factor, factor) %>%
 		{ if(max((.)$value) < 50) dplyr::mutate(value=exp(value)) else .}
 
 	# Check if design matrix exists
@@ -68,7 +70,8 @@ ARMET_tc = function(
 			my_design,
 			tibble::tibble(	sample = levels(mix$sample),	`(intercept)` = 1	)
 		) %>%
-		dplyr::mutate_if(is.character, as.factor)
+		dplyr::mutate_if(is.character, as.factor) %>%
+		dplyr::mutate_if(is.factor, factor) 
 		
 	# Format tree
 	my_tree =  format_tree( get_node_from_name(tree, cell_type_root), mix, ct_to_omit)
@@ -155,7 +158,8 @@ ARMET_tc = function(
 				multithread =                   multithread,
 				do_debug =                      do_debug,
 				omit_regression =               omit_regression,
-				save_fit =                      save_fit
+				save_fit =                      save_fit,
+				seed =                          seed
 			)
 	)
 

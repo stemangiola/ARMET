@@ -27,6 +27,7 @@ ARMET_tc_coreAlg = function(
 	omit_regression =       obj.in$omit_regression
 	do_debug =              obj.in$do_debug
 	save_fit =              obj.in$save_fit
+	seed =                  obj.in$seed
 
 	# Get ref of the current level
 	ref = 
@@ -99,7 +100,8 @@ ARMET_tc_coreAlg = function(
 		print(
 			ancestor_run_prop_table %>% 
 				dplyr::group_by(sample) %>% 
-				dplyr::summarise(tot=sum(absolute_proportion))
+				dplyr::summarise(tot=sum(absolute_proportion)) %>%
+				dplyr::filter(tot != 1)
 		)
 		#stop()
 	}
@@ -242,7 +244,8 @@ ARMET_tc_coreAlg = function(
 			data=                             model.in,
 			#iter=                             1000 ,
 			#control =                         list(adapt_delta = 0.99, stepsize = 0.01, max_treedepth =15),
-			cores=4
+			cores = 4,
+			seed = ifelse(is.null(seed), sample.int(.Machine$integer.max, 1), seed)
 		)
 	
 	# Parse results
@@ -328,9 +331,24 @@ ARMET_tc_coreAlg = function(
 			node, 
 			ct, 
 			"estimate_prop_with_uncertanties", 
-			parse_fit_for_quantiles(fit, 0.5, "mean", my_design, levels(fg$ct)) %>%
-				dplyr::left_join(	parse_fit_for_quantiles(fit, 0.95, "upper", my_design, levels(fg$ct)), by=c("sample", "ct")) %>%
-				dplyr::left_join(	parse_fit_for_quantiles(fit, 0.05, "lower", my_design, levels(fg$ct)), by=c("sample", "ct")) %>%
+			parse_fit_for_quantiles(fit, "beta", 0.5, "mean", my_design, levels(fg$ct)) %>%
+				dplyr::left_join(	parse_fit_for_quantiles(fit, "beta", 0.95, "upper", my_design, levels(fg$ct)), by=c("sample", "ct")) %>%
+				dplyr::left_join(	parse_fit_for_quantiles(fit, "beta", 0.05, "lower", my_design, levels(fg$ct)), by=c("sample", "ct")) %>%
+				dplyr::left_join(	my_design %>% dplyr::select(-`(Intercept)`), by="sample"),
+			append = F
+		),
+		node
+	)
+	
+	node = switch(
+		is.null(cov_to_test) + 1,
+		add_info_to_tree(
+			node, 
+			ct, 
+			"estimate_generated_prop_with_uncertanties", 
+			parse_fit_for_quantiles(fit,"beta_gen", 0.5, "mean", my_design, levels(fg$ct)) %>%
+				dplyr::left_join(	parse_fit_for_quantiles(fit,"beta_gen", 0.95, "upper", my_design, levels(fg$ct)), by=c("sample", "ct")) %>%
+				dplyr::left_join(	parse_fit_for_quantiles(fit,"beta_gen", 0.05, "lower", my_design, levels(fg$ct)), by=c("sample", "ct")) %>%
 				dplyr::left_join(	my_design %>% dplyr::select(-`(Intercept)`), by="sample"),
 			append = F
 		),
