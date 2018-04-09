@@ -47,6 +47,8 @@ transformed data{
 	
 	for(s in 1:S) for(g in 1:G) if(y[s,g]==0) how_many_0s += 1;
 	if(how_many_0s/(G*S) < 0.05) skip_0_inflation = 1;
+	print(how_many_0s/(G*S))
+	print(skip_0_inflation);
 }
 parameters {
 	simplex[P] beta[S];                        // Proportions,  of the signatures in the xim
@@ -152,6 +154,7 @@ model {
 generated quantities{
 	vector[P] beta_gen[S];                       // Proportions,  of the signatures in the xim
 	//for(s in 1:S) beta_gen[s] = dirichlet_rng(beta_hat_hat[s]);
-	for(s in 1:S) for(p in 1:P) beta_gen[s,p] = beta_rng(beta_hat2[s,p] * phi2, (1 - beta_hat2[s,p]) * phi2);
+	if(phi2_hyper[1] == 0) 	for(s in 1:S) for(p in 1:P) beta_gen[s,p] = beta_rng(beta_hat2[s,p] * phi2, (1 - beta_hat2[s,p]) * phi2);
+	else for(s in 1:S) for(p in 1:P) beta_gen[s,p] = beta_rng(beta_hat2[s,p] * phi2_hyper[1], (1 - beta_hat2[s,p]) * phi2_hyper[1]);
 }
 

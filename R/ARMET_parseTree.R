@@ -285,7 +285,8 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree, log.ARMET){
 		bg_tree = replace_node_from_tree(bg_tree, node)
 		
 		obj.in$my_tree = bg_tree
-		
+		obj.in$sd_hierarchical = obj.out$node$sd_hierarchical
+			
 		if(obj.in$multithread & !obj.in$do_debug){
 			n_cores = length(node$children)
 			
