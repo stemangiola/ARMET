@@ -275,7 +275,6 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree, log.ARMET){
 		
 		# Initialize pipe
 		`%>%` <- magrittr::`%>%`
-		
 		obj.out = ARMET_tc_coreAlg(obj.in, node)
 		node = obj.out$node
 		
@@ -327,6 +326,7 @@ run_coreAlg_though_tree = function(node, obj.in){
 	writeLines("ARMET: Starting deconvolution")
 	
 	log.ARMET = sprintf("%s%s", tempfile(), Sys.getpid())
+	writeLines(sprintf("ARMET: log in at the file %s", log.ARMET))
 	if (file.exists(log.ARMET)) file.remove(log.ARMET)
 	file.create(log.ARMET)
 	
@@ -339,7 +339,7 @@ run_coreAlg_though_tree = function(node, obj.in){
 		}
 		
 		`%my_do%` = ifelse(obj.in$multithread & !obj.in$do_debug, `%dopar%`, `%do%`)
-		verbose = ifelse(obj.in$multithread & !obj.in$do_debug, F, T)
+		verbose = obj.in$verbose | obj.in$do_debug 
 		
 		node.filled = foreach:::foreach(dummy = 1, .verbose = verbose) %my_do% {
 		
@@ -355,19 +355,14 @@ run_coreAlg_though_tree = function(node, obj.in){
 	{
 		node.filled = future::future(		exec_hide_std_out(node, obj.in, log.ARMET) 		)
 		
-		
-		
 		log.array = c()
 		done = F
 		
 		while(1){
 			
 			Sys.sleep(2)
-			
 			temp = readLines(log.ARMET)
-			
 			new = setdiff(temp, log.array)
-			
 			if(length(new)>0) {
 				writeLines(sprintf("ARMET: %s deconvolution completed", new))
 				log.array = c(log.array, new)

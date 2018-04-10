@@ -182,9 +182,9 @@ ARMET_tc_coreAlg = function(
 			dplyr::distinct(ct) %>% 
 			nrow(),
 		
-		R = my_design %>% 
-			dplyr::select(-sample) %>%
-			ncol(),
+		R = 1, # my_design %>% 
+			#dplyr::select(-sample) %>%
+			#ncol(),
 		
 		y = mix %>% 
 			dplyr::select(gene, sample, value) %>% 
@@ -192,12 +192,14 @@ ARMET_tc_coreAlg = function(
 			dplyr::arrange(sample) %>%
 			dplyr::select(-sample), 
 		
-		X = my_design %>% 
-			dplyr::arrange(sample) %>%
-			dplyr::select(-sample) %>%
-			# transform factors into numeric safely
-			dplyr::mutate_if(is.factor, as.character) %>%
-			dplyr::mutate_if(is.character, as.numeric),
+		X = tibble::tibble(	sample = levels(mix$sample),	`(intercept)` = 1	) %>% dplyr::select(-sample),
+		
+			# my_design %>% 
+			# dplyr::arrange(sample) %>%
+			# dplyr::select(-sample) %>%
+			# # transform factors into numeric safely
+			# dplyr::mutate_if(is.factor, as.character) %>%
+			# dplyr::mutate_if(is.character, as.numeric),
 		
 		x_genes = fg %>% 
 			dplyr::pull(gene) %>%
@@ -227,7 +229,7 @@ ARMET_tc_coreAlg = function(
 		phi_hyper_sd =       phi_hyper_sd,
 		alpha_hyper_value =  alpha_hyper_value,
 		is_mix_microarray =  as.numeric(is_mix_microarray),
-		omit_regression =    as.numeric(omit_regression)
+		omit_regression =    as.numeric(omit_regression | !is.null(my_design))
 		
 	)
 	
@@ -263,13 +265,27 @@ ARMET_tc_coreAlg = function(
 	# Set up background trees
 	node = add_absolute_proportions_to_tree(node)
 
+	# Run model regression
 	test = switch (
 		is.null(cov_to_test) + 1,
 		dirReg_test(
-			fit, 
+			rstan::sampling(
+				stanmodels$ARMET_tc_dirReg,
+				data=list(
+					K=length(unique(proportions$ct)),
+					N=nrow(my_design),
+					X=my_design,
+					R=ncol(my_design),
+					beta=t(proportions %>% tidyr::spread(sample, relative_proportion) %>% dplyr::select(-ct))
+				),
+				#iter=                             1000 ,
+				#control =                         list(adapt_delta = 0.99, stepsize = 0.01, max_treedepth =15),
+				cores = 4,
+				seed = ifelse(is.null(seed), sample.int(.Machine$integer.max, 1), seed)
+			), 
 			my_design, 
 			cov_to_test, 
-			names_groups = levels(fg$ct) 
+			names_groups = levels(proportions$ct) 
 		),
 		NULL
 	) 
