@@ -265,14 +265,27 @@ ARMET_tc_coreAlg = function(
 	
 	# Set up background trees
 	node = add_absolute_proportions_to_tree(node)
-
+  if(ct == "mono_derived") browser()
 	test = switch (
 		is.null(cov_to_test) + 1,
 		dirReg_test(
-			fit, 
+			rstan::sampling(
+				stanmodels$ARMET_tc_dirReg,
+				data=list(
+					K=length(unique(proportions$ct)),
+					N=nrow(my_design),
+					X=my_design,
+					R=ncol(my_design),
+					beta=t(proportions %>% tidyr::spread(sample, relative_proportion) %>% dplyr::select(-ct))
+				),
+				#iter=                             1000 ,
+				#control =                         list(adapt_delta = 0.99, stepsize = 0.01, max_treedepth =15),
+				cores = 4,
+				seed = ifelse(is.null(seed), sample.int(.Machine$integer.max, 1), seed)
+			), 
 			my_design, 
 			cov_to_test, 
-			names_groups = levels(fg$ct) 
+			names_groups = levels(proportions$ct) 
 		),
 		NULL
 	) 
