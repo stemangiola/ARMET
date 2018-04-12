@@ -285,8 +285,7 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree, log.ARMET){
 		bg_tree = replace_node_from_tree(bg_tree, node)
 		
 		obj.in$my_tree = bg_tree
-		obj.in$sd_hierarchical = obj.out$node$sd_hierarchical
-			
+		
 		if(obj.in$multithread & !obj.in$do_debug){
 			n_cores = length(node$children)
 			
@@ -296,9 +295,7 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree, log.ARMET){
 		}
 		
 		`%my_do%` = ifelse(obj.in$multithread & !obj.in$do_debug, `%dopar%`, `%do%`)
-
 		verbose = obj.in$verbose | obj.in$do_debug 
-
 		
 		#################################
 		## Debug
@@ -356,9 +353,8 @@ run_coreAlg_though_tree = function(node, obj.in){
 	
 	if(!obj.in$do_debug)
 	{
-		if(obj.in$verbose == F) node.filled = future::future(		exec_hide_std_out(node, obj.in, log.ARMET) 		)
-		else node.filled = 	exec_hide_std_out(node, obj.in, log.ARMET) 
-
+		node.filled = future::future(		exec_hide_std_out(node, obj.in, log.ARMET) 		)
+		
 		
 		
 		log.array = c()
@@ -383,8 +379,7 @@ run_coreAlg_though_tree = function(node, obj.in){
 		
 		file.remove(log.ARMET)
 		
-		if(obj.in$verbose == F) return(future::value(node.filled))
-		else return(node.filled)
+		return(future::value(node.filled))
 		
 	} else {
 		return( run_coreAlg_though_tree_recursive(node, obj.in, node, log.ARMET) )
