@@ -63,11 +63,11 @@ check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd,
 	if(!is.null(custom_ref)){
 		if(!tibble::is_tibble(custom_ref)) 
 			stop("ARMET: The reference must be a tibble")
-		if(!all(colnames(ref_seq)%in%colnames(custom_ref))) 
+		if(!all(levels(ref_RNAseq_recursive_summary$ct) %in%colnames(custom_ref))) 
 			stop(
 				sprinf(
 					"ARMET: The columns of the provided reference must be %s", 
-					paste(colnames(ref_seq), collapse=" ")
+					paste(levels(ref_RNAseq_recursive_summary$ct), collapse=" ")
 				)
 			)
 	} 
@@ -590,14 +590,14 @@ ARMET_getFit = function(obj){
 ARMET_plotFit = function(obj, ct = "TME", param = "estimate_prop_with_uncertanties", dodge = 0){
 
 	node_info = get_node_from_name(obj$tree, ct)
-	
+
 	is_categorical = all(
 		obj$input$my_design %>% 
 			tibble::as_tibble() %>% 
 			dplyr::select(!!obj$input$cov_to_test) %>%
 			dplyr::pull() %>% unique() %>% sort() == c(0,1)
 	)
-	
+
 	my_noise = rnorm( nrow(node_info[[param]]), 0, dodge	)
 	
 	my_method = ifelse(is_categorical, "lm", "loess")
