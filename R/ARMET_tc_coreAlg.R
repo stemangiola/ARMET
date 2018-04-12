@@ -8,7 +8,7 @@ ARMET_tc_coreAlg = function(
 	
 	# Get ct
 	ct = node$name
-
+	
 	# Parse input
 	mix =                   obj.in$mix
 	ref =                   obj.in$ref
@@ -28,7 +28,6 @@ ARMET_tc_coreAlg = function(
 	do_debug =              obj.in$do_debug
 	save_fit =              obj.in$save_fit
 	seed =                  obj.in$seed
-	sd_hierarchical =       obj.in$sd_hierarchical
 
 	# Get ref of the current level
 	ref = 
@@ -224,8 +223,6 @@ ARMET_tc_coreAlg = function(
 			dplyr::pull(theta) %>% 
 			as.array(),
 		
-		phi2_hyper = switch((!is.null(sd_hierarchical)) + 1, c(0, 5), c(sd_hierarchical$mean, sd_hierarchical$sd) ) ,
-
 		sigma_hyper_sd =     sigma_hyper_sd,
 		phi_hyper_sd =       phi_hyper_sd,
 		alpha_hyper_value =  alpha_hyper_value,
@@ -265,27 +262,14 @@ ARMET_tc_coreAlg = function(
 	
 	# Set up background trees
 	node = add_absolute_proportions_to_tree(node)
-  if(ct == "mono_derived") browser()
+
 	test = switch (
 		is.null(cov_to_test) + 1,
 		dirReg_test(
-			rstan::sampling(
-				stanmodels$ARMET_tc_dirReg,
-				data=list(
-					K=length(unique(proportions$ct)),
-					N=nrow(my_design),
-					X=my_design,
-					R=ncol(my_design),
-					beta=t(proportions %>% tidyr::spread(sample, relative_proportion) %>% dplyr::select(-ct))
-				),
-				#iter=                             1000 ,
-				#control =                         list(adapt_delta = 0.99, stepsize = 0.01, max_treedepth =15),
-				cores = 4,
-				seed = ifelse(is.null(seed), sample.int(.Machine$integer.max, 1), seed)
-			), 
+			fit, 
 			my_design, 
 			cov_to_test, 
-			names_groups = levels(proportions$ct) 
+			names_groups = levels(fg$ct) 
 		),
 		NULL
 	) 
@@ -366,18 +350,6 @@ ARMET_tc_coreAlg = function(
 				dplyr::left_join(	parse_fit_for_quantiles(fit,"beta_gen", 0.95, "upper", my_design, levels(fg$ct)), by=c("sample", "ct")) %>%
 				dplyr::left_join(	parse_fit_for_quantiles(fit,"beta_gen", 0.05, "lower", my_design, levels(fg$ct)), by=c("sample", "ct")) %>%
 				dplyr::left_join(	my_design %>% dplyr::select(-`(Intercept)`), by="sample"),
-			append = F
-		),
-		node
-	)
-
-	node = switch(
-		is.null(cov_to_test) + 1,
-		add_info_to_tree(
-			node, 
-			ct, 
-			"sd_hierarchical", 
-			tibble::tibble(mean = rstan::summary(fit, "phi2")$summary[,1], sd = rstan::summary(fit, "phi2")$summary[,2]),
 			append = F
 		),
 		node

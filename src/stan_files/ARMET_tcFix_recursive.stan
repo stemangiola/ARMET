@@ -15,8 +15,6 @@ data{
 	real<lower=0> sigma_hyper_sd; 
 	real<lower=0> phi_hyper_sd;
 	real<lower=0> alpha_hyper_value;
-	
-	real phi2_hyper[2];
 
 }
 transformed data{
@@ -40,8 +38,6 @@ transformed data{
 	
 	for(s in 1:S) for(g in 1:G) if(y[s,g]==0) how_many_0s += 1;
 	if(how_many_0s/(G*S) < 0.05) skip_0_inflation = 1;
-	print(how_many_0s/(G*S))
-	print(skip_0_inflation);
 }
 parameters {
 	simplex[P] beta[S];                        // Proportions,  of the signatures in the xim
@@ -49,7 +45,6 @@ parameters {
 	
 	vector[P-1] alpha_raw[R];
 	real<lower=1> phi;
-
 
 }
 transformed parameters{
@@ -61,9 +56,9 @@ transformed parameters{
 	
 	matrix[S,P] beta_hat;                    // Predicted proportions in the hierachical linear model
 	vector[P] beta_hat_hat[S];                    // Predicted proportions in the hierachical linear model
-	matrix[R,P] alpha;
-	
 
+matrix[R,P] alpha;
+	
 	for(s in 1:S) beta_target[s] = to_row_vector(beta[s]) * p_target[s];
 	y_hat_target = beta_target * x';
 	y_hat = y_hat_target + y_hat_background;
@@ -83,7 +78,6 @@ transformed parameters{
 	beta_hat =  X * alpha;
 	for(s in 1:S) beta_hat_hat[s] = softmax(to_vector(beta_hat[s])) * phi;
 
-
 }
 model {
 
@@ -92,9 +86,7 @@ model {
 
 	//multip ~ cauchy(1, 2.5);
 	sigma0 ~ normal(0, sigma_hyper_sd);
-
 	phi ~ normal(0,5);
-
 	y_hat_log = log(y_hat+1);
 
 	if(is_mix_microarray==1){
@@ -123,12 +115,9 @@ model {
   for(r in 1:R) alpha[r] ~ normal(0,5);
   #for(r in 1:R) alpha_mat[r] ~ normal(0, phi_phi);
 
-
 }
 generated quantities{
 	vector[P] beta_gen[S];                       // Proportions,  of the signatures in the xim
-	//for(s in 1:S) beta_gen[s] = dirichlet_rng(beta_hat_hat[s]);
-	if(phi2_hyper[1] == 0) 	for(s in 1:S) for(p in 1:P) beta_gen[s,p] = beta_rng(beta_hat2[s,p] * phi2, (1 - beta_hat2[s,p]) * phi2);
-	else for(s in 1:S) for(p in 1:P) beta_gen[s,p] = beta_rng(beta_hat2[s,p] * phi2_hyper[1], (1 - beta_hat2[s,p]) * phi2_hyper[1]);
+	for(s in 1:S) beta_gen[s] = dirichlet_rng(beta_hat_hat[s]);
 }
 
