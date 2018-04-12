@@ -667,3 +667,5 @@ parse_fit_for_quantiles = function(fit, param = "beta", q, label, my_design, nam
 		tidyr::gather(ct, !!label, -sample) %>%
 		dplyr::mutate_if(is.character, as.factor) 
 }
+
+any_column_double = function(x) is.numeric(x) & !all(x %in% c(0:1))
