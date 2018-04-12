@@ -296,7 +296,9 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree, log.ARMET){
 		}
 		
 		`%my_do%` = ifelse(obj.in$multithread & !obj.in$do_debug, `%dopar%`, `%do%`)
-		verbose = obj.in$verbose | obj.in$do_debug
+
+		verbose = obj.in$verbose | obj.in$do_debug 
+
 		
 		#################################
 		## Debug
