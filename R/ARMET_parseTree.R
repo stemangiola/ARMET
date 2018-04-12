@@ -353,9 +353,12 @@ run_coreAlg_though_tree = function(node, obj.in){
 	
 	if(!obj.in$do_debug)
 	{
-		node.filled = future::future(		exec_hide_std_out(node, obj.in, log.ARMET) 		)
-		
-		
+		node.filled = 
+			switch(
+				obj.in$verbose + 1,
+				future::future(		exec_hide_std_out(node, obj.in, log.ARMET) 		),
+				node.filled = 	exec_hide_std_out(node, obj.in, log.ARMET) 
+			)	
 		
 		log.array = c()
 		done = F
@@ -379,7 +382,13 @@ run_coreAlg_though_tree = function(node, obj.in){
 		
 		file.remove(log.ARMET)
 		
-		return(future::value(node.filled))
+		return(
+			switch(
+				obj.in$verbose + 1,
+				future::value(node.filled),
+				return(node.filled)
+			)
+		)
 		
 	} else {
 		return( run_coreAlg_though_tree_recursive(node, obj.in, node, log.ARMET) )
