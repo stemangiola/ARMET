@@ -2,6 +2,7 @@
 
 Usage:
 
+```
 # Installation
 library(devtools)  
 install_github("stemangiola/ARMET", args = "--preclean", build_vignettes = FALSE, auth_token = "37c5c6238136a6804d336d9a7078eece993ce870", password="x-oauth-basic")  
@@ -23,7 +24,7 @@ ARMET_plotFit(results, "immune_cell")
 # Input data shape
 test_data
 
-```
+
 $mix
 # A tibble: 24,507 x 16
    gene     `TCGA-CC-A8HT` `TCGA-DD-AACZ` `TCGA-DD-A73G` `TCGA-DD-A3A5`
