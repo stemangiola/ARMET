@@ -1,29 +1,14 @@
 ![alt tag](https://github.com/stemangiola/ARMET/blob/master/armet_logo.png?raw=true)
 
-Usage:
+ARMET-tc infers rates of changes in tissue composition acros a covariate of interest (e.g., treatment status, time or disease grade). 
+
+Input (see below):
+
+- Data frame of tissue gene counts
+- Design matrix
+- Covariate of interest
 
 ```
-# Installation
-library(devtools)  
-install_github("stemangiola/ARMET", args = "--preclean", build_vignettes = FALSE, auth_token = "37c5c6238136a6804d336d9a7078eece993ce870", password="x-oauth-basic")  
-library(ARMET) 
-
-# Inference
-results = 
-  ARMET_tc(
-    mix =          test_data$mix, 
-    my_design =    test_data$design_matrix, 
-    cov_to_test =  test_data$cov_to_test, 
-    do_debug = F
-   )
-   
-# Report
-ARMET_getFit(results)
-ARMET_plotFit(results, "immune_cell")
-
-# Input data shape
-test_data
-
 
 $mix
 # A tibble: 24,507 x 16
@@ -67,6 +52,45 @@ $design_matrix
 
 $cov_to_test
 [1] "relapse"
+
+```
+
+Output:
+
+- Matrix of proportions of cell type for each provided sample
+- Coefficients of change (slope)
+
+# Mode of usage:
+
+ARMET-tc is tipically used with a design matrix as you would use a linear model of differential expression estimator (e.g., Limma or edgeR)
+
+ARMET-tc can be also uses without any design matrix, in this case the only output would be the matrix of proportions of cell type for each provided sample. 
+
+IMPORTANT: in the latter case the algorithm assumes that the query experiment includes homogeneous samples. That is, coming from similar tissue. For example, querying samples of blood together is a good choice, whereas querying samples of pure macrophages, together with samples of pure t-cells is not a good design. In the latter case those two groups should be queried separately.
+
+# Usage:
+
+```
+# Installation
+library(devtools)  
+install_github("stemangiola/ARMET", args = "--preclean", build_vignettes = FALSE, auth_token = "37c5c6238136a6804d336d9a7078eece993ce870", password="x-oauth-basic")  
+library(ARMET) 
+
+# Inference
+results = 
+  ARMET_tc(
+    mix =          test_data$mix, 
+    my_design =    test_data$design_matrix, 
+    cov_to_test =  test_data$cov_to_test, 
+    do_debug = F
+   )
+   
+# Report
+ARMET_getFit(results)
+ARMET_plotFit(results, "immune_cell")
+
+# Input data shape
+test_data
 
 ```
 
