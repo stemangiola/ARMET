@@ -87,13 +87,13 @@ ARMET_tc = function(
 				is.null(choose_internal_ref) + 1,
 				switch(
 					(choose_internal_ref == "ARNA") + 1,
-					ref_array,
+					ref_array_recursive_summary,
 					ref_RNAseq_recursive_summary
 				),
 				# if npthing set choose default
 				switch(
 					(!is_mix_microarray) + 1,
-					ref_array,
+					ref_array_recursive_summary,
 					ref_RNAseq_recursive_summary
 				)
 			)
@@ -186,20 +186,7 @@ ARMET_tc = function(
 		proportions =	get_last_existing_leaves_with_annotation( my_tree ) %>%
 			dplyr::select(-relative_proportion) %>%
 			tidyr::spread(ct, absolute_proportion),
-		
-		# # What signatures were used by the model after normalization
-		# signatures = 
-		# 	list(
-		# 		orig =  
-		# 			ref %>% 
-		# 			dplyr::select(gene, ct, value) %>%
-		# 			dplyr::group_by(gene, ct) %>%
-		# 			dplyr::summarise(value = mean(value)) %>%
-		# 			dplyr::ungroup() %>%
-		# 			tidyr::spread(ct, value),
-		# 		predicted = NULL
-		# 	),
-		
+	
 		# What mixture was used by the model after normalization
 		mix = mix %>% 
 			dplyr::filter(gene %in% get_genes( my_tree )) %>%
