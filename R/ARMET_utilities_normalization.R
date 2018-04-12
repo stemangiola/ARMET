@@ -232,35 +232,22 @@ rnaseq_norm_ref_mix = function(obj, target){
 #' @return A list including the ref and mix normalized and a ggplot
 quant_norm_to_target = function(obj, target){
 	#writeLines("ARMET: Quantile normalization")
-	
+
 	error_if_log_transformed(obj)
 	error_if_log_transformed(target)
 	
-	# Needed for: Transform tibble in matrix and normalize because is faster
-	obj = obj %>%
-		tidyr::spread(sample, value)
-	
-	obj = dplyr::bind_cols(
-		obj %>% dplyr::select(gene),
-		
-		data.frame(
-			exp(preprocessCore::normalize.quantiles.use.target(
-				as.matrix(log(obj[,-1]+1)), 
-				target=log(target$value+1)
-			)) - 1
-		) %>% 
-			tibble::as_tibble()
-	) %>%
-		magrittr::set_colnames(colnames(obj)) %>%
-		tidyr::gather(sample, value, -gene) %>%
-		dplyr::mutate_if(is.character, as.factor)
-	
-	list(
-		target = target,
-		obj = obj,
-		plot = plot(1,1)
-	)
-	
+	obj %>%
+		dplyr::group_by(sample) %>%
+		do(
+			tibble(
+				gene = (.)$gene,
+				sample = (.)$sample,
+				value = as.numeric(exp(preprocessCore::normalize.quantiles.use.target(
+					as.matrix(log((.)$value+1)), 
+					target=log(target$value+1)
+				)) - 1)
+			)
+		)
 }
 
 #' Wrapper function for all normalization based on the current needs
@@ -270,12 +257,11 @@ quant_norm_to_target = function(obj, target){
 #' @param is_mix_microarray A cool
 #' @return Same list of rnaseq_norm_ref_mix, quant_norm_to_target
 wrapper_normalize_mix_ref = function(mix, ref, is_mix_microarray){
-	if(!is_mix_microarray) rnaseq_norm_ref_mix(mix, ref)
-
-	else {
-		norm = quant_norm_to_target(mix, ref)
-		list(mix=norm$obj, ref=norm$target)
-	}
 	
+	switch(
+		is_mix_microarray + 1, 
+		rnaseq_norm_ref_mix(mix, ref),
+		quant_norm_to_target(mix, ref)
+	)
 	
 }

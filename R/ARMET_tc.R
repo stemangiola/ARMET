@@ -81,7 +81,7 @@ ARMET_tc = function(
 		# See if custom ref is provided
 		switch(
 			is.null(custom_ref) + 1,
-			custom_ref,
+			ref_to_summary_ref(my_tree, custom_ref),
 			# See if choose internal ref is provided
 			switch(
 				is.null(choose_internal_ref) + 1,
@@ -159,7 +159,8 @@ ARMET_tc = function(
 				do_debug =                      do_debug,
 				omit_regression =               omit_regression,
 				save_fit =                      save_fit,
-				seed =                          seed
+				seed =                          seed,
+				verbose =                       verbose
 			)
 	)
 
