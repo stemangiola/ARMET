@@ -77,19 +77,12 @@ transformed parameters{
 		for(s in 1:S)	sigma1[s] = 0;
 	}
 	
-<<<<<<< HEAD
-	beta_hat2 = inv_logit(X * alpha2);
-	for(r in 1:R) alpha[r] = inv_logit(alpha2[r]);
-	// for(r in 1:R) alpha_mat[r] =   logit( to_row_vector( my_non_linear_scale( alpha[r], P) ) ) * 20; # to_row_vector( ( alpha[r] - 1.0/P) * multip ); #
-	// beta_hat =  X * alpha_mat;
-	// for(s in 1:S) beta_hat_hat[s] = softmax(to_vector(beta_hat[s])) * phi + 1;
-=======
 	for(r in 1:R) for(p in 1:(P-1)) alpha[r, p] = alpha_raw[r, p];
 	for(r in 1:R) alpha[r, P] = -sum(alpha_raw[r,]);
 	
 	beta_hat =  X * alpha;
 	for(s in 1:S) beta_hat_hat[s] = softmax(to_vector(beta_hat[s])) * phi;
->>>>>>> correct_dir_model
+
 
 }
 model {
@@ -99,16 +92,9 @@ model {
 
 	//multip ~ cauchy(1, 2.5);
 	sigma0 ~ normal(0, sigma_hyper_sd);
-<<<<<<< HEAD
-	// phi_phi ~ cauchy(1,2); # Tried normally distributed and not converge on some data
-	// phi ~ normal(1,phi_hyper_sd);
-	
-	phi2 ~ normal(phi2_hyper[1], phi2_hyper[2]);
-	//bg_sd2 ~ cauchy(0,2.5);
-	
-=======
+
 	phi ~ normal(0,5);
->>>>>>> correct_dir_model
+
 	y_hat_log = log(y_hat+1);
 
 	if(is_mix_microarray==1){
@@ -133,24 +119,10 @@ model {
 	}
 	
  
-<<<<<<< HEAD
-  if(omit_regression == 0){
-  	#for(s in 1:S) beta[s] ~ dirichlet(beta_hat_hat[s]);
-  	if(phi2_hyper[1] == 0) for(s in 1:S) beta[s] ~ beta(beta_hat2[s] * phi2, (1 - beta_hat2[s]) * phi2); 
-  	else for(s in 1:S) beta[s] ~ beta(beta_hat2[s] * phi2_hyper[1], (1 - beta_hat2[s]) * phi2_hyper[1]);
-
-  } 
-
-  // Prior distribution on the background cluster
-	alpha2[1] ~ cauchy(0, 2.5);
-	if(R>1) for(r in 2:R) alpha2[r] ~ cauchy(0, 2.5);
-  // for(r in 1:R) alpha[r] ~ dirichlet(alpha_hyper * phi_phi);
-  // #for(r in 1:R) alpha_mat[r] ~ normal(0, phi_phi);
-=======
   if(omit_regression == 0) for(s in 1:S) beta[s] ~ dirichlet(beta_hat_hat[s]);
   for(r in 1:R) alpha[r] ~ normal(0,5);
   #for(r in 1:R) alpha_mat[r] ~ normal(0, phi_phi);
->>>>>>> correct_dir_model
+
 
 }
 generated quantities{
