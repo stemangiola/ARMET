@@ -197,7 +197,8 @@ ARMET_tc_coreAlg = function(
 			dplyr::select(-sample) %>%
 			# transform factors into numeric safely
 			dplyr::mutate_if(is.factor, as.character) %>%
-			dplyr::mutate_if(is.character, as.numeric),
+			dplyr::mutate_if(is.character, as.numeric) %>%
+			dplyr::mutate_if(any_column_double, scale),
 		
 		x_genes = fg %>% 
 			dplyr::pull(gene) %>%
@@ -242,7 +243,7 @@ ARMET_tc_coreAlg = function(
 		rstan::sampling(
 			model,
 			data=                             model.in,
-			#iter=                             1000 ,
+			iter=                             1000 ,
 			#control =                         list(adapt_delta = 0.99, stepsize = 0.01, max_treedepth =15),
 			cores = 4,
 			seed = ifelse(is.null(seed), sample.int(.Machine$integer.max, 1), seed)
