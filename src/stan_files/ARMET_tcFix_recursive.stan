@@ -43,8 +43,8 @@ parameters {
 	simplex[P] beta[S];                        // Proportions,  of the signatures in the xim
 	real<lower=0> sigma0[S];                       // Variance linear model 
 	
-	vector[P-1] alpha_raw[R];
-	real<lower=1> phi;
+	matrix[R,P] alpha;
+		real<lower=P> phi;
 
 }
 transformed parameters{
@@ -57,8 +57,7 @@ transformed parameters{
 	matrix[S,P] beta_hat;                    // Predicted proportions in the hierachical linear model
 	vector[P] beta_hat_hat[S];                    // Predicted proportions in the hierachical linear model
 
-matrix[R,P] alpha;
-	
+
 	for(s in 1:S) beta_target[s] = to_row_vector(beta[s]) * p_target[s];
 	y_hat_target = beta_target * x';
 	y_hat = y_hat_target + y_hat_background;
@@ -72,8 +71,6 @@ matrix[R,P] alpha;
 		for(s in 1:S)	sigma1[s] = 0;
 	}
 	
-	for(r in 1:R) for(p in 1:(P-1)) alpha[r, p] = alpha_raw[r, p];
-	for(r in 1:R) alpha[r, P] = -sum(alpha_raw[r,]);
 	
 	beta_hat =  X * alpha;
 	for(s in 1:S) beta_hat_hat[s] = softmax(to_vector(beta_hat[s])) * phi;
@@ -113,6 +110,8 @@ model {
  
   if(omit_regression == 0) for(s in 1:S) beta[s] ~ dirichlet(beta_hat_hat[s]);
   for(r in 1:R) alpha[r] ~ normal(0,5);
+  for(r in 1:R) sum( alpha[r] ) ~ normal(0,0.001 * P);
+
   #for(r in 1:R) alpha_mat[r] ~ normal(0, phi_phi);
 
 }
