@@ -44,7 +44,7 @@ parameters {
 	real<lower=0> sigma0[S];                       // Variance linear model 
 	
 	vector[P-1] alpha_raw[R];
-	real<lower=1> phi;
+	real<lower=P> phi;
 
 }
 transformed parameters{
@@ -76,7 +76,7 @@ matrix[R,P] alpha;
 	for(r in 1:R) alpha[r, P] = -sum(alpha_raw[r,]);
 	
 	beta_hat =  X * alpha;
-	for(s in 1:S) beta_hat_hat[s] = softmax(to_vector(beta_hat[s])) * phi;
+	for(s in 1:S) beta_hat_hat[s] = softmax(to_vector(beta_hat[s])) * phi + 1;
 
 }
 model {
@@ -86,7 +86,7 @@ model {
 
 	//multip ~ cauchy(1, 2.5);
 	sigma0 ~ normal(0, sigma_hyper_sd);
-	phi ~ normal(0,5);
+	phi ~ normal(1.0 * P,5);
 	y_hat_log = log(y_hat+1);
 
 	if(is_mix_microarray==1){
