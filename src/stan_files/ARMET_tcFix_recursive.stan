@@ -44,7 +44,7 @@ parameters {
 	real<lower=0> sigma0[S];                       // Variance linear model 
 	
 	vector[P-1] alpha_raw[R];
-	real<lower=P> phi;
+	real<lower=1> phi;
 
 }
 transformed parameters{
@@ -113,7 +113,6 @@ model {
  
   if(omit_regression == 0) for(s in 1:S) beta[s] ~ dirichlet(beta_hat_hat[s]);
   for(r in 1:R) alpha[r] ~ normal(0,5);
-  #for(r in 1:R) alpha_mat[r] ~ normal(0, phi_phi);
 
 }
 generated quantities{
