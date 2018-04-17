@@ -32,7 +32,8 @@ ARMET_tc = function(
 	choose_internal_ref =               NULL,
 	omit_regression =                   F,
 	save_fit =                          F,
-	seed =                              NULL
+	seed =                              NULL,
+	prior_soft_constrain =              0.01
 ){
 
 	input = c(as.list(environment()))
@@ -160,7 +161,8 @@ ARMET_tc = function(
 				omit_regression =               omit_regression,
 				save_fit =                      save_fit,
 				seed =                          seed,
-				verbose =                       verbose
+				verbose =                       verbose,
+				prior_soft_constrain =          prior_soft_constrain
 			)
 	)
 

@@ -15,6 +15,7 @@ data{
 	real<lower=0> sigma_hyper_sd; 
 	real<lower=0> phi_hyper_sd;
 	real<lower=0> alpha_hyper_value;
+//	real<lower=0> prior_soft_constrain;
 
 }
 transformed data{
@@ -109,8 +110,8 @@ model {
 	
  
   if(omit_regression == 0) for(s in 1:S) beta[s] ~ dirichlet(beta_hat_hat[s]);
-  for(r in 1:R) alpha[r] ~ normal(0,5);
-  for(r in 1:R) sum( alpha[r] ) ~ normal(0,0.001 * P);
+  //for(r in 1:R) alpha[r] ~ normal(0,5);
+  for(r in 1:R) sum( alpha[r] ) ~ normal(0,0.01 * P);
 
   #for(r in 1:R) alpha_mat[r] ~ normal(0, phi_phi);
 

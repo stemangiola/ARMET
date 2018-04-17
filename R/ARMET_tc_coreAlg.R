@@ -28,6 +28,7 @@ ARMET_tc_coreAlg = function(
 	do_debug =              obj.in$do_debug
 	save_fit =              obj.in$save_fit
 	seed =                  obj.in$seed
+	prior_soft_constrain =  obj.in$prior_soft_constrain
 
 	# Get ref of the current level
 	ref = 
@@ -228,7 +229,8 @@ ARMET_tc_coreAlg = function(
 		phi_hyper_sd =       phi_hyper_sd,
 		alpha_hyper_value =  alpha_hyper_value,
 		is_mix_microarray =  as.numeric(is_mix_microarray),
-		omit_regression =    as.numeric(omit_regression)
+		omit_regression =    as.numeric(omit_regression),
+		prior_soft_constrain = prior_soft_constrain
 		
 	)
 	

@@ -634,6 +634,8 @@ ARMET_plotFit = function(obj, ct = "TME", param = "estimate_prop_with_uncertanti
 
 ref_to_summary_ref = function(tree, ref){
 	
+	writeLines("ARMET: processing custom reference")
+	
 	# cl <- multidplyr::create_cluster(parallel::detectCores()-2)
 	# multidplyr::set_default_cluster(cl)
 	
