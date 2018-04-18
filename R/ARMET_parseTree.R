@@ -642,9 +642,9 @@ run_test_though_tree = function(node, my_design, cov_to_test){
 	}
 	
 	# Add info to tree
-	dummy = foreach::foreach(ot = obj.test) %do% {
+	for(ot in obj.test) {
 
-		node <<- 
+		node <- 
 			add_data_to_tree_from_table(
 				node,
 				ot$test$stats,
@@ -653,7 +653,7 @@ run_test_though_tree = function(node, my_design, cov_to_test){
 			)
 		
 		# Add hypothesis testing
-		node <<- 
+		node <- 
 			add_info_to_tree(
 				node, 
 				ot$ct, 
