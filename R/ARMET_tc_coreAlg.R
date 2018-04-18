@@ -227,7 +227,8 @@ ARMET_tc_coreAlg = function(
 		phi_hyper_sd =       phi_hyper_sd,
 		alpha_hyper_value =  alpha_hyper_value,
 		is_mix_microarray =  as.numeric(is_mix_microarray),
-		omit_regression =    as.numeric(omit_regression)
+		omit_regression =    as.numeric(omit_regression),
+		soft_prior =         0.01
 		
 	)
 	
@@ -242,7 +243,7 @@ ARMET_tc_coreAlg = function(
 		rstan::sampling(
 			model,
 			data=                             model.in,
-			#iter=                             1000 ,
+			iter=                             500 ,warmup = 400,
 			#control =                         list(adapt_delta = 0.99, stepsize = 0.01, max_treedepth =15),
 			cores = 4,
 			seed = ifelse(is.null(seed), sample.int(.Machine$integer.max, 1), seed)
