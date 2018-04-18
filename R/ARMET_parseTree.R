@@ -357,7 +357,7 @@ run_coreAlg_though_tree = function(node, obj.in){
 			switch(
 				obj.in$verbose + 1,
 				future::future(		exec_hide_std_out(node, obj.in, log.ARMET) 		),
-				node.filled = 	exec_hide_std_out(node, obj.in, log.ARMET) 
+				exec_hide_std_out(node, obj.in, log.ARMET) 
 			)	
 		
 		log.array = c()
@@ -386,7 +386,7 @@ run_coreAlg_though_tree = function(node, obj.in){
 			switch(
 				obj.in$verbose + 1,
 				future::value(node.filled),
-				return(node.filled)
+				node.filled
 			)
 		)
 		
