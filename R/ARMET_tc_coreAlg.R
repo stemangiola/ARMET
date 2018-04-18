@@ -166,7 +166,7 @@ ARMET_tc_coreAlg = function(
 		tibble::as_tibble() %>%
 		dplyr::mutate(sample = levels(mix$sample)) %>%
 		dplyr::select(sample, dplyr::everything())
-
+	
 	# Create input object for the model
 	model.in = list(
 		
@@ -197,7 +197,8 @@ ARMET_tc_coreAlg = function(
 			dplyr::select(-sample) %>%
 			# transform factors into numeric safely
 			dplyr::mutate_if(is.factor, as.character) %>%
-			dplyr::mutate_if(is.character, as.numeric),
+			dplyr::mutate_if(is.character, as.numeric) %>%
+			dplyr::mutate_if(any_column_double, scale),
 		
 		x_genes = fg %>% 
 			dplyr::pull(gene) %>%
