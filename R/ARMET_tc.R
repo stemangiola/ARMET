@@ -167,8 +167,9 @@ ARMET_tc = function(
 	##############################################################################################
 	##############################################################################################
 	
-	writeLines("ARMET: inference complete")
-	
+	writeLines("ARMET: building output")
+	my_tree = run_test_though_tree(my_tree, my_design, cov_to_test)
+		
 	# Create tree with hypothesis testing
 	osNode.stat = 
 		switch(

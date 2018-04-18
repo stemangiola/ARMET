@@ -357,7 +357,7 @@ run_coreAlg_though_tree = function(node, obj.in){
 			switch(
 				obj.in$verbose + 1,
 				future::future(		exec_hide_std_out(node, obj.in, log.ARMET) 		),
-				node.filled = 	exec_hide_std_out(node, obj.in, log.ARMET) 
+				exec_hide_std_out(node, obj.in, log.ARMET) 
 			)	
 		
 		log.array = c()
@@ -386,7 +386,7 @@ run_coreAlg_though_tree = function(node, obj.in){
 			switch(
 				obj.in$verbose + 1,
 				future::value(node.filled),
-				return(node.filled)
+				node.filled
 			)
 		)
 		
@@ -494,7 +494,7 @@ get_gene_distributons_recursive = function(node, ref_tbl){
 		
 		doParallel::registerDoParallel(length(node$children))
 		
-		node$children = foreach(nn = node$children) %do% {
+		node$children = foreach(nn = node$children) %dopar% {
 				get_gene_distributons_recursive(nn, ref_tbl)
 		}
 		
@@ -525,6 +525,143 @@ get_gene_distributons_recursive = function(node, ref_tbl){
 				dplyr::filter(ct == node$name) %>%
 				dplyr::mutate(ct = as.character(ct)) %>%
 				dplyr::mutate(original = T)
+	}
+	
+	node
+}
+
+#' Run statstical test recursively in parallel
+#'
+#' @param node A node from the tree
+#' @return A tree object
+run_test_though_tree_recursive = function(node, my_design, cov_to_test){
+	
+	if(length(node$children)>0){
+		
+		# Initialize pipe
+		`%>%` <- magrittr::`%>%`
+
+		test = dirReg_test(
+			node, 
+			my_design, 
+			cov_to_test, 
+			names_groups = levels(node$estimate_prop_with_uncertanties$ct)
+		)
+		
+		# Pass info to the node
+		# Add hypothesis testing
+		node = switch(
+			is.null(cov_to_test) + 1,
+			add_data_to_tree_from_table(
+				node,
+				test$stats,
+				"stats",
+				append = F
+			),
+			node
+		)
+		
+		# Add hypothesis testing
+		node = switch(
+			is.null(cov_to_test) + 1,
+			add_info_to_tree(
+				node, 
+				node$name, 
+				"plot_props", 
+				test$plot_props,
+				append = F
+			),
+			node
+		)
+		
+		# Add hypothesis testing
+		node = switch(
+			is.null(cov_to_test) + 1,
+			add_info_to_tree(
+				node, 
+				node$name, 
+				"plot_coef_ang", 
+				test$plot_coef_ang,
+				append = F
+			),
+			node
+		)
+		
+		# Add hypothesis testing
+		node = switch(
+			is.null(cov_to_test) + 1,
+			add_info_to_tree(
+				node, 
+				node$name, 
+				"coef_ang_posterior_adj", 
+				test$coef_ang_posterior_adj,
+				append = F
+			),
+			node
+		)
+		
+		n_cores = length(node$children)
+		cl <- parallel::makeCluster(n_cores)
+		parallel::clusterExport(cl, c("node", "my_design", "cov_to_test", "%>%"), environment())
+		parallel::clusterExport(cl, c("run_test_though_tree_recursive"))
+		doParallel::registerDoParallel(cl)
+	
+		node$children = foreach::foreach(cc = node$children) %dopar% {
+			run_test_though_tree_recursive(cc, my_design, cov_to_test)
+		}
+	
+		parallel::stopCluster(cl)
+		
+	node
+	}
+}
+
+#' Run statstical test recursively in parallel
+#'
+#' @param node A node from the tree
+#' @return A tree object
+run_test_though_tree = function(node, my_design, cov_to_test){
+	
+	cts = c("TME", get_leave_label(node, last_level = -1))
+	
+	# Calculate test
+	obj.test = foreach::foreach(ct = cts) %do% {
+		
+		cc = get_node_from_name(node, ct)
+		
+		list(
+			ct = ct,
+			test = dirReg_test(
+				cc, 
+				my_design, 
+				cov_to_test, 
+				names_groups = levels(cc$estimate_prop_with_uncertanties$ct)
+			)
+		)
+		
+	}
+	
+	# Add info to tree
+	dummy = foreach::foreach(ot = obj.test) %do% {
+
+		node <<- 
+			add_data_to_tree_from_table(
+				node,
+				ot$test$stats,
+				"stats",
+				append = F
+			)
+		
+		# Add hypothesis testing
+		node <<- 
+			add_info_to_tree(
+				node, 
+				ot$ct, 
+				"coef_ang_posterior_adj", 
+				ot$test$coef_ang_posterior_adj,
+				append = F
+			)
+		
 	}
 	
 	node

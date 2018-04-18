@@ -166,7 +166,7 @@ ARMET_tc_coreAlg = function(
 		tibble::as_tibble() %>%
 		dplyr::mutate(sample = levels(mix$sample)) %>%
 		dplyr::select(sample, dplyr::everything())
-
+	
 	# Create input object for the model
 	model.in = list(
 		
@@ -228,7 +228,8 @@ ARMET_tc_coreAlg = function(
 		phi_hyper_sd =       phi_hyper_sd,
 		alpha_hyper_value =  alpha_hyper_value,
 		is_mix_microarray =  as.numeric(is_mix_microarray),
-		omit_regression =    as.numeric(omit_regression)
+		omit_regression =    as.numeric(omit_regression),
+		soft_prior =         0.01
 		
 	)
 	
@@ -243,7 +244,7 @@ ARMET_tc_coreAlg = function(
 		rstan::sampling(
 			model,
 			data=                             model.in,
-			iter=                             1000 ,
+			iter=                             600 ,warmup = 400,
 			#control =                         list(adapt_delta = 0.99, stepsize = 0.01, max_treedepth =15),
 			cores = 4,
 			seed = ifelse(is.null(seed), sample.int(.Machine$integer.max, 1), seed)
@@ -264,55 +265,17 @@ ARMET_tc_coreAlg = function(
 	# Set up background trees
 	node = add_absolute_proportions_to_tree(node)
 
-	test = switch (
-		is.null(cov_to_test) + 1,
-		dirReg_test(
-			fit, 
-			my_design, 
-			cov_to_test, 
-			names_groups = levels(fg$ct) 
-		),
-		NULL
-	) 
-	
-	# Add hypothesis testing
 	node = switch(
 		is.null(cov_to_test) + 1,
-		add_data_to_tree_from_table(
-			node,
-			test$stats,
-			"stats",
-			append = F
+		add_info_to_tree(
+			node, 
+			ct, 
+			"alpha_posterior", 
+			as.data.frame(rstan:::extract( fit, "alpha"))
 		),
 		node
 	)
 
-	# Add hypothesis testing
-	node = switch(
-		is.null(cov_to_test) + 1,
-		add_info_to_tree(
-			node, 
-			ct, 
-			"plot_props", 
-			test$plot_props,
-			append = F
-		),
-		node
-	)
-	
-	# Add hypothesis testing
-	node = switch(
-		is.null(cov_to_test) + 1,
-		add_info_to_tree(
-			node, 
-			ct, 
-			"plot_coef_ang", 
-			test$plot_coef_ang,
-			append = F
-		),
-		node
-	)
-	
 	# Add hypothesis testing
 	node = switch(
 		(!save_fit) + 1,
@@ -351,19 +314,6 @@ ARMET_tc_coreAlg = function(
 				dplyr::left_join(	parse_fit_for_quantiles(fit,"beta_gen", 0.95, "upper", my_design, levels(fg$ct)), by=c("sample", "ct")) %>%
 				dplyr::left_join(	parse_fit_for_quantiles(fit,"beta_gen", 0.05, "lower", my_design, levels(fg$ct)), by=c("sample", "ct")) %>%
 				dplyr::left_join(	my_design %>% dplyr::select(-`(Intercept)`), by="sample"),
-			append = F
-		),
-		node
-	)
-	
-	# Add hypothesis testing
-	node = switch(
-		is.null(cov_to_test) + 1,
-		add_info_to_tree(
-			node, 
-			ct, 
-			"coef_ang_posterior_adj", 
-			test$coef_ang_posterior_adj,
 			append = F
 		),
 		node
