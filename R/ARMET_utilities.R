@@ -609,16 +609,16 @@ ARMET_plotFit = function(obj, ct = "TME", param = "estimate_prop_with_uncertanti
 			ggplot2::aes(ymin=lower, ymax=upper, colour=ct), 
 			width=0, alpha=0.4 
 		) +
-		scale_colour_brewer(palette = "Set1") +
-		scale_fill_brewer(palette = "Set1") +
+		ggplot2::scale_colour_brewer(palette = "Set1") +
+		ggplot2::scale_fill_brewer(palette = "Set1") +
 		ggplot2::geom_smooth(method = my_method, alpha = 0.05) +
 		ggplot2::theme_bw()
 	
 	plot_coef_ang = ggplot2::ggplot(
 		node_info$coef_ang_posterior_adj, ggplot2::aes(value, group=ct, color=ct)) +
 		ggplot2::geom_line(stat="density", size=1) +
-		scale_colour_brewer(palette = "Set1") +
-		scale_fill_brewer(palette = "Set1") +
+		ggplot2::scale_colour_brewer(palette = "Set1") +
+		ggplot2::scale_fill_brewer(palette = "Set1") +
 		ggplot2::expand_limits(x=0.1) +
 		ggplot2::theme_bw() +
 		ggplot2::theme(
@@ -630,7 +630,6 @@ ARMET_plotFit = function(obj, ct = "TME", param = "estimate_prop_with_uncertanti
 	gridExtra::grid.arrange(plot_props, plot_coef_ang, nrow=2)
 	
 }
-
 
 ref_to_summary_ref = function(tree, ref){
 	
@@ -667,3 +666,5 @@ parse_fit_for_quantiles = function(fit, param = "beta", q, label, my_design, nam
 		tidyr::gather(ct, !!label, -sample) %>%
 		dplyr::mutate_if(is.character, as.factor) 
 }
+
+any_column_double = function(x) is.numeric(x) & !all(x %in% c(0:1))
