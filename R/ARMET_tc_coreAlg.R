@@ -28,6 +28,7 @@ ARMET_tc_coreAlg = function(
 	do_debug =              obj.in$do_debug
 	save_fit =              obj.in$save_fit
 	seed =                  obj.in$seed
+	phi =                   obj.in$phi
 
 	# Get ref of the current level
 	ref = 
@@ -166,7 +167,7 @@ ARMET_tc_coreAlg = function(
 		tibble::as_tibble() %>%
 		dplyr::mutate(sample = levels(mix$sample)) %>%
 		dplyr::select(sample, dplyr::everything())
-	
+
 	# Create input object for the model
 	model.in = list(
 		
@@ -219,10 +220,17 @@ ARMET_tc_coreAlg = function(
 			dplyr::pull(absolute_proportion) %>% 
 			as.array(),
 		
+		p_ancestors = ancestor_run_prop_table %>% 
+			dplyr::select(sample, ct, absolute_proportion) %>% 
+			tidyr::spread(ct, absolute_proportion) %>%
+			select(-sample),
+		
 		theta = mix %>%
 			dplyr::distinct(sample, theta) %>%
 			dplyr::pull(theta) %>% 
 			as.array(),
+		
+		phi_prior = c(mean(obj.in$phi), sd(obj.in$phi)+1),
 		
 		sigma_hyper_sd =     sigma_hyper_sd,
 		phi_hyper_sd =       phi_hyper_sd,
@@ -249,7 +257,7 @@ ARMET_tc_coreAlg = function(
 			cores = 4,
 			seed = ifelse(is.null(seed), sample.int(.Machine$integer.max, 1), seed)
 		)
-	
+	browser()
 	# Parse results
 	proportions =  
 		parse_summary_vector_in_2D(apply( as.matrix(fit, pars = "beta"), 2, mean)) %>%
@@ -272,6 +280,17 @@ ARMET_tc_coreAlg = function(
 			ct, 
 			"alpha_posterior", 
 			as.data.frame(rstan:::extract( fit, "alpha"))
+		),
+		node
+	)
+	
+	node = switch(
+		is.null(cov_to_test) + 1,
+		add_info_to_tree(
+			node, 
+			ct, 
+			"phi", 
+			rstan:::extract( fit, "phi")$phi
 		),
 		node
 	)
