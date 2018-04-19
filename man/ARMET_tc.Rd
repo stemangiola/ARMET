@@ -103,8 +103,8 @@ function (mix, my_design = NULL, cov_to_test = NULL, fully_bayesian = F,
         observed_prop = observed_prop, ct_to_omit = ct_to_omit, 
         my_tree = my_tree, is_mix_microarray = is_mix_microarray))
     if (!is.null(cov_to_test)) {
-        data(osNode)
-        tree.test = get_tree_hypoth_test(osNode, path = output_dir, 
+        data(treeYaml)
+        tree.test = get_tree_hypoth_test(treeYaml, path = output_dir, 
             cov_to_test)
         print(tree.test, "significance_causal", "pvalue_causal", 
             "direction_causal", "significance_effectual", "pvalue_effectual", 
