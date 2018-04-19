@@ -160,7 +160,8 @@ ARMET_tc = function(
 				omit_regression =               omit_regression,
 				save_fit =                      save_fit,
 				seed =                          seed,
-				verbose =                       verbose
+				verbose =                       verbose,
+				phi =                           rnorm(1000, 4, 2)
 			)
 	)
 

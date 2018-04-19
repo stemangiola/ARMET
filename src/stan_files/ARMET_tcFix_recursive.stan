@@ -17,6 +17,7 @@ data{
 	real<lower=0> alpha_hyper_value;
 	
 	real soft_prior;
+	real phi_prior[2];
 
 }
 transformed data{
@@ -41,7 +42,6 @@ transformed data{
 	for(s in 1:S) for(g in 1:G) if(y[s,g]==0) how_many_0s += 1;
 	if(how_many_0s/(G*S) < 0.05) skip_0_inflation = 1;
 	
-	print(skip_0_inflation);
 }
 parameters {
 	simplex[P] beta[S];                        // Proportions,  of the signatures in the xim
@@ -71,7 +71,7 @@ model {
 	matrix[S,G] y_hat_log; 
 
 	sigma0 ~ normal(0, sigma_hyper_sd);
-	phi ~ normal(P,5);
+	phi ~ normal(phi_prior[1], phi_prior[2]);
 	y_hat_log = log(y_hat+1);
 
 		if(skip_0_inflation == 0) 

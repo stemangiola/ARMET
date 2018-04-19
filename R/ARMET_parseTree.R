@@ -24,7 +24,7 @@ add_info_to_tree = function(node, ct, label, value, append = F){
 }
 
 replace_node_from_tree = function(node_orig, node_new){
-
+	
 	if(node_orig$name == node_new$name  ) 
 		node_orig = node_new
 	else if(length(node_orig$children)>0) 
@@ -278,13 +278,18 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree, log.ARMET){
 		
 		obj.out = ARMET_tc_coreAlg(obj.in, node)
 		node = obj.out$node
-		
+
+		# Write to log file
 		write(node$name,file=log.ARMET,append=TRUE)
 		
 		# Update tree
 		bg_tree = replace_node_from_tree(bg_tree, node)
 		
+		# Pass background tree
 		obj.in$my_tree = bg_tree
+		
+		# Pass phi posterior
+		obj.in$phi = obj.out$node$phi
 		
 		if(obj.in$multithread & !obj.in$do_debug){
 			n_cores = length(node$children)
@@ -301,13 +306,13 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree, log.ARMET){
 		## Debug
 		#################################
 		if(obj.in$do_debug)
-		node$children = lapply (node$children, function(cc)  {
-			
-			run_coreAlg_though_tree_recursive(cc, obj.in, bg_tree, log.ARMET)
-		})
+			node$children = lapply (node$children, function(cc)  {
+				
+				run_coreAlg_though_tree_recursive(cc, obj.in, bg_tree, log.ARMET)
+			})
 		else 
 			node$children = foreach::foreach(cc = node$children, .verbose = verbose) %my_do% {
-	
+				
 				run_coreAlg_though_tree_recursive(cc, obj.in, bg_tree, log.ARMET)
 			}
 		
@@ -342,7 +347,7 @@ run_coreAlg_though_tree = function(node, obj.in){
 		verbose = obj.in$verbose | obj.in$do_debug 
 		
 		node.filled = foreach:::foreach(dummy = 1, .verbose = verbose) %my_do% {
-		
+			
 			run_coreAlg_though_tree_recursive(node, obj.in, node, log.ARMET)
 		}
 		
@@ -428,7 +433,7 @@ format_tree = function(tree, mix, ct_to_omit){
 			)
 	}
 	
-
+	
 	# Add the first proportions to tree
 	tree = 
 		add_info_to_tree(
@@ -444,7 +449,7 @@ format_tree = function(tree, mix, ct_to_omit){
 						absolute_proportion = 1
 					) %>%
 					dplyr::arrange(sample)
-					
+				
 			)
 		)
 	
@@ -478,53 +483,53 @@ get_distributions_from_tree = function(node){
 	
 	
 	if(length(node$children)>0){
-
-			node[["summary"]] %>%
+		
+		node[["summary"]] %>%
 			dplyr::bind_rows(
 				do.call(dplyr::bind_rows, lapply(node$children, get_distributions_from_tree))
 			)
-
+		
 	}
 	else node[["summary"]]
 }
 
 get_gene_distributons_recursive = function(node, ref_tbl){
-
+	
 	if(length(node$children)>0){
 		
 		doParallel::registerDoParallel(length(node$children))
 		
 		node$children = foreach(nn = node$children) %dopar% {
-				get_gene_distributons_recursive(nn, ref_tbl)
+			get_gene_distributons_recursive(nn, ref_tbl)
 		}
 		
 		node$summary =
-				do.call(dplyr::bind_rows, lapply(node$children, function(n) n$summary)) %>% 
-					dplyr::group_by(gene) %>%
-					# Safer alternative to calculation if NA are present
-					dplyr::summarise(
-						log_mean =  ifelse(
-							all(is.na(log_sd)), 
-							NA, 
-							mean(log_mean, na.rm = T)  
-						),
-						log_sd = ifelse(
-							all(is.na(log_sd)), 
-							NA, 
-							mean(log_sd, na.rm = T)  # sqrt( sum(log_sd^2, na.rm = T))  
-						),
-						ct = node$name
-					) %>%
-					dplyr::ungroup() %>%
-					dplyr::mutate(original = F)
+			do.call(dplyr::bind_rows, lapply(node$children, function(n) n$summary)) %>% 
+			dplyr::group_by(gene) %>%
+			# Safer alternative to calculation if NA are present
+			dplyr::summarise(
+				log_mean =  ifelse(
+					all(is.na(log_sd)), 
+					NA, 
+					mean(log_mean, na.rm = T)  
+				),
+				log_sd = ifelse(
+					all(is.na(log_sd)), 
+					NA, 
+					mean(log_sd, na.rm = T)  # sqrt( sum(log_sd^2, na.rm = T))  
+				),
+				ct = node$name
+			) %>%
+			dplyr::ungroup() %>%
+			dplyr::mutate(original = F)
 	}
 	
 	else {
 		node$summary = 
 			ref_tbl %>% 
-				dplyr::filter(ct == node$name) %>%
-				dplyr::mutate(ct = as.character(ct)) %>%
-				dplyr::mutate(original = T)
+			dplyr::filter(ct == node$name) %>%
+			dplyr::mutate(ct = as.character(ct)) %>%
+			dplyr::mutate(original = T)
 	}
 	
 	node
@@ -540,7 +545,7 @@ run_test_though_tree_recursive = function(node, my_design, cov_to_test){
 		
 		# Initialize pipe
 		`%>%` <- magrittr::`%>%`
-
+		
 		test = dirReg_test(
 			node, 
 			my_design, 
@@ -605,14 +610,14 @@ run_test_though_tree_recursive = function(node, my_design, cov_to_test){
 		parallel::clusterExport(cl, c("node", "my_design", "cov_to_test", "%>%"), environment())
 		parallel::clusterExport(cl, c("run_test_though_tree_recursive"))
 		doParallel::registerDoParallel(cl)
-	
+		
 		node$children = foreach::foreach(cc = node$children) %dopar% {
 			run_test_though_tree_recursive(cc, my_design, cov_to_test)
 		}
-	
+		
 		parallel::stopCluster(cl)
 		
-	node
+		node
 	}
 }
 
@@ -643,7 +648,7 @@ run_test_though_tree = function(node, my_design, cov_to_test){
 	
 	# Add info to tree
 	for(ot in obj.test) {
-
+		
 		node <- 
 			add_data_to_tree_from_table(
 				node,
