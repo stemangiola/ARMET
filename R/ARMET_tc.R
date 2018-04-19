@@ -171,14 +171,14 @@ ARMET_tc = function(
 	my_tree = run_test_though_tree(my_tree, my_design, cov_to_test)
 		
 	# Create tree with hypothesis testing
-	osNode.stat = 
+	treeYaml.stat = 
 		switch(
 			(!is.null(cov_to_test)) + 1,
 			NULL,
-			get_tree_hypoth_test(osNode, my_tree)
+			get_tree_hypoth_test(treeYaml, my_tree)
 		)
 		
-	if(save_report) save(osNode.stat, file=sprintf("%s/tree_pvalues.RData", output_dir))
+	if(save_report) save(treeYaml.stat, file=sprintf("%s/tree_pvalues.RData", output_dir))
 
 	# Return
 	list(
@@ -194,7 +194,7 @@ ARMET_tc = function(
 			droplevels(),
 		
 		# Return the statistics
-		stats = osNode.stat,
+		stats = treeYaml.stat,
 		
 		# Return the annotated tree
 		tree = my_tree,
