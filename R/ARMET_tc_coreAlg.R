@@ -223,7 +223,9 @@ ARMET_tc_coreAlg = function(
 		p_ancestors = ancestor_run_prop_table %>% 
 			dplyr::select(sample, ct, absolute_proportion) %>% 
 			tidyr::spread(ct, absolute_proportion) %>%
-			select(-sample),
+			dplyr::select(-sample),
+		
+		P_a = 0,
 		
 		theta = mix %>%
 			dplyr::distinct(sample, theta) %>%
