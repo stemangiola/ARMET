@@ -17,7 +17,11 @@ data{
 	real<lower=0> alpha_hyper_value;
 	
 	real soft_prior;
-	real phi_prior[2];
+	
+	//real phi_prior[2];
+	
+	int P_a;
+	matrix[S, P_a] p_ancestors;
 
 }
 transformed data{
@@ -47,31 +51,39 @@ parameters {
 	simplex[P] beta[S];                        // Proportions,  of the signatures in the xim
 	real<lower=0> sigma0[S];                       // Variance linear model 
 	
-  matrix[R,P] alpha;
-	real<lower=P> phi;
+  matrix[R,P_a - 1 + P] alpha;
+	real<lower=P_a - 1 + P> phi;
 
 }
 transformed parameters{
 	matrix[S,P] beta_target;                  // Multiply the simplex by the whole proportion of the target
 	matrix[S,G] y_hat; 
 
-	matrix[S,P] beta_hat;                    // Predicted proportions in the hierachical linear model
-	vector[P] beta_hat_hat[S];                    // Predicted proportions in the hierachical linear model
+	matrix[S,P_a - 1 + P] beta_hat;                    // Predicted proportions in the hierachical linear model
+	vector[P_a - 1 + P] beta_hat_hat[S];                    // Predicted proportions in the hierachical linear model
 
+	simplex[P_a - 1 + P] beta_global[S];
 
-	for(s in 1:S) beta_target[s] = to_row_vector(beta[s]) * p_target[s];
+	for(s in 1:S) beta_target[s] = to_row_vector(beta[s] * p_ancestors[s,P_a]);
 	y_hat = beta_target * x' + y_hat_background;
 	
 	beta_hat =  X * alpha;
 	for(s in 1:S) beta_hat_hat[s] = softmax(to_vector(beta_hat[s])) * phi ;
-
+	
+	if(P_a>1){
+		for(s in 1:S) for(p in 1:(P_a - 1)) beta_global[s,p] = p_ancestors[s,p];
+		for(s in 1:S) for(p in 1:P) beta_global[s,P_a -1 + p] = beta_target[s,p];
+	}
+	else {
+		for(s in 1:S) beta_global[s] = to_vector(beta_target[s]);
+	}
 }
 model {
 
 	matrix[S,G] y_hat_log; 
 
 	sigma0 ~ normal(0, sigma_hyper_sd);
-	phi ~ normal(phi_prior[1], phi_prior[2]);
+	phi ~ normal(P_a - 1 + P,2);
 	y_hat_log = log(y_hat+1);
 
 		if(skip_0_inflation == 0) 
@@ -87,12 +99,12 @@ model {
 		else 
 			for(s in 1:S) y_log[s] ~ normal_lpdf( y_hat_log[s], sigma0[s] ); 
 
-  if(omit_regression == 0) for(s in 1:S) beta[s] ~ dirichlet(beta_hat_hat[s]);
-  for(r in 1:R) alpha[r] ~ normal(0,2.5);
+  if(omit_regression == 0) for(s in 1:S) beta_global[s] ~ dirichlet(beta_hat_hat[s]);
+  //for(r in 1:R) alpha[r] ~ normal(0,2.5);
   for(r in 1:R) sum( alpha[r] ) ~ normal(0,soft_prior * P);
 
 }
 generated quantities{
-	vector[P] beta_gen[S];                       // Proportions,  of the signatures in the xim
+	vector[P_a - 1 + P] beta_gen[S];                       // Proportions,  of the signatures in the xim
 	for(s in 1:S) beta_gen[s] = dirichlet_rng(beta_hat_hat[s]);
 }

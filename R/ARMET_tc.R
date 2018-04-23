@@ -169,7 +169,14 @@ ARMET_tc = function(
 	##############################################################################################
 	
 	writeLines("ARMET: building output")
-	my_tree = run_test_though_tree(my_tree, my_design, cov_to_test)
+	
+	# Calculate pvalue
+	my_tree = 
+		switch(
+			is.null(cov_to_test) + 1,
+			run_test_though_tree(my_tree, my_design, cov_to_test),
+			my_tree
+		)
 		
 	# Create tree with hypothesis testing
 	treeYaml.stat = 
