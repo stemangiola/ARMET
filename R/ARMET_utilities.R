@@ -613,9 +613,9 @@ ARMET_plotFit = function(obj, ct = "TME", param = "estimate_prop_with_uncertanti
 		ggplot2::scale_fill_brewer(palette = "Set1") +
 		ggplot2::geom_smooth(method = my_method, alpha = 0.05) +
 		ggplot2::theme_bw()
-	
+
 	plot_coef_ang = ggplot2::ggplot(
-		node_info$coef_ang_posterior_adj, ggplot2::aes(value, group=ct, color=ct)) +
+		node_info$coef_ang_posterior_adj , ggplot2::aes(value, group=ct, color=ct)) +
 		ggplot2::geom_line(stat="density", size=1) +
 		ggplot2::scale_colour_brewer(palette = "Set1") +
 		ggplot2::scale_fill_brewer(palette = "Set1") +
@@ -659,12 +659,21 @@ ref_to_summary_ref = function(tree, ref){
 
 # Add hypothesis testing
 parse_fit_for_quantiles = function(fit, param = "beta", q, label, my_design, names_groups){
-	data.frame(apply(rstan::extract(fit, param)[[1]], c(2,3), quantile, q )) %>%
-		tibble::as_tibble() %>%
+
+	as.data.frame(rstan::summary(fit, param, probs = q)$summary) %>% 
+		tibble::as_tibble(rownames="par") %>%
+		tidyr::separate(par, c("dummy", "sample_num", "ct_num", "dummy2"), "\\[|,|\\]") %>%
+		dplyr::mutate(ct_num = as.integer(ct_num), sample_num = as.integer(sample_num)) %>%
+		dplyr::select(-dummy, -dummy2) %>%
+		dplyr::filter(ct_num > max( ct_num ) -length(names_groups)) %>%
+		dplyr::select(1:2,ifelse(q == 0.5, "mean", ncol(.) - 2)) %>%
+		tidyr::spread(2,3) %>%
+		dplyr::select(-sample_num) %>%
 		stats::setNames(names_groups) %>%
 		dplyr::mutate(sample = levels(my_design$sample)) %>%
 		tidyr::gather(ct, !!label, -sample) %>%
 		dplyr::mutate_if(is.character, as.factor) 
+	
 }
 
 any_column_double = function(x) is.numeric(x) & !all(x %in% c(0:1))

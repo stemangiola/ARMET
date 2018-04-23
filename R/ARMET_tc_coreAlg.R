@@ -168,6 +168,7 @@ ARMET_tc_coreAlg = function(
 		dplyr::mutate(sample = levels(mix$sample)) %>%
 		dplyr::select(sample, dplyr::everything())
 
+
 	# Create input object for the model
 	model.in = list(
 		
@@ -223,16 +224,17 @@ ARMET_tc_coreAlg = function(
 		p_ancestors = ancestor_run_prop_table %>% 
 			dplyr::select(sample, ct, absolute_proportion) %>% 
 			tidyr::spread(ct, absolute_proportion) %>%
-			dplyr::select(-sample),
+			dplyr::select(-sample) %>%
+			dplyr::select(-dplyr::one_of(ct), dplyr::one_of(ct)),
 		
-		P_a = 0,
+		P_a = length(levels(ancestor_run_prop_table$ct)),
 		
 		theta = mix %>%
 			dplyr::distinct(sample, theta) %>%
 			dplyr::pull(theta) %>% 
 			as.array(),
 		
-		phi_prior = c(mean(obj.in$phi), sd(obj.in$phi)+1),
+		#phi_prior = c(mean(obj.in$phi), sd(obj.in$phi)+1),
 		
 		sigma_hyper_sd =     sigma_hyper_sd,
 		phi_hyper_sd =       phi_hyper_sd,
@@ -254,12 +256,14 @@ ARMET_tc_coreAlg = function(
 		rstan::sampling(
 			model,
 			data=                             model.in,
-			iter=                             600 ,warmup = 400,
-			#control =                         list(adapt_delta = 0.99, stepsize = 0.01, max_treedepth =15),
+			iter=                             ifelse(ct %in% c("TME", "immune_cell"), 600, 1400) ,
+			warmup =                          ifelse(ct %in% c("TME", "immune_cell"), 400, 700),
+			#control =                         list(adapt_delta = 0.9, stepsize = 0.01, max_treedepth =15),
+			#control =                         list(max_treedepth =15),
 			cores = 4,
 			seed = ifelse(is.null(seed), sample.int(.Machine$integer.max, 1), seed)
 		)
-
+	
 	# Parse results
 	proportions =  
 		parse_summary_vector_in_2D(apply( as.matrix(fit, pars = "beta"), 2, mean)) %>%
