@@ -108,6 +108,75 @@ ARMET_plotFit = function(obj, ct = "TME", param = "estimate_prop_with_uncertanti
 	
 }
 
+#' Create tree plot of results
+#' @rdname ARMET_plotTree
+#'
+#' Prints a report of the hipothesis testing
+#'
+#' @param ARMET-tc object 
+#'
+#' @return a ggplot
+#'
+#' @export
+ARMET_plotTree = function(obj){
+	
+	library(data.tree)
+	library(ggtree)
+	library(foreach)
+	library(ggplot2)
+	library(tibble)
+	library(dplyr)
+	
+	# Build phylo tree
+	tt = get_tree_hypoth_test(treeYaml, obj$tree)  
+	tt_phylo = tt %>% as.phylo
+	
+	# Formatted names
+	ct_names_formatted = 	
+		ToDataFrameTree(tt, "name") %>% 
+		as_tibble %>% select(-levelName) %>%
+		bind_cols(taxa = c(
+			"Root",	"Epi", "Endo", "Fibro", "Adipo", "Immune", "Granulo", "Eosin", "Neutro", "Mono deriv", "Mono", "M0 macro", "M1 macro", "M2 macro", "Rest", "Activ", "Mast", "Activ", "Rest", "B", "Naive","Mem", "T", "CD8", "CD4 naive", "H1", "H2", "Follic", "γδ", "Reg", "Mem cent", "Mem activ", "NK", "Activ", "Rest", "Plasma"
+		)) 
+	
+	# Give formatted names
+	tt_phylo$tip.label = ct_names_formatted %>% filter(name %in% tt_phylo$tip.label) %>% arrange(match(name, tt_phylo$tip.label)) %>% pull(taxa)
+	tt_phylo$node.label = ct_names_formatted %>% filter(name %in% tt_phylo$node.label) %>% arrange(match(name, tt_phylo$node.label)) %>% pull(taxa)
+	
+	# Create annotation
+	internal_branch_length = 40
+	external_branch_length = 10
+	dd = 
+		ToDataFrameTree(
+			tt, 
+			"name",
+			"isLeaf", "level",
+			"estimate_extrinsic", 
+			"std_error_extrinsic", 
+			"direction_extrinsic", 
+			"pvalue_extrinsic", 
+			"significance_extrinsic", 
+			"Cell type proportion"
+		) %>% 
+		as_tibble() %>% 
+		left_join(ct_names_formatted, by= "name") %>%
+		select(-levelName) %>% select(taxa, everything()) %>%
+		mutate(estimate_extrinsic = ifelse(pvalue_extrinsic<0.05, estimate_extrinsic, NA)) %>%
+		mutate(branch_length = ifelse(isLeaf, 0.1, 2)) %>%
+		
+		# Correct branch length
+		mutate(level = level -1) %>%
+		mutate(branch_length = ifelse(!isLeaf, internal_branch_length,	external_branch_length) ) %>%
+		mutate(branch_length =  ifelse(	isLeaf, branch_length + ((max(level) - level) * internal_branch_length),	branch_length	))
+	
+	# Change branch length
+	tt_phylo$edge.length = (dd %>% arrange(match(taxa, c(tt_phylo$tip.label, tt_phylo$node.label))) %>% pull(branch_length)) [tt_phylo$edge[,2]]
+	
+	# Plot square tree
+	# tt_phylo %>% 
+	# 	ggtree(aes(color=estimate_extrinsic, size=`Cell type proportion`)) %<+% dd +  
+	# 	xlim(-10, 150) +
+	# 	geom_tiplab(size=5, hjust = 0, color="black" , offset = 2) + 
 	# 	geom_nodelab(size=4, hjust = 1, nudge_x = -3, nudge_y  = 1, color="black") +
 	# 	scale_color_distiller(palette = "Spectral") 
 
