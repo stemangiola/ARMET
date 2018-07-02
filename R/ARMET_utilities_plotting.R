@@ -136,7 +136,7 @@ ARMET_plotTree = function(obj){
 		ToDataFrameTree(tt, "name") %>% 
 		as_tibble %>% select(-levelName) %>%
 		bind_cols(taxa = c(
-			"Root",	"Epi", "Endo", "Fibro", "Adipo", "Immune", "Granulo", "Eosin", "Neutro", "Mono deriv", "Mono", "M0 macro", "M1 macro", "M2 macro", "Rest", "Activ", "Mast", "Activ", "Rest", "B", "Naive","Mem", "T", "CD8", "CD4 naive", "H1", "H2", "Follic", "γδ", "Reg", "Mem cent", "Mem activ", "NK", "Activ", "Rest", "Plasma"
+			"Root",	"Epi", "Endo", "Fibro", "Adipo", "Immune", "Granulo", "Eosin", "Neutro", "Mono deriv", "Mono", "M0 macro", "M1 macro", "M2 macro", "Dendr rest", "Drondr activ", "Mast", "Activ", "Rest", "B", "Naive","Mem", "T", "CD8", "CD4 naive", "H1", "H2", "Follic", "γδ", "Reg", "Mem cent", "Mem activ", "NK", "Activ", "Rest", "Plasma"
 		)) 
 	
 	# Give formatted names
