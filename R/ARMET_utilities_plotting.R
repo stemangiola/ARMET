@@ -181,18 +181,27 @@ ARMET_plotTree = function(obj){
 	# 	scale_color_distiller(palette = "Spectral") 
 
 	# Plot circular tree
-	(
-		tt_phylo %>% 
-		ggtree(aes(color=estimate_extrinsic, size=`Cell type proportion`), layout="circular") %<+% dd +  
-		xlim(-2, NA) +
-		#geom_text(aes(label=label, angle=angle), vjust =-.2, na.rm = T) +
-		#geom_tiplab(size=5,  color="black" , offset = 2 ) + 
-		geom_tiplab(size=4,  color="black", aes(angle=0),   offset=10, hjust = 0.5) +
-		#geom_tiplab2(size=4,  color="black", aes(angle=angle),  align=TRUE,  offset=8) +
-		geom_nodelab(size=4,  color="black",  nudge_x = -20) 
+	switch(
+		(!length(na.omit(dd$estimate_extrinsic))>1) + 1,
+		(
+			tt_phylo %>% 
+			ggtree(aes(color=estimate_extrinsic, size=`Cell type proportion`), layout="circular") %<+% dd +  
+			xlim(-2, NA) +
+			geom_tiplab(size=4,  color="black", aes(angle=0),   offset=10, hjust = 0.5) +
+			geom_nodelab(size=4,  color="black",  nudge_x = -20) +
+			scale_color_distiller(palette = "Spectral", na.value = 'gray87', direction = 1)
+			) %>%
+		rotate_tree(-154) +  theme(legend.position = "top" , legend.direction = "horizontal" ),
+		
+		(
+			tt_phylo %>% 
+				ggtree(aes(color = "Non significant", size=`Cell type proportion`), layout="circular") %<+% dd +  
+				xlim(-2, NA) +
+				geom_tiplab(size=4,  color="black", aes(angle=0),   offset=10, hjust = 0.5) +
+				geom_nodelab(size=4,  color="black",  nudge_x = -20) +
+				scale_color_manual(values= c("Non significant" = "gray87" ))
 		) %>%
-	rotate_tree(-154) +  
-		theme(legend.position = "top" , legend.direction = "horizontal" ) +
-		scale_color_distiller(palette = "Spectral", na.value = 'gray87', direction = 1)
-	#scale_color_continuous(na.value = 'grey', high='red', low='blue') 
+			rotate_tree(-154) +  theme(legend.position = "top" , legend.direction = "horizontal" )
+	)
+	
 	}
