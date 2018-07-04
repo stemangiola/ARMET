@@ -290,6 +290,8 @@ ARMET_plotPolar = function(obj){
 		mutate(`Cell type proportion norm` = `Cell type proportion` / max(`Cell type proportion`))
 		
 	my_rescale = function(x) { as.character( format(round( x * xx %>% pull(`Cell type proportion`) %>% max, 2), nsmall = 2)) }
+	library(scales)
+	cusotm_root_trans = function() scales::trans_new("cusotm_root",function(x) x^(1/4), function(x) x^(4))
 	DTC_scale =  xx %>% pull(estimate_extrinsic) %>% abs() %>% max(na.rm = T) 
 	
 	xx %>%	ggplot(
@@ -333,19 +335,19 @@ ARMET_plotPolar = function(obj){
 	geom_bar(
 		data = xx %>% filter(level == 3),
 		aes(width = leafCount_norm, y = `Cell type proportion norm` ), # / leafCount_norm), 
-		color = "grey40", stat = "identity"
+		color = "grey20", stat = "identity"
 	)  +
 	geom_errorbar(
-		data = xx %>% filter(level == 3) %>% filter(`Cell type proportion norm`>0.005),
+		data = xx %>% filter(level == 3) %>% filter(`Cell type proportion norm`>0.005 | !is.na(estimate_extrinsic)),
 		aes(width = 0 , ymin=`Cell type proportion norm`, ymax=1.1), # / leafCount_norm), 
-		color = "grey40",  stat = "identity",linetype="dotted"
+		color = "grey20",  stat = "identity",linetype="dotted"
 	) +	
 	geom_text(
-		data = xx %>% filter(level == 3)  %>% filter(`Cell type proportion norm`>0.005),
+		data = xx %>% filter(level == 3)  %>% filter(`Cell type proportion norm`>0.005 | !is.na(estimate_extrinsic)),
 		aes(label=taxa, y = 1.2, angle= angle) ,size =3.5 ) +
 	scale_fill_distiller(palette = "Spectral", na.value = 'gray87', direction = 1, name = "Trend", limits=c(-DTC_scale, DTC_scale)) +
-	scale_y_continuous( breaks=c(0,0.1,0.2,0.3,0.5,0.7,1), trans = "sqrt", labels = my_rescale ) +
-	scale_size(range = c(0.5, 0.8), guide=FALSE) +
+	scale_y_continuous( breaks=c(0, 0.01, 0.03, 0.05, 0.1,0.3,0.5,0.7,1), trans = "cusotm_root", labels = my_rescale ) +
+	scale_size(range = c(0.3, 0.8), guide=FALSE) +
 	theme_bw() +
 	theme(
 		axis.text.x = element_blank(),
