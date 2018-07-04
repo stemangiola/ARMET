@@ -180,28 +180,186 @@ ARMET_plotTree = function(obj){
 	# 	geom_nodelab(size=4, hjust = 1, nudge_x = -3, nudge_y  = 1, color="black") +
 	# 	scale_color_distiller(palette = "Spectral") 
 
-	# Plot circular tree
-	switch(
-		(!length(na.omit(dd$estimate_extrinsic))>1) + 1,
-		(
-			tt_phylo %>% 
-			ggtree(aes(color=estimate_extrinsic, size=`Cell type proportion`), layout="circular") %<+% dd +  
-			xlim(-2, NA) +
-			geom_tiplab(size=4,  color="black", aes(angle=0),   offset=10, hjust = 0.5) +
-			geom_nodelab(size=4,  color="black",  nudge_x = -20) +
-			scale_color_distiller(palette = "Spectral", na.value = 'gray87', direction = 1)
-			) %>%
-		rotate_tree(-154) +  theme(legend.position = "top" , legend.direction = "horizontal" ),
-		
-		(
-			tt_phylo %>% 
-				ggtree(aes(color = "Non significant", size=`Cell type proportion`), layout="circular") %<+% dd +  
-				xlim(-2, NA) +
-				geom_tiplab(size=4,  color="black", aes(angle=0),   offset=10, hjust = 0.5) +
-				geom_nodelab(size=4,  color="black",  nudge_x = -20) +
+	# MultiPhylo
+	# dd_all = dd1 %>% mutate(.id = "a") %>% mutate(pvalue_extrinsic = as.numeric(pvalue_extrinsic)) %>% bind_rows(
+	# 	dd2  %>% mutate(.id = "b")
+	# ) %>% mutate(.id = as.factor(.id)) %>% mutate(estimate_extrinsic = rnorm(n()))
+	# 
+	# trees <- list(tt_phylo1, tt_phylo2)
+	# names(trees) = c("a", "b")
+	# class(trees) <- "multiPhylo"
+	# ggtree(trees)   + facet_wrap(~.id, scale="free") + geom_tiplab()
+	# ggtree(trees, aes(color=estimate_extrinsic))  %<+% dd_all  + facet_wrap(~.id, scale="free") + geom_tiplab()
+	# 
+
+	(
+		switch( 
+			(!length(na.omit(dd$estimate_extrinsic))>1) + 1,
+			tt_phylo %>% ggtree(	aes(color=estimate_extrinsic, size=`Cell type proportion`), layout="circular"	) %<+% dd +
+			  scale_color_distiller(palette = "Spectral", na.value = 'gray87', direction = 1),
+			tt_phylo %>% ggtree(	aes(color="Non significant", size=`Cell type proportion`), layout="circular"	) %<+% dd +
 				scale_color_manual(values= c("Non significant" = "gray87" ))
-		) %>%
-			rotate_tree(-154) +  theme(legend.position = "top" , legend.direction = "horizontal" )
-	)
-	
+		) +
+		xlim(-2, NA) +
+		geom_tiplab(size=4,  color="black", aes(angle=0),   offset=10, hjust = 0.5) +
+		geom_nodelab(size=4,  color="black",  nudge_x = -20) + 
+		labs(color='Significant direction') 
+	) %>%
+	rotate_tree(-154) +  theme(legend.position = "top" , legend.direction = "horizontal" )
+
 	}
+
+
+#' Create polar plot of results
+#' @rdname ARMET_plotTree
+#'
+#' Prints a report of the hipothesis testing
+#'
+#' @param ARMET-tc object 
+#'
+#' @return a ggplot
+#'
+#' @export
+ARMET_plotPolar = function(obj){
+	
+	library(data.tree)
+	library(ggtree)
+	library(foreach)
+	library(ggplot2)
+	library(tibble)
+	library(dplyr)
+	library(ape)
+	
+	# Build phylo tree
+	tt = get_tree_hypoth_test(treeYaml, obj$tree)  
+	tt_phylo = tt %>% as.phylo
+	
+	# Formatted names
+	ct_names_formatted = 	
+		ToDataFrameTree(tt, "name") %>% 
+		as_tibble %>% select(-levelName) %>%
+		bind_cols(taxa = c(
+			"Root",	"Epi", "Endo", "Fibro", "Immune", "Granulo", "Eosin", "Neutro", "Mono deriv", "Mono", "M0", "M1", "M2", "Dendr rest", "Drondr activ", "Mast", "Activ", "Rest", "B", "Naive","Mem", "T", "CD8", "H1", "H2", "Follic", "γδ", "Reg", "Mem cent", "Mem activ", "NK", "Activ", "Rest", "Plasma"
+		)) 
+	
+	# Give formatted names
+	tt_phylo$tip.label = ct_names_formatted %>% filter(name %in% tt_phylo$tip.label) %>% arrange(match(name, tt_phylo$tip.label)) %>% pull(taxa)
+	tt_phylo$node.label = ct_names_formatted %>% filter(name %in% tt_phylo$node.label) %>% arrange(match(name, tt_phylo$node.label)) %>% pull(taxa)
+	
+	# Create annotation
+	internal_branch_length = 40
+	external_branch_length = 10
+	dd = 
+		ToDataFrameTree(
+			tt, 
+			"name",
+			"isLeaf", "level", "leafCount",
+			"estimate_extrinsic", 
+			"std_error_extrinsic", 
+			"direction_extrinsic", 
+			"pvalue_extrinsic", 
+			"significance_extrinsic", 
+			"Cell type proportion"
+		) %>% 
+		as_tibble() %>% 
+		left_join(ct_names_formatted, by= "name") %>%
+		select(-levelName) %>% select(taxa, everything()) %>%
+		mutate(estimate_extrinsic = ifelse(pvalue_extrinsic<0.05, estimate_extrinsic, NA)) %>%
+		mutate(branch_length = ifelse(isLeaf, 0.1, 2)) %>%
+		
+		# Correct branch length
+		mutate(level = level -1) %>%
+		mutate(branch_length = ifelse(!isLeaf, internal_branch_length,	external_branch_length) ) %>%
+		mutate(branch_length =  ifelse(	isLeaf, branch_length + ((max(level) - level) * internal_branch_length),	branch_length	))
+	
+	xx = dd %>% 
+		filter(taxa!="Adipo") %>%
+	 	mutate(leafCount_norm = leafCount/max(leafCount)) %>%
+		group_by(level) %>%
+		arrange(desc(leafCount>1)) %>%
+		mutate(leafCount_norm_cum = cumsum(leafCount_norm)) %>%
+		ungroup() %>%
+		arrange(level) %>%
+		mutate(length_error_bar = leafCount_norm - 0.005) %>%
+		mutate(x = leafCount_norm_cum - 0.5 * leafCount_norm) %>%
+		mutate(angle = x * -360) %>%
+		mutate(angle = ifelse(angle < - 240 | angle > -120, angle, angle - 180)) %>%
+		mutate(angle = ifelse(angle > - 360, angle, angle + 360)) %>%
+		mutate(`Cell type proportion` = ifelse(level<max(level), `Cell type proportion` + (0.008*level), `Cell type proportion`  )) %>%
+		filter(level > 0) %>%
+		mutate(`Cell type proportion norm` = `Cell type proportion` / max(`Cell type proportion`))
+		
+	my_rescale = function(x) { as.character( format(round( x * xx %>% pull(`Cell type proportion`) %>% max, 2), nsmall = 2)) }
+	DTC_scale =  xx %>% pull(estimate_extrinsic) %>% abs() %>% max(na.rm = T) 
+	
+	xx %>%	ggplot(
+		aes(
+			x = x, 
+			fill = estimate_extrinsic,
+			size = 1/sqrt(level)
+		)
+	) 	+
+		annotate("rect", xmin=0, xmax=1, ymin=1, ymax=1.5, fill="grey95") +
+		annotate("rect", xmin=0, xmax=1, ymin=1.5, ymax=2, fill="grey90") +
+		annotate("rect", xmin=0, xmax=1, ymin=2, ymax=2.5, fill="grey87") +
+	geom_bar(
+		data = xx %>% filter(level == 1),
+		aes(width = leafCount_norm, y = `Cell type proportion norm`), # / leafCount_norm), 
+		color = "grey20",  stat = "identity"
+	) +	
+	geom_errorbar(
+		data = xx %>% filter(level == 1) %>% mutate(x = ifelse(taxa=="Immune", 0.5, x)),
+		aes(width = 0 , ymin=`Cell type proportion norm`, ymax=2.0), # / leafCount_norm), 
+		color = "grey20",  stat = "identity"
+	) +	
+	geom_text(
+		data = xx %>% filter(level == 1) %>% mutate(x = ifelse(taxa=="Immune", 0.5, x)) %>% mutate(angle = ifelse(taxa=="Immune", -0, angle)),
+		aes(label=taxa, y = 2.2, angle= angle  ) ,size =3.5 ) +
+	#scale_x_continuous(labels = xx %>% filter(level == 1) %>% pull(taxa), breaks = xx %>% filter(level == 1) %>% pull(leafCount_norm_cum) - 0.5 * xx %>% filter(level == 1) %>% pull(leafCount_norm)) +
+	geom_bar(
+			data = xx %>% filter(level == 2),
+			aes(width = leafCount_norm, y = `Cell type proportion norm` ), # / leafCount_norm), 
+			color = "grey20",  stat = "identity"
+		) +
+	geom_errorbar(
+		data = xx %>% filter(level == 2),
+		aes(width = 0 , ymin=`Cell type proportion norm`, ymax=1.5), # / leafCount_norm), 
+		color = "grey20",  stat = "identity",linetype="dotted"
+	) +	
+	geom_text(
+		data = xx %>% filter(level == 2),
+		aes(label=taxa, y = 1.7, angle= angle) ,size =3.5) +
+	#scale_x_continuous(labels = xx %>% filter(level == 2) %>% pull(taxa), breaks = xx %>% filter(level == 2) %>% pull(leafCount_norm_cum) - 0.5 * xx %>% filter(level == 2) %>% pull(leafCount_norm)) +
+	geom_bar(
+		data = xx %>% filter(level == 3),
+		aes(width = leafCount_norm, y = `Cell type proportion norm` ), # / leafCount_norm), 
+		color = "grey40", stat = "identity"
+	)  +
+	geom_errorbar(
+		data = xx %>% filter(level == 3) %>% filter(`Cell type proportion norm`>0.005),
+		aes(width = 0 , ymin=`Cell type proportion norm`, ymax=1.1), # / leafCount_norm), 
+		color = "grey40",  stat = "identity",linetype="dotted"
+	) +	
+	geom_text(
+		data = xx %>% filter(level == 3)  %>% filter(`Cell type proportion norm`>0.005),
+		aes(label=taxa, y = 1.2, angle= angle) ,size =3.5 ) +
+	scale_fill_distiller(palette = "Spectral", na.value = 'gray87', direction = 1, name = "Trend", limits=c(-DTC_scale, DTC_scale)) +
+	scale_y_continuous( breaks=c(0,0.1,0.2,0.3,0.5,0.7,1), trans = "sqrt", labels = my_rescale ) +
+	scale_size(range = c(0.5, 0.8), guide=FALSE) +
+	theme_bw() +
+	theme(
+		axis.text.x = element_blank(),
+		axis.ticks.x.top = element_blank(),
+		axis.title.x=element_blank(),
+		panel.border = element_blank(), 
+		axis.line.y = element_line(),
+		panel.grid  = element_blank(),
+		legend.position="bottom"
+	)	+
+	coord_polar(theta = "x") 
+	
+
+
+	
+
+}
