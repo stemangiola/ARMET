@@ -48,18 +48,23 @@ transformed data{
 
 }
 parameters {
-	simplex[P] beta[S];                        // Proportions,  of the signatures in the xim
-	real<lower=0> sigma0[S];                       // Variance linear model 
 	
-  matrix[R,P_a - 1 + P] alpha;
-	real<lower=P_a - 1 + P> phi;
+	// Deconvolution
+	simplex[P] beta[S];                // Proportions,  of the signatures in the xim
+	real<lower=0> sigma0[S];           // Variance linear model 
 
+	// Regression
+	matrix[R,P_a - 1 + P] alpha;
+	real<lower=P_a - 1 + P> phi;
 }
 transformed parameters{
-	matrix[S,P] beta_target = (beta' * p_ancestors[P_a])';     // Multiply the simplex by the whole proportion of the target
+	
+	// Deconvolution
 	matrix[S,G] y_hat =  beta_target * x' + y_hat_background; 
-	vector[P_a - 1 + P] beta_hat_hat[S];                        // Predicted proportions in the hierachical linear model
 
+	// Regression
+	matrix[S,P] beta_target = (beta' * p_ancestors[P_a])';     // Multiply the simplex by the whole proportion of the target
+	vector[P_a - 1 + P] beta_hat_hat[S];                        // Predicted proportions in the hierachical linear model
 	for(s in 1:S) beta_hat_hat[s] = softmax( X[s] * alpha ) * phi ;
 	
 }
@@ -68,9 +73,10 @@ model {
 	// Log transformation. Bad boy!
 	matrix[S,G] y_hat_log = log(y_hat+1); 
 
+	// Deconvollution
 	sigma0 ~ normal(0, sigma_hyper_sd);
-	phi ~ normal(P_a - 1 + P,2);
 
+	// If 0 inflation
 		if(skip_0_inflation == 0) 
 			for(s in 1:S) for(g in 1:G){
 				if (y_log[s,g] == 0)
@@ -81,12 +87,15 @@ model {
 				else
 					target += bern_0 + normal_lpdf(y_log[s,g] | y_hat_log[s,g], sigma0[s] );
 			}
-		else 
-			for(s in 1:S) y_log[s] ~ normal_lpdf( y_hat_log[s], sigma0[s] ); 
+			
+	// If not 0 inflation
+		else for(s in 1:S) y_log[s] ~ normal_lpdf( y_hat_log[s], sigma0[s] ); 
 
-  if(omit_regression == 0) for(s in 1:S) append_col(p_ancestors[s, 1:(P_a-1)], beta_target[s]) ~ dirichlet(beta_hat_hat[s]);
-  for(r in 1:R) alpha[r] ~ normal(0,1);
+	// Regression
+	phi ~ normal(P_a - 1 + P,2);
+	for(r in 1:R) alpha[r] ~ normal(0,1);
   for(r in 1:R) sum( alpha[r] ) ~ normal(0,soft_prior * P);
+  if(omit_regression == 0) for(s in 1:S) append_col(p_ancestors[s, 1:(P_a-1)], beta_target[s]) ~ dirichlet(beta_hat_hat[s]);
 
 }
 generated quantities{
