@@ -4,7 +4,7 @@
 \alias{add_absolute_proportions_to_tree}
 \title{Put absolute proportions on tree}
 \usage{
-add_absolute_proportions_to_tree(node, p_ancestor = 1)
+add_absolute_proportions_to_tree(node, p_ancestor = NULL)
 }
 \description{
 Put absolute proportions on tree

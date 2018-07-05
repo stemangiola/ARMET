@@ -4,7 +4,7 @@
 \alias{add_info_to_tree}
 \title{Add info to tree}
 \usage{
-add_info_to_tree(node, ct, label, value)
+add_info_to_tree(node, ct, label, value, append = F)
 }
 \description{
 Add info to tree

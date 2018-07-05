@@ -4,7 +4,8 @@
 \alias{check_input}
 \title{Check the input for anomalies}
 \usage{
-check_input()
+check_input(mix, is_mix_microarray, my_design, cov_to_test, prior_sd,
+  custom_ref, tree)
 }
 \description{
 Check the input for anomalies
