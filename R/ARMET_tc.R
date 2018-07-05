@@ -11,6 +11,9 @@
 
 # Initialize pipe
 `%>%` <- magrittr::`%>%`
+`%do%` <- foreach::`%do%`
+#`%dopar%` <- doParallel::`%dopar%`
+
 
 ARMET_tc = function(
 	mix,
@@ -169,7 +172,7 @@ ARMET_tc = function(
 	##############################################################################################
 	
 	writeLines("ARMET: building output")
-	
+
 	# Calculate pvalue
 	my_tree = 
 		switch(
@@ -178,7 +181,14 @@ ARMET_tc = function(
 			my_tree
 		)
 		
-	# Create tree with hypothesis testing
+	# # Create tree with hypothesis testing
+	# library(data.tree)
+	# fileName=("~/PhD/deconvolution/ARMET_dev/ARMET_TME_tree.yaml")
+	# ya=readChar(fileName, file.info(fileName)$size)
+	# osList <- yaml::yaml.load(ya)
+	# treeYaml <- as.Node(osList)
+	# save(treeYaml, file="data/treeYaml.rda")
+	
 	treeYaml.stat = 
 		switch(
 			(!is.null(cov_to_test)) + 1,
