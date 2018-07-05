@@ -361,7 +361,7 @@ ARMET_plotPolar = function(obj){
 		axis.text.x = element_blank(),
 		axis.ticks.x.top = element_blank(),
 		axis.title.x=element_blank(),
-		axis.title.y = element_text(margin = margin(t = 0, r = 5, b = 0, l = 0), hjust = 0.7, vjust = 1),
+		axis.title.y = element_text(margin = margin(t = 0, r = 5, b = 0, l = 0), hjust = 0.65, vjust = 1),
 		panel.border = element_blank(), 
 		axis.line.y = element_line(),
 		panel.grid  = element_blank(),
@@ -369,7 +369,7 @@ ARMET_plotPolar = function(obj){
 		legend.justification=c(0.667, 0),
 		legend.title=element_text(angle = 90),
 		legend.background = element_rect(colour = "transparent", fill = alpha("red", 0))
-	)	+
+	)	+ ylab("Cell type proportion") +
 		guides(
 			fill = guide_colorbar(
 				label.position = "left", 
