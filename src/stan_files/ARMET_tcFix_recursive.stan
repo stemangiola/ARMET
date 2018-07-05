@@ -2,15 +2,24 @@ functions{
 	int do_skip_0_inflation(matrix x){
 		real zeros = 0;
 		int skip_0_inflation = 0;
+		int how_many_0s = 0;
 		
 		// Count the number of zeros in matrix
-		for(s in 1:rows(x)) for(g in 1:cols(x)) if(y[s,g]==0) how_many_0s += 1;
+		for(s in 1:rows(x)) for(g in 1:cols(x)) if(x[s,g]==0) how_many_0s += 1;
 		
 		// If zeros are less than 5% then skip mixture model
-		if(how_many_0s/(rows(x)*cols(x)) < 0.05) skip_0_inflation = 1;
+		if(how_many_0s * 1.0 / (rows(x)*cols(x)) < 0.05) skip_0_inflation = 1;
 		
 		return skip_0_inflation;
 	}
+	
+	matrix vector_array_to_matrix(vector[] x) {
+		matrix[size(x), rows(x[1])] y;
+		for (m in 1:size(x))
+		  y[m] = x[m]';
+		return y;
+	}
+
 }
 data{
 	int G;                                       // Number of marker genes
@@ -38,6 +47,9 @@ data{
 }
 transformed data{
 	
+	// Transformed dimensions
+	int P_tot = P_a - 1 + P;
+	
 	// Zero inflation
 	real bern_0 = bernoulli_lpmf(0 | theta);
 	real bern_1 = bernoulli_lpmf(1 | theta);
@@ -54,18 +66,19 @@ parameters {
 	real<lower=0> sigma0[S];           // Variance linear model 
 
 	// Regression
-	matrix[R,P_a - 1 + P] alpha;
-	real<lower=P_a - 1 + P> phi;
+	matrix[R,P_tot] alpha;
+	real<lower=0> phi;
 }
 transformed parameters{
 	
 	// Deconvolution
+	matrix[S,P] beta_target = (vector_array_to_matrix(beta)' * diag_matrix(p_ancestors[,P_a]))';     // Multiply the simplex by the whole proportion of the target
 	matrix[S,G] y_hat =  beta_target * x' + y_hat_background; 
 
 	// Regression
-	matrix[S,P] beta_target = (beta' * p_ancestors[P_a])';     // Multiply the simplex by the whole proportion of the target
-	vector[P_a - 1 + P] beta_hat_hat[S];                        // Predicted proportions in the hierachical linear model
-	for(s in 1:S) beta_hat_hat[s] = softmax( X[s] * alpha ) * phi ;
+	matrix[S,P_tot] beta_global = append_col(p_ancestors[, 1:(P_a-1)], beta_target);
+	vector[P_tot] beta_hat_hat[S];                        // Predicted proportions in the hierachical linear model
+	for(s in 1:S) beta_hat_hat[s] = softmax( to_vector( X[s] * alpha ) ) * phi ;
 	
 }
 model {
@@ -77,28 +90,29 @@ model {
 	sigma0 ~ normal(0, sigma_hyper_sd);
 
 	// If 0 inflation
-		if(skip_0_inflation == 0) 
-			for(s in 1:S) for(g in 1:G){
-				if (y_log[s,g] == 0)
-					target += log_sum_exp(
-						bern_1, 
-						bern_0 + normal_lpdf(y_log[s,g] | y_hat_log[s,g],  sigma0[s] )
-					);
-				else
-					target += bern_0 + normal_lpdf(y_log[s,g] | y_hat_log[s,g], sigma0[s] );
-			}
+	if(skip_0_inflation == 0) 
+		for(s in 1:S) for(g in 1:G){
+			if (y_log[s,g] == 0)
+				target += log_sum_exp(
+					bern_1, 
+					bern_0 + normal_lpdf(y_log[s,g] | y_hat_log[s,g],  sigma0[s] )
+				);
+			else
+				target += bern_0 + normal_lpdf(y_log[s,g] | y_hat_log[s,g], sigma0[s] );
+		}
 			
 	// If not 0 inflation
-		else for(s in 1:S) y_log[s] ~ normal_lpdf( y_hat_log[s], sigma0[s] ); 
+	else for(s in 1:S) y_log[s] ~ normal_lpdf( y_hat_log[s], sigma0[s] ); 
 
 	// Regression
-	phi ~ normal(P_a - 1 + P,2);
+	phi ~ normal(P_tot,2);
 	for(r in 1:R) alpha[r] ~ normal(0,1);
   for(r in 1:R) sum( alpha[r] ) ~ normal(0,soft_prior * P);
-  if(omit_regression == 0) for(s in 1:S) append_col(p_ancestors[s, 1:(P_a-1)], beta_target[s]) ~ dirichlet(beta_hat_hat[s]);
+  if(omit_regression == 0) 
+  	for(s in 1:S) to_vector( beta_global[s] ) ~ dirichlet(beta_hat_hat[s]);
 
 }
 generated quantities{
-	vector[P_a - 1 + P] beta_gen[S];                       // Proportions,  of the signatures in the xim
+	vector[P_tot] beta_gen[S];                       // Proportions,  of the signatures in the xim
 	for(s in 1:S) beta_gen[s] = dirichlet_rng(beta_hat_hat[s]);
 }
