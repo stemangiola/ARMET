@@ -460,17 +460,23 @@ get_tree_hypoth_test = function(tree_out, tree_in){
 	
 	for( ct in tree_out$Get('name') ){
 		
-		if(ct %in% c("dendritic","TME")) next
+		if(ct %in% c("dendritic")) next
+		
+		if(ct == "TME") data.tree::FindNode(tree_out, ct)$Set(`Cell type proportion` =  1, filterFun = function(x) x$name == ct)
+		else {
+		
 		ti = get_node_from_name(tree_in, ct)
 		if(length(ti[["stats"]])==0) next
 		s = ti[["stats"]] %>% dplyr::mutate_if(is.factor, as.character)
-		
+
 		data.tree::FindNode(tree_out, ct)$Set(estimate_extrinsic =      round(s$mcap_human_readable, 2), filterFun = function(x) x$name == ct)
 		data.tree::FindNode(tree_out, ct)$Set(std_error_extrinsic =     round( s$ecap,2), filterFun = function(x) x$name == ct)
 		data.tree::FindNode(tree_out, ct)$Set(direction_extrinsic =     s$direction, filterFun = function(x) x$name == ct)
 		data.tree::FindNode(tree_out, ct)$Set(pvalue_extrinsic =        s$pcap_human_readable, filterFun = function(x) x$name == ct)
 		data.tree::FindNode(tree_out, ct)$Set(significance_extrinsic =  s$symbol_pcap, filterFun = function(x) x$name == ct)
-		
+		data.tree::FindNode(tree_out, ct)$Set(`Cell type proportion` =  median(ti$relative_proportion$absolute_proportion), filterFun = function(x) x$name == ct)
+	
+		}
 	}
 	
 	tree_out
@@ -604,7 +610,7 @@ run_test_though_tree_recursive = function(node, my_design, cov_to_test){
 			),
 			node
 		)
-		
+
 		n_cores = length(node$children)
 		cl <- parallel::makeCluster(n_cores)
 		parallel::clusterExport(cl, c("node", "my_design", "cov_to_test", "%>%"), environment())

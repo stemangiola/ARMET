@@ -168,7 +168,6 @@ ARMET_tc_coreAlg = function(
 		dplyr::mutate(sample = levels(mix$sample)) %>%
 		dplyr::select(sample, dplyr::everything())
 
-
 	# Create input object for the model
 	model.in = list(
 		
@@ -249,7 +248,7 @@ ARMET_tc_coreAlg = function(
 	if(save_report) save(model.in, file=sprintf("%s/%s_model_in.RData", output_dir, ct))
 	
 	# Choose model
-	model = switch(fully_bayesian + 1, stanmodels$ARMET_tcFix_recursive, stanmodels$ARMET_tc_recursive) 
+	model = switch(is_mix_microarray + 1, stanmodels$ARMET_tcFix_recursive, stanmodels$ARMET_tcFix_recursive_array) 
 
 	# Run model
 	fit = 
@@ -261,7 +260,8 @@ ARMET_tc_coreAlg = function(
 			#control =                         list(adapt_delta = 0.9, stepsize = 0.01, max_treedepth =15),
 			#control =                         list(max_treedepth =15),
 			cores = 4,
-			seed = ifelse(is.null(seed), sample.int(.Machine$integer.max, 1), seed)
+			seed = ifelse(is.null(seed), sample.int(.Machine$integer.max, 1), seed), 
+			save_warmup=FALSE
 		)
 	
 	# Parse results
@@ -279,6 +279,15 @@ ARMET_tc_coreAlg = function(
 	# Set up background trees
 	node = add_absolute_proportions_to_tree(node)
 
+	# Add names ct in this node
+	node = 
+		add_info_to_tree(
+			node, 
+			ct, 
+			"ct_in_analysis", 
+			c(colnames(model.in$p_ancestors)[-ncol(model.in$p_ancestors)], colnames(model.in$x))
+		)
+	
 	node = switch(
 		is.null(cov_to_test) + 1,
 		add_info_to_tree(
@@ -313,22 +322,28 @@ ARMET_tc_coreAlg = function(
 		),
 		node
 	)
-	
+
 	node = switch(
 		is.null(cov_to_test) + 1,
 		add_info_to_tree(
 			node, 
 			ct, 
 			"estimate_prop_with_uncertanties", 
-			parse_fit_for_quantiles(fit, "beta", 0.5, "mean", my_design, levels(fg$ct)) %>%
-				dplyr::left_join(	parse_fit_for_quantiles(fit, "beta", 0.95, "upper", my_design, levels(fg$ct)), by=c("sample", "ct")) %>%
-				dplyr::left_join(	parse_fit_for_quantiles(fit, "beta", 0.05, "lower", my_design, levels(fg$ct)), by=c("sample", "ct")) %>%
-				dplyr::left_join(	my_design %>% dplyr::select(-`(Intercept)`), by="sample"),
+			
+			fit %>% tidybayes::gather_samples(beta_global[sample_idx, ct_idx]) %>% tidybayes::median_qi() %>%
+				dplyr::left_join( 
+					tibble::tibble( ct_idx = 1:length(node$ct_in_analysis), ct=node$ct_in_analysis ), 
+					by="ct_idx" 
+				) %>%
+				dplyr::left_join( 
+					dplyr::bind_cols( sample_idx = 1:nrow(my_design), my_design %>% dplyr::select(-`(Intercept)`) %>% dplyr::arrange(sample) ), 
+					by="sample_idx" 
+				),
 			append = F
 		),
 		node
 	)
-	
+
 	node = switch(
 		is.null(cov_to_test) + 1,
 		add_info_to_tree(
@@ -343,6 +358,8 @@ ARMET_tc_coreAlg = function(
 		),
 		node
 	)
+	
+
 	
 	# Save output
 	if(save_report) save(fit, file=sprintf("%s/%s_fit.RData", output_dir, ct))
