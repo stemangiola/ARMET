@@ -238,8 +238,8 @@ quant_norm_to_target = function(obj, target){
 	
 	obj %>%
 		dplyr::group_by(sample) %>%
-		do(
-			tibble(
+		dplyr::do(
+			tibble::tibble(
 				gene = (.)$gene,
 				sample = (.)$sample,
 				value = as.numeric(exp(preprocessCore::normalize.quantiles.use.target(
