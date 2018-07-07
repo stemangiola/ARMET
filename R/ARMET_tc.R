@@ -193,14 +193,6 @@ ARMET_tc = function(
 
 	writeLines("ARMET: building output")
 
-	# Calculate pvalue
-	my_tree =
-		switch(
-			is.null(cov_to_test) + 1,
-			run_test_though_tree(my_tree, my_design, cov_to_test),
-			my_tree
-		)
-
 	# # Create tree with hypothesis testing
 	# library(data.tree)
 	# fileName=("~/PhD/deconvolution/ARMET_dev/ARMET_TME_tree.yaml")
@@ -208,7 +200,7 @@ ARMET_tc = function(
 	# osList <- yaml::yaml.load(ya)
 	# treeYaml <- as.Node(osList)
 	# save(treeYaml, file="data/treeYaml.rda")
-
+browser()
 	treeYaml.stat =
 		switch(
 			(!is.null(cov_to_test)) + 1,

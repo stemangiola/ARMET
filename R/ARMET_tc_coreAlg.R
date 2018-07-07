@@ -32,6 +32,7 @@
 #' @importFrom tidyr gather
 #'
 #' @importFrom tidybayes gather_samples
+#' @importFrom tidybayes spread_samples
 #' @importFrom tidybayes median_qi
 #' @importFrom tidybayes mean_qi
 #'
@@ -265,14 +266,15 @@ ARMET_tc_coreAlg = function(
 			pull(theta) %>%
 			as.array(),
 
-		#phi_prior = c(mean(obj.in$phi), sd(obj.in$phi)+1),
-
-		sigma_hyper_sd =     sigma_hyper_sd,
-		phi_hyper_sd =       phi_hyper_sd,
-		alpha_hyper_value =  alpha_hyper_value,
 		is_mix_microarray =  as.numeric(is_mix_microarray),
 		omit_regression =    as.numeric(omit_regression),
-		soft_prior =         0.01
+
+		# Horseshoe
+		nu_local = 1,
+		nu_global = 40,
+		par_ratio = 0.8,
+		slab_df = 40,
+		slab_scale = 2
 
 	)
 
@@ -321,12 +323,6 @@ ARMET_tc_coreAlg = function(
 	# Set up background trees
 	node = add_absolute_proportions_to_tree(node)
 
-	# node = switch(
-	# 	is.null(cov_to_test) + 1,
-	# 	add_info_to_tree(node,ct,	"phi",rstan:::extract( fit, "phi")$phi	),
-	# 	node
-	# )
-
 	# Add hypothesis testing
 	node = switch(
 		(!save_fit) + 1,
@@ -363,6 +359,44 @@ ARMET_tc_coreAlg = function(
 		),
 		node
 	)
+
+
+	# Hypothesis test
+	node = switch(
+		is.null(cov_to_test) + 1,
+		add_info_to_tree(
+			node,
+			ct,
+			"stats",
+			fit %>%
+				spread_samples(intrinsic[covariate_idx, component_idx], extrinsic[covariate_idx, component_idx]) %>%
+				median_qi() %>%
+				dplyr::filter(covariate_idx == 2) %>%
+				ungroup() %>%
+				left_join(
+					tibble(
+						covariate = colnames(my_design),
+						covariate_idx = 1:ncol(my_design)
+					),
+					by = "covariate_idx"
+				) %>%
+				left_join(
+					tibble(
+						component = colnames(proportions),
+						component_idx = 1:ncol(proportions)
+					),
+					by = "component_idx"
+				) %>%
+				mutate(
+					i.sig = ifelse(intrinsic.low * intrinsic.high > 0, "*", ""),
+					e.sig = ifelse(extrinsic.low * extrinsic.high > 0, "*", "")
+				),
+			append = F
+		),
+		node
+	)
+
+
 
 	# Save output
 	if(save_report) save(fit, file=sprintf("%s/%s_fit.RData", output_dir, ct))
