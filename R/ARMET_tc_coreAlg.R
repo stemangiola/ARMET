@@ -359,6 +359,100 @@ ARMET_tc_coreAlg = function(
 		),
 		node
 	)
+browser()
+
+	# Beta regression
+
+mb = "
+data{
+	int N;                                      // Number of observations
+	vector<lower=0, upper=1>[N] beta;
+}
+parameters {
+	real<lower=0, upper=1> beta_a;
+	real<lower=0> beta_b;
+}
+transformed parameters{
+	real beta_b_inv = inv(beta_b);
+}
+model {
+
+	beta ~ beta(beta_b_inv * beta_a, beta_b_inv * (1 - beta_a));
+	beta_a ~ beta(5,5);
+	beta_b ~ normal(0,1);
+}
+generated quantities{
+	real beta_hat;
+	beta_hat = beta_rng(beta_b_inv * beta_a, beta_b_inv * (1 - beta_a));
+}
+"
+library(abind)
+fit_betaReg =
+	rstan::sampling(
+		rstan::stan_model(model_code =  mb), # stanmodels$ARMET_betaReg,
+		data= list(
+			N = 400,
+
+			# Take posterior to a 3D matrix
+			beta = (
+				fit %>%
+				spread_samples(beta[sample_idx, ct_idx]) %>%
+				filter(.iteration <= 100) %>%
+				select(beta, sample_idx, ct_idx, .iteration) %>%
+				mutate(.iteration = 1:n()) %>%
+				ungroup() %>%
+
+				# Convert to 3D
+				{
+					foreach(i = (.) %>% pull(ct_idx) %>% unique()) %do%
+					{
+						(.) %>% filter(ct_idx==i) %>% select(-ct_idx) %>% spread( sample_idx, beta) %>% select(-.iteration)
+					}
+				} %>%
+				abind(along=3) %>%
+				aperm(c(2,3,1))
+		)[1,1,]
+		),
+		cores = 4,
+		#seed = ifelse(is.null(seed), sample.int(.Machine$integer.max, 1), seed),
+		save_warmup=TRUE
+	)
+
+
+	fit_betaReg =
+		rstan::sampling(
+			rstan::stan_model("src/stan_files/ARMET_betaReg.stan"), # stanmodels$ARMET_betaReg,
+			data= list(
+				S = model.in$S,
+				P = model.in$P,
+				R = model.in$R,
+				X = model.in$X,
+				N = 400,
+
+				# Take posterior to a 3D matrix
+				beta = (
+					fit %>%
+						spread_samples(beta[sample_idx, ct_idx]) %>%
+						filter(.iteration <= 100) %>%
+						select(beta, sample_idx, ct_idx, .iteration) %>%
+						mutate(.iteration = 1:n()) %>%
+						ungroup() %>%
+
+						# Convert to 3D
+						{
+							foreach(i = (.) %>% pull(ct_idx) %>% unique()) %do%
+							{
+								(.) %>% filter(ct_idx==i) %>% select(-ct_idx) %>% spread( sample_idx, beta) %>% select(-.iteration)
+							}
+						} %>%
+						abind(along=3) %>%
+						aperm(c(2,3,1))
+				)
+			),
+			cores = 4,
+			seed = ifelse(is.null(seed), sample.int(.Machine$integer.max, 1), seed),
+			save_warmup=TRUE
+		)
 
 
 	# Hypothesis test
