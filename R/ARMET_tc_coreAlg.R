@@ -36,6 +36,9 @@
 #' @importFrom tidybayes median_qi
 #' @importFrom tidybayes mean_qi
 #'
+#' @importFrom abind abind
+#'
+#'
 #'
 ARMET_tc_coreAlg = function(
 	obj.in,
@@ -359,12 +362,11 @@ ARMET_tc_coreAlg = function(
 		),
 		node
 	)
-browser()
 
 	# Beta regression
 	fit_betaReg =
 		rstan::sampling(
-			rstan::stan_model("src/stan_files/ARMET_betaReg.stan"), # stanmodels$ARMET_betaReg,
+			stanmodels$ARMET_betaReg, # rstan::stan_model("src/stan_files/ARMET_betaReg.stan"), #
 			data= list(
 				S = model.in$S,
 				P = model.in$P,
@@ -375,17 +377,22 @@ browser()
 				# Take posterior to a 3D matrix
 				beta = (
 					fit %>%
-						spread_samples(beta[sample_idx, ct_idx]) %>%
+						gather_samples(beta_global[sample_idx, ct_idx]) %>%
+						filter(ct_idx > ncol(model.in$p_ancestors)-1) %>%
 						filter(.iteration <= 25) %>%
-						select(beta, sample_idx, ct_idx, .iteration) %>%
+						select(estimate, sample_idx, ct_idx, .iteration) %>%
 						mutate(.iteration = 1:n()) %>%
 						ungroup() %>%
+						select(-term) %>%
+
+						# Adjust for lower and upper limits
+						#mutate(estimate = (estimate*(100-1) + (1/model.in$P) ) / (100)) %>%
 
 						# Convert to 3D
 						{
 							foreach(i = (.) %>% pull(ct_idx) %>% unique()) %do%
 							{
-								(.) %>% filter(ct_idx==i) %>% select(-ct_idx) %>% spread( sample_idx, beta) %>% select(-.iteration)
+								(.) %>% filter(ct_idx==i) %>% select(-ct_idx) %>% spread( sample_idx, estimate) %>% select(-.iteration)
 							}
 						} %>%
 						abind(along=3) %>%
@@ -396,7 +403,7 @@ browser()
 			seed = ifelse(is.null(seed), sample.int(.Machine$integer.max, 1), seed),
 			save_warmup=FALSE,
 			iter=     ifelse(ct %in% c("TME", "immune_cell"), 600, 1400) ,
-			warmup =  ifelse(ct %in% c("TME", "immune_cell"), 400, 700),
+			warmup =  ifelse(ct %in% c("TME", "immune_cell"), 400, 700)
 		)
 
 
@@ -407,35 +414,59 @@ browser()
 			node,
 			ct,
 			"stats",
-			fit %>%
-				spread_samples(intrinsic[covariate_idx, component_idx], extrinsic[covariate_idx, component_idx]) %>%
-				median_qi() %>%
-				dplyr::filter(covariate_idx == 2) %>%
-				ungroup() %>%
-				left_join(
-					tibble(
-						covariate = colnames(my_design),
-						covariate_idx = 1:ncol(my_design)
-					),
-					by = "covariate_idx"
-				) %>%
-				left_join(
-					tibble(
-						component = colnames(proportions),
-						component_idx = 1:ncol(proportions)
-					),
-					by = "component_idx"
-				) %>%
-				mutate(
-					i.sig = ifelse(intrinsic.low * intrinsic.high > 0, "*", ""),
-					e.sig = ifelse(extrinsic.low * extrinsic.high > 0, "*", "")
-				),
-			append = F
+			left_join(
+
+				# Extrinsic regression
+				fit %>%
+					spread_samples(extrinsic[covariate_idx, ct_idx]) %>%
+					median_qi() %>%
+					ungroup() %>%
+					left_join(
+						tibble(
+							covariate = colnames(my_design %>% select(-sample)),
+							covariate_idx = 1:ncol(my_design %>% select(-sample))
+						),
+						by = "covariate_idx"
+					) %>%
+					left_join(
+						tibble(
+							ct = node$ct_in_analysis,
+							ct_idx = 1:length(node$ct_in_analysis)
+						),
+						by = "ct_idx"
+					) %>%
+					filter(ct %in% colnames(model.in$x)) %>%
+					mutate(e.sig = ifelse(conf.low * conf.high > 0, "*", "")) %>%
+					setNames(gsub("conf", "e", colnames(.))) %>%
+					select(-covariate_idx, -ct_idx, -.prob),
+
+				# Extrinsic regression
+				fit_betaReg %>%
+					spread_samples(intrinsic[covariate_idx, ct_idx]) %>%
+					median_qi() %>%
+					ungroup() %>%
+					left_join(
+						tibble(
+							covariate = colnames(my_design %>% select(-sample)),
+							covariate_idx = 1:ncol(my_design %>% select(-sample))
+						),
+						by = "covariate_idx"
+					) %>%
+					left_join(
+						tibble(
+							ct = colnames(model.in$x),
+							ct_idx = 1:ncol(model.in$x)
+						),
+						by = "ct_idx"
+					) %>%
+					mutate(i.sig = ifelse(conf.low * conf.high > 0, "*", "")) %>%
+					setNames(gsub("conf", "i", colnames(.))) %>%
+					select(-covariate_idx, -ct_idx, -.prob),
+				by = c("covariate",  "ct")
+			) %>% select(covariate, ct, everything())
 		),
 		node
 	)
-
-
 
 	# Save output
 	if(save_report) save(fit, file=sprintf("%s/%s_fit.RData", output_dir, ct))

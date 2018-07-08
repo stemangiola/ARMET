@@ -518,11 +518,12 @@ get_stats_on_ref = function(ref, tree){
 ARMET_getFit = function(obj){
 	print(
 		obj$stats,
-		"estimate_extrinsic" ,
-		"std_error_extrinsic" ,
-		"direction_extrinsic" ,
-		"pvalue_extrinsic" ,
-		"significance_extrinsic"
+		"Estimate" ,
+		"Direction",
+		"CI.low" ,
+		"CI.high" ,
+		"Sig" ,
+		"Driver"
 	)
 }
 
