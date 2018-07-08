@@ -200,12 +200,12 @@ ARMET_tc = function(
 	# osList <- yaml::yaml.load(ya)
 	# treeYaml <- as.Node(osList)
 	# save(treeYaml, file="data/treeYaml.rda")
-browser()
+
 	treeYaml.stat =
 		switch(
 			(!is.null(cov_to_test)) + 1,
 			NULL,
-			get_tree_hypoth_test(treeYaml, my_tree)
+			get_tree_hypoth_test(treeYaml, my_tree, cov_to_test)
 		)
 
 	if(save_report) save(treeYaml.stat, file=sprintf("%s/tree_pvalues.RData", output_dir))

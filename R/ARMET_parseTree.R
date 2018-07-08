@@ -263,6 +263,9 @@ add_data_to_tree_from_table = function(tree, proportion, label, append  ){
 #' @param node A node from the tree
 #' @param obj.in A object with the input
 #' @param bg_tree The background tree that tracks the evolution of the algoritm
+#'
+#' @importFrom foreach %dopar%
+#'
 #' @return A probability array
 run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree, log.ARMET){
 
@@ -324,6 +327,10 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree, log.ARMET){
 	node
 }
 
+#' Run ARMET core algorithm on the tree
+#'
+#' @importFrom foreach %dopar%
+#'
 run_coreAlg_though_tree = function(node, obj.in){
 
 	future::plan(future::multiprocess)
@@ -456,25 +463,50 @@ format_tree = function(tree, mix, ct_to_omit){
 	tree
 }
 
-get_tree_hypoth_test = function(tree_out, tree_in){
+#' Enrich YAML tree with info
+#' @rdname get_tree_hypoth_test
+#'
+#' Prints a report of the hipothesis testing
+#'
+#' @param tree_out data.tree obj
+#' @param tree_in a json obj
+#' @param cov a character
+#'
+#' @return a data.tree
+#'
+#' @importFrom dplyr as_data_frame
+#'
+#' @export
+get_tree_hypoth_test = function(tree_out, tree_in, cov){
 
-	for( ct in tree_out$Get('name') ){
+	# Give proportion 1 to root
+	data.tree::FindNode(tree_out, "TME")$Set(`Cell type proportion` =  1, filterFun = function(x) x$name == "TME")
 
-		if(ct %in% c("dendritic")) next
+	for(
+		ct in
+		data.tree::ToDataFrameTree(tree_out, "name", "leafCount") %>%
+		as_tibble() %>%
+		filter(leafCount > 1) %>%
+		pull(name)
+	) {
 
-		if(ct == "TME") data.tree::FindNode(tree_out, ct)$Set(`Cell type proportion` =  1, filterFun = function(x) x$name == ct)
-		else {
+		stats =	get_node_from_name(tree_in, ct)[["stats"]] %>%
+			dplyr::mutate_if(is.factor, as.character) %>%
+			filter(covariate == !!cov)
 
-		ti = get_node_from_name(tree_in, ct)
-		if(length(ti[["stats"]])==0) next
-		s = ti[["stats"]] %>% dplyr::mutate_if(is.factor, as.character)
+		for(i in 1:nrow(stats)){
+			st = stats[i,] %>% data.frame()
 
-		data.tree::FindNode(tree_out, ct)$Set(estimate_extrinsic =      round(s$mcap_human_readable, 2), filterFun = function(x) x$name == ct)
-		data.tree::FindNode(tree_out, ct)$Set(std_error_extrinsic =     round( s$ecap,2), filterFun = function(x) x$name == ct)
-		data.tree::FindNode(tree_out, ct)$Set(direction_extrinsic =     s$direction, filterFun = function(x) x$name == ct)
-		data.tree::FindNode(tree_out, ct)$Set(pvalue_extrinsic =        s$pcap_human_readable, filterFun = function(x) x$name == ct)
-		data.tree::FindNode(tree_out, ct)$Set(significance_extrinsic =  s$symbol_pcap, filterFun = function(x) x$name == ct)
-		data.tree::FindNode(tree_out, ct)$Set(`Cell type proportion` =  median(ti$relative_proportion$absolute_proportion), filterFun = function(x) x$name == ct)
+			data.tree::FindNode(tree_out, st$ct)$Set(Estimate =   round(st$intrinsic, 2), filterFun = function(x) x$name == st$ct)
+			data.tree::FindNode(tree_out, st$ct)$Set(CI.low =     round( st$i.low,2), filterFun = function(x) x$name == st$ct)
+			data.tree::FindNode(tree_out, st$ct)$Set(CI.high =    round( st$i.high,2), filterFun = function(x) x$name == st$ct)
+			data.tree::FindNode(tree_out, st$ct)$Set(Direction =  ifelse(st$intrinsic>0, "+", "-"), filterFun = function(x) x$name == st$ct)
+			data.tree::FindNode(tree_out, st$ct)$Set(Sig =  st$i.sig, filterFun = function(x) x$name == st$ct)
+			data.tree::FindNode(tree_out, st$ct)$Set(Driver =  st$e.sig, filterFun = function(x) x$name == st$ct)
+			data.tree::FindNode(tree_out, st$ct)$Set(
+				`Cell type proportion` =  mean(get_node_from_name(tree_in, st$ct)[["relative_proportion"]]$absolute_proportion),
+				filterFun = function(x) x$name == st$ct
+			)
 
 		}
 	}
@@ -482,6 +514,7 @@ get_tree_hypoth_test = function(tree_out, tree_in){
 	tree_out
 
 }
+
 
 #' Get information from tree recursively for every node
 get_distributions_from_tree = function(node){
@@ -499,6 +532,15 @@ get_distributions_from_tree = function(node){
 	else node[["summary"]]
 }
 
+#' Run ARMET core algorithm recursively on the tree
+#'
+#' @param node A node from the tree
+#' @param obj.in A object with the input
+#' @param bg_tree The background tree that tracks the evolution of the algoritm
+#'
+#' @importFrom foreach %dopar%
+#'
+#' @return A probability array
 get_gene_distributons_recursive = function(node, ref_tbl){
 
 	if(length(node$children)>0){
