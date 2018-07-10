@@ -1,14 +1,14 @@
 # ARMET_tc_coreAlg.R
 
 ARMET_tc_coreAlg = function(
-	obj.in, 
-	node, 
-	real_prop_obj=NULL, 
+	obj.in,
+	node,
+	real_prop_obj=NULL,
 	is_test=F){
-	
+
 	# Get ct
 	ct = node$name
-	
+
 	# Parse input
 	mix =                   obj.in$mix
 	ref =                   obj.in$ref
@@ -18,7 +18,7 @@ ARMET_tc_coreAlg = function(
 	observed_prop =         obj.in$observed_prop
 	ct_to_omit =            obj.in$ct_to_omit
 	my_tree =               obj.in$my_tree
-	is_mix_microarray =     obj.in$is_mix_microarray	
+	is_mix_microarray =     obj.in$is_mix_microarray
 	output_dir =            obj.in$output_dir
 	sigma_hyper_sd =        obj.in$sigma_hyper_sd
 	phi_hyper_sd =          obj.in$phi_hyper_sd
@@ -31,122 +31,122 @@ ARMET_tc_coreAlg = function(
 	phi =                   obj.in$phi
 
 	# Get ref of the current level
-	ref = 
+	ref =
 		ref %>%
 		# Get cell type just for this recursive peers and descendants
 		dplyr::mutate(ct = as.character(ct)) %>%
 		dplyr::left_join(
-			get_map_foreground_background(tree, ct) %>% 
+			get_map_foreground_background(tree, ct) %>%
 				dplyr::select(-ct) %>%
 				dplyr::rename(ct=ancestor) %>%
-				dplyr::distinct(), 
+				dplyr::distinct(),
 			by="ct"
 		) %>%
 		# Filter non used cell types
 		dplyr::filter(!is.na(variable)) %>%
 		# Filter non used genes
 		dplyr::filter(
-			gene %in% 
+			gene %in%
 			get_node_label_level_specfic(
-				get_node_from_name(my_tree,  !!ct), 
+				get_node_from_name(my_tree,  !!ct),
 				label = "markers",
-				start_level = 1, 
+				start_level = 1,
 				stop_level = 1
 			)
 		) %>%
 		dplyr::mutate_if(is.character, as.factor) %>%
-		droplevels() 
-	
+		droplevels()
+
 	# Print stats on ref
-	get_stats_on_ref(ref,my_tree) %>% 
-		dplyr::filter(ct %in% unique(ref$ct)) 
-	
+	get_stats_on_ref(ref,my_tree) %>%
+		dplyr::filter(ct %in% unique(ref$ct))
+
 	# filter mix and add theta value
 	mix = mix %>%
 		dplyr::group_by(sample) %>%
 		dplyr::mutate(
 			theta=
-				length(which(value>0)) / 
+				length(which(value>0)) /
 				n()
 		) %>%
 		dplyr::ungroup() %>%
 		dplyr::filter(gene %in% unique(ref$gene))
-	
-	fg = ref %>% 
+
+	fg = ref %>%
 		dplyr::filter(variable=="main") %>%
 		droplevels()
-	
+
 	# Setup background
-	bg = 	ref %>% 
+	bg = 	ref %>%
 		dplyr::filter(variable=="background") %>%
 		droplevels()
-	
+
 	# Garbage collection
 	rm(ref)
 	gc()
 
 	# Get the probability table of the previous run
 	ancestor_run_prop_table = get_last_existing_leaves_with_annotation(my_tree)
-	
+
 	# Sanity check
 	if(
 		any(
-			ancestor_run_prop_table %>% 
-			dplyr::group_by(sample) %>% 
+			ancestor_run_prop_table %>%
+			dplyr::group_by(sample) %>%
 			dplyr::summarise(tot=sum(absolute_proportion)) %>%
-			dplyr::pull(tot) != 1 
+			dplyr::pull(tot) != 1
 		)
 	) {
 		writeLines("ARMET: The absolute proportions are supposed to sum to 1 for each sample")
 		print(
-			ancestor_run_prop_table %>% 
-				dplyr::group_by(sample) %>% 
+			ancestor_run_prop_table %>%
+				dplyr::group_by(sample) %>%
 				dplyr::summarise(tot=sum(absolute_proportion)) %>%
 				dplyr::filter(tot != 1)
 		)
 		#stop()
 	}
-	
+
 	# Get the probability table of my cell type
-	fg_prop = ancestor_run_prop_table %>%	
+	fg_prop = ancestor_run_prop_table %>%
 		dplyr::filter(ct==!!ct) %>%
 		droplevels()
-	
+
 	# Get the probability table of the background
-	bg_prop = ancestor_run_prop_table %>% 
+	bg_prop = ancestor_run_prop_table %>%
 		dplyr::filter(ct != !!ct) %>%
 		droplevels()
-	
-	# Prepare input for full bayesian 
+
+	# Prepare input for full bayesian
 	# e.obj = prepare_input(fg, my_tree)
 	# bg.obj = prepare_input(bg, my_tree)
-	
-	# Calculate the value of the genes for background 
+
+	# Calculate the value of the genes for background
 	# !!rlang::sym(ct) -> for variable name without quotes
 
-	y_hat_background = 
+	y_hat_background =
 		as.matrix(
 			bg_prop %>%
-			{ 
-				if(nrow(.)==0) 
+			{
+				if(nrow(.)==0)
 					dplyr::bind_rows(
 						fg_prop %>%
 							dplyr::mutate(
-								ct = factor("bg"), 
-								relative_proportion = 0, 
+								ct = factor("bg"),
+								relative_proportion = 0,
 								absolute_proportion = 0
 							)
 					)
-				else . 
+				else .
 			} %>%
 				dplyr::select(-relative_proportion) %>%
 				tidyr::spread(ct, absolute_proportion) %>%
 				dplyr::select(-sample)
-		) %*% 
+		) %*%
 		as.matrix(
-			bg %>% 
-			{ 
-				if(nrow(.)==0) 
+			bg %>%
+			{
+				if(nrow(.)==0)
 					# Take fg as template
 					fg %>%
 					dplyr::distinct(gene) %>%
@@ -156,7 +156,7 @@ ARMET_tc_coreAlg = function(
 						ct = "bg",
 						variable = "background"
 					)
-				else . 
+				else .
 			} %>%
 				dplyr::mutate_if(is.character, as.factor) %>%
 				dplyr::select(gene, ct, value) %>%
@@ -170,88 +170,88 @@ ARMET_tc_coreAlg = function(
 
 	# Create input object for the model
 	model.in = list(
-		
-		G = fg %>% 
-			dplyr::distinct(gene) %>% 
+
+		G = fg %>%
+			dplyr::distinct(gene) %>%
 			nrow(),
-		
-		S = mix %>% 
-			dplyr::distinct(sample) %>% 
+
+		S = mix %>%
+			dplyr::distinct(sample) %>%
 			nrow(),
-		
-		P = fg %>% 
-			dplyr::distinct(ct) %>% 
+
+		P = fg %>%
+			dplyr::distinct(ct) %>%
 			nrow(),
-		
-		R = my_design %>% 
+
+		R = my_design %>%
 			dplyr::select(-sample) %>%
 			ncol(),
-		
-		y = mix %>% 
-			dplyr::select(gene, sample, value) %>% 
+
+		y = mix %>%
+			dplyr::select(gene, sample, value) %>%
 			tidyr::spread(gene, value) %>%
 			dplyr::arrange(sample) %>%
-			dplyr::select(-sample), 
-		
-		X = my_design %>% 
+			dplyr::select(-sample),
+
+		X = my_design %>%
 			dplyr::arrange(sample) %>%
 			dplyr::select(-sample) %>%
 			# transform factors into numeric safely
 			dplyr::mutate_if(is.factor, as.character) %>%
 			dplyr::mutate_if(is.character, as.numeric) %>%
 			dplyr::mutate_if(any_column_double, scale),
-		
-		x_genes = fg %>% 
+
+		x_genes = fg %>%
 			dplyr::pull(gene) %>%
 			levels() %>%
 			tibble::as_tibble() %>%
 			dplyr::rename(gene = value),
-		
-		x = fg %>% 
+
+		x = fg %>%
 			dplyr::select(gene, ct, value) %>%
 			tidyr::spread(ct, value) %>%
 			dplyr::mutate_if(is.numeric, dplyr::funs(ifelse(is.na(.), 0, .))) %>%
 			dplyr::select(-gene),
-		
+
 		y_hat_background = y_hat_background %>%
 			dplyr::select(-sample),
-		
-		p_target = fg_prop %>% 
-			dplyr::pull(absolute_proportion) %>% 
+
+		p_target = fg_prop %>%
+			dplyr::pull(absolute_proportion) %>%
 			as.array(),
-		
-		p_ancestors = ancestor_run_prop_table %>% 
-			dplyr::select(sample, ct, absolute_proportion) %>% 
+
+		p_ancestors = ancestor_run_prop_table %>%
+			dplyr::select(sample, ct, absolute_proportion) %>%
 			tidyr::spread(ct, absolute_proportion) %>%
 			dplyr::select(-sample) %>%
 			dplyr::select(-dplyr::one_of(ct), dplyr::one_of(ct)),
-		
+
 		P_a = length(levels(ancestor_run_prop_table$ct)),
-		
+
 		theta = mix %>%
 			dplyr::distinct(sample, theta) %>%
-			dplyr::pull(theta) %>% 
+			dplyr::pull(theta) %>%
 			as.array(),
-		
+
 		#phi_prior = c(mean(obj.in$phi), sd(obj.in$phi)+1),
-		
+
 		sigma_hyper_sd =     sigma_hyper_sd,
 		phi_hyper_sd =       phi_hyper_sd,
 		alpha_hyper_value =  alpha_hyper_value,
 		is_mix_microarray =  as.numeric(is_mix_microarray),
 		omit_regression =    as.numeric(omit_regression),
 		soft_prior =         0.01
-		
+
 	)
-	
+
 	# Save the raw model resul for debugging
 	if(save_report) save(model.in, file=sprintf("%s/%s_model_in.RData", output_dir, ct))
-	
+
 	# Choose model
-	model = switch(is_mix_microarray + 1, stanmodels$ARMET_tcFix_recursive, stanmodels$ARMET_tcFix_recursive_array) 
+	model = switch(is_mix_microarray + 1, stanmodels$ARMET_tcFix_recursive, stanmodels$ARMET_tcFix_recursive_array)
 
 	# Run model
-	fit = 
+	fit =
 		rstan::sampling(
 			model,
 			data=                             model.in,
@@ -260,51 +260,51 @@ ARMET_tc_coreAlg = function(
 			#control =                         list(adapt_delta = 0.9, stepsize = 0.01, max_treedepth =15),
 			#control =                         list(max_treedepth =15),
 			cores = 4,
-			seed = ifelse(is.null(seed), sample.int(.Machine$integer.max, 1), seed), 
+			seed = ifelse(is.null(seed), sample.int(.Machine$integer.max, 1), seed),
 			save_warmup=FALSE
 		)
-	
+
 	# Parse results
-	proportions =  
+	proportions =
 		parse_summary_vector_in_2D(apply( as.matrix(fit, pars = "beta"), 2, mean)) %>%
 		tibble::as_tibble() %>%
 		setNames(levels(mix$sample)) %>%
 		dplyr::mutate(ct = levels(fg$ct)) %>%
 		tidyr::gather(sample, relative_proportion, -ct) %>%
 		dplyr::mutate_if(is.character, as.factor)
-	
+
 	# Add info to the node
 	node = add_data_to_tree_from_table(node, proportions, "relative_proportion", append = T)
-	
+
 	# Set up background trees
 	node = add_absolute_proportions_to_tree(node)
 
 	# Add names ct in this node
-	node = 
+	node =
 		add_info_to_tree(
-			node, 
-			ct, 
-			"ct_in_analysis", 
+			node,
+			ct,
+			"ct_in_analysis",
 			c(colnames(model.in$p_ancestors)[-ncol(model.in$p_ancestors)], colnames(model.in$x))
 		)
-	
+
 	node = switch(
 		is.null(cov_to_test) + 1,
 		add_info_to_tree(
-			node, 
-			ct, 
-			"alpha_posterior", 
+			node,
+			ct,
+			"alpha_posterior",
 			as.data.frame(rstan:::extract( fit, "alpha"))
 		),
 		node
 	)
-	
+
 	node = switch(
 		is.null(cov_to_test) + 1,
 		add_info_to_tree(
-			node, 
-			ct, 
-			"phi", 
+			node,
+			ct,
+			"phi",
 			rstan:::extract( fit, "phi")$phi
 		),
 		node
@@ -314,9 +314,9 @@ ARMET_tc_coreAlg = function(
 	node = switch(
 		(!save_fit) + 1,
 		add_info_to_tree(
-			node, 
-			ct, 
-			"fit", 
+			node,
+			ct,
+			"fit",
 			fit,
 			append = F
 		),
@@ -326,19 +326,23 @@ ARMET_tc_coreAlg = function(
 	node = switch(
 		is.null(cov_to_test) + 1,
 		add_info_to_tree(
-			node, 
-			ct, 
-			"estimate_prop_with_uncertanties", 
-			
-			fit %>% tidybayes::gather_samples(beta_global[sample_idx, ct_idx]) %>% tidybayes::median_qi() %>%
-				dplyr::left_join( 
-					tibble::tibble( ct_idx = 1:length(node$ct_in_analysis), ct=node$ct_in_analysis ), 
-					by="ct_idx" 
+			node,
+			ct,
+			"estimate_prop_with_uncertanties",
+
+			fit %>%
+				tidybayes::gather_samples(beta_global[sample_idx, ct_idx]) %>%
+				tidybayes::median_qi() %>%
+				dplyr::ungroup() %>%
+				dplyr::left_join(
+					tibble::tibble( ct_idx = 1:length(node$ct_in_analysis), ct=node$ct_in_analysis ),
+					by="ct_idx"
 				) %>%
-				dplyr::left_join( 
-					dplyr::bind_cols( sample_idx = 1:nrow(my_design), my_design %>% dplyr::select(-`(Intercept)`) %>% dplyr::arrange(sample) ), 
-					by="sample_idx" 
-				),
+				dplyr::left_join(
+					dplyr::bind_cols( sample_idx = 1:nrow(my_design), my_design %>% dplyr::select(-`(Intercept)`) %>% dplyr::arrange(sample) ),
+					by="sample_idx"
+				) %>%
+				dplyr::mutate_if(is.character, as.factor),
 			append = F
 		),
 		node
@@ -347,9 +351,9 @@ ARMET_tc_coreAlg = function(
 	node = switch(
 		is.null(cov_to_test) + 1,
 		add_info_to_tree(
-			node, 
-			ct, 
-			"estimate_generated_prop_with_uncertanties", 
+			node,
+			ct,
+			"estimate_generated_prop_with_uncertanties",
 			parse_fit_for_quantiles(fit,"beta_gen", 0.5, "mean", my_design, levels(fg$ct)) %>%
 				dplyr::left_join(	parse_fit_for_quantiles(fit,"beta_gen", 0.95, "upper", my_design, levels(fg$ct)), by=c("sample", "ct")) %>%
 				dplyr::left_join(	parse_fit_for_quantiles(fit,"beta_gen", 0.05, "lower", my_design, levels(fg$ct)), by=c("sample", "ct")) %>%
@@ -358,16 +362,16 @@ ARMET_tc_coreAlg = function(
 		),
 		node
 	)
-	
 
-	
+
+
 	# Save output
 	if(save_report) save(fit, file=sprintf("%s/%s_fit.RData", output_dir, ct))
 	# p = rstan::traceplot(fit, pars=c("alpha"), inc_warmup=F)
-	# 	
+	#
 	#if(save_report) ggplot2::ggsave(sprintf("%s_chains.png", ct), p)
 	if(save_report)	write.csv(proportions, sprintf("%s/%s_composition.csv", output_dir, ct))
-	
-	
+
+
 	list(proportions = proportions, node = node)
 }
