@@ -67,10 +67,10 @@ parameters {
 
 	// Regression
 	matrix[R,P_tot] alpha;
-	real<lower=0> phi;
+	real<lower=0> phi_raw;
 }
 transformed parameters{
-	
+	real<lower=0> phi=1.0/sqrt(phi_raw);
 	// Deconvolution
 	matrix[S,P] beta_target = (vector_array_to_matrix(beta)' * diag_matrix(p_ancestors[,P_a]))';     // Multiply the simplex by the whole proportion of the target
 	matrix[S,G] y_hat =  beta_target * x' + y_hat_background; 
@@ -78,8 +78,8 @@ transformed parameters{
 	// Regression
 	matrix[S,P_tot] beta_global = append_col(p_ancestors[, 1:(P_a-1)], beta_target);
 	vector[P_tot] beta_hat_hat[S];                        // Predicted proportions in the hierachical linear model
-	for(s in 1:S) beta_hat_hat[s] = softmax( to_vector( X[s] * alpha ) ) * phi ;
-	
+	for(s in 1:S) beta_hat_hat[s] = softmax( to_vector( X[s] * alpha ) ) * phi + 1 ;
+
 }
 model {
 
@@ -102,10 +102,10 @@ model {
 		}
 			
 	// If not 0 inflation
-	else for(s in 1:S) y_log[s] ~ normal_lpdf( y_hat_log[s], sigma0[s] ); 
+	else for(s in 1:S) y_log[s] ~ normal( y_hat_log[s], sigma0[s] );
 
 	// Regression
-	phi ~ normal(P_tot,2);
+	phi_raw ~ normal(0,1);
 	for(r in 1:R) alpha[r] ~ normal(0,1);
   for(r in 1:R) sum( alpha[r] ) ~ normal(0,soft_prior * P);
   if(omit_regression == 0) 
