@@ -255,8 +255,8 @@ ARMET_tc_coreAlg = function(
 		rstan::sampling(
 			model,
 			data=                             model.in,
-			iter=                             ifelse(ct %in% c("TME", "immune_cell"), 600, 1400) ,
-			warmup =                          ifelse(ct %in% c("TME", "immune_cell"), 400, 700),
+			#iter=                             ifelse(ct %in% c("TME", "immune_cell"), 2000, 1400) ,
+			#warmup =                          ifelse(ct %in% c("TME", "immune_cell"), 1000, 700),
 			#control =                         list(adapt_delta = 0.9, stepsize = 0.01, max_treedepth =15),
 			#control =                         list(max_treedepth =15),
 			cores = 4,
