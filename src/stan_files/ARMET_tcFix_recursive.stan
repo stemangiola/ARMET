@@ -89,7 +89,7 @@ transformed data{
 	matrix<lower=0>[S,G] y_log = log(y+1);
 
 	// Horseshoe
-	real < lower =0 > scale_global = par_ratio / sqrt(1.0 * S); // scale for the half -t prior for tau
+	real < lower =0 > scale_global = 1; //par_ratio / sqrt(1.0 * S); // scale for the half -t prior for tau
 
 
 }
