@@ -336,6 +336,7 @@ ARMET_tc_coreAlg = function(
 			fit %>%
 				gather_samples(beta_global[sample_idx, ct_idx]) %>%
 				median_qi() %>%
+				ungroup() %>%
 				annotate_posterior_sample_ct(node$ct_in_analysis,my_design),
 			append = F
 		),
@@ -351,6 +352,7 @@ ARMET_tc_coreAlg = function(
 			fit %>%
 				gather_samples(beta_gen[sample_idx, ct_idx]) %>%
 				median_qi() %>%
+				ungroup() %>%
 				annotate_posterior_sample_ct(node$ct_in_analysis,my_design),
 			append = F
 		),
