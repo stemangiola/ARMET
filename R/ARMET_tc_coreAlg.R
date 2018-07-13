@@ -366,18 +366,21 @@ ARMET_tc_coreAlg = function(
 				P = model.in$P,
 				R = model.in$R,
 				X = model.in$X,
-				N = 100,
+				N = 400,
 
 				# Take posterior to a 3D matrix
 				beta = (
 					fit %>%
 						gather_samples(beta_global[sample_idx, ct_idx]) %>%
 						filter(ct_idx > ncol(model.in$p_ancestors)-1) %>%
-						filter(.iteration <= 25) %>%
+						filter(.iteration <= 100) %>%
+						ungroup() %>%
 						select(estimate, sample_idx, ct_idx, .iteration) %>%
+
+						# Rename iterations across chains
+						group_by(sample_idx, ct_idx) %>%
 						mutate(.iteration = 1:n()) %>%
 						ungroup() %>%
-						select(-term) %>%
 
 						# Adjust for lower and upper limits
 						#mutate(estimate = (estimate*(100-1) + (1/model.in$P) ) / (100)) %>%
