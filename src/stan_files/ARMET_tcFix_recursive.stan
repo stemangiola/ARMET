@@ -58,7 +58,6 @@ data{
 	matrix<lower=0>[G,P] x;                      // signature counts
 	matrix[S,G] y_hat_background;                // This is the matrix of background
 	real<lower=0, upper=1> theta[S];
-	real<lower=0> sigma_hyper_sd;
 
 	// Regression
 	int<lower=1> R;                              // Number of covariates (e.g., treatments)
@@ -154,7 +153,7 @@ model {
 	caux ~ inv_gamma (0.5* slab_df , 0.5* slab_df );
 
 	// Deconvollution
-	sigma0 ~ normal(0, sigma_hyper_sd);
+	sigma0 ~ normal(0, 0.1);
 
 	// If 0 inflation
 	if(skip_0_inflation == 0)

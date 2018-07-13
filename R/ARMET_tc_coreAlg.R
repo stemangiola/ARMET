@@ -54,21 +54,15 @@ ARMET_tc_coreAlg = function(
 	ref =                   obj.in$ref
 	my_design=              obj.in$my_design
 	cov_to_test =           obj.in$cov_to_test
-	fully_bayesian =        obj.in$fully_bayesian
-	observed_prop =         obj.in$observed_prop
 	ct_to_omit =            obj.in$ct_to_omit
 	my_tree =               obj.in$my_tree
 	is_mix_microarray =     obj.in$is_mix_microarray
 	output_dir =            obj.in$output_dir
-	sigma_hyper_sd =        obj.in$sigma_hyper_sd
-	phi_hyper_sd =          obj.in$phi_hyper_sd
-	alpha_hyper_value =     obj.in$alpha_hyper_value
 	save_report =           obj.in$save_report
 	omit_regression =       obj.in$omit_regression
 	do_debug =              obj.in$do_debug
 	save_fit =              obj.in$save_fit
 	seed =                  obj.in$seed
-	phi =                   obj.in$phi
 
 	# Get ref of the current level
 	ref =
