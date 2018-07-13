@@ -26,12 +26,8 @@
 #' @param cov_to_test A character string
 #' @param fully_bayesian A boolean
 #' @param is_mix_microarray A boolean
-#' @param observed_prop A matrix
 #' @param ct_to_omit A character string
 #' @param verbose A boolean
-#' @param sigma_hyper_sd A real
-#' @param phi_hyper_sd A real
-#' @param alpha_hyper_value A real
 #' @param save_report A boolean
 #' @param custom_ref A matrix
 #' @param multithread A boolean
@@ -50,14 +46,9 @@ ARMET_tc = function(
 	mix,
 	my_design =                         NULL,
 	cov_to_test =                       NULL,
-	fully_bayesian =                    F,
 	is_mix_microarray =                 F,
-	observed_prop =                     NULL,
 	ct_to_omit =                        c("t_CD4_naive", "adipocyte"),
 	verbose =                           F,
-	sigma_hyper_sd =                    0.1,
-	phi_hyper_sd =                      2,
-	alpha_hyper_value =                 2,
 	save_report =                       F,
 	custom_ref =                        NULL,
 	multithread =                       T,
@@ -82,7 +73,6 @@ ARMET_tc = function(
 		is_mix_microarray,
 		my_design,
 		cov_to_test,
-		sigma_hyper_sd,
 		custom_ref,
 		drop_node_from_tree(get_node_from_name(tree, cell_type_root), ct_to_omit)
 	)
@@ -168,23 +158,17 @@ ARMET_tc = function(
 				ref =                           ref,
 				my_design=                      my_design,
 				cov_to_test =                   cov_to_test,
-				fully_bayesian =                fully_bayesian,
-				observed_prop =                 observed_prop,
 				ct_to_omit =                    ct_to_omit,
 				my_tree =                       my_tree,
 				is_mix_microarray =             is_mix_microarray,
 				save_report =                   save_report,
 				output_dir =                    output_dir,
-				sigma_hyper_sd =                sigma_hyper_sd,
-				phi_hyper_sd =                  phi_hyper_sd,
-				alpha_hyper_value =             alpha_hyper_value,
 				multithread =                   multithread,
 				do_debug =                      do_debug,
 				omit_regression =               omit_regression,
 				save_fit =                      save_fit,
 				seed =                          seed,
-				verbose =                       verbose,
-				phi =                           rnorm(1000, 4, 2)
+				verbose =                       verbose
 			)
 	)
 

@@ -54,7 +54,7 @@ error_if_log_transformed = function(x){
 }
 
 #' Check the input for anomalies
-check_input = function(mix, is_mix_microarray, my_design, cov_to_test, prior_sd, custom_ref, tree){
+check_input = function(mix, is_mix_microarray, my_design, cov_to_test, custom_ref, tree){
 
 	# Check if mix is a tibble
 	if(!tibble::is_tibble(mix)) stop("ARMET: The mixture must be a tibble")
