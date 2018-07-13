@@ -274,10 +274,10 @@ ARMET_tc_coreAlg = function(
 
 		# Horseshoe
 		nu_local = 1,
-		nu_global = 40,
+		nu_global = 1,
 		par_ratio = 0.8,
-		slab_df = 40,
-		slab_scale = 2
+		slab_df = 4,
+		slab_scale = 0.5
 
 	)
 
