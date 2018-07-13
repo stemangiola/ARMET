@@ -89,36 +89,36 @@ transformed data{
 
 	// Horseshoe
 	real < lower =0 > scale_global = 1; //par_ratio / sqrt(1.0 * S); // scale for the half -t prior for tau
-
+print(skip_0_inflation);
 
 }
 parameters {
 
 	// Deconvolution
-	simplex[P] beta[S];                // Proportions,  of the signatures in the xim
-	real<lower=0> sigma0[S];           // Variance linear model
-
+	simplex[P+1] beta[S];                // Proportions,  of the signatures in the xim
+	real<lower=0> sigma0;           // Variance linear model
+	matrix<lower=0>[G,1] x_other;
 	// Regression
-	matrix[R,P_tot] extrinsic_raw;
+	matrix[R,P_tot+1] extrinsic_raw;
 	real<lower=0> phi_raw;
 
 	// Horseshoe
 	real < lower =0 > aux1_global ;
 	real < lower =0 > aux2_global ;
-	vector < lower =0 >[P_tot] aux1_local ;
-	vector < lower =0 >[P_tot] aux2_local ;
+	vector < lower =0 >[P_tot+1] aux1_local ;
+	vector < lower =0 >[P_tot+1] aux2_local ;
 	real < lower =0 > caux ;
 }
 transformed parameters{
 
 	real<lower=0> phi = inv(sqrt(phi_raw));  	// Variance Dirichlet
-	vector[P_tot] beta_hat_hat[S];    // Predicted proportions in the hierachical linear model
-	matrix[R,P_tot] extrinsic;             	// Covariates
-	matrix[S,P_tot] beta_global;
+	vector[P_tot+1] beta_hat_hat[S];    // Predicted proportions in the hierachical linear model
+	matrix[R,P_tot+1] extrinsic;             	// Covariates
+	matrix[S,P_tot+1] beta_global;
 
 	// Deconvolution
-	matrix[S,P] beta_target = (vector_array_to_matrix(beta)' * diag_matrix(p_ancestors[,P_a]))';     // get the foreground proportions
-	matrix[S,G] y_hat =  beta_target * x' + y_hat_background;
+	matrix[S,P+1] beta_target = (vector_array_to_matrix(beta)' * diag_matrix(p_ancestors[,P_a]))';     // get the foreground proportions
+	matrix[S,G] y_hat =  beta_target * append_col(x, exp(x_other))' + y_hat_background;
 
 	// Building matrix factors of interest
 	extrinsic = extrinsic_raw;
@@ -161,16 +161,17 @@ model {
 			if (y_log[s,g] == 0)
 				target += log_sum_exp(
 					bern_1,
-					bern_0 + normal_lpdf(y_log[s,g] | y_hat_log[s,g],  sigma0[s] )
+					bern_0 + normal_lpdf(y_log[s,g] | y_hat_log[s,g],  sigma0 )
 				);
 			else
-				target += bern_0 + normal_lpdf(y_log[s,g] | y_hat_log[s,g], sigma0[s] );
+				target += bern_0 + normal_lpdf(y_log[s,g] | y_hat_log[s,g], sigma0 );
 		}
 
 	// If not 0 inflation
-	else for(s in 1:S) y_log[s] ~ normal_lpdf( y_hat_log[s], sigma0[s] );
+	else for(s in 1:S) y_log[s] ~ student_t(5, y_hat_log[s], sigma0 );
 
 	// Regression
+	x_other[1] ~ normal(0,1);
 	phi_raw ~ normal(0,1);
 	extrinsic_raw[1] ~ normal(0,5);
 	sum(extrinsic_raw[1]) ~ normal(0,0.01 * P_tot) ;
@@ -181,6 +182,6 @@ model {
 
 }
 generated quantities{
-	vector[P_tot] beta_gen[S];                       // Proportions,  of the signatures in the xim
+	vector[P_tot+1] beta_gen[S];                       // Proportions,  of the signatures in the xim
 	for(s in 1:S) beta_gen[s] = dirichlet_rng(beta_hat_hat[s]);
 }
