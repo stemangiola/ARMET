@@ -95,30 +95,45 @@ print(skip_0_inflation);
 parameters {
 
 	// Deconvolution
-	simplex[P+1] beta[S];                // Proportions,  of the signatures in the xim
 	real<lower=0> sigma0;           // Variance linear model
-	matrix<lower=0>[G,1] x_other;
+	simplex[P] beta[S];                // Proportions,  of the signatures in the xim
+	vector<lower=0, upper=1>[S] beta_dump;
+	matrix<lower=0>[G,1] x_dump;
 	// Regression
-	matrix[R,P_tot+1] extrinsic_raw;
+	matrix[R,P_tot] extrinsic_raw;
 	real<lower=0> phi_raw;
 
 	// Horseshoe
 	real < lower =0 > aux1_global ;
 	real < lower =0 > aux2_global ;
-	vector < lower =0 >[P_tot+1] aux1_local ;
-	vector < lower =0 >[P_tot+1] aux2_local ;
+	vector < lower =0 >[P_tot] aux1_local ;
+	vector < lower =0 >[P_tot] aux2_local ;
 	real < lower =0 > caux ;
 }
 transformed parameters{
 
 	real<lower=0> phi = inv(sqrt(phi_raw));  	// Variance Dirichlet
-	vector[P_tot+1] beta_hat_hat[S];    // Predicted proportions in the hierachical linear model
-	matrix[R,P_tot+1] extrinsic;             	// Covariates
-	matrix[S,P_tot+1] beta_global;
+	matrix[R,P_tot] extrinsic;             	// Covariates
+	matrix[S,P_tot] beta_global;
+	vector[P_tot] beta_hat_hat[S];    // Predicted proportions in the hierachical linear model
 
-	// Deconvolution
-	matrix[S,P+1] beta_target = (vector_array_to_matrix(beta)' * diag_matrix(p_ancestors[,P_a]))';     // get the foreground proportions
-	matrix[S,G] y_hat =  beta_target * append_col(x, exp(x_other))' + y_hat_background;
+
+	matrix[S,G] y_hat =
+		// Beta target
+		(
+			// Insert dump cell type
+			append_row(
+				vector_array_to_matrix(beta)' *
+				diag_matrix(1-beta_dump),
+				to_row_vector(beta_dump)
+			) *
+			// Multiplication by row for target
+			diag_matrix(p_ancestors[,P_a])
+		)' *
+		// Append the dump ct gene values
+		append_col(x, x_dump)' +
+		// Sum the background gene values
+		y_hat_background;
 
 	// Building matrix factors of interest
 	extrinsic = extrinsic_raw;
@@ -136,8 +151,17 @@ transformed parameters{
 	);
 
 	// Regression
-	for(s in 1:S) beta_hat_hat[s] = softmax( to_vector( X[s] * extrinsic ) ) * phi ;
-	beta_global = append_col(p_ancestors[, 1:(P_a-1)], beta_target);
+	for(s in 1:S) beta_hat_hat[s] = softmax( to_vector( X[s] * extrinsic ) ) * phi + 1;
+	beta_global =
+		append_col(
+			// Matrix of ancestor proportions
+			p_ancestors[, 1:(P_a-1)],
+			// Beta target
+			(
+				vector_array_to_matrix(beta)' *
+				diag_matrix(p_ancestors[,P_a])
+			)'
+		);
 
 }
 model {
@@ -171,7 +195,8 @@ model {
 	else for(s in 1:S) y_log[s] ~ student_t(5, y_hat_log[s], sigma0 );
 
 	// Regression
-	x_other[1] ~ normal(0,1);
+	x_dump[1] ~ lognormal(0,1);
+	beta_dump ~ beta(2, 10);
 	phi_raw ~ normal(0,1);
 	extrinsic_raw[1] ~ normal(0,5);
 	sum(extrinsic_raw[1]) ~ normal(0,0.01 * P_tot) ;
@@ -182,6 +207,6 @@ model {
 
 }
 generated quantities{
-	vector[P_tot+1] beta_gen[S];                       // Proportions,  of the signatures in the xim
+	vector[P_tot] beta_gen[S];                       // Proportions,  of the signatures in the xim
 	for(s in 1:S) beta_gen[s] = dirichlet_rng(beta_hat_hat[s]);
 }
