@@ -121,11 +121,6 @@ check_input = function(mix, is_mix_microarray, my_design, cov_to_test, custom_re
 	# Set up the covariate to test if any
 	if(is.null(my_design) & !is.null(cov_to_test)) stop("ARMET: you have specified a covariate to test but no design matrix")
 
-	# Check prior sd
-	if(prior_sd<=0) stop("ARMET: prior_sd must be a positive number.")
-
-
-
 	# Check custom reference
 	if(
 		!is.null(custom_ref) &&
