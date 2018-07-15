@@ -188,14 +188,14 @@ model {
 			if (y_log[s,g] == 0)
 				target += log_sum_exp(
 					bern_1,
-					bern_0 + normal_lpdf(y_log[s,g] | y_hat_log[s,g],  sigma0 )
+					bern_0 + student_t_lpdf(y_log[s,g] |10, y_hat_log[s,g],  sigma[s] )
 				);
 			else
-				target += bern_0 + normal_lpdf(y_log[s,g] | y_hat_log[s,g], sigma0 );
+				target += bern_0 + student_t_lpdf( y_log[s,g] |10, y_hat_log[s,g], sigma[s] );
 		}
 
 	// If not 0 inflation
-	else for(s in 1:S) y_log[s] ~ student_t(5, y_hat_log[s], sigma0 );
+	else for(s in 1:S) y_log[s] ~ student_t(10, y_hat_log[s], sigma[s] );
 
 	// Regression
 	x_dump[1] ~ lognormal(0,1);
