@@ -285,6 +285,7 @@ ARMET_tc_coreAlg = function(
 	fit =
 		rstan::sampling(
 			model,
+			#stan_model("src/stan_files/ARMET_tcFix_recursive.stan"),
 			data=                             model.in,
 			iter=                             ifelse(ct %in% c("TME", "immune_cell"), 600, 1400) ,
 			warmup =                          ifelse(ct %in% c("TME", "immune_cell"), 400, 700),
@@ -294,6 +295,10 @@ ARMET_tc_coreAlg = function(
 			seed = ifelse(is.null(seed), sample.int(.Machine$integer.max, 1), seed),
 			save_warmup=FALSE
 		)
+
+	# library(rstan)
+	# source("https://raw.githubusercontent.com/betanalpha/knitr_case_studies/master/qr_regression/stan_utility.R")
+	# check_all_diagnostics(fit)
 
 	# Add names ct in this node
 	node =
