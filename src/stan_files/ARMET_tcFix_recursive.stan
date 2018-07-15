@@ -89,15 +89,18 @@ transformed data{
 
 	// Horseshoe
 	real < lower =0 > scale_global = 1; //par_ratio / sqrt(1.0 * S); // scale for the half -t prior for tau
+
+	vector<lower=0>[S] sigma = rep_vector(0.5, S);
+
 print(skip_0_inflation);
 
 }
 parameters {
 
 	// Deconvolution
-	real<lower=0> sigma0;           // Variance linear model
 	simplex[P] beta[S];                // Proportions,  of the signatures in the xim
 	vector<lower=0, upper=1>[S] beta_dump;
+	//vector<lower=0>[S] sigma;           // Variance linear model
 	matrix<lower=0>[G,1] x_dump;
 	// Regression
 	matrix[R,P_tot] extrinsic_raw;
@@ -177,7 +180,7 @@ model {
 	caux ~ inv_gamma (0.5* slab_df , 0.5* slab_df );
 
 	// Deconvollution
-	sigma0 ~ normal(0, 0.1);
+	//sigma ~ normal(0.5, 0.1);
 
 	// If 0 inflation
 	if(skip_0_inflation == 0)
