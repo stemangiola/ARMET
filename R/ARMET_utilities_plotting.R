@@ -195,8 +195,10 @@ ARMET_plotTree = function(obj){
 	(
 		switch(
 			(!length(na.omit(dd$estimate_extrinsic))>1) + 1,
+
 			tt_phylo %>% ggtree(	aes(color=estimate_extrinsic, size=`Cell type proportion`), layout="circular"	) %<+% dd +
 			  scale_color_distiller(palette = "Spectral", na.value = 'gray87', direction = 1),
+
 			tt_phylo %>% ggtree(	aes(color="Non significant", size=`Cell type proportion`), layout="circular"	) %<+% dd +
 				scale_color_manual(values= c("Non significant" = "gray87" ))
 		) +
@@ -215,21 +217,27 @@ ARMET_plotTree = function(obj){
 #'
 #' Prints a report of the hipothesis testing
 #'
+#' @import ggplot2
+#' @import tibble
+#' @import dplyr
+#' @import data.tree
+#' @import ape
+#'
+#'
 #' @param ARMET-tc object
 #'
 #' @return a ggplot
 #'
 #' @export
-ARMET_plotPolar = function(obj){
-
-	library(data.tree)
-	library(ggtree)
-	library(foreach)
-	library(ggplot2)
-	library(tibble)
-	library(dplyr)
-	library(ape)
-	library(scales)
+ARMET_plotPolar = function(
+	obj,
+	size_geom_text = 3.5,
+	my_breaks=c(0, 0.01, 0.03, 0.05, 0.1,0.3,0.5,0.7,1),
+	prop_filter = 0.005,
+	barwidth = 0.5,
+	barheight = 2,
+	legend_justification = 0.67
+){
 
 	# Build phylo tree
 	tt = obj$stats
@@ -240,7 +248,7 @@ ARMET_plotPolar = function(obj){
 		ToDataFrameTree(tt, "name") %>%
 		as_tibble %>% select(-levelName) %>%
 		bind_cols(taxa = c(
-			"Root",	"Epi", "Endo", "Fibro", "Immune", "Granulo", "Eosin", "Neutro", "Mono deriv", "Mono", "M0", "M1", "M2", "Dendr rest", "Drondr act", "Mast", "Activ", "Rest", "B", "Naive","Mem", "T", "CD8", "H1", "H2", "Follic", "γδ", "Reg", "Mem cen", "Mem act", "NK", "Activ", "Rest", "Plasma"
+			"Root",	"Epi", "Endo", "Fibro", "Immune", "Granulo", "Eosin", "Neutro", "Mono deriv", "Mono", "M0", "M1", "M2", "Dendr rest", "Drondr act", "Mast", "Activ", "Rest", "B", "Naive","Mem", "T", "CD8", "H1", "H2", "Follic", "γδ", "Reg", "M. cen", "M. act", "NK", "Activ", "Rest", "Plasma"
 		))
 
 	# Give formatted names
@@ -257,7 +265,8 @@ ARMET_plotPolar = function(obj){
 			"isLeaf", "level", "leafCount",
 			"Estimate",
 			"Sig",
-			"Cell type proportion"
+			"Cell type proportion",
+			"Driver"
 		) %>%
 		as_tibble() %>%
 		left_join(ct_names_formatted, by= "name") %>%
@@ -289,18 +298,24 @@ ARMET_plotPolar = function(obj){
 
 	my_rescale = function(x) { as.character( format(round( x * xx %>% pull(`Cell type proportion`) %>% max, 2), nsmall = 2)) }
 	cusotm_root_trans = function() scales::trans_new("cusotm_root",function(x) x^(1/4), function(x) x^(4))
-	DTC_scale =  xx %>% pull(Estimate) %>% abs() %>% max(na.rm = T)
+	DTC_scale =  xx %>% pull(Estimate) %>% abs() %>% { switch( (!all(is.na(.))) + 1, 1, .) } %>% max(na.rm = T)
 	y_text_out = 5.0625
 	y_text_in = 1.4641
 
 
-	xx %>%	ggplot(
-		aes(
-			x = x,
-			fill = Estimate,
-			size = 1/sqrt(level)
+	xx %>%
+	{
+		# Case if none is significant
+		switch(
+			(!length(na.omit(xx$Estimate))>1) + 1,
+
+			# If there are significant
+			ggplot(data=(.), aes(x = x,fill = Estimate,size = 1/sqrt(level))),
+
+			# If there are not
+			ggplot(data=(.),aes(x = x,fill = "Non significant",size = 1/sqrt(level)))
 		)
-	) 	+
+	}	+
 		annotate("rect", xmin=0, xmax=1, ymin=1, ymax= 2.0736, fill="grey95") +
 		annotate("rect", xmin=0, xmax=1, ymin=2.0736, ymax=3.8416, fill="grey90") +
 		annotate("rect", xmin=0, xmax=1, ymin=3.8416, ymax=6.5536, fill="grey87") +
@@ -311,12 +326,18 @@ ARMET_plotPolar = function(obj){
 	) +
 	geom_errorbar(
 		data = xx %>% filter(level == 1) %>% mutate(x = ifelse(taxa=="Immune", 0.5, x)),
-		aes(width = 0 , ymin=`Cell type proportion norm`, ymax=y_text_in-0.2), # / leafCount_norm),
+		aes(width = 0 , ymin=`Cell type proportion norm`, ymax=y_text_out-0.7), # / leafCount_norm),
 		color = "grey20",  stat = "identity"
 	) +
 	geom_text(
-		data = xx %>% filter(level == 1) %>% mutate(x = ifelse(taxa=="Immune", 0.5, x)) %>% mutate(angle = ifelse(taxa=="Immune", -0, angle)),
-		aes(label=taxa, y = y_text_in, angle= angle  ) ,size =3.5 ) +
+		data =
+			xx %>%
+			filter(level == 1) %>%
+			mutate(x = ifelse(taxa=="Immune", 0.5, x)) %>%
+			mutate(angle = ifelse(taxa=="Immune", -0, angle)) %>%
+			mutate(taxa = paste(taxa, Driver)) %>%
+			mutate(taxa = sub("\\s+$", "", taxa)),
+		aes(label=taxa, y = y_text_out, angle= angle  ) ,size =size_geom_text ) +
 	#scale_x_continuous(labels = xx %>% filter(level == 1) %>% pull(taxa), breaks = xx %>% filter(level == 1) %>% pull(leafCount_norm_cum) - 0.5 * xx %>% filter(level == 1) %>% pull(leafCount_norm)) +
 	geom_bar(
 			data = xx %>% filter(level == 2),
@@ -329,29 +350,100 @@ ARMET_plotPolar = function(obj){
 		color = "grey20",  stat = "identity",linetype="dotted"
 	) +
 	geom_text(
-		data = xx %>% filter(level == 2),
-		aes(label=taxa, y = 2.8561, angle= angle) ,size =3.5) +
+		data =
+			xx %>%
+			filter(level == 2) %>%
+			mutate(taxa = paste(taxa, Driver)) %>%
+			mutate(taxa = sub("\\s+$", "", taxa)),
+		aes(label=taxa, y = 2.8561, angle= angle) ,size =size_geom_text) +
 	#scale_x_continuous(labels = xx %>% filter(level == 2) %>% pull(taxa), breaks = xx %>% filter(level == 2) %>% pull(leafCount_norm_cum) - 0.5 * xx %>% filter(level == 2) %>% pull(leafCount_norm)) +
 	geom_bar(
 		data = xx %>% filter(level == 3),
 		aes(width = leafCount_norm, y = `Cell type proportion norm` ), # / leafCount_norm),
 		color = "grey20", stat = "identity"
 	)  +
-	geom_errorbar(
-		data = xx %>% filter(level == 3) %>% filter(`Cell type proportion norm`>0.005 | !is.na(Estimate)),
-		aes(width = 0 , ymin=`Cell type proportion norm`, ymax=y_text_out-0.2), # / leafCount_norm),
-		color = "grey20",  stat = "identity",linetype="dotted"
-	) +
-	geom_text(
-		data = xx %>% filter(level == 3)  %>% filter(`Cell type proportion norm`>0.005 | !is.na(Estimate)),
-		aes(label=taxa, y = y_text_out , angle= angle) ,size =3.5 ) +
-	scale_fill_distiller(
-		palette = "Spectral",
-		na.value = 'gray90',
-		direction = 1, name = "Trend",
-		limits=c(-DTC_scale, DTC_scale)
-	) +
-	scale_y_continuous( breaks=c(0, 0.01, 0.03, 0.05, 0.1,0.3,0.5,0.7,1), trans = cusotm_root_trans(), labels = my_rescale ) +
+	{
+		# Make plotting robust if no level 3 cell types were detected
+		switch(
+			(!  xx %>% filter(level == 3) %>% filter(`Cell type proportion norm`>prop_filter | !is.na(Estimate)) %>% nrow() > 0) + 1,
+
+			# If there are cell types
+			geom_errorbar(
+				data = xx %>% filter(level == 3) %>% filter(`Cell type proportion norm`>prop_filter | !is.na(Estimate)),
+				aes(width = 0 , ymin=`Cell type proportion norm`, ymax=y_text_in-0.2), # / leafCount_norm),
+				color = "grey20",  stat = "identity",linetype="dotted"
+			) ,
+
+			# If there are NOT cell types
+			geom_errorbar(ymin=0, ymax=0)
+		)
+	} +
+	{
+		# Make plotting robust if no level 3 cell types were detected
+		switch(
+			(!  xx %>% filter(level == 3) %>% filter(`Cell type proportion norm`>prop_filter | !is.na(Estimate)) %>% nrow() > 0) + 1,
+
+			# If there are cell types
+
+				geom_text(
+					data =
+						xx %>%
+						filter(level == 3)  %>%
+						filter(
+							`Cell type proportion norm`>prop_filter |
+							!is.na(Estimate)
+						) %>%
+						mutate(taxa = paste(taxa, Driver)) %>%
+						mutate(taxa = sub("\\s+$", "", taxa)),
+					aes(label=taxa, y = y_text_in , angle= angle) ,size =size_geom_text
+				),
+
+			# If there are NOT cell types
+			geom_errorbar(ymin=0, ymax=0)
+		)
+	} +
+	{
+		# Case if none is significant
+		switch(
+			(!length(na.omit(xx$Estimate))>1) + 1,
+
+			# If there are significant
+			scale_fill_distiller(
+				palette = "Spectral",
+				na.value = 'white',
+				direction = 1, name = "Trend",
+				limits=c(-DTC_scale, DTC_scale)
+			) ,
+
+			# If there are not
+			scale_fill_manual(values= c("Non significant" = "white" ), guide=FALSE)
+		)
+
+	} +
+	{
+		# Case if none is significant
+		switch(
+			(!length(na.omit(xx$Estimate))>1) + 1,
+
+			# If there are significant
+				guides(
+					fill = guide_colorbar(
+						label.position = "left",
+						title.position = "left",
+						title.hjust = 0.5,
+						override.aes=list(fill=NA),
+						ticks.colour = "black",
+						barwidth = barwidth,
+						barheight = barheight
+					)
+				) ,
+
+			# If there are not
+			scale_fill_manual(values= c("Non significant" = "white" ), guide=FALSE)
+		)
+
+	} +
+	scale_y_continuous( breaks=my_breaks, trans = cusotm_root_trans(), labels = my_rescale ) +
 	scale_size(range = c(0.3, 0.8), guide=FALSE) +
 	theme_bw() +
 	theme(
@@ -363,19 +455,10 @@ ARMET_plotPolar = function(obj){
 		axis.line.y = element_line(),
 		panel.grid  = element_blank(),
 		legend.position=c(0,0.05),
-		legend.justification=c(0.61, 0),
+		legend.justification=c(legend_justification, 0),
 		legend.title=element_text(angle = 90),
 		legend.background = element_rect(colour = "transparent", fill = alpha("red", 0))
 	)	+ ylab("Cell type proportion") +
-		guides(
-			fill = guide_colorbar(
-				label.position = "left",
-				title.position = "left",
-				title.hjust = 0.5,
-				override.aes=list(fill=NA),
-				ticks.colour = "black"
-			)
-		) +
 		coord_polar(theta = "x")
 
 
