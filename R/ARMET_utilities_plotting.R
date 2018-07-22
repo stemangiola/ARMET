@@ -221,7 +221,7 @@ ARMET_plotTree = function(obj){
 #' @import tibble
 #' @import dplyr
 #' @import data.tree
-#' @import ape
+#' @importFrom ape as.phylo
 #'
 #'
 #' @param ARMET-tc object
@@ -307,7 +307,7 @@ ARMET_plotPolar = function(
 	{
 		# Case if none is significant
 		switch(
-			(!length(na.omit(xx$Estimate))>1) + 1,
+			(!length(na.omit(xx$Estimate))>0) + 1,
 
 			# If there are significant
 			ggplot(data=(.), aes(x = x,fill = Estimate,size = 1/sqrt(level))),
@@ -405,7 +405,7 @@ ARMET_plotPolar = function(
 	{
 		# Case if none is significant
 		switch(
-			(!length(na.omit(xx$Estimate))>1) + 1,
+			(!length(na.omit(xx$Estimate))>0) + 1,
 
 			# If there are significant
 			scale_fill_distiller(
@@ -423,7 +423,7 @@ ARMET_plotPolar = function(
 	{
 		# Case if none is significant
 		switch(
-			(!length(na.omit(xx$Estimate))>1) + 1,
+			(!length(na.omit(xx$Estimate))>0) + 1,
 
 			# If there are significant
 				guides(
