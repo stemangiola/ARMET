@@ -466,3 +466,23 @@ ARMET_plotPolar = function(
 
 
 }
+
+
+ARMET_scatter = function(model.in, sample_idx=1){
+
+	model.in$y %>%
+		mutate(sample_idx = 1:n()) %>%
+		gather(gene, observed, -sample_idx) %>%
+		inner_join(
+			model.in$x %>% bind_cols(model.in$x_genes),
+			by="gene"
+	) %>%
+		gather(ct, reference, 4:7) %>%
+		filter(sample_idx%in%!!sample_idx) %>%
+		{
+		ggplot(data=(.),aes(x=reference+1, y=observed+1, color=ct, gene=gene)) +
+				geom_point() +
+				scale_y_log10() +
+				scale_x_log10()
+		} %>% ggplotly()
+}
