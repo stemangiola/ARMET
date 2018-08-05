@@ -34,7 +34,7 @@ replace_node_from_tree = function(node_orig, node_new){
 
 }
 
-#' Get nome from cell type
+#' Get node from cell type
 get_node_from_name = function(node, ct){
 
 	if(is.na(ct)) NULL
