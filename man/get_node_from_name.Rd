@@ -2,10 +2,10 @@
 % Please edit documentation in R/ARMET_parseTree.R
 \name{get_node_from_name}
 \alias{get_node_from_name}
-\title{Get nome from cell type}
+\title{Get node from cell type}
 \usage{
 get_node_from_name(node, ct)
 }
 \description{
-Get nome from cell type
+Get node from cell type
 }

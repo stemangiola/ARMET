@@ -4,10 +4,8 @@
 \alias{ARMET_tc}
 \title{ARMET-tc main}
 \usage{
-ARMET_tc(mix, my_design = NULL, cov_to_test = NULL, fully_bayesian = F,
-  is_mix_microarray = F, observed_prop = NULL,
+ARMET_tc(mix, my_design = NULL, cov_to_test = NULL, is_mix_microarray = F,
   ct_to_omit = c("t_CD4_naive", "adipocyte"), verbose = F,
-  sigma_hyper_sd = 0.1, phi_hyper_sd = 2, alpha_hyper_value = 2,
   save_report = F, custom_ref = NULL, multithread = T, do_debug = F,
   cell_type_root = "TME", choose_internal_ref = NULL, omit_regression = F,
   save_fit = F, seed = NULL)
@@ -19,21 +17,11 @@ ARMET_tc(mix, my_design = NULL, cov_to_test = NULL, fully_bayesian = F,
 
 \item{cov_to_test}{A character string}
 
-\item{fully_bayesian}{A boolean}
-
 \item{is_mix_microarray}{A boolean}
-
-\item{observed_prop}{A matrix}
 
 \item{ct_to_omit}{A character string}
 
 \item{verbose}{A boolean}
-
-\item{sigma_hyper_sd}{A real}
-
-\item{phi_hyper_sd}{A real}
-
-\item{alpha_hyper_value}{A real}
 
 \item{save_report}{A boolean}
 
@@ -52,6 +40,8 @@ ARMET_tc(mix, my_design = NULL, cov_to_test = NULL, fully_bayesian = F,
 \item{save_fit}{A boolean}
 
 \item{seed}{An integer}
+
+\item{fully_bayesian}{A boolean}
 }
 \value{
 An ARMET object
