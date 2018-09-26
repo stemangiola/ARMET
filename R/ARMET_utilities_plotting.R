@@ -236,12 +236,13 @@ ARMET_plotPolar = function(
 	prop_filter = 0.005,
 	barwidth = 0.5,
 	barheight = 2,
-	legend_justification = 0.67
+	legend_justification = 0.67,
+	fill_direction = 1
 ){
 
 	# Build phylo tree
 	tt = obj$stats
-	tt_phylo = tt %>% as.phylo
+	tt_phylo = tt %>% data.tree::as.phylo.Node()
 
 	# Formatted names
 	ct_names_formatted =
@@ -271,7 +272,7 @@ ARMET_plotPolar = function(
 		as_tibble() %>%
 		left_join(ct_names_formatted, by= "name") %>%
 		select(-levelName) %>% select(taxa, everything()) %>%
-		mutate(Estimate = ifelse(Sig == "*", Estimate, NA)) %>%
+		mutate(Estimate = ifelse(Sig == "*" | Driver == "*", Estimate, NA)) %>%
 		mutate(branch_length = ifelse(isLeaf, 0.1, 2)) %>%
 
 		# Correct branch length
@@ -411,7 +412,7 @@ ARMET_plotPolar = function(
 			scale_fill_distiller(
 				palette = "Spectral",
 				na.value = 'white',
-				direction = 1, name = "Trend",
+				direction = fill_direction, name = "Trend",
 				limits=c(-DTC_scale, DTC_scale)
 			) ,
 
