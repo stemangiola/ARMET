@@ -2,18 +2,10 @@
 % Please edit documentation in R/ARMET_parseTree.R
 \name{run_coreAlg_though_tree}
 \alias{run_coreAlg_though_tree}
-\title{Run ARMET core algorithm recursively on the tree}
+\title{Run ARMET core algorithm on the tree}
 \usage{
 run_coreAlg_though_tree(node, obj.in)
 }
-\arguments{
-\item{node}{A node from the tree}
-
-\item{obj.in}{A object with the input}
-}
-\value{
-A probability array
-}
 \description{
-Run ARMET core algorithm recursively on the tree
+Run ARMET core algorithm on the tree
 }

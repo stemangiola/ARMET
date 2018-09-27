@@ -1,42 +1,15 @@
 Package: ARMET
-Type: Package
-Title: Algorithms for Resolving Micro Enviroment Transcriptomes
-Version: 1.0
-Date: 2018-02-02
-Authors@R: c(person("Stefano", "Mangiola", email = "mangiolastefano@gmail.com", role = c("cre", "aut", "ctb", "trl")))
-Description: More about what it does (maybe more than one line)
+Version: 0.0.0.9000
+Title: What the Package Does (One Line, Title Case)
+Description: What the package does (one paragraph).
+Authors@R: person("First", "Last", , "first.last@example.com", c("aut", "cre"))
 License: GPL (>=3)
-Depends: 
-	R (>= 3.3.0), 
-	Rcpp (>= 0.12.15), 
-	methods
-Imports: 
-	rstan (>= 2.17.3), 
-	rstantools (>= 1.4.0),
-	reshape (>= 0.8.7),
-	matrixStats (>= 0.53),
-	ini,
-	preprocessCore,
-	ggplot2 (>= 2.2.1),
-	gridExtra,
-	magrittr,
-	dplyr (>=  0.7.4),
-	tibble (>= 1.4.2),
-	tidyr (>= 0.7.2),
-	parallel (>= 3.4.3),
-	future,
-	edgeR,
-	data.tree,
-	foreach,
-	doParallel
-LinkingTo: 
-	StanHeaders (>= 2.17.2), 
-	rstan (>= 2.17.3), 
-	BH (>= 1.65.0.1), 
-	Rcpp (>= 0.12.15), 
-	RcppEigen (>= 0.3.3.3.1)
-SystemRequirements: pandoc
-VignetteBuilder: knitr
+Encoding: UTF-8
 LazyData: true
+ByteCompile: true
+Depends: R (>= 3.4.0), Rcpp (>= 0.12.17), methods
+Imports: rstan (>= 2.17.3), rstantools (>= 1.5.0), ape, tidyverse, limma, foreach, doParallel
+LinkingTo: StanHeaders (>= 2.17.2), rstan (>= 2.17.3), BH (>= 1.66.0-1), Rcpp (>= 0.12.17), RcppEigen (>= 0.3.3.4.0)
+SystemRequirements: GNU make
 NeedsCompilation: yes
 RoxygenNote: 6.0.1

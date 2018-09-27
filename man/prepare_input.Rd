@@ -4,7 +4,7 @@
 \alias{prepare_input}
 \title{Create object for full bayesian model, with the reference samples}
 \usage{
-prepare_input(ref, cell_types, markers)
+prepare_input(ref, node)
 }
 \arguments{
 \item{ref}{A matrix}
