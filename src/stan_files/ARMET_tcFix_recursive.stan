@@ -195,15 +195,6 @@ model {
 		}
 
 	// If not 0 inflation
-<<<<<<< HEAD
-	else for(s in 1:S) y_log[s] ~ normal( y_hat_log[s], sigma0[s] );
-
-	// Regression
-	phi_raw ~ normal(0,1);
-	for(r in 1:R) alpha[r] ~ normal(0,1);
-  for(r in 1:R) sum( alpha[r] ) ~ normal(0,soft_prior * P);
-  if(omit_regression == 0)
-=======
 	else for(s in 1:S) y_log[s] ~ student_t(10, y_hat_log[s], sigma[s] );
 
 	// Regression
@@ -215,7 +206,6 @@ model {
 	extrinsic_raw[2] ~ normal (0 , 1);
 	if(R > 2) for(r in 3:R) extrinsic_raw[r]  ~ normal(0,1);
   if(omit_regression == 0)
->>>>>>> new-regression-model
   	for(s in 1:S) to_vector( beta_global[s] ) ~ dirichlet(beta_hat_hat[s]);
 
 }
