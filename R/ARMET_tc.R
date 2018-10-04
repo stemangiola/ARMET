@@ -113,14 +113,14 @@ ARMET_tc = function(
 				is.null(choose_internal_ref) + 1,
 				switch(
 					(choose_internal_ref == "ARNA") + 1,
-					ref_array_recursive_summary,
-					ref_RNAseq_recursive_summary
+					ref_array_recursive,
+					ref_RNAseq_recursive
 				),
 				# if npthing set choose default
 				switch(
 					(!is_mix_microarray) + 1,
-					ref_array_recursive_summary,
-					ref_RNAseq_recursive_summary
+					ref_array_recursive,
+					ref_RNAseq_recursive
 				)
 			)
 		) %>%
