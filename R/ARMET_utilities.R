@@ -576,8 +576,7 @@ annotate_posterior_sample_ct = function(tbl, ct_names, my_design) {
 		by="ct_idx"
 	) %>%
 	left_join(
-		bind_cols( sample_idx = 1:nrow(my_design), my_design %>% select(-`(Intercept)`) %>% arrange(sample) ),
+		bind_cols( sample_idx = 1:nrow(my_design), my_design %>% select(-one_of("(Intercept)")) %>% arrange(sample) ),
 		by="sample_idx"
 	)
 }
-

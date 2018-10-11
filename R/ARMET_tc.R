@@ -183,7 +183,7 @@ ARMET_tc = function(
 	# ya=readChar(fileName, file.info(fileName)$size)
 	# osList <- yaml::yaml.load(ya)
 	# treeYaml <- as.Node(osList)
-	# save(treeYaml, file="data/treeYaml.rda")
+	# save(treeYaml, file="data/tree_Yaml.rda")
 
 	treeYaml.stat =
 		switch(
@@ -199,8 +199,7 @@ ARMET_tc = function(
 
 		# Matrix of proportions
 		proportions =	get_last_existing_leaves_with_annotation( my_tree ) %>%
-			select(-relative_proportion) %>%
-			spread(ct, absolute_proportion),
+			select(-relative_proportion),
 
 		# What mixture was used by the model after normalization
 		mix = mix %>%

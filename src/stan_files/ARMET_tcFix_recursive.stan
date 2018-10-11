@@ -140,7 +140,7 @@ transformed parameters{
 
 	// Building matrix factors of interest
 	extrinsic = extrinsic_raw;
-	extrinsic[2] = to_row_vector(
+	if(R > 1) extrinsic[2] = to_row_vector(
 		reg_horseshoe(
 			to_vector(extrinsic_raw[2]),
 			aux1_global ,
@@ -203,7 +203,7 @@ model {
 	phi_raw ~ normal(0,1);
 	extrinsic_raw[1] ~ normal(0,5);
 	sum(extrinsic_raw[1]) ~ normal(0,0.01 * P_tot) ;
-	extrinsic_raw[2] ~ normal (0 , 1);
+	if(R > 1) extrinsic_raw[2] ~ normal (0 , 1);
 	if(R > 2) for(r in 3:R) extrinsic_raw[r]  ~ normal(0,1);
   if(omit_regression == 0)
   	for(s in 1:S) to_vector( beta_global[s] ) ~ dirichlet(beta_hat_hat[s]);

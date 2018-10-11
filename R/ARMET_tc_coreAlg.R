@@ -364,51 +364,6 @@ ARMET_tc_coreAlg = function(
 		node
 	)
 
-	# Beta regression
-	fit_betaReg =
-		rstan::sampling(
-			stanmodels$ARMET_betaReg, # rstan::stan_model("src/stan_files/ARMET_betaReg.stan"), #
-			data= list(
-				S = model.in$S,
-				P = model.in$P,
-				R = model.in$R,
-				X = model.in$X,
-				N = 400,
-
-				# Take posterior to a 3D matrix
-				beta = (
-					fit %>%
-						gather_samples(beta_global[sample_idx, ct_idx]) %>%
-						filter(ct_idx > ncol(model.in$p_ancestors)-1) %>%
-						filter(.iteration <= 100) %>%
-						ungroup() %>%
-						select(estimate, sample_idx, ct_idx, .iteration) %>%
-
-						# Rename iterations across chains
-						group_by(sample_idx, ct_idx) %>%
-						mutate(.iteration = 1:n()) %>%
-						ungroup() %>%
-
-						# Adjust for lower and upper limits
-						#mutate(estimate = (estimate*(100-1) + (1/model.in$P) ) / (100)) %>%
-
-						# Convert to 3D
-						{
-							foreach(i = (.) %>% pull(ct_idx) %>% unique()) %do%
-							{
-								(.) %>% filter(ct_idx==i) %>% select(-ct_idx) %>% spread( sample_idx, estimate) %>% select(-.iteration)
-							}
-						} %>%
-						abind(along=3) %>%
-						aperm(c(2,3,1))
-				)
-			),
-			cores = 4,
-			seed = ifelse(is.null(seed), sample.int(.Machine$integer.max, 1), seed),
-			save_warmup=FALSE,
-			iter=     ifelse(ct %in% c("TME", "immune_cell"), 600, 1400) ,
-			warmup =  ifelse(ct %in% c("TME", "immune_cell"), 400, 700)
-		)
 
 
 	# Hypothesis test
@@ -445,7 +400,51 @@ ARMET_tc_coreAlg = function(
 					select(-covariate_idx, -ct_idx, -.prob),
 
 				# Extrinsic regression
-				fit_betaReg %>%
+					rstan::sampling(
+						stanmodels$ARMET_betaReg, # rstan::stan_model("src/stan_files/ARMET_betaReg.stan"), #
+						data= list(
+							S = model.in$S,
+							P = model.in$P,
+							R = model.in$R,
+							X = model.in$X,
+							N = 400,
+
+							# Take posterior to a 3D matrix
+							beta = (
+								fit %>%
+									gather_samples(beta_global[sample_idx, ct_idx]) %>%
+									filter(ct_idx > ncol(model.in$p_ancestors)-1) %>%
+									filter(.iteration <= 100) %>%
+									ungroup() %>%
+									select(estimate, sample_idx, ct_idx, .iteration) %>%
+
+									# Rename iterations across chains
+									group_by(sample_idx, ct_idx) %>%
+									mutate(.iteration = 1:n()) %>%
+									ungroup() %>%
+
+									# Adjust for lower and upper limits
+									#mutate(estimate = (estimate*(100-1) + (1/model.in$P) ) / (100)) %>%
+
+									# Convert to 3D
+									{
+										foreach(i = (.) %>% pull(ct_idx) %>% unique()) %do%
+										{
+											(.) %>% filter(ct_idx==i) %>% select(-ct_idx) %>% spread( sample_idx, estimate) %>% select(-.iteration)
+										}
+									} %>%
+									abind(along=3) %>%
+									aperm(c(2,3,1))
+							)
+						),
+						cores = 4,
+						seed = ifelse(is.null(seed), sample.int(.Machine$integer.max, 1), seed),
+						save_warmup=FALSE,
+						iter=     ifelse(ct %in% c("TME", "immune_cell"), 600, 1400) ,
+						warmup =  ifelse(ct %in% c("TME", "immune_cell"), 400, 700)
+					) %>%
+
+					# Parsing fit
 					spread_samples(intrinsic[covariate_idx, ct_idx]) %>%
 					median_qi() %>%
 					ungroup() %>%
