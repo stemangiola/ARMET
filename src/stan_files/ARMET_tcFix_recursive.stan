@@ -198,7 +198,7 @@ model {
 	else for(s in 1:S) y_log[s] ~ student_t(10, y_hat_log[s], sigma[s] );
 
 	// Regression
-	x_dump[1] ~ lognormal(0,1);
+	x_dump[1:G,1] ~ lognormal(0,1);
 	beta_dump ~ beta(2, 10);
 	phi_raw ~ normal(0,1);
 	extrinsic_raw[1] ~ normal(0,5);
