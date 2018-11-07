@@ -77,11 +77,16 @@ sudo apt-get update
 sudo apt-get libssl-dev libcurl4-openssl-dev  install libxml2-dev
 # For an initialised machine
 ###############################################
+# Dependencies
+###############################################
 source("https://bioconductor.org/biocLite.R") 
 biocLite("limma")
+biocLite("edgeR")
 install.packages("data.tree")
 install.packages("abind")
 install_github("mjskay/tidybayes")  
+install.packages("future")
+install.packages("reshape")
 ###############################################
 library(devtools)  
 install_github("stemangiola/ARMET", args = "--preclean", build_vignettes = FALSE)  
