@@ -73,7 +73,9 @@ IMPORTANT: in the latter case the algorithm assumes that the query experiment in
 ```R
 # Installation
 library(devtools)  
-install_github("stemangiola/ARMET", args = "--preclean", build_vignettes = FALSE, auth_token = "37c5c6238136a6804d336d9a7078eece993ce870", password="x-oauth-basic")  
+source("https://bioconductor.org/biocLite.R") 
+biocLite("limma")
+install_github("stemangiola/ARMET", args = "--preclean", build_vignettes = FALSE)  
 if("package:ARMET" %in% search()) detach("package:ARMET", unload=TRUE, force=TRUE)
 library(ARMET) 
 
