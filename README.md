@@ -72,6 +72,10 @@ IMPORTANT: in the latter case the algorithm assumes that the query experiment in
 
 ```R
 # Installation
+# For a fresh Ubuntu system
+sudo apt-get update
+sudo apt-get libssl-dev libcurl4-openssl-dev  install libxml2-dev
+# For an initialised machine
 library(devtools)  
 source("https://bioconductor.org/biocLite.R") 
 biocLite("limma")
