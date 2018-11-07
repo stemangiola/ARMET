@@ -76,9 +76,14 @@ IMPORTANT: in the latter case the algorithm assumes that the query experiment in
 sudo apt-get update
 sudo apt-get libssl-dev libcurl4-openssl-dev  install libxml2-dev
 # For an initialised machine
-library(devtools)  
+###############################################
 source("https://bioconductor.org/biocLite.R") 
 biocLite("limma")
+install.packages("data.tree")
+install.packages("abind")
+install_github("mjskay/tidybayes")  
+###############################################
+library(devtools)  
 install_github("stemangiola/ARMET", args = "--preclean", build_vignettes = FALSE)  
 if("package:ARMET" %in% search()) detach("package:ARMET", unload=TRUE, force=TRUE)
 library(ARMET) 
