@@ -79,6 +79,18 @@ sudo apt-get libssl-dev libcurl4-openssl-dev  install libxml2-dev
 ###############################################
 # Dependencies
 ###############################################
+For non C++14 native machines
+
+1) create ~/.R/Makevars
+2) write in it
+
+CXX14 = g++ # or clang++ if you have that
+CXX14FLAGS = -O3 -Wno-ignored-attributes
+
+###############################################
+# Dependencies
+###############################################
+library(devtools)  
 source("https://bioconductor.org/biocLite.R") 
 biocLite("limma")
 biocLite("edgeR")
@@ -87,8 +99,8 @@ install.packages("abind")
 install_github("mjskay/tidybayes")  
 install.packages("future")
 install.packages("reshape")
+install.packages("StanHeaders") 
 ###############################################
-library(devtools)  
 install_github("stemangiola/ARMET", args = "--preclean", build_vignettes = FALSE)  
 if("package:ARMET" %in% search()) detach("package:ARMET", unload=TRUE, force=TRUE)
 library(ARMET) 
