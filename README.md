@@ -74,7 +74,7 @@ IMPORTANT: in the latter case the algorithm assumes that the query experiment in
 # Installation
 # For a fresh Ubuntu system
 sudo apt-get update
-sudo apt-get libssl-dev libcurl4-openssl-dev  install libxml2-dev
+sudo apt-get install libssl-dev libcurl4-openssl-dev libxml2-dev
 # For an initialised machine
 ###############################################
 # Dependencies
