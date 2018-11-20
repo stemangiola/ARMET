@@ -130,7 +130,7 @@ ARMET_plotFit(results, "immune_cell")
 ARMET_plotPolar(results)
 ```
 
-![ARMET](https://github.com/stemangiola/ARMET/blob/master/ARMET_polar_example.png?raw=true)
+![ARMET](https://github.com/stemangiola/ARMET/blob/master/armet_polar.png?raw=true)
 
 ```
 # Input data shape
