@@ -1,4 +1,4 @@
-![alt tag](https://github.com/stemangiola/ARMET/blob/master/armet_logo.png?raw=true)
+![ARMET](https://github.com/stemangiola/ARMET/blob/master/armet_logo.png?raw=true)
 
 ARMET-tc infers rates of changes in tissue composition acros a covariate of interest (e.g., treatment status, time or disease grade). 
 
@@ -127,7 +127,12 @@ results =
 # Report
 ARMET_getFit(results)
 ARMET_plotFit(results, "immune_cell")
+ARMET_plotPolar(results)
+```
 
+![ARMET](https://github.com/stemangiola/ARMET/blob/master/ARMET_polar_example.png?raw=true)
+
+```
 # Input data shape
 test_data
 
