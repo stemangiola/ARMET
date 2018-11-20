@@ -110,6 +110,7 @@ install_github("mjskay/tidybayes")
 install.packages("future")
 install.packages("reshape")
 install.packages("StanHeaders") 
+install.packages("rstan")
 ###############################################
 install_github("stemangiola/ARMET", args = "--preclean", build_vignettes = FALSE)  
 if("package:ARMET" %in% search()) detach("package:ARMET", unload=TRUE, force=TRUE)
