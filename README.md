@@ -1,4 +1,4 @@
-![alt tag](https://github.com/stemangiola/ARMET/blob/master/armet_logo.png?raw=true)
+![ARMET](https://github.com/stemangiola/ARMET/blob/master/armet_logo.png?raw=true)
 
 ARMET-tc infers rates of changes in tissue composition acros a covariate of interest (e.g., treatment status, time or disease grade). 
 
@@ -72,8 +72,47 @@ IMPORTANT: in the latter case the algorithm assumes that the query experiment in
 
 ```R
 # Installation
+# For a fresh Ubuntu system
+
+###############################################
+# Install R/3.5.1
+###############################################
+
+sudo apt install apt-transport-https software-properties-common
+sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys E298A3A825C0D65DFD57CBB651716619E084DAB9
+sudo add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu bionic-cran35/'
+sudo apt update
+sudo apt-get install r-base
+sudo apt-get install libssl-dev libcurl4-openssl-dev libxml2-dev
+
+# For an initialised machine
+###############################################
+# Dependencies
+###############################################
+For non C++14 native machines
+
+1) create ~/.R/Makevars
+2) write in it
+
+CXX14 = g++ # or clang++ if you have that
+CXX14FLAGS = -O3 -Wno-ignored-attributes
+
+###############################################
+# Dependencies
+###############################################
 library(devtools)  
-install_github("stemangiola/ARMET", args = "--preclean", build_vignettes = FALSE, auth_token = "37c5c6238136a6804d336d9a7078eece993ce870", password="x-oauth-basic")  
+source("https://bioconductor.org/biocLite.R") 
+biocLite("limma")
+biocLite("edgeR")
+install.packages("data.tree")
+install.packages("abind")
+install_github("mjskay/tidybayes")  
+install.packages("future")
+install.packages("reshape")
+install.packages("StanHeaders") 
+install.packages("rstan")
+###############################################
+install_github("stemangiola/ARMET", args = "--preclean", build_vignettes = FALSE)  
 if("package:ARMET" %in% search()) detach("package:ARMET", unload=TRUE, force=TRUE)
 library(ARMET) 
 
@@ -89,7 +128,12 @@ results =
 # Report
 ARMET_getFit(results)
 ARMET_plotFit(results, "immune_cell")
+ARMET_plotPolar(results)
+```
 
+![ARMET](https://github.com/stemangiola/ARMET/blob/master/armet_polar.png?raw=true)
+
+```
 # Input data shape
 test_data
 
