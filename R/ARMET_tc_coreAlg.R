@@ -70,7 +70,7 @@ ARMET_tc_coreAlg = function(
 		# Get cell type just for this recursive peers and descendants
 		mutate(ct = as.character(ct)) %>%
 		left_join(
-			get_map_foreground_background(tree, ct) %>%
+			get_map_foreground_background(my_tree, ct) %>%
 				select(-ct) %>%
 				rename(ct=ancestor) %>%
 				distinct(),
@@ -95,6 +95,7 @@ ARMET_tc_coreAlg = function(
 	get_stats_on_ref(ref,my_tree) %>%
 		filter(ct %in% unique(ref$ct))
 
+	#write("check_4cc1", file = sprintf(obj.in$log.ARMET, ct), append = T)
 	# filter mix and add theta value
 	mix = mix %>%
 		group_by(sample) %>%
@@ -118,10 +119,11 @@ ARMET_tc_coreAlg = function(
 	# Garbage collection
 	rm(ref)
 	gc()
+	#write("check_4cc2", file = sprintf(obj.in$log.ARMET, ct), append = T)
 
 	# Get the probability table of the previous run
 	ancestor_run_prop_table = get_last_existing_leaves_with_annotation(my_tree)
-
+#	write("check_4cc3", file = sprintf(obj.in$log.ARMET, ct), append = T)
 	# Sanity check
 	if(
 		any(
@@ -157,7 +159,7 @@ ARMET_tc_coreAlg = function(
 
 	# Calculate the value of the genes for background
 	# !!rlang::sym(ct) -> for variable name without quotes
-
+	#write("check_4cc4", file = sprintf(obj.in$log.ARMET, ct), append = T)
 	y_hat_background =
 		as.matrix(
 			bg_prop %>%
@@ -201,7 +203,7 @@ ARMET_tc_coreAlg = function(
 		as_tibble() %>%
 		mutate(sample = levels(mix$sample)) %>%
 		select(sample, everything())
-
+	#write("check_4cc5", file = sprintf(obj.in$log.ARMET, ct), append = T)
 	# Create input object for the model
 	model.in = list(
 
@@ -293,9 +295,10 @@ ARMET_tc_coreAlg = function(
 			#control =                         list(max_treedepth =15),
 			cores = 4,
 			seed = ifelse(is.null(seed), sample.int(.Machine$integer.max, 1), seed),
-			save_warmup=FALSE
+			save_warmup=FALSE,
+			refresh = 0
 		)
-
+#	write("check_4cc6", file = sprintf(obj.in$log.ARMET, ct), append = T)
 	# library(rstan)
 	# source("https://raw.githubusercontent.com/betanalpha/knitr_case_studies/master/qr_regression/stan_utility.R")
 	# check_all_diagnostics(fit)
@@ -318,10 +321,10 @@ ARMET_tc_coreAlg = function(
 		annotate_posterior_sample_ct(colnames(model.in$x),my_design) %>%
 		rename(relative_proportion = estimate) %>%
 		mutate_if(is.character, as.factor)
-
+	#write("check_4cc7", file = sprintf(obj.in$log.ARMET, ct), append = T)
 	# Add info to the node
 	node = add_data_to_tree_from_table(node, proportions, "relative_proportion", append = T)
-
+	#write("check_4cc8", file = sprintf(obj.in$log.ARMET, ct), append = T)
 	# Set up background trees
 	node = add_absolute_proportions_to_tree(node)
 
@@ -331,7 +334,7 @@ ARMET_tc_coreAlg = function(
 		add_info_to_tree(	node,	ct,	"fit",fit,	append = F),
 		node
 	)
-
+#	write("check_4cc9", file = sprintf(obj.in$log.ARMET, ct), append = T)
 	node = switch(
 		is.null(cov_to_test) + 1,
 		add_info_to_tree(
@@ -363,9 +366,7 @@ ARMET_tc_coreAlg = function(
 		),
 		node
 	)
-
-
-
+#	write("check_4cc10", file = sprintf(obj.in$log.ARMET, ct), append = T)
 	# Hypothesis test
 	node = switch(
 		is.null(cov_to_test) + 1,
@@ -395,9 +396,10 @@ ARMET_tc_coreAlg = function(
 						by = "ct_idx"
 					) %>%
 					filter(ct %in% colnames(model.in$x)) %>%
-					mutate(e.sig = ifelse(conf.low * conf.high > 0, "*", "")) %>%
-					setNames(gsub("conf", "e", colnames(.))) %>%
-					select(-covariate_idx, -ct_idx, -.prob),
+					mutate(e.sig = ifelse(.lower * .upper > 0, "*", "")) %>%
+					rename(`e.upper` = .upper, `e.lower` = .lower,) %>%
+					#setNames(paste("conf", "e", colnames(.))) %>%
+					select(-covariate_idx, -ct_idx, -.width),
 
 				# Extrinsic regression
 					rstan::sampling(
@@ -441,7 +443,8 @@ ARMET_tc_coreAlg = function(
 						seed = ifelse(is.null(seed), sample.int(.Machine$integer.max, 1), seed),
 						save_warmup=FALSE,
 						iter=     ifelse(ct %in% c("TME", "immune_cell"), 600, 1400) ,
-						warmup =  ifelse(ct %in% c("TME", "immune_cell"), 400, 700)
+						warmup =  ifelse(ct %in% c("TME", "immune_cell"), 400, 700),
+						refresh = 0
 					) %>%
 
 					# Parsing fit
@@ -462,15 +465,16 @@ ARMET_tc_coreAlg = function(
 						),
 						by = "ct_idx"
 					) %>%
-					mutate(i.sig = ifelse(conf.low * conf.high > 0, "*", "")) %>%
-					setNames(gsub("conf", "i", colnames(.))) %>%
-					select(-covariate_idx, -ct_idx, -.prob),
+					mutate(i.sig = ifelse(.lower * .upper > 0, "*", "")) %>%
+					rename(`i.upper` = .upper, `i.lower` = .lower,) %>%
+					#setNames(gsub("conf", "i", colnames(.))) %>%
+					select(-covariate_idx, -ct_idx, -.width),
 				by = c("covariate",  "ct")
 			) %>% select(covariate, ct, everything())
 		),
 		node
 	)
-
+	#write("check_4cc11", file = sprintf(obj.in$log.ARMET, ct), append = T)
 	# Save output
 	if(save_report) save(fit, file=sprintf("%s/%s_fit.RData", output_dir, ct))
 	if(save_report)	write.csv(proportions, sprintf("%s/%s_composition.csv", output_dir, ct))

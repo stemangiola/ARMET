@@ -278,33 +278,45 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree, log.ARMET){
 
 		# Initialize pipe
 		`%>%` <- magrittr::`%>%`
+#if(node$name == "immune_cell") browser()
+		obj.in$log.ARMET = log.ARMET
 
 		obj.out = ARMET_tc_coreAlg(obj.in, node)
 		node = obj.out$node
 
+		#write("check_4cc12", file = sprintf(log.ARMET, node$name), append = T)
+		#write("blaaa", file = sprintf(log.ARMET, node$name), append = T)
+
+		#write(sprintf("check_%s", node$name), file = sprintf(log.ARMET, node$name), append = T)
+		#write(sprintf("check_%s", log.ARMET), file = sprintf(log.ARMET, node$name), append = T)
+
 		# Write to log file
 		write(node$name,file=log.ARMET,append=TRUE)
 
+
+		#write("check_4cc13", file = sprintf(log.ARMET, node$name), append = T)
+
 		# Update tree
 		bg_tree = replace_node_from_tree(bg_tree, node)
+		#write("check_4cc14", file = sprintf(log.ARMET, node$name), append = T)
 
 		# Pass background tree
 		obj.in$my_tree = bg_tree
-
+		#write("check_4cc15", file = sprintf(log.ARMET, node$name), append = T)
 		# Pass phi posterior
 		obj.in$phi = obj.out$node$phi
-
+		#write("check_4cc16", file = sprintf(log.ARMET, node$name), append = T)
 		if(obj.in$multithread & !obj.in$do_debug){
 			n_cores = length(node$children)
-
+			#write("check_4cc17", file = sprintf(log.ARMET, node$name), append = T)
 			cl <- parallel::makeCluster(n_cores)
 			parallel::clusterExport(cl, c("obj.in", "bg_tree", "%>%", "log.ARMET"), environment())
 			doParallel::registerDoParallel(cl)
 		}
-
+		#write("check_4cc18", file = sprintf(log.ARMET, node$name), append = T)
 		`%my_do%` = ifelse(obj.in$multithread & !obj.in$do_debug, `%dopar%`, `%do%`)
 		verbose = obj.in$verbose | obj.in$do_debug
-
+		#write("check_4cc19", file = sprintf(log.ARMET, node$name), append = T)
 		#################################
 		## Debug
 		#################################
@@ -314,10 +326,16 @@ run_coreAlg_though_tree_recursive = function(node, obj.in, bg_tree, log.ARMET){
 				run_coreAlg_though_tree_recursive(cc, obj.in, bg_tree, log.ARMET)
 			})
 		else
-			node$children = foreach::foreach(cc = node$children, .verbose = verbose) %my_do% {
-
+			node$children = parallel::parLapply(cl,  node$children, function(cc) {
+				#write("check_4cc20", file = sprintf(log.ARMET, node$name), append = T)
 				run_coreAlg_though_tree_recursive(cc, obj.in, bg_tree, log.ARMET)
-			}
+				#write("check_4cc21", file = sprintf(log.ARMET, node$name), append = T)
+			})
+			# node$children = foreach::foreach(cc = node$children, .verbose = verbose) %my_do% {
+			# 	write("check_4cc20", file = sprintf(log.ARMET, node$name), append = T)
+			# 	run_coreAlg_though_tree_recursive(cc, obj.in, bg_tree, log.ARMET)
+			# 	write("check_4cc21", file = sprintf(log.ARMET, node$name), append = T)
+			# }
 
 		if(obj.in$multithread & !obj.in$do_debug)	parallel::stopCluster(cl)
 
@@ -338,39 +356,39 @@ run_coreAlg_though_tree = function(node, obj.in){
 
 	writeLines("ARMET: Starting deconvolution")
 
-	log.ARMET = sprintf("%s%s", tempfile(), Sys.getpid())
+	log.ARMET = sprintf("%s%s" ,tempfile(), Sys.getpid())
+
+	#writeLines(log.ARMET)
+
 	if (file.exists(log.ARMET)) file.remove(log.ARMET)
 	file.create(log.ARMET)
 
 	exec_hide_std_out = function(node, obj.in, log.ARMET){
 
-		if(obj.in$multithread & !obj.in$do_debug){
-			cl <- parallel:::makeCluster(2)
-			parallel:::clusterExport(cl, c("obj.in", "node", "%>%", "log.ARMET"), environment())
-			doParallel:::registerDoParallel(cl)
-		}
 
-		`%my_do%` = ifelse(obj.in$multithread & !obj.in$do_debug, `%dopar%`, `%do%`)
-		verbose = obj.in$verbose | obj.in$do_debug
+		# if(obj.in$multithread & !obj.in$do_debug){
+		# 	cl <- parallel:::makeCluster(2)
+		# 	parallel:::clusterExport(cl, c("obj.in", "node", "%>%", "log.ARMET"), environment())
+		# 	doParallel:::registerDoParallel(cl)
+		# }
 
-		node.filled = foreach:::foreach(dummy = 1, .verbose = verbose) %my_do% {
+		# `%my_do%` = ifelse(obj.in$multithread & !obj.in$do_debug, `%dopar%`, `%do%`)
+		# verbose = obj.in$verbose | obj.in$do_debug
 
-			run_coreAlg_though_tree_recursive(node, obj.in, node, log.ARMET)
-		}
+	#	node.filled = foreach:::foreach(dummy = 1, .verbose = verbose) %my_do% {
 
-		if(obj.in$multithread & !obj.in$do_debug)	parallel:::stopCluster(cl)
+		run_coreAlg_though_tree_recursive(node, obj.in, node, log.ARMET)
+	#	}
 
-		return(node.filled[[1]])
+		#if(obj.in$multithread & !obj.in$do_debug)	parallel:::stopCluster(cl)
+
 	}
 
 	if(!obj.in$do_debug)
 	{
-		node.filled =
-			switch(
-				obj.in$verbose + 1,
-				future::future(		exec_hide_std_out(node, obj.in, log.ARMET) 		),
-				exec_hide_std_out(node, obj.in, log.ARMET)
-			)
+		if(!obj.in$verbose)	node.filled =	future::future(	exec_hide_std_out(node, obj.in, log.ARMET) 		)
+		else node.filled = exec_hide_std_out(node, obj.in, log.ARMET)
+
 
 		log.array = c()
 		done = F
@@ -498,8 +516,8 @@ get_tree_hypoth_test = function(tree_out, tree_in, cov){
 			st = stats[i,] %>% data.frame()
 
 			data.tree::FindNode(tree_out, st$ct)$Set(Estimate =   round(st$intrinsic, 2), filterFun = function(x) x$name == st$ct)
-			data.tree::FindNode(tree_out, st$ct)$Set(CI.low =     round( st$i.low,2), filterFun = function(x) x$name == st$ct)
-			data.tree::FindNode(tree_out, st$ct)$Set(CI.high =    round( st$i.high,2), filterFun = function(x) x$name == st$ct)
+			data.tree::FindNode(tree_out, st$ct)$Set(CI.low =     round( st$i.lower,2), filterFun = function(x) x$name == st$ct)
+			data.tree::FindNode(tree_out, st$ct)$Set(CI.high =    round( st$i.upper,2), filterFun = function(x) x$name == st$ct)
 			data.tree::FindNode(tree_out, st$ct)$Set(Direction =  ifelse(st$intrinsic>0, "+", "-"), filterFun = function(x) x$name == st$ct)
 			data.tree::FindNode(tree_out, st$ct)$Set(Sig =  st$i.sig, filterFun = function(x) x$name == st$ct)
 			data.tree::FindNode(tree_out, st$ct)$Set(Driver =  st$e.sig, filterFun = function(x) x$name == st$ct)
