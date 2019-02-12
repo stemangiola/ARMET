@@ -95,7 +95,7 @@ For non C++14 native machines
 2) write in it
 
 CXX14 = g++ # or clang++ if you have that
-CXX14FLAGS = -O3 -Wno-ignored-attributes
+CXX14FLAGS = -O3 -Wno-ignored-attributes -fPIC
 
 ###############################################
 # Dependencies
