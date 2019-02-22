@@ -149,10 +149,8 @@ check_input = function(mix, is_mix_microarray, my_design, cov_to_test, custom_re
 	}
 
 	# Check if design and mix do not have the same samples
-	if(
-		my_design %>% is.null %>% `!` &
-		my_design %>% pull(sample) %>% length != mix %>% select(-gene) %>% ncol
-	){
+	if(my_design %>% is.null %>% `!`)
+		if(	my_design %>% pull(sample) %>% length != mix %>% select(-gene) %>% ncol){
 		writeLines("ARMET: The sample names in the design matrix and count matrix are not consistent.")
 		stop()
 	}

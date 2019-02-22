@@ -270,6 +270,10 @@ ARMET_plotPolar = function(
 			"Driver"
 		) %>%
 		as_tibble() %>%
+
+		# BUG WITH EXCLUDED CELL TYOES
+		filter(`Cell type proportion` %>% is.na %>% `!`) %>%
+
 		left_join(ct_names_formatted, by= "name") %>%
 		select(-levelName) %>% select(taxa, everything()) %>%
 		mutate(Estimate = ifelse(Sig == "*" | Driver == "*", Estimate, NA)) %>%

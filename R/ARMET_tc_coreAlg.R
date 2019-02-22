@@ -92,8 +92,9 @@ ARMET_tc_coreAlg = function(
 		droplevels()
 
 	# Print stats on ref
-	get_stats_on_ref(ref,my_tree) %>%
-		filter(ct %in% unique(ref$ct))
+
+	# get_stats_on_ref(ref,my_tree) %>%
+	# 	filter(ct %in% unique(ref$ct))
 
 	#write("check_4cc1", file = sprintf(obj.in$log.ARMET, ct), append = T)
 	# filter mix and add theta value
