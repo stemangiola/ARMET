@@ -78,7 +78,7 @@ ARMET_plotFit = function(obj, ct = "TME", param = "estimate_prop_with_uncertanti
 		node_info[[param]], ggplot2::aes(x=get(obj$input$cov_to_test)+my_noise, y=estimate, colour=ct, group=ct)) +
 		ggplot2::geom_point() +
 		ggplot2::geom_errorbar(
-			ggplot2::aes(ymin=.lower, ymax=.higher, colour=ct),
+			ggplot2::aes(ymin=.lower, ymax=.upper, colour=ct),
 			width=0, alpha=0.4
 		) +
 		#ggplot2::scale_colour_brewer(palette = "Set1") +
