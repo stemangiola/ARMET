@@ -217,9 +217,10 @@ add_absolute_proportions_to_tree = function(node, p_ancestor =  NULL ){
 		node$relative_proportion =
 			node$relative_proportion %>%
 			dplyr::mutate(
-				absolute_proportion =
-					relative_proportion *
-					p_ancestor
+				absolute_proportion =	relative_proportion *	p_ancestor,
+				.lower_absolute = .lower * p_ancestor,
+				.upper_absolute = .upper * p_ancestor,
+
 			)
 
 	if(length(node$children)>0){
@@ -453,7 +454,9 @@ format_tree = function(tree, mix, ct_to_omit){
 					sample = factor(),
 					ct = factor(),
 					relative_proportion=double(),
-					absolute_proportion=double()
+					absolute_proportion=double(),
+					.lower=double(),
+					.upper=double()
 				)
 			)
 	}
