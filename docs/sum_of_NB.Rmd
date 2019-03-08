@@ -1,0 +1,114 @@
+---
+title: "sum_of_NB"
+author: "Mangiola Stefano"
+date: "3/8/2019"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#devtools::load_all()
+library(tidyverse)
+library(rstan)
+library(foreach)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
+```
+
+Testing how well is the distribution of sum of neg. binom. vars with identical overdispersion well approximated by a single neg. binom distribution.
+
+Currently assuming the same `phi` for all variables. 
+
+```{r, echo=FALSE, include=F}
+#Function to simulate N draws from the sum of NBs
+generate_nb_sum <- function(N, n_means, phi, means = rlnorm(n_means, 4, 2)) {
+  sums = numeric(N)
+  for(n in 1:N) {
+    sums[n] = sum(rnbinom(n_means, mu = means, size = phi))
+  }
+  list(sums = sums, means = means, phi = phi)
+}
+
+#Loading models used to match a distribution
+nb_model = stan_model("nb.stan")
+```
+
+
+```{r}
+ n_means = 2
+
+len <- 1000
+my_phi <- numeric(len)
+my_phi[1] <- 1
+my_phi[2] <- 1
+for (i in 3:len) { 
+    my_phi[i] <- my_phi[i-1]+my_phi[i-2]
+}
+my_phi =(my_phi/max(my_phi)*1000) + 0.001
+
+foreach(my_phi=my_phi, .combine=bind_rows) %do% {
+	#phi = 0.1
+
+	data = generate_nb_sum(10000, n_means, my_phi, means = MCMCpack::rdirichlet(1, c(100, 200)) * 2000)
+
+	 
+  opt_res = optimizing(
+  	nb_model, 
+  	data = list(N = length(data$sums), counts = data$sums)
+  )
+  
+  tibble(
+  	method="approx", mean=opt_res$par["mu"], phi=opt_res$par["phi"]
+  ) %>%
+  	bind_rows(
+  		 tibble(method="theory", mean=sum(data$means), phi=my_phi * (sum(data$means) ^ 2) / sum(data$means ^ 2))
+  	) %>% 
+  	mutate(real_phi = my_phi)
+
+} %>%
+	gather(param, value, c("phi", "mean")) %>%
+	ggplot(aes(x=real_phi, y=value, color=method)) + 
+	geom_line() + 
+	scale_x_log10() + 
+	facet_wrap(~param, scale="free")
+  
+  
+```
+
+```{r}
+
+foreach(my_tot=seq(1, 1000, 10), .combine=bind_rows) %:%
+	foreach(my_phi=c(0.001, 0.01, 0.1, 1), .combine=bind_rows) %do% {
+	#phi = 0.1
+
+	data = generate_nb_sum(10000, n_means, my_phi, means = MCMCpack::rdirichlet(1, c(100, 200)) * my_tot)
+
+	 
+  opt_res = optimizing(
+  	nb_model, 
+  	data = list(N = length(data$sums), counts = data$sums),
+  	init = list(mu = sum(data$means))
+  )
+  
+  tibble(
+  	method="approx", mean=opt_res$par["mu"], phi=opt_res$par["phi"]
+  ) %>%
+  	bind_rows(
+  		 tibble(method="theory", mean=sum(data$means), phi=my_phi * (sum(data$means) ^ 2) / sum(data$means ^ 2))
+  	) %>% 
+  	mutate(real_tot = my_tot, my_phi = my_phi)
+
+} %>%
+	gather(param, value, c("phi", "mean")) %>%
+	ggplot(aes(x=real_tot, y=value, color=method)) + 
+	geom_line() + 
+	scale_x_log10() + 
+	facet_wrap(my_phy~param, scale="free")
+  
+  
+
+
+```
