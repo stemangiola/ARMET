@@ -16,6 +16,22 @@ library(rstan)
 library(foreach)
 options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = TRUE)
+
+my_theme = 	
+	theme_bw() +
+	theme(
+		panel.border = element_blank(),
+		axis.line = element_line(),
+		panel.grid.major = element_line(size = 0.2),
+		panel.grid.minor = element_line(size = 0.1),
+		text = element_text(size=12),
+		legend.position="bottom",
+		aspect.ratio=1,
+		axis.text.x = element_text(angle = 90, hjust = 1),
+		strip.background = element_blank(),
+		axis.title.x  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10)),
+		axis.title.y  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10))
+	)
 ```
 
 Testing how well is the distribution of sum of neg. binom. vars with identical overdispersion well approximated by a single neg. binom distribution.
@@ -213,5 +229,65 @@ rate=c(0.5, 0.5, 0.5, 0.1)
 	k_sum = sum(shape/rate)^2/sum(shape/(rate^2))
 	theta_sum = 1/(sum(shape/rate)/k_sum)
 print(c(k_sum, theta_sum))
+
+```
+
+## Integration with NB
+```{r}
+mu = c(500, 100)
+#phi = c(0.1, 1)
+
+sum_nb_through_gamma = function(mu, phi){
+# Conversion to gama
+shape = (mu*phi)/(mu+phi)
+rate = phi/(mu+phi)
+
+# Calculating gamma
+shape_sum = sum(shape/rate)^2/sum(shape/(rate^2))
+rate_sum = 1/(sum(shape/rate)/shape_sum)
+
+# Conversion to NB
+mu_sum = shape_sum/rate_sum
+phi_sum = mu_sum^2 / ( (shape_sum/rate_sum^2) - mu_sum)
+c(mu_sum, phi_sum)
+}
+
+foreach(my_tot=seq(1, 1000, 10), .combine=bind_rows) %:%
+	foreach(mp=c(0.01, 0.1, 1, 10), .combine=bind_rows) %do% {
+
+	my_phi = c(mp, mp*5)
+	my_mean = MCMCpack::rdirichlet(1,mu) * my_tot
+		
+	data = generate_nb_sum(10000, 2, my_phi, means = my_mean)
+
+	 
+  opt_res = optimizing(
+  	nb_model, 
+  	data = list(N = length(data$sums), counts = data$sums),
+  	init = list(mu = sum(data$means))
+  )
+
+  tibble(
+  	method="approx", mean=opt_res$par["mu"], phi=opt_res$par["phi"]
+  ) %>%
+  	bind_rows(
+  		 tibble(
+  		 	method=c("rough theory", "gamma theory"), 
+  		 	mean=sum(data$means), 
+  		 	phi=c(
+  		 		 mean(my_phi) * (sum(data$means) ^ 2) / sum(data$means ^ 2),
+  		 		sum_nb_through_gamma(my_mean, my_phi)[2]
+  		 	)
+  		 )
+  	) %>% 
+  	mutate(real_tot = my_tot, my_phi = mp)
+
+} %>%
+	tidyr::gather(param, value, c("phi", "mean")) %>%
+	ggplot(aes(x=real_tot, y=value, color=method)) + 
+	geom_line() + 
+	scale_x_log10() + 
+	facet_wrap(my_phi~param, scale="free") + 
+	my_theme
 
 ```
