@@ -234,8 +234,7 @@ print(c(k_sum, theta_sum))
 
 ## Integration with NB
 ```{r}
-mu = c(500, 100)
-#phi = c(0.1, 1)
+
 
 sum_nb_through_gamma = function(mu, phi){
 # Conversion to gama
@@ -252,42 +251,52 @@ phi_sum = mu_sum^2 / ( (shape_sum/rate_sum^2) - mu_sum)
 c(mu_sum, phi_sum)
 }
 
-foreach(my_tot=seq(1, 1000, 10), .combine=bind_rows) %:%
-	foreach(mp=c(0.01, 0.1, 1, 10), .combine=bind_rows) %do% {
+foreach(dummy=1:1000, .combine=bind_rows) %dopar% {
 
-	my_phi = c(mp, mp*5)
-	my_mean = MCMCpack::rdirichlet(1,mu) * my_tot
-		
-	data = generate_nb_sum(10000, 2, my_phi, means = my_mean)
+	df = 
+		fit_parsed %>% 
+		group_by(cut(lambda, breaks=3)) %>%
+		sample_n(1) 
+	
+		data = generate_nb_sum(
+			10000, 
+			df %>% nrow, 
+			df %>% pull(sigma_raw) %>% exp %>% `^` (-1), 
+			means = df %>% pull(lambda) %>% exp
+		)
 
-	 
-  opt_res = optimizing(
-  	nb_model, 
-  	data = list(N = length(data$sums), counts = data$sums),
-  	init = list(mu = sum(data$means))
-  )
-
-  tibble(
-  	method="approx", mean=opt_res$par["mu"], phi=opt_res$par["phi"]
+	  opt_res = optimizing(
+	  	nb_model, 
+	  	data = list(N = length(data$sums), counts = data$sums),
+	  	init = list(mu = sum(data$means))
+	  )  
+	  
+	 tibble(	
+  	method="approx",
+  	mean=opt_res$par["mu"],
+  	phi=opt_res$par["phi"] 
   ) %>%
-  	bind_rows(
-  		 tibble(
-  		 	method=c("rough theory", "gamma theory"), 
-  		 	mean=sum(data$means), 
-  		 	phi=c(
-  		 		 mean(my_phi) * (sum(data$means) ^ 2) / sum(data$means ^ 2),
-  		 		sum_nb_through_gamma(my_mean, my_phi)[2]
-  		 	)
-  		 )
-  	) %>% 
-  	mutate(real_tot = my_tot, my_phi = mp)
-
+	bind_rows({
+		theory = sum_nb_through_gamma(
+			df %>% pull(lambda) %>% exp, 
+			df %>% pull(sigma_raw) %>% exp %>% `^` (-1)
+		)
+		
+		 tibble(
+		 	method=c("theory"), 
+		 	mean=theory[1], 
+		 	phi=theory[2]
+		 )
+	}) %>%
+  mutate(run = dummy)
+	 
+	
 } %>%
 	tidyr::gather(param, value, c("phi", "mean")) %>%
-	ggplot(aes(x=real_tot, y=value, color=method)) + 
-	geom_line() + 
+	ggplot(aes(x=run, y=value, color=method)) + 
+	geom_point(alpha=0.5) + 
 	scale_x_log10() + 
-	facet_wrap(my_phi~param, scale="free") + 
+	facet_wrap(~param, scale="free") + 
 	my_theme
 
 ```
