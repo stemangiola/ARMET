@@ -82,9 +82,6 @@ counts =
 	# Setup house keeping genes
 	mutate(`level 1` = ifelse(symbol %in% (read_csv("docs/hk_600.txt", col_names = FALSE) %>% pull(1)), "house_keeping", `level 1`)) %>%
 
-	mutate(`symbol original` = symbol) %>%
-	unite(symbol, c("level 1", "symbol"), remove = F) %>%
-
 	# Median redundant
 	do_parallel_start(40, "symbol") %>%
 	do({
@@ -107,6 +104,10 @@ counts =
 	) %>%
 	mutate(`read count normalised` = `read count normalised` %>% as.integer) %>%
 	mutate(`read count normalised log` = `read count normalised` %>% `+` (1) %>% log) %>%
+
+	# mutate symbol
+	mutate(`symbol original` = symbol) %>%
+	unite(symbol, c("level 1", "symbol"), remove = F) %>%
 
 	# Mark the bimodal distributions
 	do_parallel_start(40, "symbol") %>%
@@ -273,7 +274,7 @@ data_for_stan_MPI = list(
 # }
 # load("data_for_stan_MPI_level_1.RData")
 save(list=c("data_for_stan_MPI", "counts_stan_MPI", "counts"), file="docs/level_1_input.RData")
-if(0){
+
 fileConn<-file("~/.R/Makevars")
 writeLines(c("CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
 close(fileConn)
@@ -291,9 +292,8 @@ fit_MPI =
 save(fit_MPI, file="docs/fit_MPI_level1.RData")
 Sys.time()
 
-}
+#load("docs/fit_MPI_level1.RData")
 
-load("docs/fit_MPI_level1.RData")
 # Parse fit and ave data
 fit_MPI %>%
 summary() %$% summary %>%
