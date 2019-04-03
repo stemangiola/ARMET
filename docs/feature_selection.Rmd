@@ -37,14 +37,17 @@ nb_to_gamma = function(mu, phi){
 	)
 }
 
+source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/e4ec6a2348efc2f62b88f10b12e70f4c6273a10a/tidy_extensions.R")
+
 ```
 
 ## R Markdown
-```{r}
+```{r, cache=TRUE}
 # TEMPORARY
 load("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/fit_MPI_level1_20032019.RData")
+load("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/level_1_input.RData")
 
-xx = fit_MPI %>%
+xxx = fit_MPI %>%
 summary() %$% summary %>%
 as_tibble(rownames="par") %>%
 filter(grepl("lambda|sigma", par)) %>%
@@ -57,9 +60,7 @@ left_join(
 		gather(idx_MPI, symbol) %>%
 		drop_na() %>% mutate(G=1:n())
 ) %>%
-left_join( counts_stan_MPI %>% distinct(symbol, `level 1`)  )
-
-xxx = xx %>%
+left_join( counts_stan_MPI %>% distinct(symbol, `level 1`)  ) %>%
 
 # QQ plots
 
@@ -94,7 +95,7 @@ mutate(`error scaled` =  ((`read count normalised` - predicted_NB) / (`read coun
 left_join(
 	(.) %>%
 		group_by(symbol) %>%
-		summarise(`gene error mean` = `error of log` %>% mean)
+		summarise(`gene error mean` = `error of log` %>% abs %>% mean)
 )
 
 xxx %>%
@@ -114,12 +115,20 @@ mutate(
 ```
 
 
-```{r}
+```{r, cache=TRUE}
 
 l1 = read_csv("~/unix3XX/PhD/deconvolution/ARMET/docs/fit_level1.csv") 
 
 l1.annot = 
 	l1 %>%
+	
+	# Recalculate error mean
+	select(-`gene error mean`) %>%
+	left_join(
+	(.) %>%
+		group_by(symbol) %>%
+		summarise(`gene error mean` = `error of log` %>% abs %>% mean)
+	) %>%
 	
 	# Convert to gamma
 	mutate(
@@ -136,9 +145,34 @@ l1.annot =
 	arrange(CI_low %>% desc) %>%
 	
 	left_join( (.) %>% count(symbol)  ) %>%
-	filter(n == (.) %>% distinct(`level 1`) %>% nrow )
+	filter(n == (.) %>% distinct(`level 1`) %>% nrow %>% `-` (1))
 
-foreach(ct = l1.annot %>% distinct(`level 1`) %>% pull(1)) %do% {
+```
+
+## Plot error rank
+
+The threshold seems to be 0.5
+
+```{r}
+(
+	l1.annot %>% 
+ 	unite(symbol_ct, c("symbol", "level 1"), remove=F) %>% 
+ 	sample_frac(0.01)  %>% 
+ 	arrange(`gene error mean` %>% desc) %>%
+  mutate(symbol_ct = factor(symbol_ct, unique(symbol_ct))) %>%
+  ggplot(aes(x = symbol_ct, y = `gene error mean` , color=`level 1`, size=lambda)) +
+ 	#geom_point(alpha=0.4)  + 
+	geom_jitter(alpha=0.4, width = 25) +
+ 	theme(
+ 		axis.title.x=element_blank(),
+	 axis.text.x=element_blank(),
+	 axis.ticks.x=element_blank()
+	) 
+) %>% plotly::ggplotly()
+```
+
+```{r}
+foreach(ct = l1.annot %>% distinct(`level 1`) %>% pull(1), .combine = bind_rows) %do% {
 	l1.annot %>%
 		mutate(is_ct = `level 1` == !!ct) %>%
 		group_by(is_ct, symbol) %>%
@@ -150,29 +184,30 @@ foreach(ct = l1.annot %>% distinct(`level 1`) %>% pull(1)) %do% {
 		mutate(delta = `TRUE` - `FALSE`) %>%
 		left_join( l1.annot %>% filter(`level 1` == ct) %>% distinct(symbol, lambda) ) %>%
 		filter(lambda > 4) %>%
-		arrange(delta %>% desc)
-}
+		arrange(delta %>% desc) %>%
+		mutate(ct = ct) %>% 
+		head(n=10)
+} %>%
+	left_join(
+		l1 %>% distinct(`level 1`, symbol, sample, `read count normalised`)
+	) %>%
+	ggplot(aes(y=`read count normalised`, x=`level 1`)) + geom_boxplot() + facet_wrap(~ ct + symbol )
 
 	
 ```
 
-```{r}
+```{r, cache=TRUE}
 
-(l1.annot %>% unite(symbol_ct, c("symbol", "level 1"), remove=F) %>% sample_frac(0.001)  %>% arrange(`gene error mean` %>% desc) %>%
-    mutate(symbol_ct = factor(symbol_ct, unique(symbol_ct))) %>%
-    ggplot(aes(x = symbol_ct, y = `gene error mean`, color=`level 1`)) + geom_point()  + theme(axis.title.x=element_blank(),
-                                                                                               axis.text.x=element_blank(),
-                                                                                               axis.ticks.x=element_blank()) ) %>% plotly::ggplotly()
+
 
 
 
 l1 %>% 
-	unite(symbol_ct, c("symbol", "level 1")) %>% 
-  filter(symbol_ct %in% c("RPN1_endothelial")) %>%
-	ggplot(aes(x=`predicted_NB` + 1, y=`read count normalised` + 1, label=symbol_ct)) + 
+  filter(symbol %in% c("GK3P")) %>%
+	ggplot(aes(x=`predicted_NB` + 1, y=`read count normalised` + 1, label=symbol, color=`Cell type formatted`)) + 
 	geom_abline(intercept = 0, slope = 1, color="grey") + 
 	geom_point() + 
-	facet_wrap(~ symbol_ct, scales = "free")  +
+	facet_wrap(~ symbol, scales = "free")  +
 	expand_limits(y=1, x=1) + 
 	scale_y_log10() +
 	scale_x_log10() +

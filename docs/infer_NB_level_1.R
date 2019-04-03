@@ -11,15 +11,31 @@ library(rstan)
 library(tidybayes)
 library(here)
 library(foreach)
+library(parallel)
 library(doParallel)
-registerDoParallel()
+library(multidplyr)
+
 # library(future)
 # plan(multiprocess)
 
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 
-#devtools::load_all() # Sorry this costs me 30 minutes every day
+# Registering parallel framework
+system("nproc", intern = TRUE) %>%
+	as.integer %>%
+	sprintf("Working on %s cores", .) %>%
+	print
+
+n_cores = system("nproc", intern = TRUE) %>% as.integer
+
+cl = n_cores %>% makeCluster( manual=FALSE, outfile='log.txt')
+
+clusterEvalQ(cl, library(tidyverse))
+clusterEvalQ(cl, library(magrittr))
+
+registerDoParallel(cl)
+set_default_cluster(cl)
 
 my_theme =
 	theme_bw() +
@@ -36,6 +52,8 @@ my_theme =
 		axis.title.x  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10)),
 		axis.title.y  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10))
 	)
+
+
 
 # Tools
 source("https://gist.githubusercontent.com/stemangiola/90a528038b8c52b21f9cfa6bb186d583/raw/dbd92c49fb03fb05ab0b465704b99c0a39e654d5/transcription_tool_kit.R")
@@ -83,7 +101,7 @@ counts =
 	mutate(`level 1` = ifelse(symbol %in% (read_csv("docs/hk_600.txt", col_names = FALSE) %>% pull(1)), "house_keeping", `level 1`)) %>%
 
 	# Median redundant
-	do_parallel_start(40, "symbol") %>%
+	do_parallel_start(n_cores, "symbol") %>%
 	do({
 		`%>%` = magrittr::`%>%`
 		library(tidyverse)
@@ -110,7 +128,7 @@ counts =
 	unite(symbol, c("level 1", "symbol"), remove = F) %>%
 
 	# Mark the bimodal distributions
-	do_parallel_start(40, "symbol") %>%
+	do_parallel_start(n_cores, "symbol") %>%
 	do({
 		`%>%` = magrittr::`%>%`
 		library(tidyverse)
@@ -171,14 +189,14 @@ counts =
 
 # MPI
 
-shards = 56
+shards = n_cores %>% divide_by(3) %>% floor %>% multiply_by(4)
 counts_stan_MPI =
 	counts %>%
 
 	# inner_join(
 	# 	bind_rows (
-	# 		(.) %>% distinct(symbol, `level 1`) %>% filter(`level 1` == "house_keeping") %>% sample_n(300),
-	# 		(.) %>% distinct(symbol) %>% sample_n(20)
+	# 		(.) %>% distinct(symbol, `level 1`) %>% filter(`level 1` == "house_keeping") %>% sample_n(500),
+	# 		(.) %>% distinct(symbol) %>% sample_n(2000)
 	# 	) %>% distinct(symbol)
 	# )%>%
 
@@ -268,17 +286,42 @@ data_for_stan_MPI = list(
 		select(-i) %>%
 		replace(is.na(.), 0) %>%
 		mutate_if(is.numeric, as.integer) %>%
-		as_matrix() %>% t
+		as_matrix() %>% t,
+
+	symbol_ct_idx_expanded =
+		counts_stan_MPI %>%
+		distinct(idx_MPI, symbol, `symbol original`, `level 1`) %>%
+		mutate(G = 1:n()) %>% filter(`level 1` != "house_keeping") %>%
+		mutate(C = `level 1` %>% as.factor %>% as.integer) %>%
+		mutate(M = `symbol original` %>% as.factor %>% as.integer) %>%
+		arrange(M),
+
+	symbol_ct_idx =
+		counts_stan_MPI %>%
+		distinct(idx_MPI, symbol, `symbol original`, `level 1`) %>%
+		mutate(G = 1:n()) %>% filter(`level 1` != "house_keeping") %>%
+		mutate(C = `level 1` %>% as.factor %>% as.integer) %>%
+		mutate(M = `symbol original` %>% as.factor %>% as.integer) %>%
+		arrange(M) %>%
+		select(G, C, M) %>%
+		spread(C, G) %>%
+		select(-M)
 )
 
 # }
 # load("data_for_stan_MPI_level_1.RData")
+
+counts_stan_MPI %>% distinct(symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% as.array %>%
+	paste(collapse=" ") %>%
+	sprintf("Genes per shard %s", .) %>%
+	print
+
 save(list=c("data_for_stan_MPI", "counts_stan_MPI", "counts"), file="docs/level_1_input.RData")
 
 fileConn<-file("~/.R/Makevars")
 writeLines(c("CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
 close(fileConn)
-Sys.setenv("STAN_NUM_THREADS" = 14)
+Sys.setenv("STAN_NUM_THREADS" = n_cores %>% divide_by(3) %>% floor)
 nb_model_MPI = stan_model("/wehisan/bioinf/bioinf-data/Papenfuss_lab/projects/mangiola.s/PostDoc/RNAseq-noise-model/stan/negBinomial_tidy_MPI.stan")
 
 Sys.time()
@@ -313,7 +356,7 @@ left_join( counts_stan_MPI %>% distinct(symbol, `level 1`)  ) %>%
 # QQ plots
 
 left_join(counts) %>%
-do_parallel_start(40, "symbol") %>%
+do_parallel_start(n_cores, "symbol") %>%
 do({
 
 	`%>%` = magrittr::`%>%`
