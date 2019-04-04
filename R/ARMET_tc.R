@@ -44,136 +44,222 @@
 #'
 ARMET_tc = function(
 	mix,
-	my_design =                         NULL,
-	cov_to_test =                       NULL,
-	is_mix_microarray =                 F,
 	ct_to_omit =                        c("t_CD4_naive", "adipocyte"),
 	verbose =                           F,
-	save_report =                       F,
-	custom_ref =                        NULL,
-	multithread =                       T,
-	do_debug =                          F,
-	cell_type_root =                    "TME",
-	choose_internal_ref =               NULL,
 	omit_regression =                   F,
 	save_fit =                          F,
-	seed =                              NULL
+	seed =                              NULL,
+	cores = 14
 ){
 
+	source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/e4ec6a2348efc2f62b88f10b12e70f4c6273a10a/tidy_extensions.R")
+	library(tidyverse)
+	library(foreach)
+	library(rstan)
+	cores = 14
 	input = c(as.list(environment()))
+	shards = 56
 
-	writeLines("ARMET: Started data processing")
+	format_for_MPI = function(df){
+		df %>%
 
-	#Read ini file for some options
-	get_ini()
-
-	# Check input
-	check_input(
-		mix,
-		is_mix_microarray,
-		my_design,
-		cov_to_test,
-		custom_ref,
-		drop_node_from_tree(get_node_from_name(tree, cell_type_root), ct_to_omit)
-	)
-
-	# Create directory
-	output_dir = if(save_report)  create_temp_result_directory() else NULL
-
-	# Format input
-	mix = mix %>%
-		gather("sample", "value", 2:ncol(mix)) %>%
-		mutate_if(is.factor, as.character) %>%
-		mutate_if(is.character, as.factor) %>%
-		mutate_if(is.factor, factor) %>%
-		{ if(max((.)$value) < 50) mutate(value=exp(value)) else .}
-
-	# Check if design matrix exists
-	my_design =
-		switch(
-			is.null(my_design) + 1,
-			my_design,
-			tibble(	sample = levels(mix$sample),	`(intercept)` = 1	)
+		left_join(
+			(.) %>%
+				distinct(symbol) %>%
+				mutate( idx_MPI = head( rep(1:shards, (.) %>% nrow %>% `/` (shards) %>% ceiling ), n=(.) %>% nrow) )
 		) %>%
-		mutate_if(is.factor, as.character) %>%
-		mutate_if(is.character, as.factor) %>%
-		mutate_if(is.factor, factor)
+		arrange(idx_MPI, symbol) %>%
 
-	# Format tree
-	my_tree =  format_tree( get_node_from_name(tree, cell_type_root), mix, ct_to_omit)
-
-	# Ref formatting
-	ref =
-		# See if custom ref is provided
-		switch(
-			is.null(custom_ref) + 1,
-			ref_to_summary_ref(my_tree, custom_ref),
-			# See if choose internal ref is provided
-			switch(
-				is.null(choose_internal_ref) + 1,
-				switch(
-					(choose_internal_ref == "ARNA") + 1,
-					ref_array_recursive,
-					ref_RNAseq_recursive
-				),
-				# if npthing set choose default
-				switch(
-					(!is_mix_microarray) + 1,
-					ref_array_recursive,
-					ref_RNAseq_recursive
+		# Decide start - end location
+		group_by(idx_MPI) %>%
+		do(
+			(.) %>%
+				left_join(
+					(.) %>%
+						distinct(idx_MPI, sample, symbol) %>%
+						arrange(idx_MPI, symbol) %>%
+						count(idx_MPI, symbol) %>%
+						mutate(end = cumsum(n)) %>%
+						mutate(start = c(1, .$end %>% rev() %>% `[` (-1) %>% rev %>% `+` (1)))
 				)
-			)
 		) %>%
-		drop_na() %>%
+		ungroup() %>%
+
+		# Add counts MPI rows indexes
+		group_by(idx_MPI) %>%
+		mutate(`read count MPI row` = 1:n()) %>%
+		ungroup %>%
+
+		# Add symbol MPI rows indexes
+		left_join(
+			(.) %>%
+				group_by(idx_MPI) %>%
+				distinct(symbol) %>%
+				mutate(`symbol MPI row` = 1:n()) %>%
+				ungroup
+		) %>%
+
+		# Add gene idx
+		left_join(
+			(.) %>%
+				distinct(symbol, idx_MPI, `symbol MPI row`) %>%
+				arrange(idx_MPI, `symbol MPI row`) %>%
+				mutate(G = 1:n())
+		)
+
+	}
+
+	######################################
+	# Variable should be already set
+	######################################
+
+	load("data/reference.RData")
+
+	house_keeping = reference %>% filter(`Cell type category` == "house_keeping" ) %>% distinct(`symbol original`) %>% head(n=50) %>% pull(1)
+	reference =
+		reference %>%
+
 		filter(
-			ct %in%
-			get_leave_label(my_tree, last_level = 0, label = "name")
+			#`Cell type category` == "house_keeping" |
+			`symbol original` %in% 	house_keeping |
+			`symbol original` %in%  ( read_csv("docs/markers.csv") %>% pull(symbol) )
 		) %>%
-		droplevels()
+		select( -start, -end, -n, -contains("idx")) %>%
+		mutate(`read count` = `read count` %>% as.integer)
+		#inner_join( (.) %>% distinct(sample) %>% head(n=100))
+
+	mix = reference %>%
+		inner_join( (.) %>% distinct(sample) %>% head(n=1)) %>%
+		distinct(sample, `symbol original`, `read count`) %>%
+		spread(`symbol original`, `read count`) %>%
+		mutate(sample = 1:n() %>% as.character)
+
+	######################################
+	######################################
+
+	# Merge data sets
+	df =
+		bind_rows(
+			reference %>%
+				filter(`symbol original` %in% ( mix %>% colnames )),
+			mix %>%
+				gather(`symbol original`, `read count`, -sample) %>%
+				mutate(`Cell type category` = ifelse(
+					`symbol original` %in% ( reference %>% filter(`Cell type category` == "house_keeping" ) %>% distinct(`symbol original`) %>% pull(1) 	),
+					"house_keeping",
+					"query"
+				)) %>%
+				unite(symbol, c("Cell type category", "symbol original"), remove = F)
+		)	%>%
+
+		# Add symbol indeces
+		left_join(
+			(.) %>%
+				filter(!`Cell type category` %in% c("house_keeping")  ) %>%
+				distinct(`symbol original`) %>%
+				mutate(M = 1:n())
+		) %>%
+
+		# Add sample indeces
+		mutate(S = sample %>% as.factor %>% as.integer) %>%
+		left_join(
+			(.) %>%
+				filter(`Cell type category` == "query"  ) %>%
+				distinct(`sample`) %>%
+				mutate(Q = 1:n())
+		) %>%
+
+		# Add cell type indeces
+		left_join(
+			(.) %>%
+				filter(!`Cell type category` %in% c("query", "house_keeping")  ) %>%
+				distinct(`Cell type category`) %>%
+				mutate(C = 1:n())
+		)
 
 
-	# Calculate stats for ref
-	if(save_report) write.csv(get_stats_on_ref(ref, my_tree), sprintf("%s/stats_on_ref.csv", output_dir))
+	# For  reference MPI inference
+	counts_baseline =
+		df %>%
+		filter(`Cell type category` != "query") %>%
+		format_for_MPI
 
-	# Make data sets comparable
-	common_genes =                      intersect(as.character(mix$gene), as.character(ref$gene))
-	mix =                               mix %>% filter(gene%in%common_genes) %>% droplevels()
-	ref =                               ref %>% filter(gene%in%common_genes) %>% droplevels()
+	N = counts_baseline %>% distinct(sample, symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
+	I = counts_baseline %>% distinct(start, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
+	G = counts_baseline %>% distinct(symbol) %>% nrow()
+	S = counts_baseline %>% distinct(sample) %>% nrow()
+	G_per_shard = counts_baseline %>% distinct(symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% as.array
+	n_shards = min(shards, counts_baseline %>% distinct(idx_MPI) %>% nrow)
+	G_per_shard_idx = c(0, counts_baseline %>% distinct(symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% cumsum)
 
-	# Normalize data
-	mix = 													wrapper_normalize_mix_ref(mix, ref, is_mix_microarray)
+	counts =
+		counts_baseline %>%
+		distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
+		spread(idx_MPI,  `read count`) %>%
+		select(-`read count MPI row`) %>%
+		replace(is.na(.), 0 %>% as.integer) %>%
+		as_matrix() %>% t
 
-	# Round if RNA seq
-	if(!is_mix_microarray) ref = 				ref %>% mutate(value=round(value))
-	if(!is_mix_microarray) mix = 				mix %>% mutate(value=round(value))
+	sample_idx =
+		counts_baseline %>%
+		distinct(idx_MPI, S, `read count MPI row`)  %>%
+		spread(idx_MPI, S) %>%
+		select(-`read count MPI row`) %>%
+		replace(is.na(.), 0 %>% as.integer) %>%
+		as_matrix() %>% t
 
-	## Execute core ##############################################################################
-	##############################################################################################
+	symbol_end =
+		counts_baseline %>%
+		distinct(idx_MPI, end, `symbol MPI row`)  %>%
+		spread(idx_MPI, end) %>%
+		bind_rows( (.) %>% head(n=1) %>%  mutate_all(function(x) {0}) ) %>%
+		arrange(`symbol MPI row`) %>%
+		select(-`symbol MPI row`) %>%
+		replace(is.na(.), 0 %>% as.integer) %>%
+		as_matrix() %>% t
 
-	my_tree =
-		run_coreAlg_though_tree(
-			my_tree,
-			list(
-				mix =                           mix,
-				ref =                           ref,
-				my_design=                      my_design,
-				cov_to_test =                   cov_to_test,
-				ct_to_omit =                    ct_to_omit,
-				my_tree =                       my_tree,
-				is_mix_microarray =             is_mix_microarray,
-				save_report =                   save_report,
-				output_dir =                    output_dir,
-				multithread =                   multithread,
-				do_debug =                      do_debug,
-				omit_regression =               omit_regression,
-				save_fit =                      save_fit,
-				seed =                          seed,
-				verbose =                       verbose
-			)
-	)
+	# For deconvolution
+	ct_in_levels = c(4) %>% as.array
 
-	##############################################################################################
-	##############################################################################################
+	y =
+		df %>%
+		filter(`Cell type category` == "query") %>%
+		select(S, Q, `symbol original`, `read count`) %>%
+		left_join(
+			counts_baseline %>%
+				distinct(`symbol original`, G, C)
+		) %>%
+		spread(C, G) %>%
+		select(-`symbol original`) %>%
+		select(`read count`, S, Q, everything()) %>%
+		as_matrix
+
+	Q = df %>% filter(`Cell type category` == "query") %>% distinct(Q) %>% nrow
+
+
+
+	fileConn<-file("~/.R/Makevars")
+	writeLines(c("CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
+	close(fileConn)
+	Sys.setenv("STAN_NUM_THREADS" = cores)
+	ARMET_tc = stan_model("src/stan_files/ARMET_tc.stan")
+
+	Sys.time()
+	fit =
+		sampling(
+			ARMET_tc, #stanmodels$ARMET_tc,
+			chains=3, cores=3,
+			iter=150, warmup=100
+			# ,
+			# save_warmup = FALSE,
+			# pars = c(
+			# 	"lambda", "sigma_raw", "sigma_intercept", "sigma_slope",
+			# 	"sigma_sigma", "lambda_mu", "lambda_sigma", "lambda_skew"
+			# )
+		)
+	Sys.time()
+
+
 
 	writeLines("ARMET: building output")
 
