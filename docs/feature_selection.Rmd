@@ -44,7 +44,7 @@ source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c5
 ## R Markdown
 ```{r, cache=TRUE}
 # TEMPORARY
-load("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/fit_MPI_level1_20032019.RData")
+load("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/fit_MPI_level1.RData")
 load("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/level_1_input.RData")
 
 xxx = fit_MPI %>%
@@ -187,6 +187,12 @@ foreach(ct = l1.annot %>% distinct(`level 1`) %>% pull(1), .combine = bind_rows)
 		arrange(delta %>% desc) %>%
 		mutate(ct = ct) %>% 
 		head(n=10)
+} %>%
+{
+	(.) %>%
+		distinct(`symbol original`) %>%
+		write_csv("docs/markers.csv")
+	(.)
 } %>%
 	left_join(
 		l1 %>% distinct(`level 1`, symbol, sample, `read count normalised`)

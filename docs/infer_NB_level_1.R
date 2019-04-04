@@ -330,7 +330,7 @@ fit_MPI =
 		nb_model_MPI,
 		data = data_for_stan_MPI,
 		chains=3, iter=300, warmup=200, save_warmup = FALSE,
-		pars = c("lambda", "sigma_raw", "sigma_intercept", "sigma_slope", "sigma_sigma", "lambda_mu", "lambda_sigma", "lambda_skew")
+		pars = c("lambda", "sigma_raw", "sigma_intercept", "sigma_slope", "sigma_sigma", "lambda_mu", "lambda_sigma", "lambda_skew", "exposure_rate")
 	)
 save(fit_MPI, file="docs/fit_MPI_level1.RData")
 Sys.time()
@@ -386,7 +386,7 @@ mutate(`error scaled` =  ((`read count normalised` - predicted_NB) / (`read coun
 left_join(
 	(.) %>%
 		group_by(symbol) %>%
-		summarise(`gene error mean` = `error of log` %>% mean)
+		summarise(`gene error mean` = `error of log` %>% abs %>% mean)
 ) %>%
 
 mutate(
