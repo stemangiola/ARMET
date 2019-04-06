@@ -85,6 +85,12 @@ data {
 	int<lower=0> G_per_shard[n_shards]; // limiter for NA
 	int<lower=0> G_per_shard_idx[n_shards + 1]; // MPI mapping
 
+	// Global properies prior model
+  real lambda_skew;
+  real<upper=0> sigma_slope;
+  real sigma_intercept;
+  real<lower=0>sigma_sigma;
+
 	// Deconvolution
 	int M; // Rows of the y
 	int Q; // Query samples
@@ -116,21 +122,16 @@ parameters {
   // Overall properties of the data
   real<lower=0> lambda_mu; // So is compatible with logGamma prior
   real<lower=0> lambda_sigma;
-  real lambda_skew;
+
+	// Normalisation parameter
   vector[S] exposure_rate;
 
   // Gene-wise properties of the data
   vector[G] lambda_log;
   vector[G] sigma_raw;
 
-  // Signa linear model
-
-  real<upper=0> sigma_slope;
-  real sigma_intercept;
-  real<lower=0>sigma_sigma;
-
   // Proportions
-  simplex[ct_in_levels[1]] prop[Q];
+  //simplex[ct_in_levels[1]] prop[Q];
 
 }
 transformed parameters {
@@ -162,22 +163,19 @@ transformed parameters {
 }
 model {
 
-	vector[2] y_sum[M];
+	//vector[2] y_sum[M];
 
   // Overall properties of the data
   lambda_mu ~ normal(0,2);
   lambda_sigma ~ normal(0,2);
-  lambda_skew ~ normal(0,2);
+  //lambda_skew ~ normal(0,2);
 
   exposure_rate ~ normal(0,1);
   sum(exposure_rate) ~ normal(0, 0.001 * S);
 
-  sigma_intercept ~ normal(0,2);
-  sigma_slope ~ normal(0,2);
-  sigma_sigma ~ normal(0,2);
-
-	// Deconvolution variable
-	for(q in 1:Q) prop[q] ~ dirichlet(rep_vector(1.0 * ct_in_levels[1], ct_in_levels[1]));
+  //sigma_intercept ~ normal(0,2);
+  //sigma_slope ~ normal(0,2);
+  //sigma_sigma ~ normal(0,2);
 
   // Gene-wise properties of the data
   // lambda_log ~ normal_or_gammaLog(lambda_mu, lambda_sigma, is_prior_asymetric);

@@ -60,6 +60,13 @@ ARMET_tc = function(
 	input = c(as.list(environment()))
 	shards = 56
 
+	# Global properties
+	sigma_intercept = 1.3663737
+	sigma_slope = -0.3443049
+	sigma_sigma = 1.1755951
+	lambda_skew = -8.7458016
+	lambda_sigma = 8.7234045
+
 	format_for_MPI = function(df){
 		df %>%
 
@@ -115,14 +122,19 @@ ARMET_tc = function(
 
 	load("data/reference.RData")
 
-	house_keeping = reference %>% filter(`Cell type category` == "house_keeping" ) %>% distinct(`symbol original`) %>% head(n=50) %>% pull(1)
+	house_keeping =
+		reference %>% filter(`Cell type category` == "house_keeping" ) %>%
+		distinct(`symbol original`) %>%
+		head(n=100) %>%
+		pull(1)
+
 	reference =
 		reference %>%
 
 		filter(
 			#`Cell type category` == "house_keeping" |
 			`symbol original` %in% 	house_keeping |
-			`symbol original` %in%  ( read_csv("docs/markers.csv") %>% pull(symbol) )
+			`symbol original` %in%  ( read_csv("docs/markers.csv") %>% sample_n(100) %>% pull(symbol) )
 		) %>%
 		select( -start, -end, -n, -contains("idx")) %>%
 		mutate(`read count` = `read count` %>% as.integer)
@@ -234,6 +246,7 @@ ARMET_tc = function(
 		select(`read count`, S, Q, everything()) %>%
 		as_matrix
 
+	M = y %>% nrow
 	Q = df %>% filter(`Cell type category` == "query") %>% distinct(Q) %>% nrow
 
 
@@ -249,7 +262,7 @@ ARMET_tc = function(
 		sampling(
 			ARMET_tc, #stanmodels$ARMET_tc,
 			chains=3, cores=3,
-			iter=150, warmup=100
+			iter=300, warmup=200
 			# ,
 			# save_warmup = FALSE,
 			# pars = c(
