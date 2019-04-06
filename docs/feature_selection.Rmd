@@ -41,93 +41,97 @@ source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c5
 
 ```
 
+
 ## R Markdown
 ```{r, cache=TRUE}
 # TEMPORARY
 load("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/fit_MPI_level1.RData")
 load("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/level_1_input.RData")
 
-xxx = fit_MPI %>%
-summary() %$% summary %>%
-as_tibble(rownames="par") %>%
-filter(grepl("lambda|sigma", par)) %>%
-separate(par, c("par", "G"), sep="\\[|\\]") %>%
-filter(par %in% c("lambda", "sigma_raw")) %>%
-select(par, G, "50%") %>% spread(par, "50%") %>%
-mutate(G = G %>% as.integer) %>%
-left_join(
-	data_for_stan_MPI$symbols %>%
-		gather(idx_MPI, symbol) %>%
-		drop_na() %>% mutate(G=1:n())
-) %>%
-left_join( counts_stan_MPI %>% distinct(symbol, `level 1`)  ) %>%
-
-# QQ plots
-
-left_join(counts) %>%
-do_parallel_start(40, "symbol") %>%
-do({
-
-	`%>%` = magrittr::`%>%`
-	library(tidyverse)
-	library(magrittr)
-
-	(.) %>%
-		group_by(symbol) %>%
-		do(
-			(.) %>%
-				arrange(`read count normalised`) %>%
-				mutate(
-					predicted_NB =
-						qnbinom(
-							ppoints(`read count normalised`),
-							size=.$sigma_raw %>% unique %>% exp %>% `^` (-1),
-							mu=.$lambda %>% unique %>% exp
-						)
-				)
-		) %>%
-		ungroup()
-}) %>%
-do_parallel_end() %>%
-mutate(`log of error` = (`read count normalised` - predicted_NB) %>% abs %>% `+` (1) %>% log) %>%
-mutate(`error of log` = (log(`read count normalised` + 1) - log(predicted_NB + 1)) ) %>%
-mutate(`error scaled` =  ((`read count normalised` - predicted_NB) / (`read count normalised` + 1) )) %>%
-left_join(
-	(.) %>%
-		group_by(symbol) %>%
-		summarise(`gene error mean` = `error of log` %>% abs %>% mean)
-)
-
-xxx %>%
-
-mutate(
-	symbol =
-		gsub(
-			(.) %>%
-				distinct(`level 1`) %>%
-				pull(1) %>%
-				paste("_", sep="") %>%
-				paste(collapse="|") ,
-			"",
-			symbol
-		)
-) 
-```
-
-
-```{r, cache=TRUE}
-
-l1 = read_csv("~/unix3XX/PhD/deconvolution/ARMET/docs/fit_level1.csv") 
-
-l1.annot = 
-	l1 %>%
-	
-	# Recalculate error mean
-	select(-`gene error mean`) %>%
+fit_df = 
+	fit_MPI %>%
+	summary() %$% summary %>%
+	as_tibble(rownames="par") %>%
+	filter(grepl("lambda|sigma", par)) %>%
+	separate(par, c("par", "G"), sep="\\[|\\]") %>%
+	filter(par %in% c("lambda", "sigma_raw")) %>%
+	select(par, G, "50%") %>% spread(par, "50%") %>%
+	mutate(G = G %>% as.integer) %>%
 	left_join(
-	(.) %>%
-		group_by(symbol) %>%
-		summarise(`gene error mean` = `error of log` %>% abs %>% mean)
+		data_for_stan_MPI$symbols %>%
+			gather(idx_MPI, symbol) %>%
+			drop_na() %>% mutate(G=1:n())
+	) %>%
+	left_join( counts_stan_MPI %>% distinct(symbol, `level 1`)  ) %>%
+	
+	
+	# Add stan normalisation constants
+	left_join(counts) %>%
+	left_join(
+		fit_MPI %>%
+			summary() %$% summary %>%
+			as_tibble(rownames="par") %>%
+			filter(grepl("exposure", par)) %>%
+			separate(par, c("par", "S"), sep="\\[|\\]") %>%
+			select(par, S, "50%") %>%
+			rename(exposure = `50%`) %>%
+			select(-par) %>%
+			left_join(
+				counts_stan_MPI %>% 
+					distinct(sample, sample_idx) %>% 
+					rename(S = sample_idx) %>% 
+					mutate_if(is.integer, as.character)
+			) 
+	) %>%
+	
+	# Recalculate `read count normalised`
+	mutate(`read count normalised bayes` = `read count` / exp(exposure))	%>%
+		
+		# QQ plots
+	do_parallel_start(40, "symbol") %>%
+	do({
+	
+		`%>%` = magrittr::`%>%`
+		library(tidyverse)
+		library(magrittr)
+	
+		(.) %>%
+			group_by(symbol) %>%
+			do(
+				(.) %>%
+					arrange(`read count normalised bayes`) %>%
+					mutate(
+						predicted_NB =
+							qnbinom(
+								ppoints(`read count normalised bayes`),
+								size=.$sigma_raw %>% unique %>% exp %>% `^` (-1),
+								mu=.$lambda %>% unique %>% exp
+							)
+					)
+			) %>%
+			ungroup()
+	}) %>%
+	do_parallel_end() %>%
+	mutate(`log of error` = (`read count normalised bayes` - predicted_NB) %>% abs %>% `+` (1) %>% log) %>%
+	mutate(`error of log` = (log(`read count normalised bayes` + 1) - log(predicted_NB + 1)) ) %>%
+	mutate(`error scaled` =  ((`read count normalised bayes` - predicted_NB) / (`read count normalised bayes` + 1) )) %>%
+	left_join(
+		(.) %>%
+			group_by(symbol) %>%
+			summarise(`gene error mean` = `error of log` %>% abs %>% mean)
+	) %>%
+	
+	mutate(
+		symbol =
+			gsub(
+				(.) %>%
+					distinct(`level 1`) %>%
+					pull(1) %>%
+					paste("_", sep="") %>%
+					paste(collapse="|") ,
+				"",
+				symbol
+			)
 	) %>%
 	
 	# Convert to gamma
@@ -135,19 +139,49 @@ l1.annot =
 		shape = nb_to_gamma(lambda %>% exp, 1/exp(sigma_raw)) %$% shape,
 		rate = nb_to_gamma(lambda %>% exp, 1/exp(sigma_raw)) %$% rate
 	) %>%
-
+	
 	# Calculate confidence interval	
 	mutate(CI_low = qgamma(0.025, shape = shape, rate = rate)) %>%
-	mutate(CI_high = qgamma(0.975, shape = shape, rate = rate)) %>%
+	mutate(CI_high = qgamma(0.975, shape = shape, rate = rate)) 
 	
+	
+fit_df.potential_markers =
+	fit_df %>%
 	distinct(symbol, `level 1`, lambda, CI_low, CI_high, shape, rate, `gene error mean`) %>%
-	
-	arrange(CI_low %>% desc) %>%
-	
-	left_join( (.) %>% count(symbol)  ) %>%
-	filter(n == (.) %>% distinct(`level 1`) %>% nrow %>% `-` (1))
+	inner_join(
+		(.) %>%
+		distinct(symbol, `level 1`) %>%
+		count(symbol) %>%
+		filter(n == fit_df %>% distinct(`level 1`) %>% nrow %>% `-` (1))
+	)
+
+
 
 ```
+
+## Get global properties
+
+```{r}
+	fit_MPI %>%
+	summary() %$% summary %>%
+	as_tibble(rownames="par") %>%
+	separate(par, c("par", "G"), sep="\\[|\\]") %>%
+	filter(par %in% c( "sigma_intercept", "sigma_slope", "sigma_sigma", "lambda_sigma", "lambda_skew") ) %>%
+	select(par, `50%`)
+
+```
+
+
+## See whether the normalisation worked
+
+```{r}
+fit_df %>% 
+	distinct(`level 1`, symbol, lambda) %>% 
+	ggplot(aes(lambda, color=`level 1`)) + 
+	geom_density()
+
+```
+
 
 ## Plot error rank
 
@@ -155,7 +189,7 @@ The threshold seems to be 0.5
 
 ```{r}
 (
-	l1.annot %>% 
+	fit_df.potential_markers %>% 
  	unite(symbol_ct, c("symbol", "level 1"), remove=F) %>% 
  	sample_frac(0.01)  %>% 
  	arrange(`gene error mean` %>% desc) %>%
@@ -169,11 +203,26 @@ The threshold seems to be 0.5
 	 axis.ticks.x=element_blank()
 	) 
 ) %>% plotly::ggplotly()
+
+fit_df %>% 
+  filter(symbol %in% c("MRPL52")) %>%
+	ggplot(aes(x=`predicted_NB` + 1, y=`read count normalised bayes` + 1, label=symbol, color=`level 1`)) + 
+	geom_abline(intercept = 0, slope = 1, color="grey") + 
+	geom_point() + 
+	facet_wrap(~ symbol, scales = "free")  +
+	expand_limits(y=1, x=1) + 
+	scale_y_log10() +
+	scale_x_log10() +
+	my_theme 
+
+
 ```
 
 ```{r}
-foreach(ct = l1.annot %>% distinct(`level 1`) %>% pull(1), .combine = bind_rows) %do% {
-	l1.annot %>%
+n_markers = 100
+
+foreach(ct = fit_df %>% distinct(`level 1`) %>% filter(`level 1` != "house_keeping") %>% pull(1), .combine = bind_rows) %do% {
+	fit_df %>%
 		mutate(is_ct = `level 1` == !!ct) %>%
 		group_by(is_ct, symbol) %>%
 		summarise(CI_low_sum = CI_low %>% sum, CI_high_sum = CI_high %>% sum	) %>%
@@ -182,22 +231,38 @@ foreach(ct = l1.annot %>% distinct(`level 1`) %>% pull(1), .combine = bind_rows)
 		select(symbol, is_ct, CI) %>%
 		spread(is_ct, CI) %>%
 		mutate(delta = `TRUE` - `FALSE`) %>%
-		left_join( l1.annot %>% filter(`level 1` == ct) %>% distinct(symbol, lambda) ) %>%
+		left_join( fit_df %>% filter(`level 1` == ct) %>% distinct(symbol, lambda, `gene error mean`) ) %>%
 		filter(lambda > 4) %>%
+		filter(`gene error mean` < 0.4) %>%
 		arrange(delta %>% desc) %>%
 		mutate(ct = ct) %>% 
-		head(n=10)
+		head(n=n_markers)
 } %>%
 {
 	(.) %>%
-		distinct(`symbol original`) %>%
+		distinct(`symbol`) %>%
 		write_csv("docs/markers.csv")
 	(.)
 } %>%
-	left_join(
-		l1 %>% distinct(`level 1`, symbol, sample, `read count normalised`)
-	) %>%
-	ggplot(aes(y=`read count normalised`, x=`level 1`)) + geom_boxplot() + facet_wrap(~ ct + symbol )
+left_join(
+	fit_df %>% distinct(`level 1`, symbol, sample, `read count normalised bayes`)
+) %>%
+mutate( symbol_err = sprintf("%s %s", symbol,  `gene error mean` %>% round(2))) %>%
+{ ggplot((.), aes(y=`read count normalised bayes` + 1, x=`level 1` %>% substring(1, 2), fill=ct)) + 
+	geom_boxplot() + 
+	facet_wrap(~ ct + symbol_err, scale="free", ncol = 6 ) + 
+	scale_y_log10() + 
+	my_theme +
+	theme(text = element_text(size = 8)	)
+} %>%
+ggsave(
+	filename = 'docs/markers_level_1.pdf', 
+	height= 28 %>% divide_by(8) %>% multiply_by(n_markers*4/6) %>% ceiling, 
+	width= 21, 
+	units = "cm", limitsize = FALSE
+)
+	
+
 
 	
 ```
@@ -208,33 +273,9 @@ foreach(ct = l1.annot %>% distinct(`level 1`) %>% pull(1), .combine = bind_rows)
 
 
 
-l1 %>% 
-  filter(symbol %in% c("GK3P")) %>%
-	ggplot(aes(x=`predicted_NB` + 1, y=`read count normalised` + 1, label=symbol, color=`Cell type formatted`)) + 
-	geom_abline(intercept = 0, slope = 1, color="grey") + 
-	geom_point() + 
-	facet_wrap(~ symbol, scales = "free")  +
-	expand_limits(y=1, x=1) + 
-	scale_y_log10() +
-	scale_x_log10() +
-	my_theme 
 
 
-fit_MPI %>%
-summary() %$% summary %>%
-as_tibble(rownames="par") %>%
-filter(grepl("lambda|sigma", par)) %>%
-separate(par, c("par", "G"), sep="\\[|\\]") %>%
-filter(par %in% c("lambda", "sigma_raw")) %>%
-select(par, G, "50%") %>% spread(par, "50%") %>%
-mutate(G = G %>% as.integer) %>%
-left_join(
-	data_for_stan_MPI$symbols %>%
-		gather(idx_MPI, symbol) %>%
-		drop_na() %>% mutate(G=1:n())
-) %>%
-left_join( counts_stan_MPI %>% distinct(symbol, `level 1`)  ) %>% 
-	ggplot(aes(lambda, color=`level 1`)) + geom_density()
+
 
 ```
 
