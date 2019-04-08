@@ -53,6 +53,7 @@ ARMET_tc = function(
 ){
 
 	source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/e4ec6a2348efc2f62b88f10b12e70f4c6273a10a/tidy_extensions.R")
+	source("https://gist.githubusercontent.com/stemangiola/90a528038b8c52b21f9cfa6bb186d583/raw/9f361c5ecd5e15473e831945971cf290ea7377f1/transcription_tool_kit.R")
 	library(tidyverse)
 	library(foreach)
 	library(rstan)
@@ -64,6 +65,7 @@ ARMET_tc = function(
 	sigma_intercept = 1.3663737
 	sigma_slope = -0.3443049
 	sigma_sigma = 1.1755951
+	lambda_mu_mu = 7
 	lambda_skew = -8.7458016
 	lambda_sigma = 8.7234045
 
@@ -125,8 +127,8 @@ ARMET_tc = function(
 	house_keeping =
 		reference %>% filter(`Cell type category` == "house_keeping" ) %>%
 		distinct(`symbol original`) %>%
-		head(n=100) %>%
-		pull(1)
+		pull(1) %>%
+		head(n=200)
 
 	reference =
 		reference %>%
@@ -134,11 +136,20 @@ ARMET_tc = function(
 		filter(
 			#`Cell type category` == "house_keeping" |
 			`symbol original` %in% 	house_keeping |
-			`symbol original` %in%  ( read_csv("docs/markers.csv") %>% sample_n(100) %>% pull(symbol) )
+			`symbol original` %in%  ( read_csv("docs/markers.csv") %>% pull(symbol))
 		) %>%
 		select( -start, -end, -n, -contains("idx")) %>%
 		mutate(`read count` = `read count` %>% as.integer)
 		#inner_join( (.) %>% distinct(sample) %>% head(n=100))
+
+	# reference %>%
+	# 	# Reduce numbers by redundancy
+	# 	add_MDS_components(
+	# 		replicates_column = "symbol original",
+	# 		cluster_by_column = "sample",
+	# 		value_column = "read count normalised"
+	# 	)
+
 
 	mix = reference %>%
 		inner_join( (.) %>% distinct(sample) %>% head(n=1)) %>%
@@ -153,7 +164,7 @@ ARMET_tc = function(
 	df =
 		bind_rows(
 			reference %>%
-				filter(`symbol original` %in% ( mix %>% colnames )),
+			filter(`symbol original` %in% ( mix %>% colnames )),
 			mix %>%
 				gather(`symbol original`, `read count`, -sample) %>%
 				mutate(`Cell type category` = ifelse(
@@ -197,7 +208,7 @@ ARMET_tc = function(
 		format_for_MPI
 
 	N = counts_baseline %>% distinct(sample, symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
-	I = counts_baseline %>% distinct(start, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
+	M = counts_baseline %>% distinct(start, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
 	G = counts_baseline %>% distinct(symbol) %>% nrow()
 	S = counts_baseline %>% distinct(sample) %>% nrow()
 	G_per_shard = counts_baseline %>% distinct(symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% as.array
@@ -246,13 +257,13 @@ ARMET_tc = function(
 		select(`read count`, S, Q, everything()) %>%
 		as_matrix
 
-	M = y %>% nrow
+	I = y %>% nrow
 	Q = df %>% filter(`Cell type category` == "query") %>% distinct(Q) %>% nrow
 
 
 
 	fileConn<-file("~/.R/Makevars")
-	writeLines(c("CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
+	writeLines(c("CXX14 = g++ ", "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
 	close(fileConn)
 	Sys.setenv("STAN_NUM_THREADS" = cores)
 	ARMET_tc = stan_model("src/stan_files/ARMET_tc.stan")
@@ -271,6 +282,19 @@ ARMET_tc = function(
 			# )
 		)
 	Sys.time()
+
+
+	(
+		fit %>%
+			extract(pars=c("lambda_mu", "lambda_sigma", "exposure_rate",  "lambda_log", "sigma_raw", "prop")) %>%
+			as.data.frame %>% as_tibble() %>%
+			mutate(chain = rep(1:3, 100) %>% sort %>% as.factor ) %>%
+			select(chain, everything()) %>% gather(par, draw, -chain) %>%
+			group_by(chain, par) %>%
+			summarise(d = draw %>% median) %>%
+			ggplot(aes(y=d, x=par, color=chain)) + geom_point()
+	) %>% plotly::ggplotly()
+
 
 
 

@@ -1,7 +1,5 @@
 functions{
 
-
-
 		vector get_sum_NB(vector mu, vector phi){
 
 			// Conversion to gama
@@ -27,32 +25,19 @@ functions{
 			return mu_sigma;
 		}
 
-		// real neg_binomial_2_convoluted_lpmf(int y, vector mu, vector sigma, vector prop){
-		// 	// This function takes as input
-		// 	// - a vector of component means
-		// 	// - a vector of components sgma
-		// 	// - a vector of components proportions
-		// 	// and test the probability of having a convoluted read count
-		//
-		// 	real mu_sigma_sum[2] = get_sum_NB(mu .* prop, sigma);
-		//
-		// 	return neg_binomial_2_lpmf(y | mu_sigma_sum[1], mu_sigma_sum[2]);
-		//
-		// }
-
 	 vector lp_reduce( vector global_parameters , vector local_parameters , real[] xr , int[] xi ) {
-	 	int I = xi[1];
+	 	int M = xi[1];
 	 	int N = xi[2];
 	 	int S = xi[3];
 	 	int G_per_shard = xi[4];
-	 	int symbol_end[I+1] = xi[(4+1):(4+1+I)];
-	 	int sample_idx[N] = xi[(4+1+I+1):(4+1+I+1+N-1)];
-	 	int counts[N] = xi[(4+1+I+1+N):size(xi)];
+	 	int symbol_end[M+1] = xi[(4+1):(4+1+M)];
+	 	int sample_idx[N] = xi[(4+1+M+1):(4+1+M+1+N-1)];
+	 	int counts[N] = xi[(4+1+M+1+N):size(xi)];
 
 
 	 	vector[G_per_shard] lambda_MPI = local_parameters[1:G_per_shard];
 	 	vector[G_per_shard] sigma_MPI = local_parameters[(G_per_shard+1):(G_per_shard*2)];
-	 	vector[S] exposure_rate = local_parameters[((I*2)+1):rows(local_parameters)];
+	 	vector[S] exposure_rate = local_parameters[((M*2)+1):rows(local_parameters)];
 
 	 	vector[G_per_shard] lp;
 
@@ -72,44 +57,42 @@ functions{
 
 }
 data {
-
-	// Reference prediction
   int<lower=0> N;
-  int<lower=0> I; // column of indexes
-	int<lower=0> G; // number of cell-genes couples
-	int<lower=0> S; // number of samples
-  int n_shards; // number of shards
-	int<lower=0> counts[n_shards, N]; // raw reference
-	int<lower=0> symbol_end[n_shards, I+1]; // MPI mapping
-	int<lower=0> sample_idx[n_shards, N]; // MPI mapping
-	int<lower=0> G_per_shard[n_shards]; // limiter for NA
-	int<lower=0> G_per_shard_idx[n_shards + 1]; // MPI mapping
+  int<lower=0> M;
+	int<lower=0> G;
+	int<lower=0> S;
+  int n_shards;
+	int<lower=0> counts[n_shards, N];
+	int<lower=0> symbol_end[n_shards, M+1];
+	int<lower=0> sample_idx[n_shards, N];
+	int<lower=0> G_per_shard[n_shards];
+	int<lower=0> G_per_shard_idx[n_shards + 1];
 
 	// Global properies prior model
-  real lambda_skew;
+	real lambda_mu_mu;
+  // real lambda_skew;
   real<upper=0> sigma_slope;
   real sigma_intercept;
   real<lower=0>sigma_sigma;
 
-	// Deconvolution
-	int M; // Rows of the y
-	int Q; // Query samples
-	int ct_in_levels[1]; // how many cell types in each level
-
-	// Includes: `read count`, sample reference idx, sample query idx, lambda mapping to the marker [..]
-	int y[M, 3 + max(ct_in_levels) ];
+  // Deconvolution
+  //int<lower=1> C;
+  int<lower=0> Q;
+  int<lower=0> I;
+  int<lower=1> ct_in_levels[1];
+  int y[I, 3 + max(ct_in_levels)]; // `read count`  S Q mapping_with_ct
 
 }
 transformed data {
   vector[0] global_parameters;
   real xr[n_shards, 0];
 
-  int<lower=0> int_MPI[n_shards, 4+(I+1)+N+N];
+  int<lower=0> int_MPI[n_shards, 4+(M+1)+N+N];
 
   // Shards - MPI
   for ( i in 1:n_shards ) {
   int M_N_Gps[4];
-  M_N_Gps[1] = I;
+  M_N_Gps[1] = M;
   M_N_Gps[2] = N;
   M_N_Gps[3] = S;
   M_N_Gps[4] = G_per_shard[i];
@@ -122,8 +105,7 @@ parameters {
   // Overall properties of the data
   real<lower=0> lambda_mu; // So is compatible with logGamma prior
   real<lower=0> lambda_sigma;
-
-	// Normalisation parameter
+  real lambda_skew;
   vector[S] exposure_rate;
 
   // Gene-wise properties of the data
@@ -131,20 +113,18 @@ parameters {
   vector[G] sigma_raw;
 
   // Proportions
-  //simplex[ct_in_levels[1]] prop[Q];
+  simplex[ct_in_levels[1]] prop[Q];
 
 }
 transformed parameters {
   // Sigma
   vector[G] sigma = 1.0 ./ exp(sigma_raw);
-  vector[G] lambda = exp(lambda_log);
 
-	// Shards - MPI
-	vector[2*I] lambda_sigma_MPI[n_shards];
-
+// Shards - MPI
+	vector[2*M] lambda_sigma_MPI[n_shards];
 	for( i in 1:(n_shards) ) {
 
-	  vector[ (I*2) - (G_per_shard[i]*2) ] buffer = rep_vector(0.0,(I*2) - (G_per_shard[i]*2));
+	  vector[ (M*2) - (G_per_shard[i]*2) ] buffer = rep_vector(0.0,(M*2) - (G_per_shard[i]*2));
 
 		lambda_sigma_MPI[i] =
   		append_row(
@@ -163,19 +143,16 @@ transformed parameters {
 }
 model {
 
-	//vector[2] y_sum[M];
+	vector[2] y_sum[I];
 
   // Overall properties of the data
-  lambda_mu ~ normal(0,2);
+  lambda_mu ~ normal(lambda_mu_mu,2);
   lambda_sigma ~ normal(0,2);
-  //lambda_skew ~ normal(0,2);
+  lambda_skew ~ normal(0,2);
 
+  //sigma_raw ~ normal(0,1);
   exposure_rate ~ normal(0,1);
   sum(exposure_rate) ~ normal(0, 0.001 * S);
-
-  //sigma_intercept ~ normal(0,2);
-  //sigma_slope ~ normal(0,2);
-  //sigma_sigma ~ normal(0,2);
 
   // Gene-wise properties of the data
   // lambda_log ~ normal_or_gammaLog(lambda_mu, lambda_sigma, is_prior_asymetric);
@@ -186,15 +163,14 @@ model {
 	target += sum( map_rect( lp_reduce , global_parameters , lambda_sigma_MPI , xr , int_MPI ) );
 
 	// Deconvolution
-	for(m in 1:M) y_sum[m] =
+
+	for(i in 1:I) y_sum[i] =
 		get_sum_NB(
-			lambda[y[m,4 : 3 + ct_in_levels[1]]] .* prop[y[m,3]],
-			sigma[y[m,4 : 3 + ct_in_levels[1]]]
+			exp(lambda_log[y[i,4 : 3 + ct_in_levels[1]]]) .* prop[y[i,3]],
+			sigma[y[i,4 : 3 + ct_in_levels[1]]]
 		);
 
 	y[,1]  ~ neg_binomial_2_log(to_vector( log( y_sum[,1]) ) + exposure_rate[y[,2]] , y_sum[,2]);
-
-
 
 }
 generated quantities{
