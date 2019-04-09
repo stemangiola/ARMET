@@ -53,7 +53,7 @@ ARMET_tc = function(
 ){
 
 	source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/e4ec6a2348efc2f62b88f10b12e70f4c6273a10a/tidy_extensions.R")
-	source("https://gist.githubusercontent.com/stemangiola/90a528038b8c52b21f9cfa6bb186d583/raw/9f361c5ecd5e15473e831945971cf290ea7377f1/transcription_tool_kit.R")
+	source("https://gist.githubusercontent.com/stemangiola/90a528038b8c52b21f9cfa6bb186d583/raw/5d95739c87a26568f96f8dc7d29528473fbe82c2/transcription_tool_kit.R")
 	library(tidyverse)
 	library(foreach)
 	library(rstan)
@@ -72,49 +72,104 @@ ARMET_tc = function(
 	format_for_MPI = function(df){
 		df %>%
 
-		left_join(
-			(.) %>%
-				distinct(symbol) %>%
-				mutate( idx_MPI = head( rep(1:shards, (.) %>% nrow %>% `/` (shards) %>% ceiling ), n=(.) %>% nrow) )
-		) %>%
-		arrange(idx_MPI, symbol) %>%
+			left_join(
+				(.) %>%
+					distinct(symbol) %>%
+					mutate( idx_MPI = head( rep(1:shards, (.) %>% nrow %>% `/` (shards) %>% ceiling ), n=(.) %>% nrow) )
+			) %>%
+			arrange(idx_MPI, symbol) %>%
 
-		# Decide start - end location
-		group_by(idx_MPI) %>%
-		do(
-			(.) %>%
-				left_join(
-					(.) %>%
-						distinct(idx_MPI, sample, symbol) %>%
-						arrange(idx_MPI, symbol) %>%
-						count(idx_MPI, symbol) %>%
-						mutate(end = cumsum(n)) %>%
-						mutate(start = c(1, .$end %>% rev() %>% `[` (-1) %>% rev %>% `+` (1)))
-				)
-		) %>%
-		ungroup() %>%
+			# Decide start - end location
+			group_by(idx_MPI) %>%
+			do(
+				(.) %>%
+					left_join(
+						(.) %>%
+							distinct(idx_MPI, sample, symbol) %>%
+							arrange(idx_MPI, symbol) %>%
+							count(idx_MPI, symbol) %>%
+							mutate(end = cumsum(n)) %>%
+							mutate(start = c(1, .$end %>% rev() %>% `[` (-1) %>% rev %>% `+` (1)))
+					)
+			) %>%
+			ungroup() %>%
 
-		# Add counts MPI rows indexes
-		group_by(idx_MPI) %>%
-		mutate(`read count MPI row` = 1:n()) %>%
-		ungroup %>%
+			# Add counts MPI rows indexes
+			group_by(idx_MPI) %>%
+			mutate(`read count MPI row` = 1:n()) %>%
+			ungroup %>%
 
-		# Add symbol MPI rows indexes
-		left_join(
-			(.) %>%
-				group_by(idx_MPI) %>%
-				distinct(symbol) %>%
-				mutate(`symbol MPI row` = 1:n()) %>%
-				ungroup
-		) %>%
+			# Add symbol MPI rows indexes
+			left_join(
+				(.) %>%
+					group_by(idx_MPI) %>%
+					distinct(symbol) %>%
+					mutate(`symbol MPI row` = 1:n()) %>%
+					ungroup
+			) %>%
 
-		# Add gene idx
-		left_join(
-			(.) %>%
-				distinct(symbol, idx_MPI, `symbol MPI row`) %>%
-				arrange(idx_MPI, `symbol MPI row`) %>%
-				mutate(G = 1:n())
-		)
+			# Add gene idx
+			left_join(
+				(.) %>%
+					distinct(symbol, idx_MPI, `symbol MPI row`) %>%
+					arrange(idx_MPI, `symbol MPI row`) %>%
+					mutate(G = 1:n())
+			)
+
+	}
+
+	decrease_replicates = function(my_df){
+
+		my_df %>%
+
+			# Correct house keeping formatting
+			mutate(`house keeping` = `Cell type category` == "house_keeping") %>%
+			rename(`Cell type category old` = `Cell type category`) %>%
+			left_join(
+				(.) %>%
+					distinct(sample, `Cell type category old`) %>%
+					filter(`Cell type category old` != "house_keeping") %>%
+					rename(`Cell type category` = `Cell type category old`)
+			) %>%
+
+			# Detect redundant
+			multidplyr::partition(`Cell type category`, `Data base`) %>%
+			#group_by(`Cell type category`, `Data base`) %>%
+			do({
+				`%>%` = magrittr::`%>%`
+				library(tidyverse)
+				library(magrittr)
+				library(foreach)
+				source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/e4ec6a2348efc2f62b88f10b12e70f4c6273a10a/tidy_extensions.R")
+				source("https://gist.githubusercontent.com/stemangiola/90a528038b8c52b21f9cfa6bb186d583/raw/4ac3a7d74d4f7971bd8dd8eb470279eb7f42bbf8/transcription_tool_kit.R")
+
+				(.) %>%
+					get_redundant_pair(
+						distance_feature = "symbol original",
+						redundant_feature = "sample",
+						value_column = "read count normalised",
+						log_transform = T
+					) %>%
+
+					# For immune cells repete twice
+					{
+						if((.) %>% distinct(`Cell type category`) %>% pull(1) == "immune_cell" )
+							(.) %>%
+							get_redundant_pair(
+								distance_feature = "symbol original",
+								redundant_feature = "sample",
+								value_column = "read count normalised",
+								log_transform = T
+							)
+						else
+							(.)
+					}
+
+			}) %>%
+
+			collect %>% ungroup %>%
+			# Re put house keeping
+			mutate(`Cell type category` = ifelse(`house keeping`, "house_keeping", `Cell type category`))
 
 	}
 
@@ -128,30 +183,26 @@ ARMET_tc = function(
 		reference %>% filter(`Cell type category` == "house_keeping" ) %>%
 		distinct(`symbol original`) %>%
 		pull(1) %>%
-		head(n=200)
+		head(n=100)
 
 	reference =
 		reference %>%
 
+		# Decrese number of samples
+		decrease_replicates %>%
+
+		# Get only markes and house keeping
 		filter(
 			#`Cell type category` == "house_keeping" |
 			`symbol original` %in% 	house_keeping |
-			`symbol original` %in%  ( read_csv("docs/markers.csv") %>% pull(symbol))
+				`symbol original` %in%  ( read_csv("docs/markers.csv") %>% pull(symbol) %>% sample %>% head(n=100))
 		) %>%
 		select( -start, -end, -n, -contains("idx")) %>%
 		mutate(`read count` = `read count` %>% as.integer)
-		#inner_join( (.) %>% distinct(sample) %>% head(n=100))
-
-	# reference %>%
-	# 	# Reduce numbers by redundancy
-	# 	add_MDS_components(
-	# 		replicates_column = "symbol original",
-	# 		cluster_by_column = "sample",
-	# 		value_column = "read count normalised"
-	# 	)
 
 
-	mix = reference %>%
+
+		mix = reference %>%
 		inner_join( (.) %>% distinct(sample) %>% head(n=1)) %>%
 		distinct(sample, `symbol original`, `read count`) %>%
 		spread(`symbol original`, `read count`) %>%
@@ -164,7 +215,7 @@ ARMET_tc = function(
 	df =
 		bind_rows(
 			reference %>%
-			filter(`symbol original` %in% ( mix %>% colnames )),
+				filter(`symbol original` %in% ( mix %>% colnames )),
 			mix %>%
 				gather(`symbol original`, `read count`, -sample) %>%
 				mutate(`Cell type category` = ifelse(
@@ -263,7 +314,7 @@ ARMET_tc = function(
 
 
 	fileConn<-file("~/.R/Makevars")
-	writeLines(c("CXX14 = g++ ", "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
+	writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
 	close(fileConn)
 	Sys.setenv("STAN_NUM_THREADS" = cores)
 	ARMET_tc = stan_model("src/stan_files/ARMET_tc.stan")
