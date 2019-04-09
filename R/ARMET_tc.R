@@ -203,7 +203,7 @@ ARMET_tc = function(
 
 
 		mix = reference %>%
-		inner_join( (.) %>% distinct(sample) %>% head(n=1)) %>%
+		inner_join( (.) %>% distinct(sample) %>% slice(c(1))) %>%
 		distinct(sample, `symbol original`, `read count`) %>%
 		spread(`symbol original`, `read count`) %>%
 		mutate(sample = 1:n() %>% as.character)
@@ -301,9 +301,9 @@ ARMET_tc = function(
 		select(S, Q, `symbol original`, `read count`) %>%
 		left_join(
 			counts_baseline %>%
-				distinct(`symbol original`, G, C)
+				distinct(`symbol original`, G, `Cell type category`)
 		) %>%
-		spread(C, G) %>%
+		spread(`Cell type category`, G) %>%
 		select(-`symbol original`) %>%
 		select(`read count`, S, Q, everything()) %>%
 		as_matrix
