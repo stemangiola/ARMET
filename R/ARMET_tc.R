@@ -183,7 +183,7 @@ ARMET_tc = function(
 		reference %>% filter(`Cell type category` == "house_keeping" ) %>%
 		distinct(`symbol original`) %>%
 		pull(1) %>%
-		head(n=100)
+		head(n=200)
 
 	reference =
 		reference %>%
@@ -195,18 +195,29 @@ ARMET_tc = function(
 		filter(
 			#`Cell type category` == "house_keeping" |
 			`symbol original` %in% 	house_keeping |
-				`symbol original` %in%  ( read_csv("docs/markers.csv") %>% pull(symbol) %>% sample %>% head(n=100))
+				`symbol original` %in%  ( read_csv("docs/markers.csv") %>% pull(symbol) ) # %>% sample %>% head(n=100))
 		) %>%
 		select( -start, -end, -n, -contains("idx")) %>%
 		mutate(`read count` = `read count` %>% as.integer)
 
 
 
-		mix = reference %>%
-		inner_join( (.) %>% distinct(sample) %>% slice(c(1))) %>%
-		distinct(sample, `symbol original`, `read count`) %>%
-		spread(`symbol original`, `read count`) %>%
-		mutate(sample = 1:n() %>% as.character)
+		mix =
+			reference %>%
+			inner_join( (.) %>% distinct(sample) %>% slice(c(1,200))) %>%
+			distinct(`symbol original`, `read count`, `Cell type formatted`) %>%
+			spread(`Cell type formatted`, `read count`) %>%
+			drop_na %>%
+			mutate( `read count` = ( (b_cellnaive + fibroblast) / 2 ) %>% as.integer ) %>%
+			mutate(sample = "1") %>%
+			select(-c(2:3)) %>%
+			spread(`symbol original`, `read count`)
+
+		# mix = reference %>%
+		# 	inner_join( (.) %>% distinct(sample) %>% slice(c(200))) %>%
+		# 	distinct(sample, `symbol original`, `read count`) %>%
+		# 	spread(`symbol original`, `read count`) %>%
+		# 	mutate(sample = 1:n() %>% as.character)
 
 	######################################
 	######################################
