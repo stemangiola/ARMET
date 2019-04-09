@@ -195,8 +195,8 @@ counts_stan_MPI =
 
 	# inner_join(
 	# 	bind_rows (
-	# 		(.) %>% distinct(symbol, `level 1`) %>% filter(`level 1` == "house_keeping") %>% sample_n(500),
-	# 		(.) %>% distinct(symbol) %>% sample_n(2000)
+	# 		(.) %>% distinct(symbol, `level 1`) %>% filter(`level 1` == "house_keeping") %>% sample_n(200),
+	# 		(.) %>% distinct(symbol) %>% sample_n(0)
 	# 	) %>% distinct(symbol)
 	# )%>%
 
@@ -330,7 +330,7 @@ fit_MPI =
 		nb_model_MPI,
 		data = data_for_stan_MPI,
 		chains=3, iter=300, warmup=200, save_warmup = FALSE,
-		pars = c("lambda", "sigma_raw", "sigma_intercept", "sigma_slope", "sigma_sigma", "lambda_mu", "lambda_sigma", "lambda_skew", "exposure_rate")
+		pars = c("lambda", "sigma_raw", "sigma_intercept", "sigma_slope", "sigma_sigma", "lambda_mu", "lambda_sigma", "exposure_rate")
 	)
 save(fit_MPI, file="docs/fit_MPI_level1.RData")
 Sys.time()
