@@ -74,10 +74,10 @@ ARMET_tc = function(
 
 			left_join(
 				(.) %>%
-					distinct(symbol) %>%
+					distinct(ct_symbol) %>%
 					mutate( idx_MPI = head( rep(1:shards, (.) %>% nrow %>% `/` (shards) %>% ceiling ), n=(.) %>% nrow) )
 			) %>%
-			arrange(idx_MPI, symbol) %>%
+			arrange(idx_MPI, ct_symbol) %>%
 
 			# Decide start - end location
 			group_by(idx_MPI) %>%
@@ -85,9 +85,9 @@ ARMET_tc = function(
 				(.) %>%
 					left_join(
 						(.) %>%
-							distinct(idx_MPI, sample, symbol) %>%
-							arrange(idx_MPI, symbol) %>%
-							count(idx_MPI, symbol) %>%
+							distinct(idx_MPI, sample, ct_symbol) %>%
+							arrange(idx_MPI, ct_symbol) %>%
+							count(idx_MPI, ct_symbol) %>%
 							mutate(end = cumsum(n)) %>%
 							mutate(start = c(1, .$end %>% rev() %>% `[` (-1) %>% rev %>% `+` (1)))
 					)
@@ -99,11 +99,11 @@ ARMET_tc = function(
 			mutate(`read count MPI row` = 1:n()) %>%
 			ungroup %>%
 
-			# Add symbol MPI rows indexes
+			# Add ct_symbol MPI rows indexes
 			left_join(
 				(.) %>%
 					group_by(idx_MPI) %>%
-					distinct(symbol) %>%
+					distinct(ct_symbol) %>%
 					mutate(`symbol MPI row` = 1:n()) %>%
 					ungroup
 			) %>%
@@ -111,7 +111,7 @@ ARMET_tc = function(
 			# Add gene idx
 			left_join(
 				(.) %>%
-					distinct(symbol, idx_MPI, `symbol MPI row`) %>%
+					distinct(ct_symbol, idx_MPI, `symbol MPI row`) %>%
 					arrange(idx_MPI, `symbol MPI row`) %>%
 					mutate(G = 1:n())
 			)
@@ -145,7 +145,7 @@ ARMET_tc = function(
 
 				(.) %>%
 					get_redundant_pair(
-						distance_feature = "symbol original",
+						distance_feature = "symbol",
 						redundant_feature = "sample",
 						value_column = "read count normalised",
 						log_transform = T
@@ -156,7 +156,7 @@ ARMET_tc = function(
 						if((.) %>% distinct(`Cell type category`) %>% pull(1) == "immune_cell" )
 							(.) %>%
 							get_redundant_pair(
-								distance_feature = "symbol original",
+								distance_feature = "symbol",
 								redundant_feature = "sample",
 								value_column = "read count normalised",
 								log_transform = T
@@ -178,12 +178,54 @@ ARMET_tc = function(
 	######################################
 
 	load("data/reference.RData")
+	reference = fit_df
+ref_orig = reference
+
+mix_samples = c("ENCFF429MGN", "S00J8C11" )
+	mix =
+		ref_orig %>%
+		inner_join( (.) %>% distinct(sample) %>% filter(sample %in% mix_samples)) %>%
+		distinct(`symbol`, `read count normalised`, `Cell type formatted`) %>%
+		spread(`Cell type formatted`, `read count normalised`) %>%
+		drop_na %>%
+		mutate( `read count` = ( (macrophage_M2 + endothelial) / 2 ) %>% as.integer ) %>%
+		mutate(sample = "1") %>%
+		select(-c(2:3)) %>%
+		spread(`symbol`, `read count`)
+
+	# ar = ARMET_tc(
+	# 	ref_orig %>%
+	# 		inner_join( (.) %>% distinct(sample) %>% filter(sample %in% mix_samples)) %>%
+	# 		distinct(`symbol`, `read count normalised`, `Cell type formatted`) %>%
+	# 		spread(`Cell type formatted`, `read count normalised`) %>%
+	# 		drop_na %>%
+	# 		mutate( `read count` = ( (macrophage_M2 + endothelial) / 2 ) %>% as.integer ) %>%
+	# 		mutate(sample = "1") %>%
+	# 		select(-c(2:3)) %>% rename(gene = `symbol`) %>% spread(sample, `read count`), do_debug=F
+	# )
+
+	# mix = reference %>%
+	# 	inner_join( (.) %>% distinct(sample) %>% slice(c(200))) %>%
+	# 	distinct(sample, `symbol`, `read count`) %>%
+	# 	spread(`symbol`, `read count`) %>%
+	# 	mutate(sample = 1:n() %>% as.character)
 
 	house_keeping =
 		reference %>% filter(`Cell type category` == "house_keeping" ) %>%
-		distinct(`symbol original`) %>%
+		distinct(`symbol`) %>%
 		pull(1) %>%
 		head(n=200)
+
+	# load("/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/data/tree_Yaml.rda")
+	# source("R/ARMET_parseTree.R")
+	# my_tree = format_tree( get_node_from_name(tree, "TME"), mix, "")
+	# markers = get_node_label_level_specfic(
+	# 	get_node_from_name(my_tree,  "TME"),
+	# 	label = "markers",
+	# 	start_level = 1,
+	# 	stop_level = 1
+	# )
+	markers =  read_csv("docs/markers.csv") %>% pull(symbol)
 
 	reference =
 		reference %>%
@@ -194,30 +236,11 @@ ARMET_tc = function(
 		# Get only markes and house keeping
 		filter(
 			#`Cell type category` == "house_keeping" |
-			`symbol original` %in% 	house_keeping |
-				`symbol original` %in%  ( read_csv("docs/markers.csv") %>% pull(symbol) ) # %>% sample %>% head(n=100))
+			`symbol` %in% 	house_keeping |
+				`symbol` %in%  markers # %>% sample %>% head(n=100))
 		) %>%
-		select( -start, -end, -n, -contains("idx")) %>%
+		select(  -contains("idx"), -G) %>%
 		mutate(`read count` = `read count` %>% as.integer)
-
-
-
-		mix =
-			reference %>%
-			inner_join( (.) %>% distinct(sample) %>% slice(c(1,200))) %>%
-			distinct(`symbol original`, `read count`, `Cell type formatted`) %>%
-			spread(`Cell type formatted`, `read count`) %>%
-			drop_na %>%
-			mutate( `read count` = ( (b_cellnaive + fibroblast) / 2 ) %>% as.integer ) %>%
-			mutate(sample = "1") %>%
-			select(-c(2:3)) %>%
-			spread(`symbol original`, `read count`)
-
-		# mix = reference %>%
-		# 	inner_join( (.) %>% distinct(sample) %>% slice(c(200))) %>%
-		# 	distinct(sample, `symbol original`, `read count`) %>%
-		# 	spread(`symbol original`, `read count`) %>%
-		# 	mutate(sample = 1:n() %>% as.character)
 
 	######################################
 	######################################
@@ -226,22 +249,22 @@ ARMET_tc = function(
 	df =
 		bind_rows(
 			reference %>%
-				filter(`symbol original` %in% ( mix %>% colnames )),
+				filter(`symbol` %in% ( mix %>% colnames )),
 			mix %>%
-				gather(`symbol original`, `read count`, -sample) %>%
+				gather(`symbol`, `read count`, -sample) %>%
+				inner_join(reference %>% distinct(symbol) ) %>%
 				mutate(`Cell type category` = ifelse(
-					`symbol original` %in% ( reference %>% filter(`Cell type category` == "house_keeping" ) %>% distinct(`symbol original`) %>% pull(1) 	),
+					`symbol` %in% ( reference %>% filter(`Cell type category` == "house_keeping" ) %>% distinct(`symbol`) %>% pull(1) 	),
 					"house_keeping",
 					"query"
-				)) %>%
-				unite(symbol, c("Cell type category", "symbol original"), remove = F)
+				))
 		)	%>%
 
 		# Add symbol indeces
 		left_join(
 			(.) %>%
 				filter(!`Cell type category` %in% c("house_keeping")  ) %>%
-				distinct(`symbol original`) %>%
+				distinct(`symbol`) %>%
 				mutate(M = 1:n())
 		) %>%
 
@@ -266,16 +289,18 @@ ARMET_tc = function(
 	# For  reference MPI inference
 	counts_baseline =
 		df %>%
-		filter(`Cell type category` != "query") %>%
+		filter(`Cell type category` != "query")  %>%
+		unite(ct_symbol, c("Cell type category", "symbol"), remove = F) %>%
+
 		format_for_MPI
 
-	N = counts_baseline %>% distinct(sample, symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
+	N = counts_baseline %>% distinct(sample, ct_symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
 	M = counts_baseline %>% distinct(start, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
-	G = counts_baseline %>% distinct(symbol) %>% nrow()
+	G = counts_baseline %>% distinct(ct_symbol) %>% nrow()
 	S = counts_baseline %>% distinct(sample) %>% nrow()
-	G_per_shard = counts_baseline %>% distinct(symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% as.array
+	G_per_shard = counts_baseline %>% distinct(ct_symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% as.array
 	n_shards = min(shards, counts_baseline %>% distinct(idx_MPI) %>% nrow)
-	G_per_shard_idx = c(0, counts_baseline %>% distinct(symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% cumsum)
+	G_per_shard_idx = c(0, counts_baseline %>% distinct(ct_symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% cumsum)
 
 	counts =
 		counts_baseline %>%
@@ -309,13 +334,13 @@ ARMET_tc = function(
 	y =
 		df %>%
 		filter(`Cell type category` == "query") %>%
-		select(S, Q, `symbol original`, `read count`) %>%
+		select(S, Q, `symbol`, `read count`) %>%
 		left_join(
 			counts_baseline %>%
-				distinct(`symbol original`, G, `Cell type category`)
+				distinct(`symbol`, G, `Cell type category`)
 		) %>%
 		spread(`Cell type category`, G) %>%
-		select(-`symbol original`) %>%
+		select(-`symbol`) %>%
 		select(`read count`, S, Q, everything()) %>%
 		as_matrix
 
@@ -345,7 +370,23 @@ ARMET_tc = function(
 		)
 	Sys.time()
 
+	# Plot differences in lambda
+	 (fit %>%
+		gather_draws(lambda_log[G]) %>%
+		median_qi() %>%
+		left_join(
+			counts_baseline %>%
+				distinct(`symbol`, G, `Cell type category`)
+		) %>%
+		left_join(
+			reference %>%
+				distinct(symbol, lambda, `Cell type category`) %>%
+				rename(`lambda_log` = lambda)
+		) %>%
+		ggplot(aes(x=lambda_log, y=.value, label=G)) + geom_point() + geom_abline(intercept = 0, slope = 1, color="red") + my_theme
+)  %>% plotly::ggplotly()
 
+	#
 	(
 		fit %>%
 			extract(pars=c("lambda_mu", "lambda_sigma", "exposure_rate",  "lambda_log", "sigma_raw", "prop")) %>%
