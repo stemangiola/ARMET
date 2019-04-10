@@ -45,8 +45,8 @@ source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c5
 ## R Markdown
 ```{r, cache=TRUE}
 # TEMPORARY
-load("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/fit_MPI_level1.RData")
-load("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/level_1_input.RData")
+load("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/fit_MPI_level1_08042019.RData")
+load("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/level_1_input_08042019.RData")
 
 fit_df = 
 	fit_MPI %>%
@@ -62,7 +62,7 @@ fit_df =
 			gather(idx_MPI, symbol) %>%
 			drop_na() %>% mutate(G=1:n())
 	) %>%
-	left_join( counts_stan_MPI %>% distinct(symbol, `level 1`)  ) %>%
+	left_join( counts_stan_MPI %>% distinct(symbol, `Cell type category`)  ) %>%
 	
 	
 	# Add stan normalisation constants
@@ -125,7 +125,7 @@ fit_df =
 		symbol =
 			gsub(
 				(.) %>%
-					distinct(`level 1`) %>%
+					distinct(`Cell type category`) %>%
 					pull(1) %>%
 					paste("_", sep="") %>%
 					paste(collapse="|") ,
@@ -147,12 +147,12 @@ fit_df =
 	
 fit_df.potential_markers =
 	fit_df %>%
-	distinct(symbol, `level 1`, lambda, CI_low, CI_high, shape, rate, `gene error mean`) %>%
+	distinct(symbol, `Cell type category`, lambda, CI_low, CI_high, shape, rate, `gene error mean`) %>%
 	inner_join(
 		(.) %>%
-		distinct(symbol, `level 1`) %>%
+		distinct(symbol, `Cell type category`) %>%
 		count(symbol) %>%
-		filter(n == fit_df %>% distinct(`level 1`) %>% nrow %>% `-` (1))
+		filter(n == fit_df %>% distinct(`Cell type category`) %>% nrow %>% `-` (1))
 	)
 
 
@@ -176,8 +176,8 @@ fit_df.potential_markers =
 
 ```{r}
 fit_df %>% 
-	distinct(`level 1`, symbol, lambda) %>% 
-	ggplot(aes(lambda, color=`level 1`)) + 
+	distinct(`Cell type category`, symbol, lambda) %>% 
+	ggplot(aes(lambda, color=`Cell type category`)) + 
 	geom_density()
 
 ```
@@ -190,11 +190,11 @@ The threshold seems to be 0.5
 ```{r}
 (
 	fit_df.potential_markers %>% 
- 	unite(symbol_ct, c("symbol", "level 1"), remove=F) %>% 
+ 	unite(symbol_ct, c("symbol", "Cell type category"), remove=F) %>% 
  	sample_frac(0.01)  %>% 
  	arrange(`gene error mean` %>% desc) %>%
   mutate(symbol_ct = factor(symbol_ct, unique(symbol_ct))) %>%
-  ggplot(aes(x = symbol_ct, y = `gene error mean` , color=`level 1`, size=lambda)) +
+  ggplot(aes(x = symbol_ct, y = `gene error mean` , color=`Cell type category`, size=lambda)) +
  	#geom_point(alpha=0.4)  + 
 	geom_jitter(alpha=0.4, width = 25) +
  	theme(
@@ -206,7 +206,7 @@ The threshold seems to be 0.5
 
 fit_df %>% 
   filter(symbol %in% c("MRPL52")) %>%
-	ggplot(aes(x=`predicted_NB` + 1, y=`read count normalised bayes` + 1, label=symbol, color=`level 1`)) + 
+	ggplot(aes(x=`predicted_NB` + 1, y=`read count normalised bayes` + 1, label=symbol, color=`Cell type category`)) + 
 	geom_abline(intercept = 0, slope = 1, color="grey") + 
 	geom_point() + 
 	facet_wrap(~ symbol, scales = "free")  +
@@ -218,12 +218,14 @@ fit_df %>%
 
 ```
 
+## Select markers
+
 ```{r}
 n_markers = 100
 
-foreach(ct = fit_df %>% distinct(`level 1`) %>% filter(`level 1` != "house_keeping") %>% pull(1), .combine = bind_rows) %do% {
+foreach(ct = fit_df %>% distinct(`Cell type category`) %>% filter(`Cell type category` != "house_keeping") %>% pull(1), .combine = bind_rows) %do% {
 	fit_df %>%
-		mutate(is_ct = `level 1` == !!ct) %>%
+		mutate(is_ct = `Cell type category` == !!ct) %>%
 		group_by(is_ct, symbol) %>%
 		summarise(CI_low_sum = CI_low %>% sum, CI_high_sum = CI_high %>% sum	) %>%
 		ungroup() %>%
@@ -231,24 +233,43 @@ foreach(ct = fit_df %>% distinct(`level 1`) %>% filter(`level 1` != "house_keepi
 		select(symbol, is_ct, CI) %>%
 		spread(is_ct, CI) %>%
 		mutate(delta = `TRUE` - `FALSE`) %>%
-		left_join( fit_df %>% filter(`level 1` == ct) %>% distinct(symbol, lambda, `gene error mean`) ) %>%
+		left_join( fit_df %>% filter(`Cell type category` == ct) %>% distinct(symbol, lambda, `gene error mean`) ) %>%
 		filter(lambda > 4) %>%
 		filter(`gene error mean` < 0.4) %>%
 		arrange(delta %>% desc) %>%
 		mutate(ct = ct) %>% 
 		head(n=n_markers)
 } %>%
+	
+# resolve the problem of 
 {
 	(.) %>%
 		distinct(`symbol`) %>%
 		write_csv("docs/markers.csv")
 	(.)
 } %>%
+	
+		# plot MDS
+{
+	(.) %>%
+		rename(`Cell type category` = `Cell type category`) %>%
+    filter(`Cell type category` != "house_keeping" ) %>%
+		# Reduce numbers by redundancy
+		add_MDS_components(
+			replicates_column = "symbol original",
+			cluster_by_column = "sample",
+			value_column = "read count normalised",log_transform = T
+		) %>% 
+    distinct(sample, `Cell type category`, `Cell type formatted`, `PC 1`, `PC 2`, `Data base`) %>% 
+    ggplot(aes(x=`PC 1`, y=`PC 2`, color=`Cell type category`, shape=`Data base`, label =`Cell type formatted`)) + geom_text() +
+    geom_point() + my_theme
+} %>%
+	
 left_join(
-	fit_df %>% distinct(`level 1`, symbol, sample, `read count normalised bayes`)
+	fit_df %>% distinct(`Cell type category`, symbol, sample, `read count normalised bayes`)
 ) %>%
 mutate( symbol_err = sprintf("%s %s", symbol,  `gene error mean` %>% round(2))) %>%
-{ ggplot((.), aes(y=`read count normalised bayes` + 1, x=`level 1` %>% substring(1, 2), fill=ct)) + 
+{ ggplot((.), aes(y=`read count normalised bayes` + 1, x=`Cell type category` %>% substring(1, 2), fill=ct)) + 
 	geom_boxplot() + 
 	facet_wrap(~ ct + symbol_err, scale="free", ncol = 6 ) + 
 	scale_y_log10() + 
