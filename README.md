@@ -1,6 +1,6 @@
 ![ARMET](https://github.com/stemangiola/ARMET/blob/master/armet_logo.png?raw=true)
 
-ARMET-tc infers rates of changes in tissue composition acros a covariate of interest (e.g., treatment status, time or disease grade). 
+ARMET-tc infers rates of changes in tissue composition across a covariate of interest (e.g., treatment status, time or disease grade). 
 
 Input (see below):
 
