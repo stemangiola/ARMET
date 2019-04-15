@@ -177,18 +177,24 @@ ARMET_tc = function(
 	# Variable should be already set
 	######################################
 
-	load("data/reference.RData")
-	reference = fit_df
+	load("docs/reference_BK.RData")
+#	reference = fit_df
 ref_orig = reference
 
+# It works
 mix_samples = c("ENCFF429MGN", "S00J8C11" )
+# It does NOT work
+mix_samples = c("counts.Fibroblast%20-%20Choroid%20Plexus%2c%20donor3.CNhs12620.11653-122E6", "C001FRB3" )
+# ?
+mix_samples = c("counts.Endothelial%20Cells%20-%20Microvascular%2c%20donor3.CNhs12024.11414-118F1","counts.CD4%2b%20T%20Cells%2c%20donor1.CNhs10853.11225-116C1" )
+
 	mix =
 		ref_orig %>%
 		inner_join( (.) %>% distinct(sample) %>% filter(sample %in% mix_samples)) %>%
 		distinct(`symbol`, `read count normalised`, `Cell type formatted`) %>%
 		spread(`Cell type formatted`, `read count normalised`) %>%
 		drop_na %>%
-		mutate( `read count` = ( (macrophage_M2 + endothelial) / 2 ) %>% as.integer ) %>%
+		mutate( `read count` = ( (endothelial + t_CD4) / 2 ) %>% as.integer ) %>%
 		mutate(sample = "1") %>%
 		select(-c(2:3)) %>%
 		spread(`symbol`, `read count`)
