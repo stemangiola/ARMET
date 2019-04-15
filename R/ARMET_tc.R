@@ -62,12 +62,11 @@ ARMET_tc = function(
 	shards = 56
 
 	# Global properties
-	sigma_intercept = 1.3663737
-	sigma_slope = -0.3443049
-	sigma_sigma = 1.1755951
-	lambda_mu_mu = 7
-	lambda_skew = -8.7458016
-	lambda_sigma = 8.7234045
+	sigma_intercept = 1.3420415
+	sigma_slope = -0.3386389
+	sigma_sigma = 1.1720851
+	lambda_mu_mu = 5.612671
+	lambda_sigma = 7.131593
 
 	format_for_MPI = function(df){
 		df %>%
@@ -177,18 +176,52 @@ ARMET_tc = function(
 	# Variable should be already set
 	######################################
 
-	load("data/reference.RData")
-	reference = fit_df
-ref_orig = reference
+	load("docs/ref.RData")
+	#reference = fit_df
+
+# New mx
+# mix_source =
+# 	combn(ref_orig %>% distinct(C) %>% pull(1),m = 2) %>%
+# 	t %>%
+# 	as_tibble %>%
+# 	mutate(run = 1:n()) %>%
+# 	rowwise() %>%
+# 	do({
+# 		cc = (.)
+# 		bind_rows(
+# 			ref_orig %>% filter(C == cc %>% pull(1)) %>%
+# 				sample_n(1) %>%
+# 				distinct(sample, run),
+# 			ref_orig %>% filter(C == cc %>% pull(2)) %>%
+# 				sample_n(1) %>%
+# 				distinct(sample, run)
+# 		) %>%
+# 			left_join(ref_orig) %>%
+# 			distinct(`symbol`, `read count normalised`, `Cell type formatted`, run, sample)
+# 	}) %>%
+# 	ungroup()
+#
+# mix = mix_source %>%
+# 	group_by(run) %>%
+# 	distinct(`symbol`, `read count normalised`, `Cell type formatted`) %>%
+# 	spread(`Cell type formatted`, `read count normalised`) %>%
+# 	drop_na %>%
+# 	mutate( `read count` = ( (`2` + `3`) / 2 ) %>% as.integer ) %>%
+# 	mutate(sample = run) %>%
+# 	unroup()
+
+# old mix
 
 mix_samples = c("ENCFF429MGN", "S00J8C11" )
+mix_samples = c("counts.Fibroblast%20-%20Choroid%20Plexus%2c%20donor3.CNhs12620.11653-122E6", "C001FRB3" )
+
 	mix =
-		ref_orig %>%
+		ref %>%
 		inner_join( (.) %>% distinct(sample) %>% filter(sample %in% mix_samples)) %>%
 		distinct(`symbol`, `read count normalised`, `Cell type formatted`) %>%
 		spread(`Cell type formatted`, `read count normalised`) %>%
 		drop_na %>%
-		mutate( `read count` = ( (macrophage_M2 + endothelial) / 2 ) %>% as.integer ) %>%
+		mutate( `read count` = ( (t_memory_central + fibroblast) / 2 ) %>% as.integer ) %>%
 		mutate(sample = "1") %>%
 		select(-c(2:3)) %>%
 		spread(`symbol`, `read count`)
@@ -211,7 +244,7 @@ mix_samples = c("ENCFF429MGN", "S00J8C11" )
 	# 	mutate(sample = 1:n() %>% as.character)
 
 	house_keeping =
-		reference %>% filter(`Cell type category` == "house_keeping" ) %>%
+		ref %>% filter(`Cell type category` == "house_keeping" ) %>%
 		distinct(`symbol`) %>%
 		pull(1) %>%
 		head(n=200)
@@ -228,7 +261,7 @@ mix_samples = c("ENCFF429MGN", "S00J8C11" )
 	markers =  read_csv("docs/markers.csv") %>% pull(symbol)
 
 	reference =
-		reference %>%
+		ref %>%
 
 		# Decrese number of samples
 		decrease_replicates %>%
@@ -355,12 +388,28 @@ mix_samples = c("ENCFF429MGN", "S00J8C11" )
 	Sys.setenv("STAN_NUM_THREADS" = cores)
 	ARMET_tc = stan_model("src/stan_files/ARMET_tc.stan")
 
+
+	initializer <- function() list(
+		lambda_log =
+			counts_baseline %>%
+			# Ths is bcause mix lacks lambda info and produces NA in the df
+			filter(!(`Cell type category` == "house_keeping" & lambda %>% is.na)) %>%
+			distinct(G, lambda) %>% pull(lambda),
+		sigma_raw =
+			counts_baseline %>%
+			# Ths is bcause mix lacks lambda info and produces NA in the df
+			filter(!(`Cell type category` == "house_keeping" & sigma_raw %>% is.na)) %>%
+			distinct(G, sigma_raw) %>% pull(sigma_raw)
+	)
+	inits <- foreach(chain = 1:3) %do% {initializer()}
+
+
 	Sys.time()
 	fit =
 		sampling(
 			ARMET_tc, #stanmodels$ARMET_tc,
 			chains=3, cores=3,
-			iter=300, warmup=200
+			iter=300, warmup=200,init=inits
 			# ,
 			# save_warmup = FALSE,
 			# pars = c(
