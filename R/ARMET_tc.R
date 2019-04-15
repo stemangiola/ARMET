@@ -214,6 +214,7 @@ ARMET_tc = function(
 
 mix_samples = c("ENCFF429MGN", "S00J8C11" )
 mix_samples = c("counts.Fibroblast%20-%20Choroid%20Plexus%2c%20donor3.CNhs12620.11653-122E6", "C001FRB3" )
+mix_samples = c("counts.Endothelial%20Cells%20-%20Microvascular%2c%20donor3.CNhs12024.11414-118F1","counts.CD4%2b%20T%20Cells%2c%20donor1.CNhs10853.11225-116C1" )
 
 	mix =
 		ref %>%
@@ -221,7 +222,7 @@ mix_samples = c("counts.Fibroblast%20-%20Choroid%20Plexus%2c%20donor3.CNhs12620.
 		distinct(`symbol`, `read count normalised`, `Cell type formatted`) %>%
 		spread(`Cell type formatted`, `read count normalised`) %>%
 		drop_na %>%
-		mutate( `read count` = ( (t_memory_central + fibroblast) / 2 ) %>% as.integer ) %>%
+		mutate( `read count` = ( (endothelial + t_CD4) / 2 ) %>% as.integer ) %>%
 		mutate(sample = "1") %>%
 		select(-c(2:3)) %>%
 		spread(`symbol`, `read count`)
@@ -249,16 +250,16 @@ mix_samples = c("counts.Fibroblast%20-%20Choroid%20Plexus%2c%20donor3.CNhs12620.
 		pull(1) %>%
 		head(n=200)
 
-	# load("/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/data/tree_Yaml.rda")
-	# source("R/ARMET_parseTree.R")
-	# my_tree = format_tree( get_node_from_name(tree, "TME"), mix, "")
-	# markers = get_node_label_level_specfic(
-	# 	get_node_from_name(my_tree,  "TME"),
-	# 	label = "markers",
-	# 	start_level = 1,
-	# 	stop_level = 1
-	# )
-	markers =  read_csv("docs/markers.csv") %>% pull(symbol)
+	load("/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/data/tree_Yaml.rda")
+	source("R/ARMET_parseTree.R")
+	my_tree = format_tree( get_node_from_name(tree, "TME"), mix, "")
+	markers = get_node_label_level_specfic(
+		get_node_from_name(my_tree,  "TME"),
+		label = "markers",
+		start_level = 1,
+		stop_level = 1
+	)
+	# markers =  read_csv("docs/markers.csv") %>% pull(symbol)
 
 	reference =
 		ref %>%
