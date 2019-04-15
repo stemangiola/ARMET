@@ -1,4 +1,4 @@
-# Infer NB from level 1
+# Infer NB from Cell type category
 
 # Initialise
 #setwd("/wehisan/bioinf/bioinf-data/Papenfuss_lab/projects/mangiola.s/PostDoc/RNAseq-noise-model")
@@ -20,6 +20,10 @@ library(multidplyr)
 
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
+
+# Get level
+args <- commandArgs(TRUE)
+my_level = args[1]
 
 # Registering parallel framework
 system("nproc", intern = TRUE) %>%
@@ -59,6 +63,46 @@ my_theme =
 source("https://gist.githubusercontent.com/stemangiola/90a528038b8c52b21f9cfa6bb186d583/raw/dbd92c49fb03fb05ab0b465704b99c0a39e654d5/transcription_tool_kit.R")
 source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/e4ec6a2348efc2f62b88f10b12e70f4c6273a10a/tidy_extensions.R")
 
+# Setup table of name conversion
+level_df = foreach( l = list(
+	c("b_cell", "immune_cell", "b_cell"),
+	c("b_memory", "immune_cell", "b_cell", "b_memory"),
+	c("b_naive", "immune_cell", "b_cell", "b_naive"),
+	c("dendritic",  "immune_cell", "dendritic"),
+	c("dendritic_m",  "immune_cell", "dendritic"),
+	c("dendritic_m_immature",  "immune_cell", "dendritic", "dendritic_m_immature"),
+	c("dendritic_m_mature",  "immune_cell", "dendritic", "dendritic_m_mature"),
+	c("endothelial", "endothelial", "endothelial", "endothelial"),
+	c("eosinophil", "immune_cell", "granulocyte", "eosinophil"),
+	c("epithelial", "epithelial", "epithelial", "epithelial"),
+	c("fibroblast","fibroblast", "fibroblast", "fibroblast"),
+	c("immune_cell", "immune_cell"),
+	c("macrophage", "immune_cell", "mono_derived"),
+	c("macrophage_M1", "immune_cell", "mono_derived", "macrophage_M1"),
+	c("macrophage_M2", "immune_cell", "mono_derived", "macrophage_M2"),
+	c("mast_cell", "immune_cell", "mast_cell", "mast_cell"),
+	c("monocyte","immune_cell", "mono_derived",  "monocyte"),
+	c("myeloid", "immune_cell"),
+	c("natural_killer", "immune_cell", "natural_killer", "natural_killer"),
+	c("neutrophil", "immune_cell", "granulocyte", "neutrophil"),
+	c("t_CD4", "immune_cell","t_cell"),
+	c("t_CD8", "immune_cell","t_cell"),
+	c("t_CD8_memory_effector", "immune_cell","t_cell", "t_CD8_memory_effector"),
+	c("t_cell", "immune_cell","t_cell"),
+	c("t_gamma_delta", "immune_cell","t_cell", "t_gamma_delta"),
+	c("t_helper", "immune_cell","t_cell", "t_helper"),
+	c("t_memory_central", "immune_cell","t_cell", "t_memory_central"),
+	c("t_memory", "immune_cell","t_cell"),
+	c("t_memory_effector", "immune_cell","t_cell", "t_memory_effector"),
+	c("t_naive", "immune_cell","t_cell", "t_naive"),
+	c("t_reg", "immune_cell","t_cell", "t_reg"),
+	c("t_reg_memory", "immune_cell","t_cell", "t_reg")
+), .combine = bind_rows) %do% {
+	l %>%
+		as.data.frame %>% t %>% as_tibble(.name_repair = "minimal") %>%
+		setNames(c("Cell type formatted", sprintf("level %s",  1:((.)%>%ncol()-1) ) ))
+}
+
 # if(0){
 # Get data
 counts =
@@ -78,27 +122,21 @@ counts =
 	filter(symbol %>% is.na %>% `!`) %>%
 	filter(`Cell type formatted` %>% is.na %>% `!`) %>%
 
-	# Setup level 1 names
-	mutate(
-		`level 1` =
-			ifelse(
-				grepl("^b_|^t_|natural_killer|monocyte|mono_|myeloid|macrophage|natural_killer|nk|neutrophil|eosinophil", `Cell type formatted`), "immune_cell",
-				ifelse(
-					`Cell type formatted` %in% c("epithelial", "endothelial", "fibroblast"),
-					`Cell type formatted`,
-					NA
-				)
-			)
-	) %>%
+	# Setup Cell type category names
+	left_join(
+		level_df %>%
+			select(`Cell type formatted`, contains(sprintf("level %s", my_level))) %>%
+			setNames(c((.) %>% colnames  %>% `[` (1), "Cell type category"))
 
-	# Filter no level
-	filter(`level 1` %>% is.na %>% `!`) %>%
+	) %>%
+	filter(`Cell type category` %>% is.na %>% `!`) %>%
+	mutate(level = !!my_level) %>%
 
 	# Eliminate genes that are not in all cell types
-	inner_join( (.) %>% distinct(symbol, `level 1`) %>% count(symbol) %>% filter(n == max(n)) ) %>%
+	inner_join( (.) %>% distinct(symbol, `Cell type category`) %>% count(symbol) %>% filter(n == max(n)) ) %>%
 
 	# Setup house keeping genes
-	mutate(`level 1` = ifelse(symbol %in% (read_csv("docs/hk_600.txt", col_names = FALSE) %>% pull(1)), "house_keeping", `level 1`)) %>%
+	mutate(`Cell type category` = ifelse(symbol %in% (read_csv("docs/hk_600.txt", col_names = FALSE) %>% pull(1)), "house_keeping", `Cell type category`)) %>%
 
 	# Median redundant
 	do_parallel_start(n_cores, "symbol") %>%
@@ -108,7 +146,7 @@ counts =
 		library(magrittr)
 
 		(.) %>%
-			group_by(sample, symbol, `level 1`, `Cell type formatted`,  `Data base`) %>%
+			group_by(sample, symbol, `Cell type category`, `Cell type formatted`,  `Data base`) %>%
 			summarise(`read count` = `read count` %>% median(na.rm = T)) %>%
 			ungroup()
 	}) %>%
@@ -125,7 +163,7 @@ counts =
 
 	# mutate symbol
 	mutate(`symbol original` = symbol) %>%
-	unite(symbol, c("level 1", "symbol"), remove = F) %>%
+	unite(symbol, c("Cell type category", "symbol"), remove = F) %>%
 
 	# Mark the bimodal distributions
 	do_parallel_start(n_cores, "symbol") %>%
@@ -193,10 +231,11 @@ shards = n_cores %>% divide_by(3) %>% floor %>% multiply_by(4)
 counts_stan_MPI =
 	counts %>%
 
+	# # Subsample for test
 	# inner_join(
 	# 	bind_rows (
-	# 		(.) %>% distinct(symbol, `level 1`) %>% filter(`level 1` == "house_keeping") %>% sample_n(200),
-	# 		(.) %>% distinct(symbol) %>% sample_n(0)
+	# 		(.) %>% distinct(symbol, `Cell type category`) %>% filter(`Cell type category` == "house_keeping") %>% sample_n(200),
+	# 		(.) %>% distinct(symbol) %>% sample_n(100)
 	# 	) %>% distinct(symbol)
 	# )%>%
 
@@ -290,17 +329,17 @@ data_for_stan_MPI = list(
 
 	symbol_ct_idx_expanded =
 		counts_stan_MPI %>%
-		distinct(idx_MPI, symbol, `symbol original`, `level 1`) %>%
-		mutate(G = 1:n()) %>% filter(`level 1` != "house_keeping") %>%
-		mutate(C = `level 1` %>% as.factor %>% as.integer) %>%
+		distinct(idx_MPI, symbol, `symbol original`, `Cell type category`) %>%
+		mutate(G = 1:n()) %>% filter(`Cell type category` != "house_keeping") %>%
+		mutate(C = `Cell type category` %>% as.factor %>% as.integer) %>%
 		mutate(M = `symbol original` %>% as.factor %>% as.integer) %>%
 		arrange(M),
 
 	symbol_ct_idx =
 		counts_stan_MPI %>%
-		distinct(idx_MPI, symbol, `symbol original`, `level 1`) %>%
-		mutate(G = 1:n()) %>% filter(`level 1` != "house_keeping") %>%
-		mutate(C = `level 1` %>% as.factor %>% as.integer) %>%
+		distinct(idx_MPI, symbol, `symbol original`, `Cell type category`) %>%
+		mutate(G = 1:n()) %>% filter(`Cell type category` != "house_keeping") %>%
+		mutate(C = `Cell type category` %>% as.factor %>% as.integer) %>%
 		mutate(M = `symbol original` %>% as.factor %>% as.integer) %>%
 		arrange(M) %>%
 		select(G, C, M) %>%
@@ -316,7 +355,7 @@ counts_stan_MPI %>% distinct(symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>%
 	sprintf("Genes per shard %s", .) %>%
 	print
 
-save(list=c("data_for_stan_MPI", "counts_stan_MPI", "counts"), file="docs/level_1_input.RData")
+save(list=c("data_for_stan_MPI", "counts_stan_MPI", "counts"), file=sprintf("docs/level_%s_input.RData", my_level))
 
 fileConn<-file("~/.R/Makevars")
 writeLines(c("CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
@@ -332,7 +371,7 @@ fit_MPI =
 		chains=3, iter=300, warmup=200, save_warmup = FALSE,
 		pars = c("lambda", "sigma_raw", "sigma_intercept", "sigma_slope", "sigma_sigma", "lambda_mu", "lambda_sigma", "exposure_rate")
 	)
-save(fit_MPI, file="docs/fit_MPI_level1.RData")
+save(fit_MPI, file= sprintf("docs/fit_MPI_level%s.RData", my_level))
 Sys.time()
 
 #load("docs/fit_MPI_level1.RData")
@@ -351,7 +390,7 @@ left_join(
 		gather(idx_MPI, symbol) %>%
 		drop_na() %>% mutate(G=1:n())
 ) %>%
-left_join( counts_stan_MPI %>% distinct(symbol, `level 1`)  ) %>%
+left_join( counts_stan_MPI %>% distinct(symbol, `Cell type category`)  ) %>%
 
 # QQ plots
 
@@ -393,7 +432,7 @@ mutate(
 	symbol =
 		gsub(
 			(.) %>%
-				distinct(`level 1`) %>%
+				distinct(`Cell type category`) %>%
 				pull(1) %>%
 				paste("_", sep="") %>%
 				paste(collapse="|"),
@@ -401,4 +440,4 @@ mutate(
 			symbol
 		)
 ) %>%
-	write_csv("docs/fit_level1.csv")
+	write_csv(sprintf("docs/fit_level%s.csv", my_level))
