@@ -61,6 +61,22 @@ ARMET_tc = function(
 	input = c(as.list(environment()))
 	shards = 56
 
+	my_theme =
+		theme_bw() +
+		theme(
+			panel.border = element_blank(),
+			axis.line = element_line(),
+			panel.grid.major = element_line(size = 0.2),
+			panel.grid.minor = element_line(size = 0.1),
+			text = element_text(size=12),
+			legend.position="bottom",
+			aspect.ratio=1,
+			axis.text.x = element_text(angle = 90, hjust = 1),
+			strip.background = element_blank(),
+			axis.title.x  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10)),
+			axis.title.y  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10))
+		)
+
 	# Global properties
 	sigma_intercept = 1.3420415
 	sigma_slope = -0.3386389
@@ -214,8 +230,9 @@ ARMET_tc = function(
 
 # It works
 mix_samples = c("ENCFF429MGN", "S00J8C11" )
+# Problematic
 mix_samples = c("counts.Fibroblast%20-%20Choroid%20Plexus%2c%20donor3.CNhs12620.11653-122E6", "C001FRB3" )
-mix_samples = c("counts.Endothelial%20Cells%20-%20Microvascular%2c%20donor3.CNhs12024.11414-118F1","counts.CD4%2b%20T%20Cells%2c%20donor1.CNhs10853.11225-116C1" )
+#mix_samples = c("counts.Endothelial%20Cells%20-%20Microvascular%2c%20donor3.CNhs12024.11414-118F1","counts.CD4%2b%20T%20Cells%2c%20donor1.CNhs10853.11225-116C1" )
 
 	mix =
 		ref %>%
@@ -223,7 +240,7 @@ mix_samples = c("counts.Endothelial%20Cells%20-%20Microvascular%2c%20donor3.CNhs
 		distinct(`symbol`, `read count normalised`, `Cell type formatted`) %>%
 		spread(`Cell type formatted`, `read count normalised`) %>%
 		drop_na %>%
-		mutate( `read count` = ( (endothelial + t_CD4) / 2 ) %>% as.integer ) %>%
+		mutate( `read count` = ( (fibroblast + t_memory_central) / 2 ) %>% as.integer ) %>%
 		mutate(sample = "1") %>%
 		select(-c(2:3)) %>%
 		spread(`symbol`, `read count`)
@@ -423,8 +440,8 @@ mix_samples = c("counts.Endothelial%20Cells%20-%20Microvascular%2c%20donor3.CNhs
 
 	# Plot differences in lambda
 	 (fit %>%
-		gather_draws(lambda_log[G]) %>%
-		median_qi() %>%
+		tidybayes::gather_draws(lambda_log[G]) %>%
+		tidybayes::median_qi() %>%
 		left_join(
 			counts_baseline %>%
 				distinct(`symbol`, G, `Cell type category`)
