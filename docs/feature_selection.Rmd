@@ -38,15 +38,18 @@ nb_to_gamma = function(mu, phi){
 }
 
 source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/e4ec6a2348efc2f62b88f10b12e70f4c6273a10a/tidy_extensions.R")
-
+source("https://gist.githubusercontent.com/stemangiola/90a528038b8c52b21f9cfa6bb186d583/raw/4ac3a7d74d4f7971bd8dd8eb470279eb7f42bbf8/transcription_tool_kit.R")
 ```
 
 
 ## R Markdown
 ```{r, cache=TRUE}
 # TEMPORARY
-load("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/fit_MPI_level1_08042019.RData")
-load("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/level_1_input_08042019.RData")
+load("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/fit_MPI_level1_10042019.RData")
+load("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/level_1_input_10042019.RData")
+
+counts_stan_MPI = counts_stan_MPI %>% rename(`Cell type category` = `level 1`)
+counts = counts %>% rename(`Cell type category` = `level 1`)
 
 fit_df = 
 	fit_MPI %>%
@@ -143,8 +146,15 @@ fit_df =
 	# Calculate confidence interval	
 	mutate(CI_low = qgamma(0.025, shape = shape, rate = rate)) %>%
 	mutate(CI_high = qgamma(0.975, shape = shape, rate = rate)) 
+
+# fit_df %>%
+# 	{
+# 		reference = (.)
+# 		save(reference, file="docs/reference.RData")
+# 	}
 	
-	
+
+
 fit_df.potential_markers =
 	fit_df %>%
 	distinct(symbol, `Cell type category`, lambda, CI_low, CI_high, shape, rate, `gene error mean`) %>%
@@ -205,7 +215,7 @@ The threshold seems to be 0.5
 ) %>% plotly::ggplotly()
 
 fit_df %>% 
-  filter(symbol %in% c("MRPL52")) %>%
+  filter(symbol %in% c("FLJ36644")) %>%
 	ggplot(aes(x=`predicted_NB` + 1, y=`read count normalised bayes` + 1, label=symbol, color=`Cell type category`)) + 
 	geom_abline(intercept = 0, slope = 1, color="grey") + 
 	geom_point() + 
@@ -221,64 +231,110 @@ fit_df %>%
 ## Select markers
 
 ```{r}
-n_markers = 100
+n_markers = 50
 
-foreach(ct = fit_df %>% distinct(`Cell type category`) %>% filter(`Cell type category` != "house_keeping") %>% pull(1), .combine = bind_rows) %do% {
-	fit_df %>%
-		mutate(is_ct = `Cell type category` == !!ct) %>%
-		group_by(is_ct, symbol) %>%
-		summarise(CI_low_sum = CI_low %>% sum, CI_high_sum = CI_high %>% sum	) %>%
-		ungroup() %>%
-		mutate(CI = ifelse(is_ct == T, CI_low_sum, CI_high_sum)) %>%
-		select(symbol, is_ct, CI) %>%
-		spread(is_ct, CI) %>%
-		mutate(delta = `TRUE` - `FALSE`) %>%
+foreach(ct = fit_df %>% distinct(`Cell type category`) %>% filter(`Cell type category` != "house_keeping") %>% pull(1), .combine = bind_rows) %:% 
+foreach(other_ct = fit_df %>% distinct(`Cell type category`) %>% filter(!`Cell type category` %in% c("house_keeping" , ct) ) %>% pull(1)) %do% {
+fit_df %>%
+    filter(`Cell type category` %in% c(!!ct, !!other_ct)) %>%
+    mutate(is_ct = `Cell type category` == !!ct) %>%
+    mutate(CI = ifelse(is_ct == T, CI_low, CI_high)) %>% {
+        left_join(
+        (.) %>%
+            distinct(symbol, is_ct, CI) %>%
+            spread(is_ct, CI) %>%
+            mutate(delta = `TRUE` - `FALSE`) %>%
+            select(-`TRUE`, -`FALSE`),
+        (.) %>%
+            distinct(symbol, is_ct, lambda) %>%
+            spread(is_ct, lambda) %>%
+            mutate(delta_lambda = `TRUE` - `FALSE`) %>%
+            select(-`TRUE`, -`FALSE`)
+        )
+    } %>%
 		left_join( fit_df %>% filter(`Cell type category` == ct) %>% distinct(symbol, lambda, `gene error mean`) ) %>%
 		filter(lambda > 4) %>%
 		filter(`gene error mean` < 0.4) %>%
 		arrange(delta %>% desc) %>%
-		mutate(ct = ct) %>% 
-		head(n=n_markers)
+		mutate(`Cell type category query` = ct, other_ct = other_ct) %>%
+		mutate(rank = 1:n())
 } %>%
+	
+# 				# plot MDS
+# {
+# 	(.) %>%
+#     filter(`Cell type category query` != "house_keeping" ) %>%
+# 		# Reduce numbers by redundancy
+# 		add_MDS_components(
+# 			replicates_column = "symbol",
+# 			cluster_by_column = "sample",
+# 			value_column = "read count normalised bayes",log_transform = T
+# 		) %>% 
+#     distinct(sample, `Cell type category query`, `Cell type formatted`, `PC 1`, `PC 2`, `Data base`) %>% 
+#     ggplot(aes(x=`PC 1`, y=`PC 2`, color=`Cell type category query`, shape=`Data base`, label =`Cell type formatted`)) + geom_text() +
+#     geom_point() + my_theme
+# 	(.)
+# } %>%
+	
+	# Plot differences in rank	
+# {
+# 	(
+# 		(.) %>% 
+# 			filter(delta > 0) %>% 
+# 			ggplot(aes(x=rank, y=delta, color=interaction(`Cell type category query`, other_ct))) +
+# 			geom_line() + scale_x_log10()
+# 	) %>% 
+# 	plot()
+# 	
+# 	(.)
+# } %>%
+
+# Add proportion of markers based on cell differenc
+left_join(
+ (.)	%>% 
+ 	filter(delta_lambda>0) %>% 
+ 	group_by(`Cell type category query`, other_ct) %>% 
+ 	summarise(s = delta_lambda %>% sum) %>% 
+ 	ungroup() %>% 
+ 	mutate(p = 1/s) %>% 
+ 	mutate(p = p/max(p)) %>%
+ 	mutate(n_markers = (p * n_markers) %>% ceiling) %>%
+ 	select(-s, -p)
+) %>%
+	
+# Select markers
+group_by(`Cell type category query`, other_ct) %>%
+filter(delta_lambda > 0) %>%
+filter(rank < n_markers) %>%
+ungroup() %>%
+distinct(`Cell type category query`, symbol, `gene error mean`) %>%
+
 	
 # resolve the problem of 
 {
-	(.) %>%
-		distinct(`symbol`) %>%
-		write_csv("docs/markers.csv")
+	(.) %>%	write_csv("docs/markers.csv")
 	(.)
 } %>%
 	
-		# plot MDS
-{
-	(.) %>%
-		rename(`Cell type category` = `Cell type category`) %>%
-    filter(`Cell type category` != "house_keeping" ) %>%
-		# Reduce numbers by redundancy
-		add_MDS_components(
-			replicates_column = "symbol original",
-			cluster_by_column = "sample",
-			value_column = "read count normalised",log_transform = T
-		) %>% 
-    distinct(sample, `Cell type category`, `Cell type formatted`, `PC 1`, `PC 2`, `Data base`) %>% 
-    ggplot(aes(x=`PC 1`, y=`PC 2`, color=`Cell type category`, shape=`Data base`, label =`Cell type formatted`)) + geom_text() +
-    geom_point() + my_theme
-} %>%
+
 	
 left_join(
 	fit_df %>% distinct(`Cell type category`, symbol, sample, `read count normalised bayes`)
 ) %>%
-mutate( symbol_err = sprintf("%s %s", symbol,  `gene error mean` %>% round(2))) %>%
-{ ggplot((.), aes(y=`read count normalised bayes` + 1, x=`Cell type category` %>% substring(1, 2), fill=ct)) + 
+	
+
+	
+mutate( symbol_err = sprintf("%s %s", symbol,  `gene error mean` %>% round(2))) %>% 
+{ ggplot((.), aes(y=`read count normalised bayes` + 1, x=`Cell type category` %>% substring(1, 2), fill=`Cell type category`)) + 
 	geom_boxplot() + 
-	facet_wrap(~ ct + symbol_err, scale="free", ncol = 6 ) + 
+	facet_wrap(~ `Cell type category query` + symbol_err, scale="free", ncol = 6 ) + 
 	scale_y_log10() + 
 	my_theme +
 	theme(text = element_text(size = 8)	)
 } %>%
 ggsave(
 	filename = 'docs/markers_level_1.pdf', 
-	height= 28 %>% divide_by(8) %>% multiply_by(n_markers*4/6) %>% ceiling, 
+	height= 28 %>% divide_by(8) %>% multiply_by(n_markers) %>% ceiling, 
 	width= 21, 
 	units = "cm", limitsize = FALSE
 )

@@ -251,16 +251,16 @@ mix_samples = c("counts.Endothelial%20Cells%20-%20Microvascular%2c%20donor3.CNhs
 		pull(1) %>%
 		head(n=200)
 
-	load("/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/data/tree_Yaml.rda")
-	source("R/ARMET_parseTree.R")
-	my_tree = format_tree( get_node_from_name(tree, "TME"), mix, "")
-	markers = get_node_label_level_specfic(
-		get_node_from_name(my_tree,  "TME"),
-		label = "markers",
-		start_level = 1,
-		stop_level = 1
-	)
-	# markers =  read_csv("docs/markers.csv") %>% pull(symbol)
+	# load("/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/data/tree_Yaml.rda")
+	# source("R/ARMET_parseTree.R")
+	# my_tree = format_tree( get_node_from_name(tree, "TME"), mix, "")
+	# markers = get_node_label_level_specfic(
+	# 	get_node_from_name(my_tree,  "TME"),
+	# 	label = "markers",
+	# 	start_level = 1,
+	# 	stop_level = 1
+	# )
+	markers =  read_csv("docs/markers.csv") %>% pull(symbol) %>% unique
 
 	reference =
 		ref %>%
