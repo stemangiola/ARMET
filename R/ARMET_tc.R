@@ -196,54 +196,63 @@ ARMET_tc = function(
 	#reference = fit_df
 
 # New mx
-# mix_source =
-# 	combn(ref_orig %>% distinct(C) %>% pull(1),m = 2) %>%
-# 	t %>%
-# 	as_tibble %>%
-# 	mutate(run = 1:n()) %>%
-# 	rowwise() %>%
-# 	do({
-# 		cc = (.)
-# 		bind_rows(
-# 			ref_orig %>% filter(C == cc %>% pull(1)) %>%
-# 				sample_n(1) %>%
-# 				distinct(sample, run),
-# 			ref_orig %>% filter(C == cc %>% pull(2)) %>%
-# 				sample_n(1) %>%
-# 				distinct(sample, run)
-# 		) %>%
-# 			left_join(ref_orig) %>%
-# 			distinct(`symbol`, `read count normalised`, `Cell type formatted`, run, sample)
-# 	}) %>%
-# 	ungroup()
-#
-# mix = mix_source %>%
-# 	group_by(run) %>%
-# 	distinct(`symbol`, `read count normalised`, `Cell type formatted`) %>%
-# 	spread(`Cell type formatted`, `read count normalised`) %>%
-# 	drop_na %>%
-# 	mutate( `read count` = ( (`2` + `3`) / 2 ) %>% as.integer ) %>%
-# 	mutate(sample = run) %>%
-# 	unroup()
+mix_source =
+	combn(ref %>% distinct(`Cell type category`) %>% pull(1),m = 2) %>%
+	t %>%
+	as_tibble %>%
+	mutate(run = 1:n()) %>%
+	group_by(run) %>%
+	do({
+		cc = (.)
+		bind_rows(
+			ref %>% filter(`Cell type category` == (cc %>% pull(1))) %>%
+				sample_n(1) %>%
+				distinct(sample, run),
+			ref %>% filter(`Cell type category` == (cc %>% pull(2))) %>%
+				sample_n(1) %>%
+				distinct(sample, run)
+		) %>%
+			left_join(ref) %>%
+			distinct(`symbol`, `read count normalised`, `Cell type formatted`, run, sample)
+	}) %>%
+	ungroup()
+
+mix = mix_source %>%
+	group_by(run) %>%
+	do(
+		(.) %>%
+			distinct(`symbol`, `read count normalised`, `Cell type formatted`, run) %>%
+			spread(`Cell type formatted`, `read count normalised`) %>%
+			drop_na %>%
+			setNames(c("symbol", "run", "1", "2")) %>%
+			mutate( `read count` = ( (`1` + `2`) / 2 ) %>% as.integer ) %>%
+			mutate(sample = run)
+	) %>%
+	ungroup() %>%
+	select(sample, symbol, `read count`) %>%
+	spread(`sample`, `read count`) %>%
+	drop_na %>%
+	gather(sample, `read count`, -symbol) %>%
+	spread(`symbol`, `read count`)
 
 # old mix
 
 # It works
-mix_samples = c("ENCFF429MGN", "S00J8C11" )
+# mix_samples = c("ENCFF429MGN", "S00J8C11" )
 # Problematic
 #mix_samples = c("counts.Fibroblast%20-%20Choroid%20Plexus%2c%20donor3.CNhs12620.11653-122E6", "C001FRB3" )
 #mix_samples = c("counts.Endothelial%20Cells%20-%20Microvascular%2c%20donor3.CNhs12024.11414-118F1","counts.CD4%2b%20T%20Cells%2c%20donor1.CNhs10853.11225-116C1" )
 
-	mix =
-		ref %>%
-		inner_join( (.) %>% distinct(sample) %>% filter(sample %in% mix_samples)) %>%
-		distinct(`symbol`, `read count normalised`, `Cell type formatted`) %>%
-		spread(`Cell type formatted`, `read count normalised`) %>%
-		drop_na %>%
-		mutate( `read count` = ( (endothelial + macrophage_M2) / 2 ) %>% as.integer ) %>%
-		mutate(sample = "1") %>%
-		select(-c(2:3)) %>%
-		spread(`symbol`, `read count`)
+# mix =
+# 	ref %>%
+# 	inner_join( (.) %>% distinct(sample) %>% filter(sample %in% mix_samples)) %>%
+# 	distinct(`symbol`, `read count normalised`, `Cell type formatted`) %>%
+# 	spread(`Cell type formatted`, `read count normalised`) %>%
+# 	drop_na %>%
+# 	mutate( `read count` = ( (endothelial + macrophage_M2) / 2 ) %>% as.integer ) %>%
+# 	mutate(sample = "1") %>%
+# 	select(-c(2:3)) %>%
+# 	spread(`symbol`, `read count`)
 
 	# ar = ARMET_tc(
 	# 	ref_orig %>%
@@ -255,12 +264,6 @@ mix_samples = c("ENCFF429MGN", "S00J8C11" )
 	# 		mutate(sample = "1") %>%
 	# 		select(-c(2:3)) %>% rename(gene = `symbol`) %>% spread(sample, `read count`), do_debug=F
 	# )
-
-	# mix = reference %>%
-	# 	inner_join( (.) %>% distinct(sample) %>% slice(c(200))) %>%
-	# 	distinct(sample, `symbol`, `read count`) %>%
-	# 	spread(`symbol`, `read count`) %>%
-	# 	mutate(sample = 1:n() %>% as.character)
 
 	house_keeping =
 		ref %>% filter(`Cell type category` == "house_keeping" ) %>%
@@ -401,7 +404,7 @@ mix_samples = c("ENCFF429MGN", "S00J8C11" )
 	Q = df %>% filter(`Cell type category` == "query") %>% distinct(Q) %>% nrow
 
 	# Pass previously infered parameters
-	do_infer = 0
+	do_infer = 1
 	lambda_log_data =
 		counts_baseline %>%
 		# Ths is bcause mix lacks lambda info and produces NA in the df
