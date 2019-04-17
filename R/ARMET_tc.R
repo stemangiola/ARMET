@@ -231,7 +231,7 @@ ARMET_tc = function(
 # It works
 mix_samples = c("ENCFF429MGN", "S00J8C11" )
 # Problematic
-mix_samples = c("counts.Fibroblast%20-%20Choroid%20Plexus%2c%20donor3.CNhs12620.11653-122E6", "C001FRB3" )
+#mix_samples = c("counts.Fibroblast%20-%20Choroid%20Plexus%2c%20donor3.CNhs12620.11653-122E6", "C001FRB3" )
 #mix_samples = c("counts.Endothelial%20Cells%20-%20Microvascular%2c%20donor3.CNhs12024.11414-118F1","counts.CD4%2b%20T%20Cells%2c%20donor1.CNhs10853.11225-116C1" )
 
 	mix =
@@ -240,7 +240,7 @@ mix_samples = c("counts.Fibroblast%20-%20Choroid%20Plexus%2c%20donor3.CNhs12620.
 		distinct(`symbol`, `read count normalised`, `Cell type formatted`) %>%
 		spread(`Cell type formatted`, `read count normalised`) %>%
 		drop_na %>%
-		mutate( `read count` = ( (fibroblast + t_memory_central) / 2 ) %>% as.integer ) %>%
+		mutate( `read count` = ( (endothelial + macrophage_M2) / 2 ) %>% as.integer ) %>%
 		mutate(sample = "1") %>%
 		select(-c(2:3)) %>%
 		spread(`symbol`, `read count`)
@@ -354,6 +354,7 @@ mix_samples = c("counts.Fibroblast%20-%20Choroid%20Plexus%2c%20donor3.CNhs12620.
 	n_shards = min(shards, counts_baseline %>% distinct(idx_MPI) %>% nrow)
 	G_per_shard_idx = c(0, counts_baseline %>% distinct(ct_symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% cumsum)
 
+
 	counts =
 		counts_baseline %>%
 		distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
@@ -399,6 +400,19 @@ mix_samples = c("counts.Fibroblast%20-%20Choroid%20Plexus%2c%20donor3.CNhs12620.
 	I = y %>% nrow
 	Q = df %>% filter(`Cell type category` == "query") %>% distinct(Q) %>% nrow
 
+	# Pass previously infered parameters
+	do_infer = 0
+	lambda_log_data =
+		counts_baseline %>%
+		# Ths is bcause mix lacks lambda info and produces NA in the df
+		filter(!(`Cell type category` == "house_keeping" & lambda %>% is.na)) %>%
+		distinct(G, lambda) %>% pull(lambda)
+
+	sigma_raw_data =
+		counts_baseline %>%
+		# Ths is bcause mix lacks lambda info and produces NA in the df
+		filter(!(`Cell type category` == "house_keeping" & sigma_raw %>% is.na)) %>%
+		distinct(G, sigma_raw) %>% pull(sigma_raw)
 
 
 	fileConn<-file("~/.R/Makevars")
@@ -407,28 +421,14 @@ mix_samples = c("counts.Fibroblast%20-%20Choroid%20Plexus%2c%20donor3.CNhs12620.
 	Sys.setenv("STAN_NUM_THREADS" = cores)
 	ARMET_tc = stan_model("src/stan_files/ARMET_tc.stan")
 
-
-	initializer <- function() list(
-		lambda_log =
-			counts_baseline %>%
-			# Ths is bcause mix lacks lambda info and produces NA in the df
-			filter(!(`Cell type category` == "house_keeping" & lambda %>% is.na)) %>%
-			distinct(G, lambda) %>% pull(lambda),
-		sigma_raw =
-			counts_baseline %>%
-			# Ths is bcause mix lacks lambda info and produces NA in the df
-			filter(!(`Cell type category` == "house_keeping" & sigma_raw %>% is.na)) %>%
-			distinct(G, sigma_raw) %>% pull(sigma_raw)
-	)
-	inits <- foreach(chain = 1:3) %do% {initializer()}
-
-
 	Sys.time()
 	fit =
 		sampling(
 			ARMET_tc, #stanmodels$ARMET_tc,
 			chains=3, cores=3,
-			iter=300, warmup=200,init=inits
+			iter=300, warmup=200
+			#,
+			#init=foreach(chain = 1:3) %do% {(function() list( lambda_log = lambda_log_data, sigma_raw = sigma_raw_data	))()}
 			# ,
 			# save_warmup = FALSE,
 			# pars = c(

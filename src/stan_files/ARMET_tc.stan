@@ -115,6 +115,11 @@ data {
   int<lower=1> ct_in_levels[1];
   int y[I, 3 + max(ct_in_levels)]; // `read count`  S Q mapping_with_ct
 
+  // Skip lambda imputaton
+ 	int<lower=0, upper=1> do_infer;
+ 	vector[G] lambda_log_data;
+  vector[G] sigma_raw_data;
+
 }
 transformed data {
   vector[0] global_parameters;
@@ -141,8 +146,8 @@ parameters {
   vector[S] exposure_rate;
 
   // Gene-wise properties of the data
-  vector[G] lambda_log;
-  vector[G] sigma_raw;
+  vector[G * do_infer] lambda_log;
+  vector[G * do_infer] sigma_raw;
 
   // Proportions
   simplex[ct_in_levels[1]] prop[Q];
@@ -150,7 +155,7 @@ parameters {
 }
 transformed parameters {
   // Sigma
-  vector[G] sigma = 1.0 ./ exp(sigma_raw);
+  vector[G] sigma = 1.0 ./ exp(do_infer ? sigma_raw : sigma_raw_data) ;
 
 // Shards - MPI
 	vector[2*M + S] lambda_sigma_exposure_MPI[n_shards];
@@ -161,16 +166,19 @@ transformed parameters {
 		lambda_sigma_exposure_MPI[i] =
   		append_row(
   		  append_row(
-  		    append_row(
-      		  lambda_log[(G_per_shard_idx[i]+1):(G_per_shard_idx[i+1])],
-      		  sigma[(G_per_shard_idx[i]+1):(G_per_shard_idx[i+1])]
-      		),
+	  		    append_row(
+	      		  do_infer ?
+	      		  lambda_log[(G_per_shard_idx[i]+1):(G_per_shard_idx[i+1])] :
+	      		  lambda_log_data[(G_per_shard_idx[i]+1):(G_per_shard_idx[i+1])],
+	      		  sigma[(G_per_shard_idx[i]+1):(G_per_shard_idx[i+1])]
+	      		),
       		buffer
       	),
       	exposure_rate
       );
 
 	}
+
 
 }
 model {
@@ -187,9 +195,8 @@ model {
 
   // Gene-wise properties of the data
   // lambda_log ~ normal_or_gammaLog(lambda_mu, lambda_sigma, is_prior_asymetric);
-  lambda_log ~ exp_gamma_meanSd(lambda_mu,lambda_sigma);
-
-  sigma_raw ~ normal(sigma_slope * lambda_log + sigma_intercept,sigma_sigma);
+  if(do_infer) lambda_log ~ exp_gamma_meanSd(lambda_mu,lambda_sigma);
+  if(do_infer) sigma_raw ~ normal(sigma_slope * lambda_log + sigma_intercept,sigma_sigma);
 
 	// Gene-wise properties of the data
 	target += sum( map_rect( lp_reduce , global_parameters , lambda_sigma_exposure_MPI , xr , int_MPI ) );
@@ -198,7 +205,11 @@ model {
 
 	for(i in 1:I) y_sum[i] =
 		get_sum_NB(
-			exp(lambda_log[y[i,4 : 3 + ct_in_levels[1]]]) .* prop[y[i,3]],
+			exp(
+				do_infer ?
+				lambda_log[y[i,4 : 3 + ct_in_levels[1]]] :
+				lambda_log_data[y[i,4 : 3 + ct_in_levels[1]]]
+			) .* prop[y[i,3]] ,
 			sigma[y[i,4 : 3 + ct_in_levels[1]]]
 		);
 
