@@ -115,6 +115,9 @@ data {
   int<lower=1> ct_in_levels[1];
   int y[I, 3 + max(ct_in_levels)]; // `read count`  S Q mapping_with_ct
 
+  // Skip lambda imputaton
+ 	int<lower=0, upper=1> is_inferred;
+
 }
 transformed data {
   vector[0] global_parameters;
@@ -141,8 +144,8 @@ parameters {
   vector[S] exposure_rate;
 
   // Gene-wise properties of the data
-  vector[G] lambda_log;
-  vector[G] sigma_raw;
+  vector[G * is_inferred] lambda_log;
+  vector[G * is_inferred] sigma_raw;
 
   // Proportions
   simplex[ct_in_levels[1]] prop[Q];
@@ -154,6 +157,7 @@ transformed parameters {
 
 // Shards - MPI
 	vector[2*M] lambda_sigma_MPI[n_shards];
+
 	for( i in 1:(n_shards) ) {
 
 	  vector[ (M*2) - (G_per_shard[i]*2) ] buffer = rep_vector(0.0,(M*2) - (G_per_shard[i]*2));
@@ -171,6 +175,7 @@ transformed parameters {
       );
 
 	}
+
 
 }
 model {
