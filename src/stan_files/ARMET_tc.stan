@@ -153,12 +153,12 @@ transformed parameters {
   vector[G] sigma = 1.0 ./ exp(sigma_raw);
 
 // Shards - MPI
-	vector[2*M] lambda_sigma_MPI[n_shards];
+	vector[2*M + S] lambda_sigma_exposure_MPI[n_shards];
 	for( i in 1:(n_shards) ) {
 
 	  vector[ (M*2) - (G_per_shard[i]*2) ] buffer = rep_vector(0.0,(M*2) - (G_per_shard[i]*2));
 
-		lambda_sigma_MPI[i] =
+		lambda_sigma_exposure_MPI[i] =
   		append_row(
   		  append_row(
   		    append_row(
@@ -192,7 +192,7 @@ model {
   sigma_raw ~ normal(sigma_slope * lambda_log + sigma_intercept,sigma_sigma);
 
 	// Gene-wise properties of the data
-	target += sum( map_rect( lp_reduce , global_parameters , lambda_sigma_MPI , xr , int_MPI ) );
+	target += sum( map_rect( lp_reduce , global_parameters , lambda_sigma_exposure_MPI , xr , int_MPI ) );
 
 	// Deconvolution
 
