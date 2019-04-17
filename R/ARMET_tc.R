@@ -231,7 +231,7 @@ ARMET_tc = function(
 # It works
 mix_samples = c("ENCFF429MGN", "S00J8C11" )
 # Problematic
-mix_samples = c("counts.Fibroblast%20-%20Choroid%20Plexus%2c%20donor3.CNhs12620.11653-122E6", "C001FRB3" )
+#mix_samples = c("counts.Fibroblast%20-%20Choroid%20Plexus%2c%20donor3.CNhs12620.11653-122E6", "C001FRB3" )
 #mix_samples = c("counts.Endothelial%20Cells%20-%20Microvascular%2c%20donor3.CNhs12024.11414-118F1","counts.CD4%2b%20T%20Cells%2c%20donor1.CNhs10853.11225-116C1" )
 
 	mix =
@@ -240,7 +240,7 @@ mix_samples = c("counts.Fibroblast%20-%20Choroid%20Plexus%2c%20donor3.CNhs12620.
 		distinct(`symbol`, `read count normalised`, `Cell type formatted`) %>%
 		spread(`Cell type formatted`, `read count normalised`) %>%
 		drop_na %>%
-		mutate( `read count` = ( (fibroblast + t_memory_central) / 2 ) %>% as.integer ) %>%
+		mutate( `read count` = ( (endothelial + macrophage_M2) / 2 ) %>% as.integer ) %>%
 		mutate(sample = "1") %>%
 		select(-c(2:3)) %>%
 		spread(`symbol`, `read count`)
