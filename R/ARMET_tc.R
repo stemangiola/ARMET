@@ -44,6 +44,7 @@
 #'
 ARMET_tc = function(
 	mix,
+	full_bayesian = 0,
 	ct_to_omit =                        c("t_CD4_naive", "adipocyte"),
 	verbose =                           F,
 	omit_regression =                   F,
@@ -53,13 +54,13 @@ ARMET_tc = function(
 ){
 
 	source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/e4ec6a2348efc2f62b88f10b12e70f4c6273a10a/tidy_extensions.R")
-	source("https://gist.githubusercontent.com/stemangiola/90a528038b8c52b21f9cfa6bb186d583/raw/5d95739c87a26568f96f8dc7d29528473fbe82c2/transcription_tool_kit.R")
+	source("https://gist.githubusercontent.com/stemangiola/90a528038b8c52b21f9cfa6bb186d583/raw/4a5798857362d946bd3029188b1cc9eb9b625456/transcription_tool_kit.R")
 	library(tidyverse)
 	library(foreach)
 	library(rstan)
-	cores = 14
+
 	input = c(as.list(environment()))
-	shards = 56
+	shards = cores * 4
 
 	my_theme =
 		theme_bw() +
@@ -192,54 +193,9 @@ ARMET_tc = function(
 	# Variable should be already set
 	######################################
 
-	load("docs/ref.RData")
+
 	sample_blacklist = c("666CRI", "972UYG", "344KCP", "555QVG", "370KKZ", "511TST", "13816.11933", "13819.11936", "13817.11934", "13818.11935", "096DQV", "711SNV")
 
-# New mx
-set.seed(123)
-mix_source =
-	combn(ref %>% filter(`Cell type category` != "house_keeping") %>% distinct(`Cell type category`) %>% pull(1),m = 2) %>%
-	t %>%
-	as_tibble %>%
-	mutate(run = 1:n()) %>%
-	group_by(run) %>%
-	do({
-		cc = (.)
-		bind_rows(
-			ref %>%
-				filter( grepl(sample_blacklist %>% paste(collapse="|"), sample)) %>%
-				filter(`Cell type category` == (cc %>% pull(1))) %>%
-				sample_n(1) %>%
-				distinct(sample, run),
-			ref %>%
-				filter( grepl(sample_blacklist %>% paste(collapse="|"), sample)) %>%
-				filter(`Cell type category` == (cc %>% pull(2))) %>%
-				sample_n(1) %>%
-				distinct(sample, run)
-		) %>%
-			left_join(ref) %>%
-			distinct(`symbol`, `read count normalised bayes`, `Cell type formatted`, run, sample)
-	}) %>%
-	ungroup()
-
-mix = mix_source %>%
-	group_by(run) %>%
-	do(
-		(.) %>%
-			distinct(`symbol`, `read count normalised bayes`, `Cell type formatted`, run) %>%
-			spread(`Cell type formatted`, `read count normalised bayes`) %>%
-			drop_na %>%
-			mutate(combination = names((.))[3:4] %>% paste(collapse=" ")) %>%
-			setNames(c("symbol", "run", "1", "2", "combination")) %>%
-			mutate( `read count` = ( (`1` + `2`) / 2 ) %>% as.integer ) %>%
-			unite(sample, c("run", "combination"), remove = F)
-	) %>%
-	ungroup() %>%
-	select(sample, symbol, `read count`) %>%
-	spread(`sample`, `read count`) %>%
-	drop_na %>%
-	gather(sample, `read count`, -symbol) %>%
-	spread(`symbol`, `read count`)
 
 # load("/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/data/tree_Yaml.rda")
 # source("R/ARMET_parseTree.R")
@@ -253,50 +209,49 @@ mix = mix_source %>%
 markers =  read_csv("docs/markers.csv") %>% pull(symbol) %>% unique
 
 
-# Trouble shoot
-plot_df =
-	ref %>%
-	filter(filt_for_calc) %>%
-	decrease_replicates %>%
-	filter(	`symbol` %in%  markers ) %>%
-	bind_rows(
-		mix %>%
-			gather(symbol, `read count`, -sample) %>%
-			mutate(`Cell type category` = "mix") %>%
-			mutate(`read count normalised bayes` = `read count`)
-	) %>%
-	add_MDS_components(
-		replicates_column = "symbol",
-		cluster_by_column = "sample",
-		value_column = "read count normalised bayes",
-		log_transform = T
-	)
+## Trouble shoot
+# plot_df =
+# 	ref %>%
+# 	filter(filt_for_calc) %>%
+# 	decrease_replicates %>%
+# 	filter(	`symbol` %in%  markers ) %>%
+# 	bind_rows(
+# 		mix %>%
+# 			gather(symbol, `read count`, -sample) %>%
+# 			mutate(`Cell type category` = "mix") %>%
+# 			mutate(`read count normalised bayes` = `read count`)
+# 	) %>%
+# 	add_MDS_components(
+# 		replicates_column = "symbol",
+# 		cluster_by_column = "sample",
+# 		value_column = "read count normalised bayes",
+# 		log_transform = T
+# 	)
+#
+# plot_df %>%
+# 	filter(`Cell type category` != "house_keeping") %>%
+# 	distinct(`PC 1`, `PC 2`, `Cell type category`, `Data base`, sample) %>%
+# 	{
+# 		(.) %>% ggplot(aes(
+# 		x=`PC 1`, y = `PC 2`,
+# 		color=`Cell type category`,
+# 		label=sample, ds=`Data base`
+# 		)) +
+# 		geom_point() + my_theme
+# 	} %>%
+# 	plotly::ggplotly()
 
-plot_df %>%
-	filter(`Cell type category` != "house_keeping") %>%
-	distinct(`PC 1`, `PC 2`, `Cell type category`, `Data base`, sample) %>%
-	{
-		(.) %>% ggplot(aes(
-		x=`PC 1`, y = `PC 2`,
-		color=`Cell type category`,
-		label=sample, ds=`Data base`
-		)) +
-		geom_point() + my_theme
-	} %>%
-	plotly::ggplotly()
 
-
-
-	# ar = ARMET_tc(
-	# 	ref_orig %>%
-	# 		inner_join( (.) %>% distinct(sample) %>% filter(sample %in% mix_samples)) %>%
-	# 		distinct(`symbol`, `read count normalised`, `Cell type formatted`) %>%
-	# 		spread(`Cell type formatted`, `read count normalised`) %>%
-	# 		drop_na %>%
-	# 		mutate( `read count` = ( (macrophage_M2 + endothelial) / 2 ) %>% as.integer ) %>%
-	# 		mutate(sample = "1") %>%
-	# 		select(-c(2:3)) %>% rename(gene = `symbol`) %>% spread(sample, `read count`), do_debug=F
-	# )
+# ar = ARMET_tc(
+# 	ref_orig %>%
+# 		inner_join( (.) %>% distinct(sample) %>% filter(sample %in% mix_samples)) %>%
+# 		distinct(`symbol`, `read count normalised`, `Cell type formatted`) %>%
+# 		spread(`Cell type formatted`, `read count normalised`) %>%
+# 		drop_na %>%
+# 		mutate( `read count` = ( (macrophage_M2 + endothelial) / 2 ) %>% as.integer ) %>%
+# 		mutate(sample = "1") %>%
+# 		select(-c(2:3)) %>% rename(gene = `symbol`) %>% spread(sample, `read count`), do_debug=F
+# )
 
 	house_keeping =
 		ref %>% filter(`Cell type category` == "house_keeping" ) %>%
@@ -305,10 +260,9 @@ plot_df %>%
 		head(n=200)
 
 
-
 	reference =
 		ref %>%
-		filter( grepl(sample_blacklist %>% paste(collapse="|"), sample)) %>%
+		filter( !grepl(sample_blacklist %>% paste(collapse="|"), sample)) %>%
 
 		# Decrese number of samples
 		decrease_replicates %>%
@@ -373,7 +327,6 @@ plot_df %>%
 	n_shards = min(shards, counts_baseline %>% distinct(idx_MPI) %>% nrow)
 	G_per_shard_idx = c(0, counts_baseline %>% distinct(ct_symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% cumsum)
 
-
 	counts =
 		counts_baseline %>%
 		distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
@@ -422,7 +375,7 @@ plot_df %>%
 	Q = df %>% filter(`Cell type category` == "query") %>% distinct(Q) %>% nrow
 
 	# Pass previously infered parameters
-	do_infer = 0
+	do_infer = full_bayesian
 	lambda_log_data =
 		counts_baseline %>%
 		# Ths is bcause mix lacks lambda info and produces NA in the df
@@ -463,6 +416,7 @@ plot_df %>%
 	prop = fit %>%
 		tidybayes::gather_draws(prop[Q, C]) %>%
 		tidybayes::median_qi() %>%
+		ungroup() %>%
 		left_join(
 			y_source %>%
 				distinct(`Cell type category`) %>%
@@ -472,7 +426,7 @@ plot_df %>%
 		left_join(
 			df %>%
 		 	filter(`Cell type category` == "query") %>%
-		 	select(Q, sample)
+		 	distinct(Q, sample)
 		)
 
 if(0){
@@ -515,7 +469,10 @@ if(0){
 		proportions =	prop,
 
 		# Return the input itself
-		input = input
+		input = input,
+
+		# Return the fitted object
+		fit = fit
 	)
 
 }
