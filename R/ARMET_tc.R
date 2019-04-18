@@ -162,7 +162,7 @@ ARMET_tc = function(
 					get_redundant_pair(
 						distance_feature = "symbol",
 						redundant_feature = "sample",
-						value_column = "read count normalised",
+						value_column = "read count normalised bayes",
 						log_transform = T
 					) %>%
 
@@ -173,7 +173,7 @@ ARMET_tc = function(
 							get_redundant_pair(
 								distance_feature = "symbol",
 								redundant_feature = "sample",
-								value_column = "read count normalised",
+								value_column = "read count normalised bayes",
 								log_transform = T
 							)
 						else
@@ -193,11 +193,12 @@ ARMET_tc = function(
 	######################################
 
 	load("docs/ref.RData")
-	#reference = fit_df
+	sample_blacklist = c("666CRI", "972UYG", "344KCP", "555QVG", "370KKZ", "511TST", "13816.11933", "13819.11936", "13817.11934", "13818.11935", "096DQV", "711SNV")
 
 # New mx
+set.seed(123)
 mix_source =
-	combn(ref %>% distinct(`Cell type category`) %>% pull(1),m = 2) %>%
+	combn(ref %>% filter(`Cell type category` != "house_keeping") %>% distinct(`Cell type category`) %>% pull(1),m = 2) %>%
 	t %>%
 	as_tibble %>%
 	mutate(run = 1:n()) %>%
@@ -205,15 +206,19 @@ mix_source =
 	do({
 		cc = (.)
 		bind_rows(
-			ref %>% filter(`Cell type category` == (cc %>% pull(1))) %>%
+			ref %>%
+				filter( grepl(sample_blacklist %>% paste(collapse="|"), sample)) %>%
+				filter(`Cell type category` == (cc %>% pull(1))) %>%
 				sample_n(1) %>%
 				distinct(sample, run),
-			ref %>% filter(`Cell type category` == (cc %>% pull(2))) %>%
+			ref %>%
+				filter( grepl(sample_blacklist %>% paste(collapse="|"), sample)) %>%
+				filter(`Cell type category` == (cc %>% pull(2))) %>%
 				sample_n(1) %>%
 				distinct(sample, run)
 		) %>%
 			left_join(ref) %>%
-			distinct(`symbol`, `read count normalised`, `Cell type formatted`, run, sample)
+			distinct(`symbol`, `read count normalised bayes`, `Cell type formatted`, run, sample)
 	}) %>%
 	ungroup()
 
@@ -221,12 +226,13 @@ mix = mix_source %>%
 	group_by(run) %>%
 	do(
 		(.) %>%
-			distinct(`symbol`, `read count normalised`, `Cell type formatted`, run) %>%
-			spread(`Cell type formatted`, `read count normalised`) %>%
+			distinct(`symbol`, `read count normalised bayes`, `Cell type formatted`, run) %>%
+			spread(`Cell type formatted`, `read count normalised bayes`) %>%
 			drop_na %>%
-			setNames(c("symbol", "run", "1", "2")) %>%
+			mutate(combination = names((.))[3:4] %>% paste(collapse=" ")) %>%
+			setNames(c("symbol", "run", "1", "2", "combination")) %>%
 			mutate( `read count` = ( (`1` + `2`) / 2 ) %>% as.integer ) %>%
-			mutate(sample = run)
+			unite(sample, c("run", "combination"), remove = F)
 	) %>%
 	ungroup() %>%
 	select(sample, symbol, `read count`) %>%
@@ -235,24 +241,51 @@ mix = mix_source %>%
 	gather(sample, `read count`, -symbol) %>%
 	spread(`symbol`, `read count`)
 
-# old mix
+# load("/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/data/tree_Yaml.rda")
+# source("R/ARMET_parseTree.R")
+# my_tree = format_tree( get_node_from_name(tree, "TME"), mix, "")
+# markers = get_node_label_level_specfic(
+# 	get_node_from_name(my_tree,  "TME"),
+# 	label = "markers",
+# 	start_level = 1,
+# 	stop_level = 1
+# )
+markers =  read_csv("docs/markers.csv") %>% pull(symbol) %>% unique
 
-# It works
-# mix_samples = c("ENCFF429MGN", "S00J8C11" )
-# Problematic
-#mix_samples = c("counts.Fibroblast%20-%20Choroid%20Plexus%2c%20donor3.CNhs12620.11653-122E6", "C001FRB3" )
-#mix_samples = c("counts.Endothelial%20Cells%20-%20Microvascular%2c%20donor3.CNhs12024.11414-118F1","counts.CD4%2b%20T%20Cells%2c%20donor1.CNhs10853.11225-116C1" )
 
-# mix =
-# 	ref %>%
-# 	inner_join( (.) %>% distinct(sample) %>% filter(sample %in% mix_samples)) %>%
-# 	distinct(`symbol`, `read count normalised`, `Cell type formatted`) %>%
-# 	spread(`Cell type formatted`, `read count normalised`) %>%
-# 	drop_na %>%
-# 	mutate( `read count` = ( (endothelial + macrophage_M2) / 2 ) %>% as.integer ) %>%
-# 	mutate(sample = "1") %>%
-# 	select(-c(2:3)) %>%
-# 	spread(`symbol`, `read count`)
+# Trouble shoot
+plot_df =
+	ref %>%
+	filter(filt_for_calc) %>%
+	decrease_replicates %>%
+	filter(	`symbol` %in%  markers ) %>%
+	bind_rows(
+		mix %>%
+			gather(symbol, `read count`, -sample) %>%
+			mutate(`Cell type category` = "mix") %>%
+			mutate(`read count normalised bayes` = `read count`)
+	) %>%
+	add_MDS_components(
+		replicates_column = "symbol",
+		cluster_by_column = "sample",
+		value_column = "read count normalised bayes",
+		log_transform = T
+	)
+
+plot_df %>%
+	filter(`Cell type category` != "house_keeping") %>%
+	distinct(`PC 1`, `PC 2`, `Cell type category`, `Data base`, sample) %>%
+	{
+		(.) %>% ggplot(aes(
+		x=`PC 1`, y = `PC 2`,
+		color=`Cell type category`,
+		label=sample, ds=`Data base`
+		)) +
+		geom_point() + my_theme
+	} %>%
+	plotly::ggplotly()
+
+
 
 	# ar = ARMET_tc(
 	# 	ref_orig %>%
@@ -271,19 +304,11 @@ mix = mix_source %>%
 		pull(1) %>%
 		head(n=200)
 
-	# load("/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/data/tree_Yaml.rda")
-	# source("R/ARMET_parseTree.R")
-	# my_tree = format_tree( get_node_from_name(tree, "TME"), mix, "")
-	# markers = get_node_label_level_specfic(
-	# 	get_node_from_name(my_tree,  "TME"),
-	# 	label = "markers",
-	# 	start_level = 1,
-	# 	stop_level = 1
-	# )
-	markers =  read_csv("docs/markers.csv") %>% pull(symbol) %>% unique
+
 
 	reference =
 		ref %>%
+		filter( grepl(sample_blacklist %>% paste(collapse="|"), sample)) %>%
 
 		# Decrese number of samples
 		decrease_replicates %>%
@@ -330,16 +355,7 @@ mix = mix_source %>%
 				filter(`Cell type category` == "query"  ) %>%
 				distinct(`sample`) %>%
 				mutate(Q = 1:n())
-		) %>%
-
-		# Add cell type indeces
-		left_join(
-			(.) %>%
-				filter(!`Cell type category` %in% c("query", "house_keeping")  ) %>%
-				distinct(`Cell type category`) %>%
-				mutate(C = 1:n())
 		)
-
 
 	# For  reference MPI inference
 	counts_baseline =
@@ -387,14 +403,16 @@ mix = mix_source %>%
 	# For deconvolution
 	ct_in_levels = c(4) %>% as.array
 
-	y =
+	y_source =
 		df %>%
 		filter(`Cell type category` == "query") %>%
 		select(S, Q, `symbol`, `read count`) %>%
 		left_join(
 			counts_baseline %>%
 				distinct(`symbol`, G, `Cell type category`)
-		) %>%
+		)
+	y =
+		y_source %>%
 		spread(`Cell type category`, G) %>%
 		select(-`symbol`) %>%
 		select(`read count`, S, Q, everything()) %>%
@@ -404,7 +422,7 @@ mix = mix_source %>%
 	Q = df %>% filter(`Cell type category` == "query") %>% distinct(Q) %>% nrow
 
 	# Pass previously infered parameters
-	do_infer = 1
+	do_infer = 0
 	lambda_log_data =
 		counts_baseline %>%
 		# Ths is bcause mix lacks lambda info and produces NA in the df
@@ -441,6 +459,24 @@ mix = mix_source %>%
 		)
 	Sys.time()
 
+	# Produce results
+	prop = fit %>%
+		tidybayes::gather_draws(prop[Q, C]) %>%
+		tidybayes::median_qi() %>%
+		left_join(
+			y_source %>%
+				distinct(`Cell type category`) %>%
+				arrange(`Cell type category`) %>%
+				mutate(C = 1:n())
+		) %>%
+		left_join(
+			df %>%
+		 	filter(`Cell type category` == "query") %>%
+		 	select(Q, sample)
+		)
+
+if(0){
+
 	# Plot differences in lambda
 	 (fit %>%
 		tidybayes::gather_draws(lambda_log[G]) %>%
@@ -469,45 +505,14 @@ mix = mix_source %>%
 			ggplot(aes(y=d, x=par, color=chain)) + geom_point()
 	) %>% plotly::ggplotly()
 
+}
 
-
-
-	writeLines("ARMET: building output")
-
-	# # Create tree with hypothesis testing
-	# library(data.tree)
-	# fileName=("~/PhD/deconvolution/ARMET_dev/ARMET_TME_tree.yaml")
-	# ya=readChar(fileName, file.info(fileName)$size)
-	# osList <- yaml::yaml.load(ya)
-	# treeYaml <- as.Node(osList)
-	# save(treeYaml, file="data/tree_Yaml.rda")
-
-	treeYaml.stat =
-		switch(
-			(!is.null(cov_to_test)) + 1,
-			NULL,
-			get_tree_hypoth_test(treeYaml, my_tree, cov_to_test)
-		)
-
-	if(save_report) save(treeYaml.stat, file=sprintf("%s/tree_pvalues.RData", output_dir))
 
 	# Return
 	list(
 
 		# Matrix of proportions
-		proportions =	get_last_existing_leaves_with_annotation( my_tree ) %>%
-			select(-relative_proportion),
-
-		# What mixture was used by the model after normalization
-		mix = mix %>%
-			filter(gene %in% get_genes( my_tree )) %>%
-			droplevels(),
-
-		# Return the statistics
-		stats = treeYaml.stat,
-
-		# Return the annotated tree
-		tree = my_tree,
+		proportions =	prop,
 
 		# Return the input itself
 		input = input
