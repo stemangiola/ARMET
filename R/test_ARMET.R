@@ -81,6 +81,16 @@ res %$% proportions %>%
 	separate(dummy, c("ct1","ct2"), remove = F, sep=" ") %>%
 	mutate(ct1 = ifelse(ct1 %in% c("endothelial", "epithelial", "fibroblast"), ct1, "immune_cell")) %>%
 	mutate(ct2 = ifelse(ct2 %in% c("endothelial", "epithelial", "fibroblast"), ct2, "immune_cell")) %>%
-	rowwise %>% mutate(real = ifelse(`Cell type category` %in% c(ct1, ct2), 0.5, 0)) %>%
+	rowwise %>%
+	mutate(real = ifelse(`Cell type category` %in% c(ct1, ct2), 0.5, 0)) %>%
 	unite(combination, c("ct1", "ct2")) %>%
-	ggplot(aes(y=`.value`, x=sample, color=`Cell type category`)) + geom_errorbar(aes(ymin = `.lower`, ymax=`.upper`), width=0) + facet_wrap(~combination + real)
+	rowwise %>%
+	mutate(is_outside = ifelse(real %>% between( .lower ,  .upper), 0, 1)) %>%
+	mutate(error = min(abs(.lower - real), abs(.upper - real)) * is_without)
+	# Plot
+	{
+		ggplot(aes(y=`.value`, x=sample, color=`Cell type category`)) + geom_errorbar(aes(ymin = `.lower`, ymax=`.upper`), width=0) + facet_wrap(~combination + real)
+		(.)
+	} %>%
+
+
