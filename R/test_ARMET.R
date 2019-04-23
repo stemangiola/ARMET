@@ -1,6 +1,7 @@
 # test new ARMET
 library(tidyverse)
 library(foreach)
+library(magrittr)
 load("docs/ref.RData")
 
 # Create mix
@@ -79,18 +80,31 @@ res %$% proportions %>%
 	# Add real prop
 	mutate(dummy = gsub("^[0-9]+_", "", sample)) %>%
 	separate(dummy, c("ct1","ct2"), remove = F, sep=" ") %>%
-	mutate(ct1 = ifelse(ct1 %in% c("endothelial", "epithelial", "fibroblast"), ct1, "immune_cell")) %>%
-	mutate(ct2 = ifelse(ct2 %in% c("endothelial", "epithelial", "fibroblast"), ct2, "immune_cell")) %>%
-	rowwise %>%
+	mutate(cta = ifelse(ct1 %in% c("endothelial", "epithelial", "fibroblast"), ct1, "immune_cell")) %>%
+	mutate(ctb = ifelse(ct2 %in% c("endothelial", "epithelial", "fibroblast"), ct2, "immune_cell")) %>%
+	rowwise %>% mutate(ct1 = min(cta, ctb), ct2 = max(cta, ctb)) %>%
 	mutate(real = ifelse(`Cell type category` %in% c(ct1, ct2), 0.5, 0)) %>%
+	ungroup %>%
 	unite(combination, c("ct1", "ct2")) %>%
-	rowwise %>%
-	mutate(is_outside = ifelse(real %>% between( .lower ,  .upper), 0, 1)) %>%
-	mutate(error = min(abs(.lower - real), abs(.upper - real)) * is_without)
+
 	# Plot
 	{
-		ggplot(aes(y=`.value`, x=sample, color=`Cell type category`)) + geom_errorbar(aes(ymin = `.lower`, ymax=`.upper`), width=0) + facet_wrap(~combination + real)
+		{ (.) %>%
+			ggplot(aes(y=`.value`, x=sample, color=`Cell type category`)) +
+			geom_errorbar(aes(ymin = `.lower`, ymax=`.upper`), width=0) + facet_wrap(~combination + real)} %>%
+			ggsave(.,filename =  "level_1_test_CI.png", device = "png")
 		(.)
 	} %>%
+
+	rowwise %>%
+	mutate(is_outside = ifelse(real %>% between( .lower ,  .upper), 0, 1)) %>%
+	mutate(error = min(abs(.lower - real), abs(.upper - real)) * is_outside) %>%
+	mutate(error = ifelse(error < 1e-4, 0, error)) %>%
+	{
+		{(.) %>% ggplot(aes(y=error, x=combination)) + geom_boxplot(outlier.shape = NA) + geom_jitter(size=0.2)} %>% ggsave(filename = "level_1_test_error.png", device = "png")
+		(.)
+	} %>%
+	group_by(combination) %>%
+	summarise(`error mean` = error %>% mean)
 
 
