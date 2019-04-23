@@ -42,7 +42,7 @@ mix_source =
 				distinct(sample)
 		) %>%
 			left_join(ref) %>%
-			distinct(`symbol`, `read count normalised bayes`, `Cell type formatted`, sample) %>%
+			distinct(`symbol`, `read count normalised bayes`, `Cell type category`, sample) %>%
 			mutate(run = cc %>% distinct(run) %>% pull(1))
 	}) %>%
 	#multidplyr::collect() %>%
@@ -53,8 +53,8 @@ mix =
 	group_by(run) %>%
 	do(
 		(.) %>%
-			distinct(`symbol`, `read count normalised bayes`, `Cell type formatted`, run) %>%
-			spread(`Cell type formatted`, `read count normalised bayes`) %>%
+			distinct(`symbol`, `read count normalised bayes`, `Cell type category`, run) %>%
+			spread(`Cell type category`, `read count normalised bayes`) %>%
 			drop_na %>%
 			mutate(combination = names((.))[3:4] %>% paste(collapse=" ")) %>%
 			setNames(c("symbol", "run", "1", "2", "combination")) %>%
@@ -71,3 +71,16 @@ mix =
 # Run ARMET
 source("R/ARMET_tc.R")
 res = ARMET_tc(mix)
+save(res, file="temp_res.RData")
+
+res %$% proportions %>%
+	ungroup() %>%
+
+	# Add real prop
+	mutate(dummy = gsub("^[0-9]+_", "", sample)) %>%
+	separate(dummy, c("ct1","ct2"), remove = F, sep=" ") %>%
+	mutate(ct1 = ifelse(ct1 %in% c("endothelial", "epithelial", "fibroblast"), ct1, "immune_cell")) %>%
+	mutate(ct2 = ifelse(ct2 %in% c("endothelial", "epithelial", "fibroblast"), ct2, "immune_cell")) %>%
+	rowwise %>% mutate(real = ifelse(`Cell type category` %in% c(ct1, ct2), 0.5, 0)) %>%
+	unite(combination, c("ct1", "ct2")) %>%
+	ggplot(aes(y=`.value`, x=sample, color=`Cell type category`)) + geom_errorbar(aes(ymin = `.lower`, ymax=`.upper`), width=0) + facet_wrap(~combination + real)
