@@ -134,150 +134,6 @@ ARMET_tc = function(
 
 	}
 
-	decrease_replicates = function(my_df){
-
-		my_df %>%
-
-			# Correct house keeping formatting
-			mutate(`house keeping` = `Cell type category` == "house_keeping") %>%
-			rename(`Cell type category old` = `Cell type category`) %>%
-			left_join(
-				(.) %>%
-					distinct(sample, `Cell type category old`) %>%
-					filter(`Cell type category old` != "house_keeping") %>%
-					rename(`Cell type category` = `Cell type category old`)
-			) %>%
-
-			# Detect redundant
-			multidplyr::partition(`Cell type category`, `Data base`) %>%
-			#group_by(`Cell type category`, `Data base`) %>%
-			do({
-				`%>%` = magrittr::`%>%`
-				library(tidyverse)
-				library(magrittr)
-				library(foreach)
-				source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/e4ec6a2348efc2f62b88f10b12e70f4c6273a10a/tidy_extensions.R")
-				source("https://gist.githubusercontent.com/stemangiola/90a528038b8c52b21f9cfa6bb186d583/raw/4ac3a7d74d4f7971bd8dd8eb470279eb7f42bbf8/transcription_tool_kit.R")
-
-				(.) %>%
-					get_redundant_pair(
-						distance_feature = "symbol",
-						redundant_feature = "sample",
-						value_column = "read count normalised bayes",
-						log_transform = T
-					) %>%
-
-					# For immune cells repete twice
-					{
-						if((.) %>% distinct(`Cell type category`) %>% pull(1) == "immune_cell" )
-							(.) %>%
-							get_redundant_pair(
-								distance_feature = "symbol",
-								redundant_feature = "sample",
-								value_column = "read count normalised bayes",
-								log_transform = T
-							)
-						else
-							(.)
-					}
-
-			}) %>%
-
-			collect %>% ungroup %>%
-			# Re put house keeping
-			mutate(`Cell type category` = ifelse(`house keeping`, "house_keeping", `Cell type category`))
-
-	}
-
-	######################################
-	# Variable should be already set
-	######################################
-
-
-	sample_blacklist = c("666CRI", "972UYG", "344KCP", "555QVG", "370KKZ", "511TST", "13816.11933", "13819.11936", "13817.11934", "13818.11935", "096DQV", "711SNV")
-
-
-# load("/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/data/tree_Yaml.rda")
-# source("R/ARMET_parseTree.R")
-# my_tree = format_tree( get_node_from_name(tree, "TME"), mix, "")
-# markers = get_node_label_level_specfic(
-# 	get_node_from_name(my_tree,  "TME"),
-# 	label = "markers",
-# 	start_level = 1,
-# 	stop_level = 1
-# )
-markers =  read_csv("docs/markers.csv") %>% pull(symbol) %>% unique
-
-
-## Trouble shoot
-# plot_df =
-# 	ref %>%
-# 	filter(filt_for_calc) %>%
-# 	decrease_replicates %>%
-# 	filter(	`symbol` %in%  markers ) %>%
-# 	bind_rows(
-# 		mix %>%
-# 			gather(symbol, `read count`, -sample) %>%
-# 			mutate(`Cell type category` = "mix") %>%
-# 			mutate(`read count normalised bayes` = `read count`)
-# 	) %>%
-# 	add_MDS_components(
-# 		replicates_column = "symbol",
-# 		cluster_by_column = "sample",
-# 		value_column = "read count normalised bayes",
-# 		log_transform = T
-# 	)
-#
-# plot_df %>%
-# 	filter(`Cell type category` != "house_keeping") %>%
-# 	distinct(`PC 1`, `PC 2`, `Cell type category`, `Data base`, sample) %>%
-# 	{
-# 		(.) %>% ggplot(aes(
-# 		x=`PC 1`, y = `PC 2`,
-# 		color=`Cell type category`,
-# 		label=sample, ds=`Data base`
-# 		)) +
-# 		geom_point() + my_theme
-# 	} %>%
-# 	plotly::ggplotly()
-
-
-# ar = ARMET_tc(
-# 	ref_orig %>%
-# 		inner_join( (.) %>% distinct(sample) %>% filter(sample %in% mix_samples)) %>%
-# 		distinct(`symbol`, `read count normalised`, `Cell type formatted`) %>%
-# 		spread(`Cell type formatted`, `read count normalised`) %>%
-# 		drop_na %>%
-# 		mutate( `read count` = ( (macrophage_M2 + endothelial) / 2 ) %>% as.integer ) %>%
-# 		mutate(sample = "1") %>%
-# 		select(-c(2:3)) %>% rename(gene = `symbol`) %>% spread(sample, `read count`), do_debug=F
-# )
-
-	house_keeping =
-		ref %>% filter(`Cell type category` == "house_keeping" ) %>%
-		distinct(`symbol`) %>%
-		pull(1) %>%
-		head(n=200)
-
-
-	reference =
-		ref %>%
-		filter( !grepl(sample_blacklist %>% paste(collapse="|"), sample)) %>%
-
-		# Decrese number of samples
-		decrease_replicates %>%
-
-		# Get only markes and house keeping
-		filter(
-			#`Cell type category` == "house_keeping" |
-			`symbol` %in% 	house_keeping |
-				`symbol` %in%  markers # %>% sample %>% head(n=100))
-		) %>%
-		select(  -contains("idx"), -G) %>%
-		mutate(`read count` = `read count` %>% as.integer)
-
-	######################################
-	######################################
 
 	# Merge data sets
 	df =
@@ -304,6 +160,8 @@ markers =  read_csv("docs/markers.csv") %>% pull(symbol) %>% unique
 
 		# Add sample indeces
 		mutate(S = sample %>% as.factor %>% as.integer) %>%
+
+		# Add query samples indeces
 		left_join(
 			(.) %>%
 				filter(`Cell type category` == "query"  ) %>%
@@ -319,10 +177,10 @@ markers =  read_csv("docs/markers.csv") %>% pull(symbol) %>% unique
 
 		format_for_MPI
 
-	N = counts_baseline %>% distinct(sample, ct_symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
+	S = df %>% distinct(sample) %>% nrow()
+	N = counts_baseline %>% distinct(idx_MPI, `read count`, `read count MPI row`) %>%  count(idx_MPI) %>% summarise(max(n)) %>% pull(1)
 	M = counts_baseline %>% distinct(start, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
 	G = counts_baseline %>% distinct(ct_symbol) %>% nrow()
-	S = counts_baseline %>% distinct(sample) %>% nrow()
 	G_per_shard = counts_baseline %>% distinct(ct_symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% as.array
 	n_shards = min(shards, counts_baseline %>% distinct(idx_MPI) %>% nrow)
 	G_per_shard_idx = c(0, counts_baseline %>% distinct(ct_symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% cumsum)
@@ -354,7 +212,7 @@ markers =  read_csv("docs/markers.csv") %>% pull(symbol) %>% unique
 		as_matrix() %>% t
 
 	# For deconvolution
-	ct_in_levels = c(4) %>% as.array
+	ct_in_levels = c(4,7)
 
 	y_source =
 		df %>%
@@ -362,17 +220,26 @@ markers =  read_csv("docs/markers.csv") %>% pull(symbol) %>% unique
 		select(S, Q, `symbol`, `read count`) %>%
 		left_join(
 			counts_baseline %>%
-				distinct(`symbol`, G, `Cell type category`)
-		)
+				distinct(`symbol`, G, `Cell type category`, level)
+		) %>%
+		arrange(level, `Cell type category`, Q, symbol) %>%
+		mutate(`Cell type category` = factor(`Cell type category`, unique(`Cell type category`)))
+
 	y =
 		y_source %>%
 		spread(`Cell type category`, G) %>%
-		select(-`symbol`) %>%
+		arrange(level, Q, S) %>%
+		select(-`symbol`, -level) %>%
 		select(`read count`, S, Q, everything()) %>%
+		replace(is.na(.), 0 %>% as.integer) %>%
 		as_matrix
 
-	I = y %>% nrow
+	I = y_source %>% spread(`Cell type category`, G) %>% count(level) %>% pull(n)
 	Q = df %>% filter(`Cell type category` == "query") %>% distinct(Q) %>% nrow
+	idx_ct_root = c(1:4)
+	idx_ct_immune = c(1:3, 5:11)
+	y_idx_ct_root = idx_ct_root + 3
+	y_idx_ct_immune = idx_ct_immune + 3
 
 	# Pass previously infered parameters
 	do_infer = full_bayesian
@@ -400,28 +267,37 @@ markers =  read_csv("docs/markers.csv") %>% pull(symbol) %>% unique
 		sampling(
 			ARMET_tc, #stanmodels$ARMET_tc,
 			chains=3, cores=3,
-			iter=300, warmup=200
+			iter=300, warmup=200,
 			#,
 			#init=foreach(chain = 1:3) %do% {(function() list( lambda_log = lambda_log_data, sigma_raw = sigma_raw_data	))()}
 			# ,
-			# save_warmup = FALSE,
-			# pars = c(
-			# 	"lambda", "sigma_raw", "sigma_intercept", "sigma_slope",
-			# 	"sigma_sigma", "lambda_mu", "lambda_sigma", "lambda_skew"
-			# )
+			save_warmup = FALSE,
+			pars = c(		"prop_1", "prop_2"	)
 		)
 	Sys.time()
 
 	# Produce results
 	prop = fit %>%
-		tidybayes::gather_draws(prop[Q, C]) %>%
+		tidybayes::gather_draws(prop_1[Q, C], prop_2[Q, C]) %>%
 		tidybayes::median_qi() %>%
 		ungroup() %>%
+		separate(.variable, c(".variable", "level"), convert = T) %>%
 		left_join(
+
 			y_source %>%
 				distinct(`Cell type category`) %>%
 				arrange(`Cell type category`) %>%
-				mutate(C = 1:n())
+				{
+					ys = (.)
+					ys %>%
+					slice(!!idx_ct_root) %>%
+					mutate(C = 1:n(), level=1) %>%
+					bind_rows(
+						ys %>%
+						slice(!!idx_ct_immune) %>%
+						mutate(C = 1:n(), level=2)
+					)
+				}
 		) %>%
 		left_join(
 			df %>%
