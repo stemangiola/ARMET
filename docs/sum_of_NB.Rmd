@@ -137,15 +137,14 @@ foreach(my_tot=seq(1, 1000, 10), .combine=bind_rows) %:%
 
 ```{r, cache=TRUE}
 
-foreach(my_tot=seq(1, 1000, 10), .combine=bind_rows) %:%
+foreach(my_tot=seq(1, 1000, 20), .combine=bind_rows) %:%
 	foreach(my_phi=c(0.001, 0.01, 0.1, 1), .combine=bind_rows) %do% {
 
-	my_phi = c(my_phi, my_phi*5)
+	my_my_phi = c(my_phi, my_phi*5)
 	my_mean = MCMCpack::rdirichlet(1, c(100, 200)) * my_tot
 		
-	data = generate_nb_sum(10000, 2, my_phi, means = my_mean)
+	data = generate_nb_sum(1000, 2, my_my_phi, means = my_mean)
 
-	 
   opt_res = optimizing(
   	nb_model, 
   	data = list(N = length(data$sums), counts = data$sums),
@@ -160,15 +159,15 @@ foreach(my_tot=seq(1, 1000, 10), .combine=bind_rows) %:%
   		 	method=c("theory", "theory generalised"), 
   		 	mean=sum(data$means), 
   		 	phi=c(
-  		 		 mean(my_phi) * (sum(data$means) ^ 2) / sum(data$means ^ 2),
-  		 		(sum(sqrt(my_phi) * data$means) ^ 2) / sum(data$means ^ 2)
+  		 		 mean(my_my_phi) * (sum(data$means) ^ 2) / sum(data$means ^ 2),
+  		 		(sum(sqrt(my_my_phi) * data$means) ^ 2) / sum(data$means ^ 2)
   		 	)
   		 )
   	) %>% 
   	mutate(real_tot = my_tot, my_phi = my_phi)
 
 } %>%
-	gather(param, value, c("phi", "phi_generalised", "mean")) %>%
+	gather(param, value, c("phi", "mean")) %>%
 	ggplot(aes(x=real_tot, y=value, color=method)) + 
 	geom_line() + 
 	scale_x_log10() + 
@@ -217,12 +216,7 @@ print(c(k_sum, theta_sum))
 ## gamma shape rate
 
 ```{r, cache=TRUE}
-generate_gamma_sum <- function(N, k, theta) {
-	n_means = length(k)
-  sums = numeric(N)
-  for(n in 1:N) sums[n] = sum(rgamma(n_means, shape = k, rate = theta))
-  list(sums = sums, shape = k, scale = theta)
-}
+
 
 shape=c(3,4,5, 10)
 rate=c(0.5, 0.5, 0.5, 0.1)
@@ -237,6 +231,7 @@ print(c(k_sum, theta_sum))
 ```
 
 ## Integration with read data NB
+
 ```{r, cache=TRUE}
 # load file
 fit_parsed <- read_csv("~/unix3XX/PhD/deconvolution/ARMET/docs/fit_level1_20032019.csv")
@@ -259,7 +254,7 @@ sum_nb_through_gamma = function(mu, phi){
 	c(mu_sum, phi_sum)
 }
 
-foreach(dummy=1:1000, .combine=bind_rows) %dopar% {
+foreach(dummy=1:1000=, .combine=bind_rows) %dopar% {
 
 	df = 
 		fit_parsed %>% 
@@ -315,12 +310,12 @@ yes it does, in case the fraction gets really low. But I will verify whether is 
 
 #Loading models used to match a distribution
 nb_model = stan_model("nb.stan")
-
+multiplier = 1
 foreach(divisor = seq(1, 100, 1), .combine = bind_rows) %:%
-	foreach(size = 10) %dopar% {
+	foreach(size = c(1, 10, 100)) %dopar% {
 		x = rnbinom(10000, mu = 1000 * multiplier, size = size) %>% 
 		    divide_by(divisor * multiplier) %>% round
-		multiplier=2
+		#multiplier=2
 		tibble(
 			size = size,
 			divisor = divisor,
@@ -330,15 +325,84 @@ foreach(divisor = seq(1, 100, 1), .combine = bind_rows) %:%
 				    nb_model, 
 				    data = list(N = x %>% length, counts = x),
 				    init = list(mu = x %>% mean)
-				)  %$% par %>% unlist %>% `[[` (2) %>%
-				divide_by(size)
+				)  %$% par %>% unlist %>% `[[` (2) 
 		)
 	} %>%
-	ggplot(aes(x = divisor, y = `estimated size`, color=size)) + 
+	ggplot(aes(x = divisor, y = `estimated size`, color=factor(size))) + 
 	geom_point() + 
 	geom_smooth(method="lm", formula= (y ~ exp(x)), se=FALSE) +
-	facet_grid(~ multiplier) +  
+	geom_hline(yintercept = size) +
+	facet_wrap(~ size, scales = "free") +  
 	my_theme
+```
+
+## Test whether a more naive but efficient way for calculating sigma exists
+
+Apparently exists
+
+```{r, cache=TRUE}
+# load file
+fit_parsed <- read_csv("~/unix3XX/PhD/deconvolution/ARMET/docs/fit_level1_20032019.csv")
+
+#Loading models used to match a distribution
+nb_model = stan_model("nb.stan")
+
+sum_nb_through_method_of_moment = function(mu, phi){
+	
+	mean=sum(mu)
+ 	phi= sum(mu)^2 / sum(mu^2 / phi)
+ 	
+ 	c(mean, phi)
+
+}
+
+foreach(dummy=1:1000, .combine=bind_rows) %dopar% {
+
+	df = 
+		fit_parsed %>% 
+		group_by(cut(lambda, breaks=3)) %>%
+		sample_n(1) 
+	
+		data = generate_nb_sum(
+			10000, 
+			df %>% nrow, 
+			df %>% pull(sigma_raw) %>% exp %>% `^` (-1), 
+			means = df %>% pull(lambda) %>% exp
+		)
+
+	  opt_res = optimizing(
+	  	nb_model, 
+	  	data = list(N = length(data$sums), counts = data$sums),
+	  	init = list(mu = sum(data$means))
+	  )  
+	  
+	 tibble(	
+  	method="approx",
+  	mean=opt_res$par["mu"],
+  	phi=opt_res$par["phi"] 
+  ) %>%
+	bind_rows({
+		theory = sum_nb_through_method_of_moment(
+			df %>% pull(lambda) %>% exp, 
+			df %>% pull(sigma_raw) %>% exp %>% `^` (-1)
+		)
+		
+		 tibble(
+		 	method=c("theory"), 
+		 	mean=theory[1], 
+		 	phi=theory[2]
+		 )
+	}) %>%
+  mutate(run = dummy)
+	 
+	
+} %>%
+	tidyr::gather(param, value, c("phi", "mean")) %>%
+	ggplot(aes(x=run, y=value, color=method)) + 
+	geom_point(alpha=0.5) + 
+	facet_wrap(~param, scale="free") + 
+	my_theme
+
 ```
 
 As example, highly transcribed genes, from a really rare population
@@ -357,7 +421,7 @@ tibble(
 
 ```
 
-Let's try with real lambda/sigma ratios
+Let's try with real lambda/sigma ratios ad prportions
 
 ```{r}
 
@@ -392,6 +456,65 @@ foreach(dummy=1:1000, .combine=bind_rows) %dopar% {
   ) %>%
 	bind_rows({
 		theory = sum_nb_through_gamma(
+			df %>% mutate(mean = (lambda %>% exp) * prop ) %>% pull(mean), 
+			df %>% pull(sigma_raw) %>% exp %>% `^` (-1)
+		)
+		
+		 tibble(
+		 	method=c("theory"), 
+		 	mean=theory[1], 
+		 	phi=theory[2]
+		 )
+	}) %>%
+  mutate(run = dummy)
+	 
+	
+} %>%
+	tidyr::gather(param, value, c("phi", "mean")) %>%
+	ggplot(aes(x=run, y=value, color=method)) + 
+	geom_point(alpha=0.5) + 
+	facet_wrap(~param, scale="free") + 
+	my_theme
+
+
+
+```
+
+## Now with the efficient calculation
+
+```{r}
+
+
+foreach(dummy=1:1000, .combine=bind_rows) %dopar% {
+
+	df = 
+		fit_parsed %>% 
+		filter(lambda > 5) %>%
+		sample_n(3) %>%
+		mutate(prop = exp(c(1, 3, 6))/sum(exp(c(1, 3, 6)))) 
+
+
+		data = generate_nb_sum(
+			10000, 
+			df %>% nrow, 
+			df %>% pull(sigma_raw) %>% exp %>% `^` (-1), 
+			means = df %>% pull(lambda) %>% exp,
+			props = df %>% pull(prop)
+		)
+
+	  opt_res = optimizing(
+	  	nb_model, 
+	  	data = list(N = length(data$sums), counts = data$sums),
+	  	init = list(mu = sum(data$means))
+	  )  
+	  
+	 tibble(	
+  	method="approx",
+  	mean=opt_res$par["mu"],
+  	phi=opt_res$par["phi"] 
+  ) %>%
+	bind_rows({
+		theory = sum_nb_through_method_of_moment(
 			df %>% mutate(mean = (lambda %>% exp) * prop ) %>% pull(mean), 
 			df %>% pull(sigma_raw) %>% exp %>% `^` (-1)
 		)
