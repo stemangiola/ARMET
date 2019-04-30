@@ -35,6 +35,9 @@ my_theme =
 		axis.title.x  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10)),
 		axis.title.y  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10))
 	)
+
+source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/e4ec6a2348efc2f62b88f10b12e70f4c6273a10a/tidy_extensions.R")
+
 ```
 
 Testing how well is the distribution of sum of neg. binom. vars with identical overdispersion well approximated by a single neg. binom distribution.
@@ -489,7 +492,12 @@ foreach(dummy=1:1000, .combine=bind_rows) %dopar% {
 
 	df = 
 		fit_parsed %>% 
-		filter(lambda > 5) %>%
+		{
+			bind_rows(
+				(.) %>% filter(lambda > 5) %>% sample_n(1),
+				(.) %>% filter(lambda < 5) %>% sample_n(2)
+			)
+		} %>%
 		sample_n(3) %>%
 		mutate(prop = exp(c(1, 3, 6))/sum(exp(c(1, 3, 6)))) 
 
@@ -532,9 +540,67 @@ foreach(dummy=1:1000, .combine=bind_rows) %dopar% {
 	tidyr::gather(param, value, c("phi", "mean")) %>%
 	ggplot(aes(x=run, y=value, color=method)) + 
 	geom_point(alpha=0.5) + 
+	scale_y_log10() +
 	facet_wrap(~param, scale="free") + 
 	my_theme
 
 
+
+```
+
+## Setup linear algebra version of sigma calculation. The two formulations match
+
+```{r}
+sum_nb_through_method_of_moment = function(mu, phi){
+	
+	mean=sum(mu)
+ 	phi= sum(mu)^2 / sum(mu^2 / phi)
+ 	
+ 	c(mean, phi)
+
+}
+
+my_df = 
+	foreach(sample=1:10, .combine=bind_rows) %do% {
+
+		df = 
+			fit_parsed %>% 
+			filter(lambda > 5) %>%
+			inner_join( 
+				(.) %>%
+					distinct(sample) %>%
+					slice(c(3, 30, 300)) %>% 
+					mutate(ct = 1:3) %>%
+					mutate(prop = exp(c(1, 3, 6))/sum(exp(c(1, 3, 6))))
+			) %>%
+			mutate(sample = !!sample) 
+	
+	}
+
+prop = my_df %>% distinct(sample, ct, prop) %>% spread(sample, prop) %>% as_matrix(rownames = "ct")
+mu = my_df %>% mutate(mean = lambda %>% exp ) %>% distinct(ct, symbol, mean) %>% spread(ct, mean) %>% drop_na() %>% as_matrix(rownames = "symbol")
+sigma = my_df %>% mutate(sigma = sigma_raw %>% exp %>% `^` (-1) ) %>% distinct(ct, symbol, sigma) %>% spread(ct, sigma) %>% drop_na() %>% as_matrix(rownames = "symbol")
+
+sums1 = my_df %>% 
+	group_by(sample, symbol) %>%
+	do({
+		theory = sum_nb_through_method_of_moment(
+			(.) %>% mutate(mean = (lambda %>% exp) * prop ) %>% pull(mean), 
+			(.) %>% pull(sigma_raw) %>% exp %>% `^` (-1)
+		)
+		
+		(.) %>%
+			summarise(
+				mean_sum=theory[1], 
+		 		phi_sum=theory[2]
+			)
+	}) %>%
+	ungroup
+
+sums2 = 
+	left_join(
+		(mu %*% prop) %>% as_tibble(rownames = "symbol") %>% gather(sample, mean_sum, -symbol),
+		(mean_sum^2 / ((mu / sqrt(sigma))^2 %*% prop^2)) %>% as_tibble(rownames = "symbol") %>% gather(sample, sigma_sum, -symbol)
+	)
 
 ```
