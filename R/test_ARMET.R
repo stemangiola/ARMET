@@ -144,12 +144,19 @@ reference =
 	) %>%
 
 	# Decrese number of samples
+	# inner_join(
+	# 	(.) %>%
+	# 		filter(level ==1) %>%
+	# 		decrease_replicates(n_pass=1) %>%
+	# 		decrease_replicates(n_pass=2) %>%
+	# 		distinct(sample)
+	# ) %>%
 	inner_join(
 		(.) %>%
-			filter(level ==1) %>%
-			decrease_replicates(n_pass=1) %>%
-			decrease_replicates(n_pass=2) %>%
-			distinct(sample)
+			distinct(sample, `Cell type category`) %>%
+			group_by( `Cell type category`) %>%
+			slice(1) %>%
+			ungroup
 	) %>%
 
 
@@ -165,20 +172,44 @@ reference =
 
 ######################################
 ######################################
+library(parallel)
+n_cores = system("nproc", intern = TRUE) %>% as.integer
+cl = n_cores %>% makeCluster( manual=FALSE, outfile='log.txt')
+clusterEvalQ(cl, library(tidyverse))
+clusterEvalQ(cl, library(magrittr))
+clusterExport(cl, "ref")
+registerDoParallel(cl)
+multidplyr::set_default_cluster(cl)
+
 
 # Create mix
 set.seed(123)
-reps = 1
+reps = 10
+
+sample_blacklist = c("666CRI", "972UYG", "344KCP", "555QVG", "370KKZ", "511TST", "13816.11933", "13819.11936", "13817.11934", "13818.11935", "096DQV", "711SNV")
+
+my_ref = 	ref %>%
+	distinct(sample, `Cell type category`) %>%
+	filter( ! grepl(sample_blacklist %>% paste(collapse="|"), sample))
+
 mix_source =
 	ref %>%
 
 	# Create the combinations
 	group_by(level) %>%
-	do(
-		combn((.) %>% filter(`Cell type category` != "house_keeping") %>% distinct(`Cell type category`) %>% pull(1),m = 2)  %>%
+	do({
+		my_level = (.) %>% distinct(level) %>% pull(1)
+		combn(
+			(.) %>%
+				filter(`Cell type category` != "house_keeping") %>%
+				distinct(`Cell type category`) %>%
+				anti_join(ref %>% distinct(`Cell type category`, level) %>% filter(level < my_level ) %>% distinct(`Cell type category`)) %>%
+				pull(1),
+			m = 2
+		)  %>%
 			t %>%
 			as_tibble
-	) %>%
+	}) %>%
 	ungroup %>%
 	mutate(`#` = 1:n()) %>%
 
@@ -193,14 +224,8 @@ mix_source =
 	group_by(run) %>%
 	do({
 		`%>%` = magrittr::`%>%`
-		library(tidyverse)
-		library(magrittr)
 
-		sample_blacklist = c("666CRI", "972UYG", "344KCP", "555QVG", "370KKZ", "511TST", "13816.11933", "13819.11936", "13817.11934", "13818.11935", "096DQV", "711SNV")
 		cc = (.)
-		my_ref = 	ref %>%
-			distinct(sample, `Cell type category`) %>%
-			filter( ! grepl(sample_blacklist %>% paste(collapse="|"), sample))
 
 		bind_rows(
 			my_ref %>%
@@ -212,12 +237,12 @@ mix_source =
 				sample_n(1) %>%
 				distinct(sample, `Cell type category`)
 		) %>%
-			left_join(ref) %>%
-			distinct(`symbol`, `read count normalised bayes`, `Cell type category`, sample, level) %>%
 			mutate(run = cc %>% distinct(run) %>% pull(1))
 	}) %>%
 	#multidplyr::collect() %>%
 	ungroup() %>%
+
+	left_join(ref %>% distinct(`symbol`, `read count normalised bayes`, `Cell type category`, sample, level))  %>%
 
 	# Add mix_sample
 	left_join(
@@ -260,11 +285,12 @@ mix =
 	spread(`sample_mix`, `read count mix`) %>%
 	drop_na %>%
 	gather(sample_mix, `read count mix`, -symbol) %>%
-	spread(`symbol`, `read count mix`)
+	spread(`symbol`, `read count mix`) %>%
+	rename(sample = sample_mix)
 
 # Run ARMET
 res = ARMET_tc(mix)
-#save(res, file="temp_res.RData")
+save(list = c("res", "mix_source", "mix"), file="temp_res.RData")
 
 res %$%
 	proportions %>%
@@ -278,7 +304,7 @@ res %$%
 	rowwise %>% mutate(ct1 = min(cta, ctb), ct2 = max(cta, ctb)) %>%
 	mutate(real = ifelse(`Cell type category` %in% c(ct1, ct2), 0.5, 0)) %>%
 	ungroup %>%
-	unite(combination, c("ct1", "ct2")) %>%
+	unite(combination, c("ct1", "ct2"),sep=" ", remove = F) %>%
 
 	# Plot
 	{
@@ -298,7 +324,19 @@ res %$%
 			ggsave(filename = "level_1_test_error.png", device = "png", width = 8)
 		(.)
 	} %>%
-	group_by(combination) %>%
-	summarise(`error mean` = error %>% mean)
+	group_by(combination,level) %>%
+	summarise(`error mean` = error %>% mean) %>%
+	separate(combination, c("ct1", "ct2"), sep=" ") %>%
+
+	# Correct temporary mistake
+	anti_join(ref %>% filter(level <2) %>% distinct(`Cell type category`) %>% setNames("ct1") %>% mutate(level=2)) %>%
+	anti_join(ref %>% filter(level <2) %>% distinct(`Cell type category`) %>% setNames("ct2") %>% mutate(level=2)) %>%
+
+	arrange(`error mean` %>% desc) %>%
+	mutate(`error min` = `error mean` %>% min) %>%
+	mutate(`error mean relative` = (`error mean` / `error min`) %>% log) %>%
+	mutate(`n markers` = (`error mean relative` * 20) %>% ceiling) %>%
+	write_csv("docs/num_markers_based_on_error_levels_1_2_first_run.csv")
+
 
 
