@@ -1,5 +1,57 @@
 #' ARMET-tc main
 #'
+#' @description Formated data frame to be readable by MPI map_rect of Stan
+format_for_MPI = function(df){
+	df %>%
+
+		left_join(
+			(.) %>%
+				distinct(ct_symbol) %>%
+				mutate( idx_MPI = head( rep(1:shards, (.) %>% nrow %>% `/` (shards) %>% ceiling ), n=(.) %>% nrow) )
+		) %>%
+		arrange(idx_MPI, ct_symbol) %>%
+
+		# Decide start - end location
+		group_by(idx_MPI) %>%
+		do(
+			(.) %>%
+				left_join(
+					(.) %>%
+						distinct(idx_MPI, sample, ct_symbol) %>%
+						arrange(idx_MPI, ct_symbol) %>%
+						count(idx_MPI, ct_symbol) %>%
+						mutate(end = cumsum(n)) %>%
+						mutate(start = c(1, .$end %>% rev() %>% `[` (-1) %>% rev %>% `+` (1)))
+				)
+		) %>%
+		ungroup() %>%
+
+		# Add counts MPI rows indexes
+		group_by(idx_MPI) %>%
+		mutate(`read count MPI row` = 1:n()) %>%
+		ungroup %>%
+
+		# Add ct_symbol MPI rows indexes
+		left_join(
+			(.) %>%
+				group_by(idx_MPI) %>%
+				distinct(ct_symbol) %>%
+				mutate(`symbol MPI row` = 1:n()) %>%
+				ungroup
+		) %>%
+
+		# Add gene idx
+		left_join(
+			(.) %>%
+				distinct(ct_symbol, idx_MPI, `symbol MPI row`) %>%
+				arrange(idx_MPI, `symbol MPI row`) %>%
+				mutate(G = 1:n())
+		)
+
+}
+
+#' ARMET-tc main
+#'
 #' @description This function calls the stan model.
 #'
 #'
@@ -78,62 +130,12 @@ ARMET_tc = function(
 			axis.title.y  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10))
 		)
 
-	# Global properties
+	# Global properties - derived by previous analyses of the whole reference dataset
 	sigma_intercept = 1.3420415
 	sigma_slope = -0.3386389
 	sigma_sigma = 1.1720851
 	lambda_mu_mu = 5.612671
 	lambda_sigma = 7.131593
-
-	format_for_MPI = function(df){
-		df %>%
-
-			left_join(
-				(.) %>%
-					distinct(ct_symbol) %>%
-					mutate( idx_MPI = head( rep(1:shards, (.) %>% nrow %>% `/` (shards) %>% ceiling ), n=(.) %>% nrow) )
-			) %>%
-			arrange(idx_MPI, ct_symbol) %>%
-
-			# Decide start - end location
-			group_by(idx_MPI) %>%
-			do(
-				(.) %>%
-					left_join(
-						(.) %>%
-							distinct(idx_MPI, sample, ct_symbol) %>%
-							arrange(idx_MPI, ct_symbol) %>%
-							count(idx_MPI, ct_symbol) %>%
-							mutate(end = cumsum(n)) %>%
-							mutate(start = c(1, .$end %>% rev() %>% `[` (-1) %>% rev %>% `+` (1)))
-					)
-			) %>%
-			ungroup() %>%
-
-			# Add counts MPI rows indexes
-			group_by(idx_MPI) %>%
-			mutate(`read count MPI row` = 1:n()) %>%
-			ungroup %>%
-
-			# Add ct_symbol MPI rows indexes
-			left_join(
-				(.) %>%
-					group_by(idx_MPI) %>%
-					distinct(ct_symbol) %>%
-					mutate(`symbol MPI row` = 1:n()) %>%
-					ungroup
-			) %>%
-
-			# Add gene idx
-			left_join(
-				(.) %>%
-					distinct(ct_symbol, idx_MPI, `symbol MPI row`) %>%
-					arrange(idx_MPI, `symbol MPI row`) %>%
-					mutate(G = 1:n())
-			)
-
-	}
-
 
 	# Merge data sets
 	df =
@@ -224,7 +226,7 @@ ARMET_tc = function(
 		df %>%
 		filter(`Cell type category` == "query") %>%
 		select(S, Q, `symbol`, `read count`) %>%
-		left_join(	counts_baseline %>% distinct(`symbol`, G, `Cell type category`, level) ) %>%
+		left_join(	counts_baseline %>% distinct(`symbol`, G, `Cell type category`, level, lambda) ) %>%
 		arrange(level, `Cell type category`, Q, symbol) %>%
 		mutate(`Cell type category` = factor(`Cell type category`, unique(`Cell type category`)))
 

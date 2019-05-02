@@ -600,7 +600,7 @@ sums1 = my_df %>%
 sums2 = 
 	left_join(
 		(mu %*% prop) %>% as_tibble(rownames = "symbol") %>% gather(sample, mean_sum, -symbol),
-		(mean_sum^2 / ((mu / sqrt(sigma))^2 %*% prop^2)) %>% as_tibble(rownames = "symbol") %>% gather(sample, sigma_sum, -symbol)
+		mean_sum^2 / ((mu^2 / sigma) %*% prop^2)  %>% as_tibble(rownames = "symbol") %>% gather(sample, sigma_sum, -symbol)
 	)
 
 ```

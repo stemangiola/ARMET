@@ -155,7 +155,7 @@ parameters {
 
   // Gene-wise properties of the data
   vector[G * do_infer] lambda_log_param;
-  vector[G * do_infer] sigma_raw;
+  vector[G * do_infer] sigma_raw_param;
 
   // Proportions
   simplex[ct_in_levels[1]] prop_1[Q]; // Root
@@ -164,7 +164,7 @@ parameters {
 }
 transformed parameters {
   // Sigma
-  vector[G] sigma = 1.0 ./ exp(do_infer ? sigma_raw : sigma_raw_data) ;
+  vector[G] sigma = 1.0 ./ exp(do_infer ? sigma_raw_param : sigma_raw_data) ;
 	vector[G] lambda_log = do_infer ? lambda_log_param : lambda_log_data;
 
 	// proportion of the higher level
@@ -188,7 +188,6 @@ transformed parameters {
       	),
       	exposure_rate
       );
-
 	}
 }
 
@@ -198,24 +197,24 @@ model {
 	// prop_1 ~ dirichlet(rep_vector(1*ct_in_levels[1], ct_in_levels[1]));
 	// prop_immune ~ dirichlet(rep_vector(1*ct_in_levels[2], ct_in_levels[2]));
 
-	vector[I1] lambda_1 = exp(lambda_log[idx_1]);
-	matrix[I1_dim[1], I1_dim[2]] lambda_mat_1 = to_matrix(lambda_1, I1_dim[1], I1_dim[2]); // Bug prone
+	vector[G] lambda = exp(lambda_log);
+
+	matrix[I1_dim[1], I1_dim[2]] lambda_mat_1 = to_matrix(lambda[idx_1], I1_dim[1], I1_dim[2]); // Bug prone
 	matrix[Q, ct_in_levels[1]] prop_mat_1 = vector_array_to_matrix(prop_1);
 	matrix[I1_dim[1] , Q] lambda_sum_1 = lambda_mat_1 * prop_mat_1';
-	matrix[I1_dim[1], I1_dim[2]] sigma_mat_1 = to_matrix(lambda_1, I1_dim[1], I1_dim[2]);
-	matrix[I1_dim[1], Q] sigma_sum_1 =  square(lambda_sum_1) ./ (square(lambda_mat_1 ./ sqrt(sigma_mat_1)) * square(prop_mat_1')) ;
+	matrix[I1_dim[1], I1_dim[2]] sigma_mat_1 = to_matrix(sigma[idx_1], I1_dim[1], I1_dim[2]);
+	matrix[I1_dim[1], Q] sigma_sum_1 =  square(lambda_sum_1) ./ (( square(lambda_mat_1) ./ sigma_mat_1 ) * square(prop_mat_1')) ;
 
-	vector[I2] lambda_2 = exp(lambda_log[idx_2]);
-	matrix[I2_dim[1], I2_dim[2]] lambda_mat_2 = to_matrix(lambda_2, I2_dim[1], I2_dim[2]); // Bug prone
+	matrix[I2_dim[1], I2_dim[2]] lambda_mat_2 = to_matrix(lambda[idx_2], I2_dim[1], I2_dim[2]); // Bug prone
 	matrix[Q, sum(ct_in_levels[1:2]) -1 ] prop_mat_2 = vector_array_to_matrix(prop_2);
 	matrix[I2_dim[1] , Q] lambda_sum_2 = lambda_mat_2 * prop_mat_2';
-	matrix[I2_dim[1], I2_dim[2]] sigma_mat_2 = to_matrix(lambda_2, I2_dim[1], I2_dim[2]);
-	matrix[I2_dim[1], Q] sigma_sum_2 =  square(lambda_sum_2) ./ (square(lambda_mat_2 ./ sqrt(sigma_mat_2)) * square(prop_mat_2'));
+	matrix[I2_dim[1], I2_dim[2]] sigma_mat_2 = to_matrix(sigma[idx_2], I2_dim[1], I2_dim[2]);
+	matrix[I2_dim[1], Q] sigma_sum_2 =  square(lambda_sum_2) ./ (( square(lambda_mat_2) ./ sigma_mat_2 ) * square(prop_mat_2'));
 
 	// Vecotrised sampling
 	y[,1]  ~ neg_binomial_2_log(
 		log(append_row( to_vector(lambda_sum_1), to_vector(lambda_sum_2))) + exposure_rate[y[,2]] ,
-		append_row( to_vector(lambda_sum_1), to_vector(lambda_sum_2))
+		append_row( to_vector(sigma_sum_1), to_vector(sigma_sum_2))
 	);
 
   // Overall properties of the data
@@ -226,8 +225,8 @@ model {
   sum(exposure_rate) ~ normal(0, 0.001 * S);
 
   // Gene-wise properties of the data
-  if(do_infer) lambda_log ~ exp_gamma_meanSd(lambda_mu,lambda_sigma);
-  if(do_infer) sigma_raw ~ normal(sigma_slope * lambda_log + sigma_intercept,sigma_sigma);
+  if(do_infer) lambda_log_param ~ exp_gamma_meanSd(lambda_mu,lambda_sigma);
+  if(do_infer) sigma_raw_param ~ normal(sigma_slope * lambda_log_param + sigma_intercept,sigma_sigma);
 
 	// Gene-wise properties of the data
 	target += sum( map_rect( lp_reduce , global_parameters , lambda_sigma_exposure_MPI , xr , int_MPI ) );
