@@ -101,7 +101,8 @@ level_df = foreach( l = list(
 	l %>%
 		as.data.frame %>% t %>% as_tibble(.name_repair = "minimal") %>%
 		setNames(c("Cell type formatted", sprintf("level %s",  1:((.)%>%ncol()-1) ) ))
-}
+} %>%
+	mutate(`level 0` = "root")
 
 # if(0){
 # Get data
@@ -355,7 +356,7 @@ counts_stan_MPI %>% distinct(symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>%
 	sprintf("Genes per shard %s", .) %>%
 	print
 
-save(list=c("data_for_stan_MPI", "counts_stan_MPI", "counts"), file=sprintf("docs/level_%s_input.RData", my_level))
+save(list=c("data_for_stan_MPI", "counts_stan_MPI", "counts", "level_df"), file=sprintf("docs/level_%s_input.RData", my_level))
 
 fileConn<-file("~/.R/Makevars")
 writeLines(c("CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
