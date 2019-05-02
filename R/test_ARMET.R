@@ -171,7 +171,7 @@ reference =
 
 # Create mix
 set.seed(123)
-reps = 10
+reps = 1
 
 sample_blacklist = c("666CRI", "972UYG", "344KCP", "555QVG", "370KKZ", "511TST", "13816.11933", "13819.11936", "13817.11934", "13818.11935", "096DQV", "711SNV")
 
