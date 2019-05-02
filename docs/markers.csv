@@ -1,291 +1,485 @@
-Cell type category query,symbol
-endothelial,CDH5
-endothelial,ROBO4
-endothelial,S1PR1
-endothelial,SDPR
-endothelial,ERG
-endothelial,CAVIN2
-endothelial,SEC14L1
-endothelial,"LRRC70,p2"
-endothelial,ENST00000503066
-endothelial,LOC646576
-endothelial,MFNG
-endothelial,"GPR4,p2"
-endothelial,AK296594
-endothelial,SH2D3C
-endothelial,MAP3K3
-endothelial,"GIMAP1,p1"
-endothelial,NOVA2
-endothelial,FAM70B
-endothelial,FLI1
-endothelial,FGD5
-endothelial,"LRRC33,p2"
-endothelial,ENST00000432195
-endothelial,TSPAN18
-endothelial,LOC158376
-endothelial,ELMO1
-endothelial,EMCN
-endothelial,LMO2
-endothelial,PCAT19
-endothelial,LOC100507254
-endothelial,ARHGEF15
-endothelial,"ENST00000432793,p1"
-endothelial,ENST00000447975
-endothelial,ENST00000513158
-endothelial,KIAA1274
-endothelial,PECAM1
-endothelial,TIE1
-endothelial,STAB1
-endothelial,MMRN2
-endothelial,VWF
-endothelial,BCL6B
-endothelial,SCARF1
-endothelial,MYCT1
-endothelial,GIMAP6
-endothelial,PTPRB
-endothelial,F11R
-endothelial,PPP1R16B
-endothelial,ICAM2
-endothelial,TAL1
-endothelial,INPP5D
-endothelial,SH3TC1
-endothelial,DYSF
-endothelial,BMP6
-endothelial,PRKCH
-endothelial,ABCA3
-endothelial,CALCRL
-endothelial,EHD4
-endothelial,SHE
-endothelial,GIMAP4
-endothelial,ICA1
-endothelial,ST6GAL1
-endothelial,EFEMP1
-endothelial,HSPG2
-endothelial,PTRF
-endothelial,CAVIN1
-endothelial,TM4SF1
-endothelial,FSTL1
-endothelial,APP
-endothelial,CALD1
-endothelial,COL4A1
-endothelial,FZD4
-endothelial,LAMB1
-endothelial,CRIM1
-endothelial,TXNDC5
-endothelial,CAV1
-endothelial,WWTR1
-endothelial,ARHGAP29
-endothelial,CNN3
-endothelial,CAV2
-endothelial,MCAM
-endothelial,TINAGL1
-epithelial,C11orf70
-epithelial,C19orf46
-epithelial,"ENST00000426475,p1"
-epithelial,PVRL4
-epithelial,DQ126686
-epithelial,ENST00000433544
-epithelial,C1orf210
-epithelial,CU687211
-epithelial,LOC100505633
-epithelial,CU687195
-epithelial,"MIR205,p2"
-epithelial,VGLL1
-epithelial,BC127260
-epithelial,ENST00000427341
-epithelial,"CCBP2,p2"
-epithelial,MIR203
-epithelial,BARX2
-epithelial,CRCT1
-epithelial,DEFB1
-epithelial,SPRR2D
-epithelial,SPINK7
-epithelial,KRTDAP
-epithelial,KRT16P4
-epithelial,GSTA2
-epithelial,ENST00000439009
-epithelial,SPRR1A
-epithelial,LY6D
-epithelial,PRR15L
-epithelial,GJB6
-epithelial,S100A12
-epithelial,KRT75
-epithelial,LCE3D
-epithelial,SLAMF9
-epithelial,CASP14
-epithelial,APOC3
-epithelial,CRNN
-epithelial,KRT4
-epithelial,KRT24
-epithelial,IL36G
-epithelial,RNF223
-epithelial,SLC6A14
-epithelial,RNASE7
-epithelial,CERS3
-epithelial,C10orf99
-epithelial,SDR16C5
-epithelial,KLK8
-epithelial,OVOL1
-epithelial,TP53AIP1
-epithelial,SERPINB13
-epithelial,GJB4
-epithelial,SPINK5
-epithelial,uc010ofi.1
-epithelial,CKMT1A
-epithelial,PNLIPRP3
-epithelial,BSPRY
-epithelial,HAVCR1
-epithelial,UGT1A6
-epithelial,TMEM125
-epithelial,SERPINB3
-epithelial,TTC22
-epithelial,APOH
-epithelial,SCEL
-epithelial,ENST00000534398
-epithelial,CKMT1B
-epithelial,SPRR3
-epithelial,SFTPB
-epithelial,A2ML1
-epithelial,LGALS7
-epithelial,PTRF
-epithelial,CAVIN1
-epithelial,CAV2
-epithelial,FKBP10
-epithelial,PTPRF
-epithelial,AMOTL2
-epithelial,FBLIM1
-epithelial,PARVA
-epithelial,KIRREL1
-epithelial,KIRREL
-epithelial,CEP170B
-epithelial,ADGRL2
-epithelial,EHD2
-epithelial,YAP1
-epithelial,TUSC3
-epithelial,FHL2
-epithelial,PFN2
-epithelial,NXN
-epithelial,TEAD1
-epithelial,EGFR
-epithelial,P3H4
-epithelial,KIAA0284
-epithelial,GPC1
-fibroblast,COL6A2
-fibroblast,PDGFRA
-fibroblast,CD248
-fibroblast,VASN
-fibroblast,CEMIP
-fibroblast,PCOLCE
-fibroblast,ENST00000509788
-fibroblast,PCDH18
-fibroblast,LUM
-fibroblast,PAMR1
-fibroblast,LOXL1
-fibroblast,C11orf70
-fibroblast,UST
-fibroblast,MRGPRF
-fibroblast,SNHG18
-fibroblast,MSC-AS1
-fibroblast,THY1
-fibroblast,ALDH3B1
-fibroblast,CLMP
-fibroblast,RAB7B
-fibroblast,LNPK
-fibroblast,FBLN1
-fibroblast,SERPINF1
-fibroblast,MFAP4
-fibroblast,S1PR2
-fibroblast,K02046
-fibroblast,COL16A1
-fibroblast,ADAM33
-fibroblast,PDZRN3
-fibroblast,TMEM119
-fibroblast,FAM69A
-fibroblast,FIBIN
-fibroblast,ADAMTSL5
-fibroblast,WISP1
-fibroblast,EFS
-fibroblast,"Y15913,p1"
-fibroblast,MIR143HG
-fibroblast,LOC100505633
-fibroblast,"ENST00000521483,p1"
-fibroblast,LINC00968
-fibroblast,DPT
-fibroblast,COL6A6
-fibroblast,EBF2
-fibroblast,ENST00000531798
-fibroblast,HSPB3
-fibroblast,SLC1A2
-fibroblast,MYH11
-fibroblast,GATA4
-fibroblast,CACNA1A
-fibroblast,ADGRD1
-fibroblast,B3GALT2
-fibroblast,CASS4
-fibroblast,FGL2
-fibroblast,MBNL1-AS1
-fibroblast,TBX15
-fibroblast,LRRC2
-fibroblast,TRAM2-AS1
-fibroblast,MAN1C1
-fibroblast,GRIA3
-fibroblast,GALNTL2
-fibroblast,LRRC15
-fibroblast,ACOX2
-fibroblast,MASP1
-fibroblast,OLFML1
-fibroblast,EVI2A
-fibroblast,DET1
-fibroblast,FAM229B
-fibroblast,PCOLCE2
-fibroblast,SCARA5
-fibroblast,CH25H
-fibroblast,ENST00000368528
-fibroblast,SCUBE3
-fibroblast,ALPL
-fibroblast,LINC01278
-fibroblast,CEND1
-fibroblast,X74837
-fibroblast,C7orf58
-fibroblast,FOXL2NB
-fibroblast,SGCD
-fibroblast,WISP2
-fibroblast,FAM20A
-fibroblast,GPR133
-fibroblast,CAVIN1
-fibroblast,COL1A2
-fibroblast,PTRF
-fibroblast,FSTL1
-fibroblast,CAV1
-fibroblast,CNN3
-fibroblast,EHD2
-fibroblast,PARVA
-fibroblast,COL5A2
-fibroblast,AXL
-fibroblast,FKBP10
-fibroblast,KIRREL1
-fibroblast,TPM2
-fibroblast,PRKCDBP
-fibroblast,COL6A3
-fibroblast,DLC1
-fibroblast,DCBLD2
-fibroblast,GPX8
-immune_cell,PTPRC
-immune_cell,LCP1
-immune_cell,NCKAP1L
-immune_cell,DOCK2
-immune_cell,PRKCB
-immune_cell,ITGB2
-immune_cell,SASH3
-immune_cell,LSP1
-immune_cell,CORO1A
-immune_cell,CD53
-immune_cell,PTK2B
-immune_cell,KCNAB2
-immune_cell,AX721088
-immune_cell,PTPN6
-immune_cell,LAPTM5
-immune_cell,HCLS1
-immune_cell,"uc003tbj.2,p1"
-immune_cell,INPP5D
-immune_cell,ARHGAP45
+comparison,pair,Cell type category,other Cell type category,symbol,delta,lambda,gene error mean,rank,level
+2,endothelial fibroblast,endothelial,fibroblast,PECAM1,-5675.204221536785,9.738770950018807,0.08005591011488684,1,1
+9,fibroblast immune_cell,fibroblast,immune_cell,COL1A2,-5512.47453717484,11.578653333038957,0.1516327190646643,1,1
+3,endothelial immune_cell,endothelial,immune_cell,EFEMP1,-4869.571132834364,10.43033911811272,0.12227788102364553,1,1
+3,endothelial immune_cell,endothelial,immune_cell,HSPG2,-4859.238440725115,10.709321040507678,0.10663640658331042,2,1
+9,fibroblast immune_cell,fibroblast,immune_cell,CAVIN1,-4210.28188644352,9.385531188550416,0.052970364451570745,2,1
+3,endothelial immune_cell,endothelial,immune_cell,CDH5,-3939.7645024833582,9.310096585457956,0.04458688277006168,3,1
+2,endothelial fibroblast,endothelial,fibroblast,CDH5,-3121.721720021329,9.310096585457956,0.04458688277006168,2,1
+3,endothelial immune_cell,endothelial,immune_cell,CAVIN1,-2491.6879721723917,9.28149330362931,0.10737363146570522,4,1
+3,endothelial immune_cell,endothelial,immune_cell,PTRF,-2330.5076993824578,9.051760038674274,0.0801888205272108,5,1
+3,endothelial immune_cell,endothelial,immune_cell,TM4SF1,-1870.136800209534,8.917767499213241,0.10024420697995794,6,1
+1,endothelial epithelial,endothelial,epithelial,CDH5,-1789.6895656137094,9.310096585457956,0.04458688277006168,1,1
+9,fibroblast immune_cell,fibroblast,immune_cell,COL1A1,-1698.453486541327,11.810127031299746,0.17560475672766981,3,1
+9,fibroblast immune_cell,fibroblast,immune_cell,PTRF,-1552.531381267066,8.7340318189784,0.05709610044093196,4,1
+12,immune_cell fibroblast,immune_cell,fibroblast,LAPTM5,-1465.3104921890895,9.778827687960803,0.12209197681118654,1,1
+3,endothelial immune_cell,endothelial,immune_cell,FSTL1,-1414.2829878146842,8.495311160452255,0.046688131198029455,7,1
+10,immune_cell endothelial,immune_cell,endothelial,PTPRC,-1391.7639431955733,9.708069059468915,0.10680518504849615,1,1
+2,endothelial fibroblast,endothelial,fibroblast,TIE1,-1384.7048410911425,8.866732070640154,0.04849671566081967,3,1
+12,immune_cell fibroblast,immune_cell,fibroblast,PTPRC,-1374.1874902687211,9.708069059468915,0.10680518504849615,2,1
+9,fibroblast immune_cell,fibroblast,immune_cell,FSTL1,-1369.4845211421073,9.780994112347635,0.07896953351902081,5,1
+11,immune_cell epithelial,immune_cell,epithelial,LAPTM5,-1348.0888990631465,9.778827687960803,0.12209197681118654,1,1
+11,immune_cell epithelial,immune_cell,epithelial,PTPRC,-1326.8430053098557,9.708069059468915,0.10680518504849615,2,1
+7,fibroblast endothelial,fibroblast,endothelial,COL1A2,-1311.8836697313964,11.578653333038957,0.1516327190646643,1,1
+10,immune_cell endothelial,immune_cell,endothelial,LCP1,-1240.6884325152687,9.925004479845352,0.10781541967374102,2,1
+12,immune_cell fibroblast,immune_cell,fibroblast,LCP1,-1231.425850287741,9.925004479845352,0.10781541967374102,3,1
+9,fibroblast immune_cell,fibroblast,immune_cell,CAV1,-1214.2667317311386,8.986055816861533,0.03840003076585924,6,1
+3,endothelial immune_cell,endothelial,immune_cell,CALD1,-1069.0833271728845,8.037445718360047,0.06825493981464875,8,1
+7,fibroblast endothelial,fibroblast,endothelial,COL6A2,-1038.5702880794724,10.149345786936166,0.13336298986914075,2,1
+3,endothelial immune_cell,endothelial,immune_cell,COL4A1,-1030.464967568732,9.876518252026997,0.13012814721337185,9,1
+9,fibroblast immune_cell,fibroblast,immune_cell,COL6A2,-1024.9877427479605,10.149345786936166,0.13336298986914075,7,1
+9,fibroblast immune_cell,fibroblast,immune_cell,CNN3,-1008.3719396961686,8.297717669644356,0.05452702076590009,8,1
+12,immune_cell fibroblast,immune_cell,fibroblast,NCKAP1L,-948.7215976241724,8.217561512659291,0.06537425141321214,4,1
+10,immune_cell endothelial,immune_cell,endothelial,NCKAP1L,-945.609067849209,8.217561512659291,0.06537425141321214,3,1
+11,immune_cell epithelial,immune_cell,epithelial,NCKAP1L,-944.8262642856386,8.217561512659291,0.06537425141321214,3,1
+2,endothelial fibroblast,endothelial,fibroblast,ROBO4,-868.5439674432644,8.424605549846504,0.05830636631492206,4,1
+2,endothelial fibroblast,endothelial,fibroblast,SEC14L1,-822.1555661671241,8.271809200830845,0.038307665475724006,5,1
+9,fibroblast immune_cell,fibroblast,immune_cell,EHD2,-789.3078602857178,8.390213229800093,0.06669162095602144,9,1
+2,endothelial fibroblast,endothelial,fibroblast,FGD5,-787.9629027007638,7.516010967999312,0.026349685620328828,6,1
+10,immune_cell endothelial,immune_cell,endothelial,DOCK2,-747.2536009539094,8.315285358003528,0.10773753043500824,4,1
+1,endothelial epithelial,endothelial,epithelial,ROBO4,-730.5383634842408,8.424605549846504,0.05830636631492206,2,1
+7,fibroblast endothelial,fibroblast,endothelial,PDGFRA,-666.6620334117829,8.925894048729287,0.10497991741616683,3,1
+12,immune_cell fibroblast,immune_cell,fibroblast,DOCK2,-620.6899286911769,8.315285358003528,0.10773753043500824,5,1
+2,endothelial fibroblast,endothelial,fibroblast,ERG,-564.6557960522563,7.427833430995985,0.03870573181935958,7,1
+2,endothelial fibroblast,endothelial,fibroblast,STAB1,-528.9617212017637,8.757728895481513,0.10992438402754987,8,1
+11,immune_cell epithelial,immune_cell,epithelial,DOCK2,-526.2241474215143,8.315285358003528,0.10773753043500824,4,1
+2,endothelial fibroblast,endothelial,fibroblast,VWF,-525.784312339069,10.375149713770949,0.17897228229845294,9,1
+1,endothelial epithelial,endothelial,epithelial,S1PR1,-521.1761168863798,7.8181107151910645,0.04637991729134788,3,1
+1,endothelial epithelial,endothelial,epithelial,CAVIN2,-468.8057356153847,8.280640336692588,0.06798342342151707,4,1
+12,immune_cell fibroblast,immune_cell,fibroblast,INPP5D,-456.36962887522,7.810201947014447,0.04203912920919146,6,1
+1,endothelial epithelial,endothelial,epithelial,SDPR,-454.7018690380958,8.086424596430362,0.13632897349691137,5,1
+1,endothelial epithelial,endothelial,epithelial,ERG,-423.43234750858767,7.427833430995985,0.03870573181935958,6,1
+10,immune_cell endothelial,immune_cell,endothelial,PRKCB,-404.9471521773042,8.089493266273745,0.08944836406889994,5,1
+12,immune_cell fibroblast,immune_cell,fibroblast,PRKCB,-398.711345401943,8.089493266273745,0.08944836406889994,7,1
+10,immune_cell endothelial,immune_cell,endothelial,SASH3,-380.36142833148426,7.83682295371977,0.10047808119199247,6,1
+12,immune_cell fibroblast,immune_cell,fibroblast,SASH3,-377.75389647497724,7.83682295371977,0.10047808119199247,8,1
+12,immune_cell fibroblast,immune_cell,fibroblast,CD53,-366.9359592327416,8.908282551900541,0.11645067489923913,9,1
+11,immune_cell epithelial,immune_cell,epithelial,SASH3,-366.1735974493507,7.83682295371977,0.10047808119199247,5,1
+10,immune_cell endothelial,immune_cell,endothelial,CD53,-358.1292158354291,8.908282551900541,0.11645067489923913,7,1
+11,immune_cell epithelial,immune_cell,epithelial,CD53,-351.62919458445555,8.908282551900541,0.11645067489923913,6,1
+11,immune_cell epithelial,immune_cell,epithelial,PRKCB,-341.9129473070559,8.089493266273745,0.08944836406889994,7,1
+1,endothelial epithelial,endothelial,epithelial,SEC14L1,-305.51418383229657,8.271809200830845,0.038307665475724006,7,1
+7,fibroblast endothelial,fibroblast,endothelial,CD248,-218.39396594945242,7.969880816673562,0.09204393047033185,4,1
+6,epithelial immune_cell,epithelial,immune_cell,CAV2,-207.86871134605826,7.337205308733649,0.08008176110683234,1,1
+7,fibroblast endothelial,fibroblast,endothelial,VASN,-205.9645484753668,7.410360669000783,0.08175907875803887,5,1
+11,immune_cell epithelial,immune_cell,epithelial,FERMT3,-195.0282200136393,7.816120106319035,0.06006004047154851,8,1
+11,immune_cell epithelial,immune_cell,epithelial,KCNAB2,-191.02387122266992,7.53140142043717,0.04657805594263781,9,1
+1,endothelial epithelial,endothelial,epithelial,FGD5,-188.57637781098651,7.516010967999312,0.026349685620328828,8,1
+6,epithelial immune_cell,epithelial,immune_cell,FKBP10,-185.4834582051251,7.569841803496426,0.11202668058187658,2,1
+1,endothelial epithelial,endothelial,epithelial,"LRRC70,p2",-183.842975556962,6.816951157952458,0.11798678319500788,9,1
+7,fibroblast endothelial,fibroblast,endothelial,CEMIP,-173.19274770121945,8.882772805430111,0.21898579017842396,6,1
+6,epithelial immune_cell,epithelial,immune_cell,PTPRF,-167.01057505914258,7.619347680366471,0.09271615101809337,3,1
+6,epithelial immune_cell,epithelial,immune_cell,AMOTL2,-165.95411135035675,6.97171239283235,0.06769489564244044,4,1
+6,epithelial immune_cell,epithelial,immune_cell,FBLIM1,-161.43670067106976,7.109798288011818,0.23205235031330051,5,1
+6,epithelial immune_cell,epithelial,immune_cell,KIRREL1,-161.2796234332163,7.288993987255766,0.14807533079979102,6,1
+7,fibroblast endothelial,fibroblast,endothelial,PCOLCE,-143.52992207011914,9.03365406364816,0.22094975080584284,7,1
+6,epithelial immune_cell,epithelial,immune_cell,PARVA,-137.89631317925333,6.752330077224906,0.10250056280145942,7,1
+6,epithelial immune_cell,epithelial,immune_cell,CEP170B,-133.6890402320875,6.655479831872674,0.10320117717590879,8,1
+6,epithelial immune_cell,epithelial,immune_cell,ADGRL2,-133.54788668697046,6.555713080489611,0.12241715958174708,9,1
+7,fibroblast endothelial,fibroblast,endothelial,ENST00000509788,-106.39655791589321,6.247899653552437,0.04144987264741034,8,1
+7,fibroblast endothelial,fibroblast,endothelial,LUM,-47.47919972113159,8.17550099081961,0.20248090789729506,9,1
+4,epithelial endothelial,epithelial,endothelial,C11orf70,-17.87968954821856,4.689169616416994,0.23870860060092525,1,1
+4,epithelial endothelial,epithelial,endothelial,C1orf172,-1.2907694583696454,4.675621622692509,0.49267501165407884,2,1
+4,epithelial endothelial,epithelial,endothelial,C19orf46,-0.27490336344680916,4.720902121359912,0.27514505111463927,3,1
+4,epithelial endothelial,epithelial,endothelial,"ENST00000426475,p1",-0.24440163373040932,4.530021054828286,0.18494625530549677,4,1
+4,epithelial endothelial,epithelial,endothelial,GPR115,-0.1789619237486081,4.635799413180498,0.494293841854596,5,1
+4,epithelial endothelial,epithelial,endothelial,AIM1L,-0.0892032113342626,5.3336748745103275,0.4553632944038551,6,1
+4,epithelial endothelial,epithelial,endothelial,C8orf73,-0.05787924302953425,4.451143476718789,0.40995584789965955,7,1
+4,epithelial endothelial,epithelial,endothelial,DQ126686,-0.01152044244843597,4.400626570548498,0.200686176441544,8,1
+4,epithelial endothelial,epithelial,endothelial,PVRL4,-0.010262657053302657,4.987388652827312,0.14675241029356606,9,1
+5,epithelial fibroblast,epithelial,fibroblast,KRT24,0.0011072449825297716,5.456910248470368,0.18004966800986683,1,1
+5,epithelial fibroblast,epithelial,fibroblast,CRNN,0.007999398416853876,4.448873089955782,0.21481802050423376,2,1
+5,epithelial fibroblast,epithelial,fibroblast,IL36G,0.017258604247116303,4.249441851641697,0.23788153563998035,3,1
+5,epithelial fibroblast,epithelial,fibroblast,RNF223,0.03857696008771001,4.063151621122962,0.23407207990771808,4,1
+5,epithelial fibroblast,epithelial,fibroblast,VGLL1,0.05934713340231754,4.442942195624495,0.13829076953839595,5,1
+5,epithelial fibroblast,epithelial,fibroblast,SLC6A14,0.09071787058516673,4.343315304884857,0.22413949826834578,6,1
+5,epithelial fibroblast,epithelial,fibroblast,SPINK7,0.11069860047124369,4.542384048217606,0.14453242286508688,7,1
+5,epithelial fibroblast,epithelial,fibroblast,RNASE7,0.19703311859724035,5.020697613842296,0.33196200586941,8,1
+5,epithelial fibroblast,epithelial,fibroblast,C10orf99,0.224838484253323,5.4297284750218235,0.41928934151363895,9,1
+8,fibroblast epithelial,fibroblast,epithelial,OGN,0.3076810327386774,4.614865964417305,0.44130941291126913,1,1
+8,fibroblast epithelial,fibroblast,epithelial,DPT,4.409123722370147,4.421282736427443,0.2221459932505035,2,1
+8,fibroblast epithelial,fibroblast,epithelial,PLPPR4,4.479497352091378,5.076367415904242,0.45942090299321475,3,1
+8,fibroblast epithelial,fibroblast,epithelial,LINC00968,4.524279029732722,4.661594353073795,0.2726398829135601,4,1
+8,fibroblast epithelial,fibroblast,epithelial,COL6A6,5.136809077341141,4.025307811055946,0.37562777155676147,5,1
+8,fibroblast epithelial,fibroblast,epithelial,EBF2,5.685330617677799,4.585193694865303,0.18410274083984576,6,1
+8,fibroblast epithelial,fibroblast,epithelial,ENST00000531798,6.023079703369419,4.49194579942386,0.33838400420537385,7,1
+8,fibroblast epithelial,fibroblast,epithelial,SLC1A2,7.198295902692029,4.3962148060640125,0.3671631337780878,8,1
+8,fibroblast epithelial,fibroblast,epithelial,MYH11,9.72589090092998,4.12727370870402,0.3639302003835124,9,1
+19,mast_cell b_cell,mast_cell,b_cell,CTSG,-90381.96143480849,12.064146662337306,0.06841931568737891,1,2
+23,mast_cell natural_killer,mast_cell,natural_killer,CTSG,-90371.828743791,12.064146662337306,0.06841931568737891,1,2
+20,mast_cell dendritic,mast_cell,dendritic,CTSG,-90371.7199918597,12.064146662337306,0.06841931568737891,1,2
+24,mast_cell t_cell,mast_cell,t_cell,CTSG,-90043.36344393791,12.064146662337306,0.06841931568737891,1,2
+22,mast_cell mono_derived,mast_cell,mono_derived,CTSG,-90021.87506434212,12.064146662337306,0.06841931568737891,1,2
+21,mast_cell granulocyte,mast_cell,granulocyte,CTSG,-87244.58549549949,12.064146662337306,0.06841931568737891,1,2
+23,mast_cell natural_killer,mast_cell,natural_killer,CPA3,-37633.899082317555,11.491244671877288,0.1263692580235879,2,2
+19,mast_cell b_cell,mast_cell,b_cell,CPA3,-37630.40807165749,11.491244671877288,0.1263692580235879,2,2
+20,mast_cell dendritic,mast_cell,dendritic,CPA3,-37607.92981727861,11.491244671877288,0.1263692580235879,2,2
+24,mast_cell t_cell,mast_cell,t_cell,CPA3,-37605.541991696424,11.491244671877288,0.1263692580235879,2,2
+21,mast_cell granulocyte,mast_cell,granulocyte,CPA3,-37372.519623465334,11.491244671877288,0.1263692580235879,2,2
+22,mast_cell mono_derived,mast_cell,mono_derived,CPA3,-37281.14883916182,11.491244671877288,0.1263692580235879,2,2
+9,dendritic mast_cell,dendritic,mast_cell,CD74,-22823.976487197117,12.019587702253595,0.1322224102537011,1,2
+19,mast_cell b_cell,mast_cell,b_cell,KIT,-18491.920083243076,10.679180809208637,0.12005989564417854,3,2
+20,mast_cell dendritic,mast_cell,dendritic,KIT,-18453.053977048603,10.679180809208637,0.12005989564417854,3,2
+22,mast_cell mono_derived,mast_cell,mono_derived,KIT,-18447.267924105352,10.679180809208637,0.12005989564417854,3,2
+24,mast_cell t_cell,mast_cell,t_cell,KIT,-18305.15298087551,10.679180809208637,0.12005989564417854,3,2
+21,mast_cell granulocyte,mast_cell,granulocyte,KIT,-18094.68373573698,10.679180809208637,0.12005989564417854,3,2
+23,mast_cell natural_killer,mast_cell,natural_killer,KIT,-17840.639586031837,10.679180809208637,0.12005989564417854,3,2
+32,natural_killer dendritic,natural_killer,dendritic,S69623,-14201.273252240944,10.031723246706623,0.1156061715357956,1,2
+30,mono_derived t_cell,mono_derived,t_cell,PSAP,-13235.89546705504,11.45925080621188,0.11299797230643559,1,2
+25,mono_derived b_cell,mono_derived,b_cell,PSAP,-12499.465173447956,11.45925080621188,0.11299797230643559,1,2
+15,granulocyte mast_cell,granulocyte,mast_cell,ITGB2,-12166.832811209568,10.023753983314702,0.03900760627075819,1,2
+32,natural_killer dendritic,natural_killer,dendritic,GNLY,-11313.636938578054,10.328358413757382,0.07217137327283997,2,2
+31,natural_killer b_cell,natural_killer,b_cell,GNLY,-11224.644024513314,10.328358413757382,0.07217137327283997,1,2
+34,natural_killer mast_cell,natural_killer,mast_cell,GNLY,-11179.798145740422,10.328358413757382,0.07217137327283997,1,2
+8,dendritic granulocyte,dendritic,granulocyte,CD74,-10836.286634252509,12.019587702253595,0.1322224102537011,1,2
+28,mono_derived mast_cell,mono_derived,mast_cell,CTSS,-10475.451138677838,10.349391380782272,0.03115616353990432,1,2
+19,mast_cell b_cell,mast_cell,b_cell,FCER1G,-10459.450252551793,10.421390379362187,0.09540611478560833,4,2
+9,dendritic mast_cell,dendritic,mast_cell,HLA-DRA,-10221.206478303651,11.028870189680786,0.08079394273101798,2,2
+19,mast_cell b_cell,mast_cell,b_cell,ANXA1,-10088.839297582179,10.978305953700325,0.13149052434023034,5,2
+21,mast_cell granulocyte,mast_cell,granulocyte,VWA5A,-10063.334941938168,9.968698770199346,0.06585572640300007,4,2
+24,mast_cell t_cell,mast_cell,t_cell,VWA5A,-9901.845871752983,9.968698770199346,0.06585572640300007,4,2
+33,natural_killer granulocyte,natural_killer,granulocyte,GNLY,-9879.600240516687,10.328358413757382,0.07217137327283997,1,2
+19,mast_cell b_cell,mast_cell,b_cell,VWA5A,-9870.389037282996,9.968698770199346,0.06585572640300007,6,2
+23,mast_cell natural_killer,mast_cell,natural_killer,VWA5A,-9835.34775602589,9.968698770199346,0.06585572640300007,4,2
+32,natural_killer dendritic,natural_killer,dendritic,"ENST00000392730,p1",-9514.657909411224,10.222861392970753,0.05838127241687374,3,2
+3,b_cell mast_cell,b_cell,mast_cell,CD74,-9199.299905409242,11.68916907160328,0.25929467951272905,1,2
+35,natural_killer mono_derived,natural_killer,mono_derived,GNLY,-9184.168760972649,10.328358413757382,0.07217137327283997,1,2
+19,mast_cell b_cell,mast_cell,b_cell,HPGD,-9127.957454770998,11.362708533518886,0.263461146740707,7,2
+20,mast_cell dendritic,mast_cell,dendritic,HPGD,-9116.180754978035,11.362708533518886,0.263461146740707,4,2
+23,mast_cell natural_killer,mast_cell,natural_killer,HPGD,-9011.932868359581,11.362708533518886,0.263461146740707,5,2
+20,mast_cell dendritic,mast_cell,dendritic,VWA5A,-8973.862960868315,9.968698770199346,0.06585572640300007,5,2
+22,mast_cell mono_derived,mast_cell,mono_derived,VWA5A,-8973.855995387907,9.968698770199346,0.06585572640300007,4,2
+19,mast_cell b_cell,mast_cell,b_cell,SERPINB1,-8918.554862901057,10.712462857765088,0.1546660401172952,8,2
+19,mast_cell b_cell,mast_cell,b_cell,FCER1A,-8918.140247520649,10.188112293597417,0.08548453847578703,9,2
+21,mast_cell granulocyte,mast_cell,granulocyte,HPGD,-8825.81455483687,11.362708533518886,0.263461146740707,5,2
+24,mast_cell t_cell,mast_cell,t_cell,FCER1A,-8628.20143323087,10.188112293597417,0.08548453847578703,5,2
+24,mast_cell t_cell,mast_cell,t_cell,SERPINB1,-8333.473855306613,10.712462857765088,0.1546660401172952,6,2
+21,mast_cell granulocyte,mast_cell,granulocyte,FCER1A,-8236.82870676177,10.188112293597417,0.08548453847578703,6,2
+23,mast_cell natural_killer,mast_cell,natural_killer,SERPINB1,-8212.16440418519,10.712462857765088,0.1546660401172952,6,2
+34,natural_killer mast_cell,natural_killer,mast_cell,HLA-B,-8002.51299190924,10.910570768912905,0.07832287839641584,2,2
+24,mast_cell t_cell,mast_cell,t_cell,HPGD,-7990.552849754751,11.362708533518886,0.263461146740707,7,2
+23,mast_cell natural_killer,mast_cell,natural_killer,FCER1A,-7919.841770044839,10.188112293597417,0.08548453847578703,7,2
+23,mast_cell natural_killer,mast_cell,natural_killer,HPGDS,-7891.169964861587,10.486492887250064,0.1547776614628711,8,2
+21,mast_cell granulocyte,mast_cell,granulocyte,HPGDS,-7884.480523800601,10.486492887250064,0.1547776614628711,7,2
+20,mast_cell dendritic,mast_cell,dendritic,HPGDS,-7786.795062551151,10.486492887250064,0.1547776614628711,6,2
+34,natural_killer mast_cell,natural_killer,mast_cell,ITGB2,-7783.722058556106,9.627111459249484,0.06705696956861337,3,2
+13,granulocyte b_cell,granulocyte,b_cell,ITGB2,-7773.331682292673,10.023753983314702,0.03900760627075819,1,2
+20,mast_cell dendritic,mast_cell,dendritic,RAB27B,-7607.195846872176,9.61802349805105,0.04277402264687306,7,2
+30,mono_derived t_cell,mono_derived,t_cell,CTSS,-7601.229586282367,10.349391380782272,0.03115616353990432,2,2
+22,mast_cell mono_derived,mast_cell,mono_derived,HPGDS,-7594.883985814676,10.486492887250064,0.1547776614628711,5,2
+3,b_cell mast_cell,b_cell,mast_cell,MS4A1,-7480.9566383424535,10.111696706721654,0.08097043584028853,2,2
+22,mast_cell mono_derived,mast_cell,mono_derived,RAB27B,-7407.5798170166,9.61802349805105,0.04277402264687306,6,2
+28,mono_derived mast_cell,mono_derived,mast_cell,ITGB2,-7343.612103321576,9.895498374693165,0.04572915238614071,2,2
+2,b_cell granulocyte,b_cell,granulocyte,MS4A1,-7283.074554873913,10.111696706721654,0.08097043584028853,1,2
+22,mast_cell mono_derived,mast_cell,mono_derived,HPGD,-7275.8104427478265,11.362708533518886,0.263461146740707,7,2
+24,mast_cell t_cell,mast_cell,t_cell,RAB27B,-7273.088915867873,9.61802349805105,0.04277402264687306,8,2
+24,mast_cell t_cell,mast_cell,t_cell,HPGDS,-7245.287834580166,10.486492887250064,0.1547776614628711,9,2
+4,b_cell mono_derived,b_cell,mono_derived,MS4A1,-7188.376014888186,10.111696706721654,0.08097043584028853,1,2
+21,mast_cell granulocyte,mast_cell,granulocyte,FXYD5,-7139.393558197244,10.41522139040443,0.1506949584554166,8,2
+12,dendritic t_cell,dendritic,t_cell,PSAP,-7136.334286022062,11.197230264161806,0.19055752309026186,1,2
+23,mast_cell natural_killer,mast_cell,natural_killer,MS4A2,-7090.585752801107,10.061264457429473,0.08497818809916996,9,2
+20,mast_cell dendritic,mast_cell,dendritic,MS4A2,-7083.698966950167,10.061264457429473,0.08497818809916996,8,2
+21,mast_cell granulocyte,mast_cell,granulocyte,MS4A2,-7026.64578149096,10.061264457429473,0.08497818809916996,9,2
+6,b_cell t_cell,b_cell,t_cell,MS4A1,-7000.982772287354,10.111696706721654,0.08097043584028853,1,2
+8,dendritic granulocyte,dendritic,granulocyte,HLA-DRA,-6862.306175156659,11.028870189680786,0.08079394273101798,2,2
+20,mast_cell dendritic,mast_cell,dendritic,SERPINB1,-6733.972208189592,10.712462857765088,0.1546660401172952,9,2
+7,dendritic b_cell,dendritic,b_cell,PSAP,-6399.903992414978,11.197230264161806,0.19055752309026186,1,2
+22,mast_cell mono_derived,mast_cell,mono_derived,MS4A2,-6368.1583579347825,10.061264457429473,0.08497818809916996,8,2
+32,natural_killer dendritic,natural_killer,dendritic,"H3F3A,p1",-6263.042949236782,9.800495249932524,0.09811960257677121,4,2
+32,natural_killer dendritic,natural_killer,dendritic,LOC100507217,-6242.5748238070855,9.507641974950078,0.06107900484712007,5,2
+22,mast_cell mono_derived,mast_cell,mono_derived,FCER1A,-6160.20554289053,10.188112293597417,0.08548453847578703,9,2
+34,natural_killer mast_cell,natural_killer,mast_cell,HLA-E,-5701.722842407997,10.318800987337465,0.062393570530794855,4,2
+32,natural_killer dendritic,natural_killer,dendritic,ENST00000555909,-5594.019690588329,9.179476032432643,0.06627175888895682,6,2
+29,mono_derived natural_killer,mono_derived,natural_killer,CTSS,-5432.442767502454,10.349391380782272,0.03115616353990432,1,2
+38,t_cell dendritic,t_cell,dendritic,"ENST00000392730,p1",-5100.129674864188,10.645008565478447,0.04732903611107888,1,2
+12,dendritic t_cell,dendritic,t_cell,CD74,-4992.129157247964,12.019587702253595,0.1322224102537011,2,2
+8,dendritic granulocyte,dendritic,granulocyte,CU692482,-4877.062104583878,9.551362674550937,0.05318446263870458,3,2
+33,natural_killer granulocyte,natural_killer,granulocyte,RPS6,-4783.688876438212,9.590891427491899,0.05350872122131128,2,2
+15,granulocyte mast_cell,granulocyte,mast_cell,S100A9,-4766.611600632942,11.85915889726086,0.29471763593774575,2,2
+25,mono_derived b_cell,mono_derived,b_cell,CTSS,-4737.691059224742,10.349391380782272,0.03115616353990432,2,2
+12,dendritic t_cell,dendritic,t_cell,HLA-DRA,-4439.65988140592,11.028870189680786,0.08079394273101798,3,2
+29,mono_derived natural_killer,mono_derived,natural_killer,PSAP,-4113.0087665111205,11.45925080621188,0.11299797230643559,2,2
+15,granulocyte mast_cell,granulocyte,mast_cell,NCF2,-4106.074624798215,9.946588606501148,0.14560522636258158,3,2
+18,granulocyte t_cell,granulocyte,t_cell,ALOX5,-4083.663169597008,9.159994978002246,0.1089811149247842,1,2
+7,dendritic b_cell,dendritic,b_cell,CTSL1,-4035.4810274553784,8.742648202932099,0.08117722470644262,2,2
+8,dendritic granulocyte,dendritic,granulocyte,CTSL1,-4010.859764091684,8.742648202932099,0.08117722470644262,4,2
+11,dendritic natural_killer,dendritic,natural_killer,CTSL1,-4000.0184537074333,8.742648202932099,0.08117722470644262,1,2
+11,dendritic natural_killer,dendritic,natural_killer,CU692482,-3906.7442627259425,9.551362674550937,0.05318446263870458,2,2
+12,dendritic t_cell,dendritic,t_cell,CTSL1,-3829.7985656842293,8.742648202932099,0.08117722470644262,4,2
+14,granulocyte dendritic,granulocyte,dendritic,S100A9,-3756.496623318764,11.85915889726086,0.29471763593774575,1,2
+18,granulocyte t_cell,granulocyte,t_cell,NCF2,-3643.2494529237597,9.946588606501148,0.14560522636258158,2,2
+12,dendritic t_cell,dendritic,t_cell,CU692482,-3502.2700885259883,9.551362674550937,0.05318446263870458,5,2
+34,natural_killer mast_cell,natural_killer,mast_cell,ENST00000555909,-3498.1994340645874,9.179476032432643,0.06627175888895682,5,2
+13,granulocyte b_cell,granulocyte,b_cell,S100A9,-3496.5251236963013,11.85915889726086,0.29471763593774575,2,2
+14,granulocyte dendritic,granulocyte,dendritic,C10orf54,-3494.3672033538555,9.881338836888096,0.20122892046014781,2,2
+9,dendritic mast_cell,dendritic,mast_cell,CTSL1,-3488.4234647048374,8.742648202932099,0.08117722470644262,3,2
+28,mono_derived mast_cell,mono_derived,mast_cell,LYZ,-3393.549193787974,11.978179027874233,0.20771740106852676,3,2
+31,natural_killer b_cell,natural_killer,b_cell,ITGB2,-3390.220929639211,9.627111459249484,0.06705696956861337,2,2
+32,natural_killer dendritic,natural_killer,dendritic,AK056941,-3350.774703889003,9.463880627994161,0.15290060244967366,7,2
+13,granulocyte b_cell,granulocyte,b_cell,NCF2,-3229.8922246342518,9.946588606501148,0.14560522636258158,3,2
+3,b_cell mast_cell,b_cell,mast_cell,HLA-DRA,-3196.4466720032433,10.978518715831761,0.3696446122171949,3,2
+2,b_cell granulocyte,b_cell,granulocyte,RPS6,-3157.3122673359667,9.965244791229036,0.09047580406880963,2,2
+35,natural_killer mono_derived,natural_killer,mono_derived,ETS1,-3042.5902972406357,9.136858794849257,0.12644740851354938,2,2
+34,natural_killer mast_cell,natural_killer,mast_cell,CD247,-3031.212813044563,9.00374896843423,0.05792812737584076,6,2
+32,natural_killer dendritic,natural_killer,dendritic,CD247,-2986.77424770775,9.00374896843423,0.05792812737584076,8,2
+40,t_cell mast_cell,t_cell,mast_cell,SPOCK2,-2968.3019827737216,9.1962054018453,0.09873533897013423,1,2
+32,natural_killer dendritic,natural_killer,dendritic,FLJ43663,-2966.0479943778623,8.633512101676637,0.0862270026755958,9,2
+25,mono_derived b_cell,mono_derived,b_cell,ITGB2,-2950.1109744046807,9.895498374693165,0.04572915238614071,3,2
+38,t_cell dendritic,t_cell,dendritic,ITK,-2937.9281818296254,8.833362461643372,0.04243555443578941,2,2
+31,natural_killer b_cell,natural_killer,b_cell,CD247,-2915.4430681223675,9.00374896843423,0.05792812737584076,3,2
+41,t_cell mono_derived,t_cell,mono_derived,ETS1,-2910.919485965107,9.48096590080032,0.10931943765219787,1,2
+37,t_cell b_cell,t_cell,b_cell,ITK,-2892.604674249209,8.833362461643372,0.04243555443578941,1,2
+9,dendritic mast_cell,dendritic,mast_cell,CTSZ,-2892.354506039826,10.06407889314422,0.29928790230625135,4,2
+34,natural_killer mast_cell,natural_killer,mast_cell,ETS1,-2867.190351846912,9.136858794849257,0.12644740851354938,7,2
+12,dendritic t_cell,dendritic,t_cell,CTSZ,-2844.651996726068,10.06407889314422,0.29928790230625135,6,2
+17,granulocyte natural_killer,granulocyte,natural_killer,ALOX5,-2827.0404579191986,9.159994978002246,0.1089811149247842,1,2
+33,natural_killer granulocyte,natural_killer,granulocyte,CD247,-2782.5067962535486,9.00374896843423,0.05792812737584076,3,2
+15,granulocyte mast_cell,granulocyte,mast_cell,ACTN1,-2765.757117337132,9.286554159709514,0.08803659649032777,4,2
+38,t_cell dendritic,t_cell,dendritic,ETS1,-2755.536930476407,9.48096590080032,0.10931943765219787,3,2
+40,t_cell mast_cell,t_cell,mast_cell,ETS1,-2735.5195405713835,9.48096590080032,0.10931943765219787,2,2
+41,t_cell mono_derived,t_cell,mono_derived,ITK,-2728.5899841619776,8.833362461643372,0.04243555443578941,2,2
+34,natural_killer mast_cell,natural_killer,mast_cell,KLRD1,-2727.500621109333,9.0133427927294,0.14162797674274247,8,2
+39,t_cell granulocyte,t_cell,granulocyte,ITK,-2720.9863327761386,8.833362461643372,0.04243555443578941,1,2
+35,natural_killer mono_derived,natural_killer,mono_derived,ENST00000555909,-2715.068853415676,9.179476032432643,0.06627175888895682,3,2
+31,natural_killer b_cell,natural_killer,b_cell,KLRD1,-2708.4845330517514,9.0133427927294,0.14162797674274247,4,2
+35,natural_killer mono_derived,natural_killer,mono_derived,CD247,-2665.929561941851,9.00374896843423,0.05792812737584076,4,2
+33,natural_killer granulocyte,natural_killer,granulocyte,RPS18,-2661.6732360358947,9.015873688292753,0.041334376770002325,4,2
+40,t_cell mast_cell,t_cell,mast_cell,ENST00000548222,-2597.6563288130296,8.967968124676958,0.038623328550375605,3,2
+33,natural_killer granulocyte,natural_killer,granulocyte,KLRD1,-2596.792767558754,9.0133427927294,0.14162797674274247,5,2
+13,granulocyte b_cell,granulocyte,b_cell,PYGL,-2580.079347310452,9.564200143813139,0.11321291474743914,4,2
+1,b_cell dendritic,b_cell,dendritic,HNRPDL,-2573.680103350623,8.87907025380268,0.0337984855082464,1,2
+34,natural_killer mast_cell,natural_killer,mast_cell,FLJ43663,-2572.766361341595,8.633512101676637,0.0862270026755958,9,2
+35,natural_killer mono_derived,natural_killer,mono_derived,FLJ43663,-2535.943850571798,8.633512101676637,0.0862270026755958,5,2
+38,t_cell dendritic,t_cell,dendritic,ENST00000406049,-2486.8213118727294,9.748481538965256,0.04467500928696553,4,2
+13,granulocyte b_cell,granulocyte,b_cell,ACTN1,-2485.795556436639,9.286554159709514,0.08803659649032777,5,2
+30,mono_derived t_cell,mono_derived,t_cell,ASAH1,-2484.54783519234,9.4485829240218,0.04158556678094727,3,2
+38,t_cell dendritic,t_cell,dendritic,"RPL13AP5,p1",-2484.3511068206712,9.65213192707072,0.08552396554461535,5,2
+17,granulocyte natural_killer,granulocyte,natural_killer,NCF2,-2461.464719838272,9.946588606501148,0.14560522636258158,2,2
+31,natural_killer b_cell,natural_killer,b_cell,CTSW,-2460.623870729472,9.342785072175252,0.2079127134119067,5,2
+33,natural_killer granulocyte,natural_killer,granulocyte,FYN,-2459.7069149140098,8.810260529865126,0.06929382780941765,6,2
+35,natural_killer mono_derived,natural_killer,mono_derived,KLRD1,-2459.6471524293074,9.0133427927294,0.14162797674274247,6,2
+15,granulocyte mast_cell,granulocyte,mast_cell,LSP1,-2455.4808920733103,9.912520862614695,0.12044849631014713,5,2
+18,granulocyte t_cell,granulocyte,t_cell,PYGL,-2414.23746430064,9.564200143813139,0.11321291474743914,3,2
+1,b_cell dendritic,b_cell,dendritic,"CCDC19,p1",-2351.095968666264,9.304939048141385,0.058264706886126304,2,2
+14,granulocyte dendritic,granulocyte,dendritic,GPR97,-2316.41576319793,9.565555632643866,0.2158358226836966,3,2
+15,granulocyte mast_cell,granulocyte,mast_cell,GPR97,-2316.0404234863713,9.565555632643866,0.2158358226836966,6,2
+38,t_cell dendritic,t_cell,dendritic,ENST00000548222,-2314.249075908606,8.967968124676958,0.038623328550375605,6,2
+17,granulocyte natural_killer,granulocyte,natural_killer,PYGL,-2309.0883854707185,9.564200143813139,0.11321291474743914,3,2
+41,t_cell mono_derived,t_cell,mono_derived,ENST00000548222,-2307.4822493287284,8.967968124676958,0.038623328550375605,3,2
+41,t_cell mono_derived,t_cell,mono_derived,SPOCK2,-2279.9977121331403,9.1962054018453,0.09873533897013423,4,2
+14,granulocyte dendritic,granulocyte,dendritic,LOC100507217,-2258.372570585977,9.456661311762222,0.143101039460182,4,2
+18,granulocyte t_cell,granulocyte,t_cell,GPR97,-2255.6439779795655,9.565555632643866,0.2158358226836966,4,2
+13,granulocyte b_cell,granulocyte,b_cell,GPR97,-2250.7653023824764,9.565555632643866,0.2158358226836966,6,2
+13,granulocyte b_cell,granulocyte,b_cell,C10orf54,-2249.6506560038974,9.881338836888096,0.20122892046014781,7,2
+39,t_cell granulocyte,t_cell,granulocyte,RPS18,-2224.7236783937833,9.749717772220524,0.05590789791109774,2,2
+9,dendritic mast_cell,dendritic,mast_cell,HLA-DPB1,-2170.3863733521825,9.596782441118215,0.08019721903952329,5,2
+3,b_cell mast_cell,b_cell,mast_cell,IRF8,-2159.8537198035256,8.727773354347216,0.05948016233110582,4,2
+40,t_cell mast_cell,t_cell,mast_cell,FAM65B,-2126.8148276513543,8.895665203461423,0.06064058963705683,4,2
+38,t_cell dendritic,t_cell,dendritic,FAM65B,-2091.262724144676,8.895665203461423,0.06064058963705683,7,2
+17,granulocyte natural_killer,granulocyte,natural_killer,NCF4,-2085.3686929024175,8.927135110965054,0.06539113842636625,4,2
+17,granulocyte natural_killer,granulocyte,natural_killer,GPR97,-2070.136222259836,9.565555632643866,0.2158358226836966,5,2
+15,granulocyte mast_cell,granulocyte,mast_cell,MXD1,-2068.677602872567,10.44725825572515,0.22648690976534333,7,2
+15,granulocyte mast_cell,granulocyte,mast_cell,C1orf38,-2068.0580634415956,9.583899371237635,0.24289094112888143,8,2
+40,t_cell mast_cell,t_cell,mast_cell,LCK,-2048.2594000708914,8.346295721123782,0.07712184342625991,5,2
+7,dendritic b_cell,dendritic,b_cell,CU692482,-2035.4983626612056,9.551362674550937,0.05318446263870458,3,2
+38,t_cell dendritic,t_cell,dendritic,LCK,-2032.1526074824155,8.346295721123782,0.07712184342625991,8,2
+14,granulocyte dendritic,granulocyte,dendritic,NCF4,-2023.480317050529,8.927135110965054,0.06539113842636625,5,2
+9,dendritic mast_cell,dendritic,mast_cell,HLA-DPA1,-2019.5481113235346,10.299389825121679,0.21202224701394326,6,2
+31,natural_killer b_cell,natural_killer,b_cell,FLJ43663,-2017.5337385208268,8.633512101676637,0.0862270026755958,6,2
+17,granulocyte natural_killer,granulocyte,natural_killer,ACTN1,-1967.1905771015204,9.286554159709514,0.08803659649032777,6,2
+8,dendritic granulocyte,dendritic,granulocyte,HLA-DPB1,-1945.1638086658616,9.596782441118215,0.08019721903952329,5,2
+2,b_cell granulocyte,b_cell,granulocyte,IRF8,-1912.0752543167835,8.727773354347216,0.05948016233110582,3,2
+41,t_cell mono_derived,t_cell,mono_derived,LCK,-1872.0935515111698,8.346295721123782,0.07712184342625991,5,2
+37,t_cell b_cell,t_cell,b_cell,ENST00000548222,-1847.351011897757,8.967968124676958,0.038623328550375605,2,2
+39,t_cell granulocyte,t_cell,granulocyte,LCK,-1838.957575585096,8.346295721123782,0.07712184342625991,3,2
+9,dendritic mast_cell,dendritic,mast_cell,LSP1,-1837.97451193503,8.661392468038228,0.10821243380630428,7,2
+33,natural_killer granulocyte,natural_killer,granulocyte,ENST00000536809,-1816.896001531246,8.727831699897445,0.08898275009232748,7,2
+35,natural_killer mono_derived,natural_killer,mono_derived,RORA,-1813.7951080015841,8.596566532917041,0.0748540291552958,7,2
+33,natural_killer granulocyte,natural_killer,granulocyte,IL2RB,-1789.8820697220513,9.337758927192649,0.1448912259475971,8,2
+39,t_cell granulocyte,t_cell,granulocyte,RPS6,-1783.2043226017686,10.024046871803769,0.041722127124896424,4,2
+40,t_cell mast_cell,t_cell,mast_cell,ITGB2,-1769.1066723659335,8.776379328510147,0.05768431545819684,6,2
+31,natural_killer b_cell,natural_killer,b_cell,FYN,-1720.9651205879427,8.810260529865126,0.06929382780941765,7,2
+39,t_cell granulocyte,t_cell,granulocyte,RPL35A,-1717.7089529910206,8.974279218060882,0.04375053890863016,5,2
+15,granulocyte mast_cell,granulocyte,mast_cell,UNC13D,-1715.3820698714162,8.412953522430648,0.06545696500173614,9,2
+18,granulocyte t_cell,granulocyte,t_cell,MXD1,-1714.024407626334,10.44725825572515,0.22648690976534333,5,2
+35,natural_killer mono_derived,natural_killer,mono_derived,"HIST1H2AG,p1",-1712.4991308422277,9.306355620117564,0.0519632629822695,8,2
+40,t_cell mast_cell,t_cell,mast_cell,RASGRP1,-1711.4159404899935,7.978635302296324,0.022495578215060808,7,2
+6,b_cell t_cell,b_cell,t_cell,IRF8,-1709.4959660237237,8.727773354347216,0.05948016233110582,2,2
+35,natural_killer mono_derived,natural_killer,mono_derived,ENST00000548222,-1704.058584526379,8.171580228814088,0.09187110393363973,9,2
+9,dendritic mast_cell,dendritic,mast_cell,ITGB2,-1704.0144082147583,10.236529921870574,0.23604614424123696,8,2
+14,granulocyte dendritic,granulocyte,dendritic,S69623,-1697.704742477064,9.987502293497734,0.24977953473546716,6,2
+33,natural_killer granulocyte,natural_killer,granulocyte,RPL31,-1685.8218248732583,8.658330871672552,0.05826063177542141,9,2
+28,mono_derived mast_cell,mono_derived,mast_cell,NCF2,-1681.5193508505354,9.019832473914033,0.054207864175174605,4,2
+28,mono_derived mast_cell,mono_derived,mast_cell,CYBB,-1673.9751637851855,9.406048188821075,0.17325493172738063,5,2
+28,mono_derived mast_cell,mono_derived,mast_cell,LTA4H,-1669.38963326403,8.780123297842724,0.027552501589232253,6,2
+17,granulocyte natural_killer,granulocyte,natural_killer,GCA,-1642.917900204403,10.013038838421513,0.17712997415585752,7,2
+18,granulocyte t_cell,granulocyte,t_cell,C10orf54,-1606.7147571632963,9.881338836888096,0.20122892046014781,6,2
+13,granulocyte b_cell,granulocyte,b_cell,MXD1,-1582.911868938938,10.44725825572515,0.22648690976534333,8,2
+11,dendritic natural_killer,dendritic,natural_killer,CTSZ,-1575.4880909258213,10.06407889314422,0.29928790230625135,3,2
+12,dendritic t_cell,dendritic,t_cell,ITGAX,-1530.154844056854,9.435894270735478,0.11951243072817869,7,2
+2,b_cell granulocyte,b_cell,granulocyte,ENST00000423610,-1526.757210721739,8.142930107399746,0.049355778726041424,4,2
+40,t_cell mast_cell,t_cell,mast_cell,CD247,-1509.8023458625912,8.150750694793608,0.06817195068809484,8,2
+9,dendritic mast_cell,dendritic,mast_cell,CTSS,-1497.1086505424614,9.670650479580946,0.11567616667991976,9,2
+2,b_cell granulocyte,b_cell,granulocyte,RPS18,-1495.1982656473233,9.635134450837281,0.06304777586274637,5,2
+38,t_cell dendritic,t_cell,dendritic,CD247,-1465.3637805257783,8.150750694793608,0.06817195068809484,9,2
+31,natural_killer b_cell,natural_killer,b_cell,KLRB1,-1456.0705358691214,8.384936576067295,0.1043246773006976,8,2
+31,natural_killer b_cell,natural_killer,b_cell,ITK,-1449.575645995048,7.962371984350027,0.04384614488450699,9,2
+3,b_cell mast_cell,b_cell,mast_cell,CXCR4,-1438.591418317967,9.836555753470815,0.13841530455190462,5,2
+37,t_cell b_cell,t_cell,b_cell,CD247,-1394.0326009403962,8.150750694793608,0.06817195068809484,3,2
+14,granulocyte dendritic,granulocyte,dendritic,ALOX5,-1358.4680742371934,9.159994978002246,0.1089811149247842,7,2
+41,t_cell mono_derived,t_cell,mono_derived,"CALM1,p1",-1353.8100633099402,9.586716353338765,0.015484793723968781,6,2
+13,granulocyte b_cell,granulocyte,b_cell,IL17RA,-1344.5471767603972,9.227662422599122,0.1367639257091841,9,2
+3,b_cell mast_cell,b_cell,mast_cell,CIITA,-1343.5454647414228,8.940399877393293,0.09837458924506079,6,2
+41,t_cell mono_derived,t_cell,mono_derived,RASGRP1,-1335.8257309978926,7.978635302296324,0.022495578215060808,7,2
+39,t_cell granulocyte,t_cell,granulocyte,RPL24,-1305.4315653783706,8.583518146614734,0.039326425707755394,6,2
+25,mono_derived b_cell,mono_derived,b_cell,ASAH1,-1301.557853850392,9.4485829240218,0.04158556678094727,4,2
+2,b_cell granulocyte,b_cell,granulocyte,CD22,-1275.4989530611306,8.89129507085897,0.0918924787923924,6,2
+39,t_cell granulocyte,t_cell,granulocyte,ENST00000423610,-1269.4139799305372,8.962082533959826,0.11461563265358901,7,2
+6,b_cell t_cell,b_cell,t_cell,CD22,-1268.102447710822,8.89129507085897,0.0918924787923924,3,2
+39,t_cell granulocyte,t_cell,granulocyte,CD247,-1261.0963290715767,8.150750694793608,0.06817195068809484,8,2
+11,dendritic natural_killer,dendritic,natural_killer,"HSPA1A,p1",-1241.3233312036368,7.836979042387327,0.06696111599546128,4,2
+30,mono_derived t_cell,mono_derived,t_cell,NCF2,-1218.69417897608,9.019832473914033,0.054207864175174605,4,2
+18,granulocyte t_cell,granulocyte,t_cell,GCA,-1207.4876783955228,10.013038838421513,0.17712997415585752,7,2
+28,mono_derived mast_cell,mono_derived,mast_cell,LSP1,-1173.717567564819,9.341513428726675,0.0792908966552829,7,2
+28,mono_derived mast_cell,mono_derived,mast_cell,C1orf38,-1157.972083064419,8.726721665086414,0.07088910293394043,8,2
+17,granulocyte natural_killer,granulocyte,natural_killer,TALDO1,-1150.1934129492197,9.284598208634039,0.10339651241789465,8,2
+41,t_cell mono_derived,t_cell,mono_derived,CD247,-1144.5190947598792,8.150750694793608,0.06817195068809484,8,2
+3,b_cell mast_cell,b_cell,mast_cell,HLA-DPA1,-1132.7076366788863,10.020423213275116,0.314891950844997,7,2
+40,t_cell mast_cell,t_cell,mast_cell,TC2N,-1128.4642138279007,8.178477500913537,0.07506984227326899,9,2
+18,granulocyte t_cell,granulocyte,t_cell,PLCG2,-1119.551468776348,8.714670106482512,0.27883619632779505,8,2
+2,b_cell granulocyte,b_cell,granulocyte,ENST00000469811,-1115.60744897645,7.90362183200736,0.04060501257992151,7,2
+3,b_cell mast_cell,b_cell,mast_cell,HLA-DMB,-1111.4824601652897,8.695131498309344,0.31042100807778794,8,2
+7,dendritic b_cell,dendritic,b_cell,CTSZ,-1087.6609420956866,10.06407889314422,0.29928790230625135,4,2
+39,t_cell granulocyte,t_cell,granulocyte,RPL36,-1081.8187431741626,8.837617671566651,0.047495668350954146,9,2
+17,granulocyte natural_killer,granulocyte,natural_killer,C10orf54,-1056.058906352042,9.881338836888096,0.20122892046014781,9,2
+14,granulocyte dendritic,granulocyte,dendritic,"ENST00000538676,p1",-1033.7906680963117,8.68624795070938,0.26545423433694004,8,2
+14,granulocyte dendritic,granulocyte,dendritic,MLL5,-1029.8686996539004,8.121905530668935,0.12981529554910617,9,2
+37,t_cell b_cell,t_cell,b_cell,SLFN5,-1028.9892659638062,8.49815102536672,0.05629646779740988,4,2
+8,dendritic granulocyte,dendritic,granulocyte,TM7SF4,-1011.4078351799759,7.526921119112731,0.07833317432110798,6,2
+12,dendritic t_cell,dendritic,t_cell,TM7SF4,-1009.6026309308398,7.526921119112731,0.07833317432110798,8,2
+7,dendritic b_cell,dendritic,b_cell,TM7SF4,-1009.5004563517514,7.526921119112731,0.07833317432110798,5,2
+11,dendritic natural_killer,dendritic,natural_killer,uc002iyl.2,-1001.9023889594735,8.194954596627863,0.18191332674599336,5,2
+3,b_cell mast_cell,b_cell,mast_cell,HLA-DMA,-999.4652607485289,8.632807945496069,0.13223623597331066,9,2
+12,dendritic t_cell,dendritic,t_cell,uc002iyl.2,-996.9617853210874,8.194954596627863,0.18191332674599336,9,2
+18,granulocyte t_cell,granulocyte,t_cell,LPCAT2,-995.9291662982162,8.198914336837655,0.13722975891155653,9,2
+8,dendritic granulocyte,dendritic,granulocyte,HLA-DPA1,-992.5539000928525,10.299389825121679,0.21202224701394326,7,2
+7,dendritic b_cell,dendritic,b_cell,uc002iyl.2,-989.882545786592,8.194954596627863,0.18191332674599336,6,2
+7,dendritic b_cell,dendritic,b_cell,SEPN1,-989.6516206104867,8.067896896265376,0.09158234511316872,7,2
+11,dendritic natural_killer,dendritic,natural_killer,TM7SF4,-989.3601175013259,7.526921119112731,0.07833317432110798,6,2
+28,mono_derived mast_cell,mono_derived,mast_cell,CECR1,-988.7496062917578,7.824786248151017,0.07761616003556297,9,2
+8,dendritic granulocyte,dendritic,granulocyte,uc002iyl.2,-985.3237963253694,8.194954596627863,0.18191332674599336,8,2
+41,t_cell mono_derived,t_cell,mono_derived,TC2N,-982.5756517930461,8.178477500913537,0.07506984227326899,9,2
+8,dendritic granulocyte,dendritic,granulocyte,CD86,-956.9522287518804,8.527564096991954,0.18763019970657607,9,2
+2,b_cell granulocyte,b_cell,granulocyte,ENST00000443998,-938.6721809274744,7.776998878879908,0.052248756690233183,8,2
+7,dendritic b_cell,dendritic,b_cell,ITGAX,-932.6262627304616,9.435894270735478,0.11951243072817869,8,2
+37,t_cell b_cell,t_cell,b_cell,PRKCH,-918.5844261771122,8.116284897043567,0.05850211895797226,5,2
+27,mono_derived granulocyte,mono_derived,granulocyte,CECR1,-882.6669394122343,7.824786248151017,0.07761616003556297,1,2
+4,b_cell mono_derived,b_cell,mono_derived,CD22,-882.6420378652051,8.89129507085897,0.0918924787923924,2,2
+2,b_cell granulocyte,b_cell,granulocyte,RPL24,-827.4743333584922,8.392410317528713,0.053363312173973255,9,2
+10,dendritic mono_derived,dendritic,mono_derived,uc002iyl.2,-820.9819505310069,8.194954596627863,0.18191332674599336,1,2
+25,mono_derived b_cell,mono_derived,b_cell,NCF2,-805.3369506865719,9.019832473914033,0.054207864175174605,5,2
+30,mono_derived t_cell,mono_derived,t_cell,GRN,-781.5376138456928,9.531556351216327,0.10959376845216011,5,2
+6,b_cell t_cell,b_cell,t_cell,CIITA,-765.2223772551442,8.940399877393293,0.09837458924506079,4,2
+11,dendritic natural_killer,dendritic,natural_killer,PPAP2B,-757.439939449627,7.8501761093179265,0.2448988724838189,7,2
+1,b_cell dendritic,b_cell,dendritic,KIAA0922,-745.3763494646577,7.820161635966924,0.1012850754771075,3,2
+37,t_cell b_cell,t_cell,b_cell,CD6,-744.9687588177205,8.245055177496836,0.09955036839478963,6,2
+37,t_cell b_cell,t_cell,b_cell,LCP2,-744.2914500441118,7.7996220827790665,0.034891026437458096,7,2
+29,mono_derived natural_killer,mono_derived,natural_killer,"MS4A14,p1",-742.4729125750023,9.101720455314613,0.12568744611354138,3,2
+37,t_cell b_cell,t_cell,b_cell,uc011kss.1,-742.2076415982771,7.911815980823086,0.06859091479586017,8,2
+7,dendritic b_cell,dendritic,b_cell,QSOX1,-740.58898069965,8.836173306795848,0.30463699170221065,9,2
+6,b_cell t_cell,b_cell,t_cell,IGHM,-736.6241866787776,9.761418856539848,0.1810806620200936,5,2
+5,b_cell natural_killer,b_cell,natural_killer,IGHM,-718.7534115023698,9.761418856539848,0.1810806620200936,1,2
+37,t_cell b_cell,t_cell,b_cell,CD5,-703.7959480852005,8.41220374837157,0.10087830250406925,9,2
+30,mono_derived t_cell,mono_derived,t_cell,EMILIN2,-681.9592119239195,8.162799957310886,0.12556113011915604,6,2
+27,mono_derived granulocyte,mono_derived,granulocyte,ENST00000423610,-670.855787083669,8.507866240898466,0.22181593885395232,2,2
+30,mono_derived t_cell,mono_derived,t_cell,RNF130,-663.7205680818068,8.333279034636599,0.10695792202045792,7,2
+1,b_cell dendritic,b_cell,dendritic,IGJ,-663.3888629538,9.850326595782697,0.36830647281787837,4,2
+6,b_cell t_cell,b_cell,t_cell,HLA-DMB,-655.824659962309,8.695131498309344,0.31042100807778794,6,2
+25,mono_derived b_cell,mono_derived,b_cell,RNF130,-654.1925163093769,8.333279034636599,0.10695792202045792,6,2
+5,b_cell natural_killer,b_cell,natural_killer,IGJ,-641.7872185523322,9.850326595782697,0.36830647281787837,2,2
+6,b_cell t_cell,b_cell,t_cell,CD79A,-636.1604799365007,9.54342540405424,0.38910290833397226,7,2
+4,b_cell mono_derived,b_cell,mono_derived,IGHM,-633.40809443177,9.761418856539848,0.1810806620200936,3,2
+4,b_cell mono_derived,b_cell,mono_derived,CD19,-610.3960833071131,7.922834256961548,0.10870505633073865,4,2
+6,b_cell t_cell,b_cell,t_cell,CD19,-604.6100835506968,7.922834256961548,0.10870505633073865,8,2
+30,mono_derived t_cell,mono_derived,t_cell,RAB31,-603.6384354272038,7.830883242571717,0.035827465675514154,8,2
+29,mono_derived natural_killer,mono_derived,natural_killer,ASAH1,-566.1359778292717,9.4485829240218,0.04158556678094727,4,2
+16,granulocyte mono_derived,granulocyte,mono_derived,DAPK2,-560.5237680267023,7.808143017149353,0.25531676973644885,1,2
+4,b_cell mono_derived,b_cell,mono_derived,IGJ,-554.4052943095168,9.850326595782697,0.36830647281787837,5,2
+6,b_cell t_cell,b_cell,t_cell,IGJ,-551.9601724951987,9.850326595782697,0.36830647281787837,9,2
+30,mono_derived t_cell,mono_derived,t_cell,CORO1C,-549.2588893396282,8.154093369708,0.07246858619568053,9,2
+25,mono_derived b_cell,mono_derived,b_cell,PLBD1,-512.8494789160109,8.155033049101872,0.06676171888105789,7,2
+16,granulocyte mono_derived,granulocyte,mono_derived,PLCG2,-503.87036096833594,8.714670106482512,0.27883619632779505,2,2
+4,b_cell mono_derived,b_cell,mono_derived,TNFRSF13C,-501.38395740321903,8.672253452523819,0.131708709504922,6,2
+1,b_cell dendritic,b_cell,dendritic,ENST00000469811,-500.45394335517904,7.90362183200736,0.04060501257992151,5,2
+29,mono_derived natural_killer,mono_derived,natural_killer,"C17orf49,p1",-483.64182144914594,9.777814638485905,0.04686569880982017,5,2
+4,b_cell mono_derived,b_cell,mono_derived,IKZF3,-467.83894256139115,8.180098537354272,0.16242322807997173,7,2
+27,mono_derived granulocyte,mono_derived,granulocyte,ENST00000435269,-460.0086619926551,8.246818318674848,0.09743094777160814,3,2
+11,dendritic natural_killer,dendritic,natural_killer,SQRDL,-458.00556649224046,8.131421328215954,0.11000097818445383,8,2
+5,b_cell natural_killer,b_cell,natural_killer,ENST00000429730,-454.9771548893455,7.02559114923546,0.11360120368355393,3,2
+11,dendritic natural_killer,dendritic,natural_killer,ADRBK2,-454.0836336887262,7.785135569373551,0.23215309771860201,9,2
+16,granulocyte mono_derived,granulocyte,mono_derived,GPR97,-447.729280708121,9.565555632643866,0.2158358226836966,3,2
+4,b_cell mono_derived,b_cell,mono_derived,RAB30,-437.4501481831228,8.10941177300063,0.11445156680386633,8,2
+25,mono_derived b_cell,mono_derived,b_cell,PLXDC2,-434.75776413787406,7.997942619539194,0.10164157534119776,8,2
+4,b_cell mono_derived,b_cell,mono_derived,ETS1,-414.1095476879939,8.337708002892185,0.07646424156334153,9,2
+16,granulocyte mono_derived,granulocyte,mono_derived,MBOAT2,-413.61740066185655,7.96071623045067,0.11175226437464066,4,2
+25,mono_derived b_cell,mono_derived,b_cell,"MS4A14,p1",-400.7450276893453,9.101720455314613,0.12568744611354138,9,2
+26,mono_derived dendritic,mono_derived,dendritic,"MS4A14,p1",-398.7020673722669,9.101720455314613,0.12568744611354138,1,2
+27,mono_derived granulocyte,mono_derived,granulocyte,CNIH,-372.96535204819116,7.508238789501999,0.03809615574759606,4,2
+16,granulocyte mono_derived,granulocyte,mono_derived,"LY75-CD302,p1",-369.01108802263127,7.417162196698859,0.09800634382532694,5,2
+16,granulocyte mono_derived,granulocyte,mono_derived,MPZL3,-367.03471728394607,7.937837191274205,0.13482215727629943,6,2
+16,granulocyte mono_derived,granulocyte,mono_derived,PYGL,-342.24363324449723,9.564200143813139,0.11321291474743914,7,2
+16,granulocyte mono_derived,granulocyte,mono_derived,C1orf9,-338.06255753924415,7.322831932756717,0.2218040999293643,8,2
+27,mono_derived granulocyte,mono_derived,granulocyte,SHFM1,-325.195315961794,6.711261706918947,0.04964959589077676,5,2
+1,b_cell dendritic,b_cell,dendritic,ENST00000498453,-300.77532781959235,8.301562158379708,0.10487098938278513,6,2
+5,b_cell natural_killer,b_cell,natural_killer,"AKAP2,p1",-279.5214295741833,7.62338539877439,0.09219082467015417,4,2
+27,mono_derived granulocyte,mono_derived,granulocyte,CD86,-268.72874678269494,8.038595836239686,0.08343703645615494,6,2
+10,dendritic mono_derived,dendritic,mono_derived,uc003igi.1,-262.6094577285005,6.752784275321288,0.10312728042190211,2,2
+5,b_cell natural_killer,b_cell,natural_killer,CSDA,-259.18168284267415,7.336566903112482,0.08466494169306919,5,2
+1,b_cell dendritic,b_cell,dendritic,ETS1,-258.7269921992943,8.337708002892185,0.07646424156334153,7,2
+16,granulocyte mono_derived,granulocyte,mono_derived,NTNG2,-243.0374154727437,7.466330964036668,0.24276429849615036,9,2
+29,mono_derived natural_killer,mono_derived,natural_killer,CTNNA1,-229.31839275825052,7.772247729298117,0.046590053707413814,6,2
+10,dendritic mono_derived,dendritic,mono_derived,ENST00000421534,-222.7562934237861,6.448533331026869,0.12625694209580773,3,2
+1,b_cell dendritic,b_cell,dendritic,TAF1D,-218.01578453243496,7.7778887150291824,0.04726546831108264,8,2
+1,b_cell dendritic,b_cell,dendritic,"AKAP2,p1",-217.4496590988163,7.62338539877439,0.09219082467015417,9,2
+27,mono_derived granulocyte,mono_derived,granulocyte,CPVL,-208.29768858368902,8.394127715776126,0.17877798762029254,7,2
+36,natural_killer t_cell,natural_killer,t_cell,ENST00000555909,-205.8537371701541,9.179476032432643,0.06627175888895682,1,2
+27,mono_derived granulocyte,mono_derived,granulocyte,VDAC1,-202.5188629708848,7.439243029872384,0.04552074940067949,8,2
+10,dendritic mono_derived,dendritic,mono_derived,GALNTL4,-199.43000301022667,6.424404255472124,0.07974203519120349,4,2
+36,natural_killer t_cell,natural_killer,t_cell,MCTP2,-196.33888918203365,8.226131701941338,0.08335803755473457,2,2
+10,dendritic mono_derived,dendritic,mono_derived,SGK223,-179.72160382222697,6.949023160175772,0.05768782249693002,5,2
+27,mono_derived granulocyte,mono_derived,granulocyte,PEA15,-177.0181817369486,7.565109828903809,0.07618025113280798,9,2
+10,dendritic mono_derived,dendritic,mono_derived,ENST00000449270,-169.86572724059903,6.021841363249894,0.09767344452999294,6,2
+36,natural_killer t_cell,natural_killer,t_cell,ENST00000478444,-157.48385102478574,7.9322992307707825,0.12829262862828106,3,2
+36,natural_killer t_cell,natural_killer,t_cell,ENST00000365207,-148.0936063634631,8.137664592685347,0.07692081921646803,4,2
+29,mono_derived natural_killer,mono_derived,natural_killer,TLR4,-126.93796844345297,8.532102928353488,0.06879471719524198,7,2
+10,dendritic mono_derived,dendritic,mono_derived,"LY75-CD302,p1",-117.101781745724,7.2226804399179585,0.06836344723296217,7,2
+29,mono_derived natural_killer,mono_derived,natural_killer,AB528017,-115.56632169106607,7.1415072529726,0.06977660457494332,8,2
+5,b_cell natural_killer,b_cell,natural_killer,ENST00000521731,-114.96931411976786,5.6168075830324735,0.05218368334113747,6,2
+5,b_cell natural_killer,b_cell,natural_killer,AJ294734,-111.01446114311622,6.18462031644874,0.10021225184423053,7,2
+5,b_cell natural_killer,b_cell,natural_killer,J00257,-109.18260281717907,5.666983829574639,0.07425658004002335,8,2
+29,mono_derived natural_killer,mono_derived,natural_killer,ADRBK2,-99.68391591948281,6.074950341431219,0.1361794444947396,9,2
+10,dendritic mono_derived,dendritic,mono_derived,O3FAR1,-90.87084945370233,5.841932220341466,0.14600473654556834,8,2
+10,dendritic mono_derived,dendritic,mono_derived,ENST00000437504,-78.06728359508541,5.311870467993089,0.16394013034102173,9,2
+5,b_cell natural_killer,b_cell,natural_killer,FJ197674,-76.15612483996438,5.916548808289686,0.09526775435801867,9,2
+36,natural_killer t_cell,natural_killer,t_cell,LYN,-75.76863745049627,7.803310097783704,0.13376539458553569,5,2
+26,mono_derived dendritic,mono_derived,dendritic,KIAA0141,-74.5363881379107,6.768734435901248,0.046922056699041384,2,2
+36,natural_killer t_cell,natural_killer,t_cell,NCAM1,-53.685337956451235,7.835537265761483,0.1310348076261555,6,2
+36,natural_killer t_cell,natural_killer,t_cell,ENST00000390893,-52.73658745651119,9.0931029338064,0.13005511753819712,7,2
+36,natural_killer t_cell,natural_killer,t_cell,ENST00000427824,-44.01226279577446,6.069363128428684,0.1300591726230295,8,2
+36,natural_killer t_cell,natural_killer,t_cell,ENST00000410792,-43.81486400974836,8.121776475893576,0.1056431172703558,9,2
+26,mono_derived dendritic,mono_derived,dendritic,"ENST00000538676,p1",-13.986901609173014,6.291081820038696,0.12491308191648334,3,2
+26,mono_derived dendritic,mono_derived,dendritic,C14orf166,-13.914992073620851,8.185693651620035,0.04534540393527618,4,2
+26,mono_derived dendritic,mono_derived,dendritic,LOC728323,-13.011481692015998,5.194145795045595,0.246182215394656,5,2
+26,mono_derived dendritic,mono_derived,dendritic,FAM175A,-8.117682973398104,5.6741563890220466,0.12812332089359696,6,2
+26,mono_derived dendritic,mono_derived,dendritic,C9orf156,-6.030330363847526,6.268947037518519,0.03638496519247558,7,2
+26,mono_derived dendritic,mono_derived,dendritic,CCDC94,-4.92472198976418,6.171237868529731,0.04693380482549763,8,2
+26,mono_derived dendritic,mono_derived,dendritic,LOC100270804,-4.045666117217628,4.4318536197143805,0.31767166973271,9,2
+42,t_cell natural_killer,t_cell,natural_killer,RPL14P5,0.02017553537846963,4.563704162707886,0.3493636015197981,1,2
+42,t_cell natural_killer,t_cell,natural_killer,ENST00000309865,5.673952776406422,4.554347174842346,0.35148825929987293,2,2
+42,t_cell natural_killer,t_cell,natural_killer,TRAV17,6.4333258698021965,4.412239525357181,0.1697795902864754,3,2
+42,t_cell natural_killer,t_cell,natural_killer,ENST00000401004,7.477651198547777,5.290229837665127,0.38136473212025507,4,2
+42,t_cell natural_killer,t_cell,natural_killer,ENST00000429825,8.841588933544779,4.460926912850461,0.39436256143197523,5,2
+42,t_cell natural_killer,t_cell,natural_killer,ENST00000506046,9.009647179695849,4.251969397355609,0.3677439892840567,6,2
+42,t_cell natural_killer,t_cell,natural_killer,CACHD1,10.314378274909442,4.153339050146949,0.20807371961184554,7,2
+42,t_cell natural_killer,t_cell,natural_killer,H19,12.830624055413866,4.021396346967036,0.32282837731601777,8,2
+42,t_cell natural_killer,t_cell,natural_killer,TRBV20-1,13.43874701788515,4.7667865741448825,0.2035731631764112,9,2
