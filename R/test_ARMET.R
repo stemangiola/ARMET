@@ -21,6 +21,7 @@ my_theme =
 	)
 
 ref = read_csv("docs/ref.csv")
+
 ######################################
 # Variable should be already set
 ######################################
@@ -31,16 +32,6 @@ sample_blacklist = c("666CRI", "972UYG", "344KCP", "555QVG", "370KKZ", "511TST",
 decrease_replicates = function(my_df, n_pass=1){
 
 	my_df %>%
-
-		# Correct house keeping formatting
-		mutate(`house keeping` = `Cell type category` == "house_keeping") %>%
-		rename(`Cell type category old` = `Cell type category`) %>%
-		left_join(
-			(.) %>%
-				distinct(sample, `Cell type category old`) %>%
-				filter(`Cell type category old` != "house_keeping") %>%
-				rename(`Cell type category` = `Cell type category old`)
-		) %>%
 
 		# Add n_pass info
 		mutate(n_pass = n_pass) %>%
@@ -81,10 +72,6 @@ decrease_replicates = function(my_df, n_pass=1){
 		}) %>%
 
 		collect %>% ungroup %>%
-
-		# Re put house keeping
-		mutate(`Cell type category` = ifelse(`house keeping`, "house_keeping", `Cell type category`)) %>%
-		select(-`Cell type category old`) %>%
 
 		# Eliminate n_pass info
 		select(-n_pass)
@@ -128,7 +115,7 @@ markers =	read_csv("docs/markers.csv")
 # 	plotly::ggplotly()
 
 house_keeping =
-	ref %>% filter(`Cell type category` == "house_keeping" ) %>%
+	ref %>% filter(`house keeping`) %>%
 	distinct(`symbol`) %>%
 	pull(1) %>%
 	head(n=200)
@@ -163,8 +150,8 @@ reference =
 	# Get house keeping and markwrs
 	{
 		bind_rows(
-			(.) %>%	filter(	`symbol` %in% 	house_keeping 	) %>%	select(-level) %>% distinct(),
-			(.) %>% inner_join(markers %>% distinct(symbol, level))
+			(.) %>% inner_join( markers %>% distinct(level, symbol)),
+			(.) %>% filter(`house keeping`)
 		)
 	} %>%
 	select(  -contains("idx")) %>%
@@ -172,14 +159,14 @@ reference =
 
 ######################################
 ######################################
-library(parallel)
-n_cores = system("nproc", intern = TRUE) %>% as.integer
-cl = n_cores %>% makeCluster( manual=FALSE, outfile='log.txt')
-clusterEvalQ(cl, library(tidyverse))
-clusterEvalQ(cl, library(magrittr))
-clusterExport(cl, "ref")
-registerDoParallel(cl)
-multidplyr::set_default_cluster(cl)
+# library(parallel)
+# n_cores = system("nproc", intern = TRUE) %>% as.integer
+# cl = n_cores %>% makeCluster( manual=FALSE, outfile='log.txt')
+# clusterEvalQ(cl, library(tidyverse))
+# clusterEvalQ(cl, library(magrittr))
+# clusterExport(cl, "ref")
+# registerDoParallel(cl)
+# multidplyr::set_default_cluster(cl)
 
 
 # Create mix
@@ -201,7 +188,6 @@ mix_source =
 		my_level = (.) %>% distinct(level) %>% pull(1)
 		combn(
 			(.) %>%
-				filter(`Cell type category` != "house_keeping") %>%
 				distinct(`Cell type category`) %>%
 				anti_join(ref %>% distinct(`Cell type category`, level) %>% filter(level < my_level ) %>% distinct(`Cell type category`)) %>%
 				pull(1),
@@ -237,12 +223,14 @@ mix_source =
 				sample_n(1) %>%
 				distinct(sample, `Cell type category`)
 		) %>%
-			mutate(run = cc %>% distinct(run) %>% pull(1))
+			mutate(run = cc %>% distinct(run) %>% pull(1)) %>%
+			mutate(level = cc %>% distinct(level) %>% pull(1))
 	}) %>%
 	#multidplyr::collect() %>%
 	ungroup() %>%
 
-	left_join(ref %>% distinct(`symbol`, `read count normalised bayes`, `Cell type category`, sample, level))  %>%
+	# Again solving the problem with house keeping genes
+	left_join(ref %>% distinct(`symbol`, `read count normalised bayes`, `Cell type category`, sample, level, `house keeping`))  %>%
 
 	# Add mix_sample
 	left_join(
@@ -262,16 +250,7 @@ mix_source =
 			distinct(symbol, run, level, combination, sample_mix,  `read count mix`)
 	) %>%
 
-	# # Correct for house keeping gene catwegory
-	# rename(`Cell type category OLD` = `Cell type category`) %>%
-	# left_join(
-	# 	(.) %>%
-	# 		filter(`Cell type category OLD` != "house_keeping") %>%
-	# 		distinct(sample, `Cell type category OLD`) %>%
-	# 		rename(`Cell type category` = `Cell type category OLD`)
-	# 	) %>%
-
-	# Eliminate duplicated of difference levels
+	# Eliminate duplicated of difference levels for example house keepng genes
 	group_by(run, symbol, sample) %>%
 	arrange(level) %>%
 	slice(1) %>%

@@ -138,22 +138,18 @@ ARMET_tc = function(
 	# Merge data sets
 	df =
 		bind_rows(
-			reference %>%
-				filter(`symbol` %in% ( mix %>% colnames )),
+			reference %>% filter(`symbol` %in% ( mix %>% colnames )),
 			mix %>%
 				gather(`symbol`, `read count`, -sample) %>%
 				inner_join(reference %>% distinct(symbol) ) %>%
-				mutate(`Cell type category` = ifelse(
-					`symbol` %in% ( reference %>% filter(`Cell type category` == "house_keeping" ) %>% distinct(`symbol`) %>% pull(1) 	),
-					"house_keeping",
-					"query"
-				))
+				left_join( reference %>% distinct(symbol, `house keeping`) ) %>%
+				mutate(`Cell type category` = "query")
 		)	%>%
 
 		# Add symbol indeces
 		left_join(
 			(.) %>%
-				filter(!`Cell type category` %in% c("house_keeping")  ) %>%
+				filter(!`house keeping`) %>%
 				distinct(`symbol`) %>%
 				mutate(M = 1:n())
 		) %>%
@@ -167,12 +163,22 @@ ARMET_tc = function(
 				filter(`Cell type category` == "query"  ) %>%
 				distinct(`sample`) %>%
 				mutate(Q = 1:n())
+		) %>%
+
+		# Add house keeping into Cell type label
+		mutate(`Cell type category` = ifelse(`house keeping`, "house_keeping", `Cell type category`)) %>%
+		anti_join(
+			(.) %>% filter(`house keeping`) %>% distinct(symbol, level) %>% group_by(symbol) %>% arrange(level) %>% slice(2) %>% ungroup()
 		)
 
 	# For  reference MPI inference
 	counts_baseline =
 		df %>%
+
+		# Eliminate the query part, not the house keeping of the query
 		filter(`Cell type category` != "query")  %>%
+
+		# Create unique symbol ID
 		unite(ct_symbol, c("Cell type category", "symbol"), remove = F) %>%
 
 		format_for_MPI
@@ -218,23 +224,22 @@ ARMET_tc = function(
 		df %>%
 		filter(`Cell type category` == "query") %>%
 		select(S, Q, `symbol`, `read count`) %>%
-		left_join(
-			counts_baseline %>%
-				distinct(`symbol`, G, `Cell type category`, level)
-		) %>%
+		left_join(	counts_baseline %>% distinct(`symbol`, G, `Cell type category`, level) ) %>%
 		arrange(level, `Cell type category`, Q, symbol) %>%
 		mutate(`Cell type category` = factor(`Cell type category`, unique(`Cell type category`)))
 
-	y =
-		y_source %>%
-		spread(`Cell type category`, G) %>%
-		arrange(level, Q, S) %>%
-		select(-`symbol`, -level) %>%
-		select(`read count`, S, Q, everything()) %>%
-		replace(is.na(.), 0 %>% as.integer) %>%
-		as_matrix
+	idx_1_source = y_source %>% filter(level == 1) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
+	idx_2_source = y_source %>% filter(level == 2) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
+	idx_1 = idx_1_source %>% pull(G)
+	idx_2 = idx_2_source %>% pull(G)
+	I1 = idx_1 %>% length
+	I2 = idx_2 %>% length
+	I1_dim = c(idx_1_source %>% distinct(symbol) %>% nrow, idx_1_source %>% distinct(`Cell type category`) %>% nrow)
+	I2_dim = c(idx_2_source %>% distinct(symbol) %>% nrow, idx_2_source %>% distinct(`Cell type category`) %>% nrow)
 
-	I = y_source %>% spread(`Cell type category`, G) %>% count(level) %>% pull(n)
+	y = y_source %>% distinct(level, Q, S, symbol, `read count`) %>% arrange(level, Q, symbol) %>% select(`read count`, S) %>% as_matrix
+	I = y %>% nrow
+
 	Q = df %>% filter(`Cell type category` == "query") %>% distinct(Q) %>% nrow
 	idx_ct_root = c(1:4)
 	idx_ct_immune = c(1:3, 5:11)
