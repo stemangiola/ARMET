@@ -1,5 +1,21 @@
 functions{
 
+		vector[] append_vector_array(vector[] v1, vector[] v2){
+			vector[num_elements(v1[1]) + num_elements(v2[1])] v3[num_elements(v1[,1])];
+
+			v3[,1:num_elements(v1[1])] = v1;
+			v3[,num_elements(v1[1])+1:num_elements(v3[1])] = v2;
+
+			return v3;
+		}
+
+		vector[] multiply_by_column(vector[] v, real[] r){
+			vector[num_elements(v[1])] v_mult [num_elements(v[,1])];
+			for(i in 1:num_elements(v[1])) v_mult[,i] = to_array_1d(to_row_vector(v[,i]) .* to_row_vector(r));
+
+			return v_mult;
+		}
+
   	real exp_gamma_meanSd_lpdf(vector x_log, real m_log, real s){
 
       // This function is the  probability of the log gamma function
@@ -111,9 +127,12 @@ data {
   // Deconvolution
   //int<lower=1> C;
   int<lower=0> Q;
-  int<lower=0> I;
-  int<lower=1> ct_in_levels[1];
-  int y[I, 3 + max(ct_in_levels)]; // `read count`  S Q mapping_with_ct
+  int<lower=0> I[2];
+  int<lower=1> ct_in_levels[2];
+  int y[sum(I), 3 + ct_in_levels[1] + ct_in_levels[2]]; // `read count`  S Q mapping_with_ct
+  int y_idx_ct_root[4];
+  int y_idx_ct_immune[sum(ct_in_levels) - 1];
+
 
   // Skip lambda imputaton
  	int<lower=0, upper=1> do_infer;
@@ -122,6 +141,7 @@ data {
 
 }
 transformed data {
+
   vector[0] global_parameters;
   real xr[n_shards, 0];
 
@@ -146,18 +166,24 @@ parameters {
   vector[S] exposure_rate;
 
   // Gene-wise properties of the data
-  vector[G * do_infer] lambda_log;
+  vector[G * do_infer] lambda_log_param;
   vector[G * do_infer] sigma_raw;
 
   // Proportions
-  simplex[ct_in_levels[1]] prop[Q];
+  simplex[ct_in_levels[1]] prop_1[Q]; // Root
+  simplex[ct_in_levels[2]] prop_immune[Q]; // Immune cells
 
 }
 transformed parameters {
   // Sigma
   vector[G] sigma = 1.0 ./ exp(do_infer ? sigma_raw : sigma_raw_data) ;
+	vector[G] lambda_log = do_infer ? lambda_log_param : lambda_log_data;
 
-// Shards - MPI
+	// proportion of the higher level
+	vector[sum(ct_in_levels) - 1] prop_2[Q] =
+		append_vector_array(	prop_1[, 1:3], multiply_by_column(prop_immune, prop_1[, 4]) );
+
+	// Shards - MPI
 	vector[2*M + S] lambda_sigma_exposure_MPI[n_shards];
 	for( i in 1:(n_shards) ) {
 
@@ -167,9 +193,7 @@ transformed parameters {
   		append_row(
   		  append_row(
 	  		    append_row(
-	      		  do_infer ?
-	      		  lambda_log[(G_per_shard_idx[i]+1):(G_per_shard_idx[i+1])] :
-	      		  lambda_log_data[(G_per_shard_idx[i]+1):(G_per_shard_idx[i+1])],
+	  		    	lambda_log[(G_per_shard_idx[i]+1):(G_per_shard_idx[i+1])],
 	      		  sigma[(G_per_shard_idx[i]+1):(G_per_shard_idx[i+1])]
 	      		),
       		buffer
@@ -178,12 +202,11 @@ transformed parameters {
       );
 
 	}
-
-
 }
+
 model {
 
-	vector[2] y_sum[I];
+	vector[2] y_sum[sum(I)];
 
   // Overall properties of the data
   lambda_mu ~ normal(lambda_mu_mu,2);
@@ -194,7 +217,6 @@ model {
   sum(exposure_rate) ~ normal(0, 0.001 * S);
 
   // Gene-wise properties of the data
-  // lambda_log ~ normal_or_gammaLog(lambda_mu, lambda_sigma, is_prior_asymetric);
   if(do_infer) lambda_log ~ exp_gamma_meanSd(lambda_mu,lambda_sigma);
   if(do_infer) sigma_raw ~ normal(sigma_slope * lambda_log + sigma_intercept,sigma_sigma);
 
@@ -202,18 +224,28 @@ model {
 	target += sum( map_rect( lp_reduce , global_parameters , lambda_sigma_exposure_MPI , xr , int_MPI ) );
 
 	// Deconvolution
+	//prop_1 ~ dirichlet(rep_vector(1*ct_in_levels[1], ct_in_levels[1]));
+	//prop_immune ~ dirichlet(rep_vector(1*ct_in_levels[2], ct_in_levels[2]));
 
-	for(i in 1:I) y_sum[i] =
+	// Root
+	for(i in 1:I[1]) y_sum[i] =
 		get_sum_NB(
-			exp(
-				do_infer ?
-				lambda_log[y[i,4 : 3 + ct_in_levels[1]]] :
-				lambda_log_data[y[i,4 : 3 + ct_in_levels[1]]]
-			) .* prop[y[i,3]] ,
-			sigma[y[i,4 : 3 + ct_in_levels[1]]]
+			exp(lambda_log[y[i,y_idx_ct_root]]) .* prop_1[y[i,3]] ,
+			sigma[y[i,y_idx_ct_root]]
 		);
 
+	// Immune
+	for(i in I[1]+1 : sum(I)) y_sum[i] =
+		get_sum_NB(
+			exp(lambda_log[y[i,y_idx_ct_immune]] ) .* prop_2[y[i,3]] ,
+			sigma[y[i,y_idx_ct_immune]]
+		);
+
+
+	// Vecotrised sampling
 	y[,1]  ~ neg_binomial_2_log(to_vector( log( y_sum[,1]) ) + exposure_rate[y[,2]] , y_sum[,2]);
+
+
 
 }
 // generated quantities{
