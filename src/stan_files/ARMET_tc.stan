@@ -51,25 +51,10 @@ functions{
 
 	vector get_sum_NB(vector mu, vector phi){
 
-			// Conversion to gama
-			vector[rows(mu)] shape = (mu .* phi)./(mu+phi);
-			vector[rows(mu)] rate = phi ./ (mu+phi);
-
-			// Calculating gamma
-			real sum_shape_on_rate = sum( shape ./ rate );
-			real shape_sum = sum_shape_on_rate^2/sum(shape ./ (rate .* rate));
-			real rate_sum = 1/(sum_shape_on_rate / shape_sum);
-
-			// Conversion to NB
-
-			// mu_sum
-			real mu_sum = shape_sum / rate_sum; // or sum(mu);
-			// sigma_sum
-			real sigma_sum = mu_sum^2 / ( (shape_sum/rate_sum^2) - mu_sum );
-
 			vector[2] mu_sigma;
-			mu_sigma[1] = mu_sum;
-			mu_sigma[2] = sigma_sum;
+
+			mu_sigma[1] = sum(mu);
+			mu_sigma[2] = square(mu_sigma[1]) / sum(square(mu) ./ phi);
 
 			return mu_sigma;
 		}
