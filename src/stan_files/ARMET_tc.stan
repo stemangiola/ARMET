@@ -209,8 +209,8 @@ model {
 	target += sum( map_rect( lp_reduce , global_parameters , lambda_sigma_exposure_MPI , xr , int_MPI ) );
 
 	// Deconvolution
-	//prop_1 ~ dirichlet(rep_vector(1*ct_in_levels[1], ct_in_levels[1]));
-	//prop_immune ~ dirichlet(rep_vector(1*ct_in_levels[2], ct_in_levels[2]));
+	// for(q in 1:Q) prop_1[q] ~ dirichlet(rep_vector(1*ct_in_levels[1], ct_in_levels[1]));
+	// for(q in 1:Q) prop_immune[q] ~ dirichlet(rep_vector(1*ct_in_levels[2], ct_in_levels[2]));
 
 	// Root
 	for(i in 1:I[1]) y_sum[i] =
