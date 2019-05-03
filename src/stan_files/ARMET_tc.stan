@@ -1,9 +1,9 @@
 functions{
 
-		matrix vector_array_to_matrix(vector[] x) {
-		  matrix[size(x), rows(x[1])] y;
+		matrix vector_array_to_transposed_matrix(vector[] x) {
+		  matrix[rows(x[1]), size(x)] y;
 		  for (m in 1:size(x))
-		    y[m] = x[m]';
+		    y[,m] = x[m];
 		  return y;
 		}
 
@@ -199,21 +199,35 @@ model {
 
 	vector[G] lambda = exp(lambda_log);
 
+
+
 	matrix[I1_dim[1], I1_dim[2]] lambda_mat_1 = to_matrix(lambda[idx_1], I1_dim[1], I1_dim[2]); // Bug prone
-	matrix[Q, ct_in_levels[1]] prop_mat_1 = vector_array_to_matrix(prop_1);
-	matrix[I1_dim[1] , Q] lambda_sum_1 = lambda_mat_1 * prop_mat_1';
-	matrix[I1_dim[1], I1_dim[2]] sigma_mat_1 = to_matrix(sigma[idx_1], I1_dim[1], I1_dim[2]);
-	matrix[I1_dim[1], Q] sigma_sum_1 =  square(lambda_sum_1) ./ (( square(lambda_mat_1) ./ sigma_mat_1 ) * square(prop_mat_1')) ;
+	matrix[rows(prop_1[1]),Q] prop_mat_1 = vector_array_to_transposed_matrix(prop_1);
+	matrix[I1_dim[1] , Q] lambda_sum_1 = lambda_mat_1 * prop_mat_1;
+	//matrix[I1_dim[1], I1_dim[2]] sigma_mat_1 = to_matrix(sigma[idx_1], I1_dim[1], I1_dim[2]);
+	matrix[I1_dim[1], Q] sigma_sum_1 =
+		square(lambda_sum_1) ./
+		((
+			square(lambda_mat_1) ./
+			to_matrix(sigma[idx_1], I1_dim[1], I1_dim[2])
+		) * square(prop_mat_1)) ;
+
 
 	matrix[I2_dim[1], I2_dim[2]] lambda_mat_2 = to_matrix(lambda[idx_2], I2_dim[1], I2_dim[2]); // Bug prone
-	matrix[Q, sum(ct_in_levels[1:2]) -1 ] prop_mat_2 = vector_array_to_matrix(prop_2);
-	matrix[I2_dim[1] , Q] lambda_sum_2 = lambda_mat_2 * prop_mat_2';
-	matrix[I2_dim[1], I2_dim[2]] sigma_mat_2 = to_matrix(sigma[idx_2], I2_dim[1], I2_dim[2]);
-	matrix[I2_dim[1], Q] sigma_sum_2 =  square(lambda_sum_2) ./ (( square(lambda_mat_2) ./ sigma_mat_2 ) * square(prop_mat_2'));
+	matrix[rows(prop_2[1]), Q ] prop_mat_2 = vector_array_to_transposed_matrix(prop_2);
+	matrix[I2_dim[1] , Q] lambda_sum_2 = lambda_mat_2 * prop_mat_2;
+	//matrix[I2_dim[1], I2_dim[2]] sigma_mat_2 = to_matrix(sigma[idx_2], I2_dim[1], I2_dim[2]);
+	matrix[I2_dim[1], Q] sigma_sum_2 =
+		square(lambda_sum_2) ./
+		((
+			square(lambda_mat_2) ./
+			to_matrix(sigma[idx_2], I2_dim[1], I2_dim[2])
+		) * square(prop_mat_2));
+
 
 	// Vecotrised sampling
-	y[,1]  ~ neg_binomial_2_log(
-		log(append_row( to_vector(lambda_sum_1), to_vector(lambda_sum_2))) + exposure_rate[y[,2]] ,
+	y[,1]  ~ neg_binomial_2(
+		append_row( to_vector(lambda_sum_1), to_vector(lambda_sum_2)) .* exp(exposure_rate)[y[,2]] ,
 		append_row( to_vector(sigma_sum_1), to_vector(sigma_sum_2))
 	);
 
