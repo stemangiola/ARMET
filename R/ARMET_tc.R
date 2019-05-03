@@ -232,6 +232,7 @@ ARMET_tc = function(
 
 	y =
 		y_source %>%
+		select(S, Q, symbol, G, `Cell type category`, level, `read count`) %>%
 		spread(`Cell type category`, G) %>%
 		arrange(level, Q, S) %>%
 		select(-`symbol`, -level) %>%
@@ -239,7 +240,7 @@ ARMET_tc = function(
 		replace(is.na(.), 0 %>% as.integer) %>%
 		as_matrix
 
-	I = y_source %>% spread(`Cell type category`, G) %>% count(level) %>% pull(n)
+	I = y_source %>% select(S, Q, symbol, G, `Cell type category`, level, `read count`) %>%	spread(`Cell type category`, G) %>% count(level) %>% pull(n)
 	Q = df %>% filter(`Cell type category` == "query") %>% distinct(Q) %>% nrow
 	idx_ct_root = c(1:4)
 	idx_ct_immune = c(1:3, 5:11)
