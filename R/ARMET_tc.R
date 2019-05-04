@@ -230,6 +230,22 @@ ARMET_tc = function(
 		arrange(level, `Cell type category`, Q, symbol) %>%
 		mutate(`Cell type category` = factor(`Cell type category`, unique(`Cell type category`)))
 
+	# For NON full bayesian I use a faster methd to normalise data
+	y_normalise_data_source =
+		y_source %>%
+		distinct(S) %>%
+		left_join(
+			counts_baseline %>% distinct(S, symbol, `read count`)
+		) %>%
+		arrange(symbol) %>%
+		left_join(
+			counts_baseline %>% mutate(sigma = 1/exp(sigma_raw)) %>% distinct(symbol, lambda, sigma) %>%  drop_na
+		) %>%
+		select(-symbol)
+	y_normalise_data_reals = y_normalise_data_source %>% select(lambda, sigma) %>% as_matrix %>% t
+	y_normalise_data_ints = y_normalise_data_source %>% select(`read count`, S ) %>% as_matrix %>% t
+	ND = y_normalise_data_source %>% nrow
+
 	idx_1_source = y_source %>% filter(level == 1) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
 	idx_2_source = y_source %>% filter(level == 2) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
 	idx_1 = idx_1_source %>% pull(G)

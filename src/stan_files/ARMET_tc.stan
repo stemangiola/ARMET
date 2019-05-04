@@ -198,7 +198,7 @@ transformed parameters {
 
 	// Shards - MPI
 	vector[2*M + S] lambda_sigma_exposure_MPI[n_shards];
-	for( i in 1:(n_shards) ) {
+	if(1) for( i in 1:(n_shards) ) {
 
 	  vector[ (M*2) - (G_per_shard[i]*2) ] buffer = rep_vector(0.0,(M*2) - (G_per_shard[i]*2));
 
@@ -241,7 +241,8 @@ model {
   if(do_infer) sigma_raw_param ~ normal(sigma_slope * lambda_log_param + sigma_intercept,sigma_sigma);
 
 	// Gene-wise properties of the data
-	target += sum( map_rect( lp_reduce , global_parameters , lambda_sigma_exposure_MPI , xr , int_MPI ) );
+	if(1) target += sum( map_rect( lp_reduce , global_parameters , lambda_sigma_exposure_MPI , xr , int_MPI ) );
+	else y_normalise_data_ints[1] ~ neg_binomial_2_log(y_normalise_data_reals[1] + exposure_rate[y_normalise_data_ints[2]], y_normalise_data_reals[2]);
 
 }
 // generated quantities{
