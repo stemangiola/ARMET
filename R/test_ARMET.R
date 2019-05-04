@@ -154,6 +154,12 @@ reference =
 			(.) %>% filter(`house keeping`)
 		)
 	} %>%
+
+	# decrease number of house keeping
+	anti_join(
+		(.) %>% filter(`house keeping`) %>% distinct(symbol) %>% sample_frac(0.7)
+	) %>%
+
 	select(  -contains("idx")) %>%
 	mutate(`read count` = `read count` %>% as.integer)
 
