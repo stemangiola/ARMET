@@ -26,6 +26,23 @@ functions{
 			return v_mult;
 		}
 
+
+		vector sum_NB(vector lambda, vector sigma, int[] matrix_dim, vector[] prop){
+
+			int Q = size(prop);
+			matrix[matrix_dim[1], matrix_dim[2]] lambda_mat = to_matrix(lambda, matrix_dim[1], matrix_dim[2]); // Bug prone
+			matrix[rows(prop[1]),Q] prop_mat = vector_array_to_transposed_matrix(prop);
+			matrix[matrix_dim[1] , Q] lambda_sum = lambda_mat * prop_mat;
+			matrix[matrix_dim[1], Q] sigma_sum =
+				square(lambda_sum) ./
+				((
+					square(lambda_mat) ./
+					to_matrix(sigma, matrix_dim[1], matrix_dim[2]) //sigma_mat
+				) * square(prop_mat)) ;
+
+				return(append_row( to_vector(lambda_sum), to_vector(sigma_sum)));
+		}
+
   	real exp_gamma_meanSd_lpdf(vector x_log, real m_log, real s){
 
       // This function is the  probability of the log gamma function
@@ -127,8 +144,16 @@ data {
 	int idx_1[I1];
 	int idx_2[I2];
 
+	// Normalisation if not full bayes
+	int ND;
+	vector[ND] y_normalise_data_reals[2];
+	int y_normalise_data_ints[2, ND];
+
 }
 transformed data {
+
+	int y_1_rows = I1_dim[1] * Q;
+	int y_2_rows = I2_dim[1] * Q;
 
   vector[0] global_parameters;
   real xr[n_shards, 0];
@@ -194,41 +219,14 @@ transformed parameters {
 model {
 
 	// Deconvolution
-	// prop_1 ~ dirichlet(rep_vector(1*ct_in_levels[1], ct_in_levels[1]));
-	// prop_immune ~ dirichlet(rep_vector(1*ct_in_levels[2], ct_in_levels[2]));
-
 	vector[G] lambda = exp(lambda_log);
-
-
-
-	matrix[I1_dim[1], I1_dim[2]] lambda_mat_1 = to_matrix(lambda[idx_1], I1_dim[1], I1_dim[2]); // Bug prone
-	matrix[rows(prop_1[1]),Q] prop_mat_1 = vector_array_to_transposed_matrix(prop_1);
-	matrix[I1_dim[1] , Q] lambda_sum_1 = lambda_mat_1 * prop_mat_1;
-	//matrix[I1_dim[1], I1_dim[2]] sigma_mat_1 = to_matrix(sigma[idx_1], I1_dim[1], I1_dim[2]);
-	matrix[I1_dim[1], Q] sigma_sum_1 =
-		square(lambda_sum_1) ./
-		((
-			square(lambda_mat_1) ./
-			to_matrix(sigma[idx_1], I1_dim[1], I1_dim[2])
-		) * square(prop_mat_1)) ;
-
-
-	matrix[I2_dim[1], I2_dim[2]] lambda_mat_2 = to_matrix(lambda[idx_2], I2_dim[1], I2_dim[2]); // Bug prone
-	matrix[rows(prop_2[1]), Q ] prop_mat_2 = vector_array_to_transposed_matrix(prop_2);
-	matrix[I2_dim[1] , Q] lambda_sum_2 = lambda_mat_2 * prop_mat_2;
-	//matrix[I2_dim[1], I2_dim[2]] sigma_mat_2 = to_matrix(sigma[idx_2], I2_dim[1], I2_dim[2]);
-	matrix[I2_dim[1], Q] sigma_sum_2 =
-		square(lambda_sum_2) ./
-		((
-			square(lambda_mat_2) ./
-			to_matrix(sigma[idx_2], I2_dim[1], I2_dim[2])
-		) * square(prop_mat_2));
-
+	vector[y_1_rows * 2] sum1 = sum_NB( lambda[idx_1], sigma[idx_1], I1_dim, prop_1);
+	vector[y_2_rows * 2] sum2 = sum_NB( lambda[idx_2], sigma[idx_2], I2_dim, prop_2);
 
 	// Vecotrised sampling
 	y[,1]  ~ neg_binomial_2(
-		append_row( to_vector(lambda_sum_1), to_vector(lambda_sum_2)) .* exp(exposure_rate)[y[,2]] ,
-		append_row( to_vector(sigma_sum_1), to_vector(sigma_sum_2))
+		append_row( sum1[1:y_1_rows], sum2[1:y_2_rows]) .* exp(exposure_rate)[y[,2]] ,
+		append_row( sum1[(y_1_rows+1):(y_1_rows*2)], sum2[(y_2_rows+1):(y_2_rows*2)])
 	);
 
   // Overall properties of the data
