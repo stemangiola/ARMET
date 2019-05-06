@@ -38,6 +38,14 @@ format_for_MPI = function(df){
 				distinct(ct_symbol) %>%
 				mutate(`symbol MPI row` = 1:n()) %>%
 				ungroup
+		) %>%
+
+		# Add gene idx
+		left_join(
+			(.) %>%
+				distinct(ct_symbol, idx_MPI, `symbol MPI row`) %>%
+				arrange(idx_MPI, `symbol MPI row`) %>%
+				mutate(G = 1:n())
 		)
 
 }
@@ -183,53 +191,18 @@ ARMET_tc = function(
 		# Create unique symbol ID
 		unite(ct_symbol, c("Cell type category", "symbol"), remove = F) %>%
 
-		# Add gene idx
-		left_join( (.) %>%	distinct(ct_symbol) %>%	mutate(G = 1:n()) )
-
-	S = counts_baseline %>% distinct(sample) %>% nrow()
-	G = counts_baseline %>% distinct(ct_symbol) %>% nrow()
-
-	# Pass previously infered parameters
-	do_infer = full_bayesian
-	lambda_log_data =
-		counts_baseline %>%
-		# Ths is bcause mix lacks lambda info and produces NA in the df
-		filter(!(`Cell type category` == "house_keeping" & lambda %>% is.na)) %>%
-		distinct(G, lambda) %>% pull(lambda)
-
-	sigma_raw_data =
-		counts_baseline %>%
-		# Ths is bcause mix lacks lambda info and produces NA in the df
-		filter(!(`Cell type category` == "house_keeping" & sigma_raw %>% is.na)) %>%
-		distinct(G, sigma_raw) %>% pull(sigma_raw)
-
-
-	################################################
-	## MPI - reference
-	################################################
-
-	counts_baseline_MPI =
-		counts_baseline %>%
-
-		# If not full bayesian just keep housekeeping to infer exposure
-		{ if(!do_infer)
-				(.) %>%
-				filter(`Cell type category` == "house_keeping") %>%
-				inner_join( df %>% filter(`Cell type category` == "query") %>% distinct(sample) )
-			else
-				(.)
-		} %>%
-
 		format_for_MPI
 
-	N = counts_baseline_MPI %>% distinct(idx_MPI, `read count`, `read count MPI row`) %>%  count(idx_MPI) %>% summarise(max(n)) %>% pull(1)
-	M = counts_baseline_MPI %>% distinct(start, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
-	G_per_shard = counts_baseline_MPI %>% distinct(ct_symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% as.array
-	n_shards = min(shards, counts_baseline_MPI %>% distinct(idx_MPI) %>% nrow)
-	G_per_shard_idx = c(0, counts_baseline_MPI %>% distinct(ct_symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% cumsum)
+	S = df %>% distinct(sample) %>% nrow()
+	N = counts_baseline %>% distinct(idx_MPI, `read count`, `read count MPI row`) %>%  count(idx_MPI) %>% summarise(max(n)) %>% pull(1)
+	M = counts_baseline %>% distinct(start, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
+	G = counts_baseline %>% distinct(ct_symbol) %>% nrow()
+	G_per_shard = counts_baseline %>% distinct(ct_symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% as.array
+	n_shards = min(shards, counts_baseline %>% distinct(idx_MPI) %>% nrow)
+	G_per_shard_idx = c(0, counts_baseline %>% distinct(ct_symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% cumsum)
 
 	counts =
-		counts_baseline_MPI %>%
+		counts_baseline %>%
 		distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
 		spread(idx_MPI,  `read count`) %>%
 		select(-`read count MPI row`) %>%
@@ -237,7 +210,7 @@ ARMET_tc = function(
 		as_matrix() %>% t
 
 	sample_idx =
-		counts_baseline_MPI %>%
+		counts_baseline %>%
 		distinct(idx_MPI, S, `read count MPI row`)  %>%
 		spread(idx_MPI, S) %>%
 		select(-`read count MPI row`) %>%
@@ -245,7 +218,7 @@ ARMET_tc = function(
 		as_matrix() %>% t
 
 	symbol_end =
-		counts_baseline_MPI %>%
+		counts_baseline %>%
 		distinct(idx_MPI, end, `symbol MPI row`)  %>%
 		spread(idx_MPI, end) %>%
 		bind_rows( (.) %>% head(n=1) %>%  mutate_all(function(x) {0}) ) %>%
@@ -253,9 +226,6 @@ ARMET_tc = function(
 		select(-`symbol MPI row`) %>%
 		replace(is.na(.), 0 %>% as.integer) %>%
 		as_matrix() %>% t
-
-	################################################
-	################################################
 
 	# For deconvolution
 	ct_in_levels = c(4,7)
@@ -285,6 +255,21 @@ ARMET_tc = function(
 	idx_ct_immune = c(1:3, 5:11)
 	y_idx_ct_root = idx_ct_root + 3
 	y_idx_ct_immune = idx_ct_immune + 3
+
+	# Pass previously infered parameters
+	do_infer = full_bayesian
+	lambda_log_data =
+		counts_baseline %>%
+		# Ths is bcause mix lacks lambda info and produces NA in the df
+		filter(!(`Cell type category` == "house_keeping" & lambda %>% is.na)) %>%
+		distinct(G, lambda) %>% pull(lambda)
+
+	sigma_raw_data =
+		counts_baseline %>%
+		# Ths is bcause mix lacks lambda info and produces NA in the df
+		filter(!(`Cell type category` == "house_keeping" & sigma_raw %>% is.na)) %>%
+		distinct(G, sigma_raw) %>% pull(sigma_raw)
+
 
 	fileConn<-file("~/.R/Makevars")
 	writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
@@ -320,19 +305,19 @@ ARMET_tc = function(
 				{
 					ys = (.)
 					ys %>%
-						slice(!!idx_ct_root) %>%
-						mutate(C = 1:n(), level=1) %>%
-						bind_rows(
-							ys %>%
-								slice(!!idx_ct_immune) %>%
-								mutate(C = 1:n(), level=2)
-						)
+					slice(!!idx_ct_root) %>%
+					mutate(C = 1:n(), level=1) %>%
+					bind_rows(
+						ys %>%
+						slice(!!idx_ct_immune) %>%
+						mutate(C = 1:n(), level=2)
+					)
 				}
 		) %>%
 		left_join(
 			df %>%
-				filter(`Cell type category` == "query") %>%
-				distinct(Q, sample)
+		 	filter(`Cell type category` == "query") %>%
+		 	distinct(Q, sample)
 		)
 
 if(0){
