@@ -2,7 +2,7 @@
 library(tidyverse)
 library(foreach)
 library(magrittr)
-source("R/ARMET_tc.R")
+
 
 my_theme =
 	theme_bw() +
@@ -80,7 +80,7 @@ decrease_replicates = function(my_df, n_pass=1){
 
 
 
-markers =	read_csv("docs/markers.csv")
+markers =	read_csv("docs/markers_pass2.csv")
 
 ## Trouble shoot
 # plot_df =
@@ -177,7 +177,7 @@ reference =
 
 # Create mix
 set.seed(123)
-reps = 1
+reps = 10
 
 sample_blacklist = c("666CRI", "972UYG", "344KCP", "555QVG", "370KKZ", "511TST", "13816.11933", "13819.11936", "13817.11934", "13818.11935", "096DQV", "711SNV")
 
@@ -274,15 +274,17 @@ mix =
 	rename(sample = sample_mix)
 
 # Run ARMET
+source("R/ARMET_tc.R")
 res = ARMET_tc(mix)
-save(list = c("res", "mix_source", "mix"), file="temp_res.RData")
+save(list = c("res", "mix_source", "mix"), file="temp_res_pass2.RData")
 
 res %$%
 	proportions %>%
 	ungroup() %>%
 
 	# Filter only relevant
-	inner_join(	mix_source %>% distinct(level, `Cell type category`, sample_mix, combination) %>% rename(sample = sample_mix) ) %>%
+	#inner_join(	mix_source %>% distinct(level, `Cell type category`, sample_mix, combination) %>% rename(sample = sample_mix) ) %>%
+	inner_join(	mix_source %>% distinct(level, sample_mix, combination) %>% rename(sample = sample_mix) ) %>%
 
 	# Add real prop
 	separate(combination, c("cta","ctb"), sep=" ") %>%
@@ -295,7 +297,8 @@ res %$%
 	{
 		{ (.) %>%
 			ggplot(aes(y=`.value`, x=sample, color=`Cell type category`)) +
-			geom_errorbar(aes(ymin = `.lower`, ymax=`.upper`), width=0) + facet_wrap(~level + combination + real) } %>%
+			geom_errorbar(aes(ymin = `.lower`, ymax=`.upper`), width=0) + facet_wrap(~level + combination + real) +
+				theme(strip.text.x = element_text(size = 5)) } %>%
 			ggsave(.,filename =  "level_1_test_CI.png", device = "png")
 		(.)
 	} %>%
@@ -303,25 +306,48 @@ res %$%
 	rowwise %>%
 	mutate(is_outside = ifelse(real %>% between( .lower ,  .upper), 0, 1)) %>%
 	mutate(error = min(abs(.lower - real), abs(.upper - real)) * is_outside) %>%
-	mutate(error = ifelse(error < 1e-4, 0, error)) %>%
+
+	# Analysis error on worst pairs
+
+	group_by(sample, real) %>%
+	arrange(error %>% desc) %>%
+	slice(1) %>%
+	ungroup %>%
+	select(sample, `Cell type category`, real, error) %>%
+	group_by(sample) %>%
+	mutate(`error mean` = error %>% mean) %>%
+	select(-error) %>%
+	spread(real, `Cell type category`) %>%
+	arrange(`error mean` %>% desc) %>%
+	unite(pair, c("0", "0.5"), sep=" ") %>%
+	ungroup %>%
 	{
-		{(.) %>% ggplot(aes(y=error, x=combination, label=sample)) + geom_boxplot(outlier.shape = NA) + geom_jitter(size=0.2) + facet_wrap(~ level, scales = "free_x") + my_theme} %>%
-			ggsave(filename = "level_1_test_error.png", device = "png", width = 8)
+			((.) %>% ggplot(aes(x=pair, y=`error mean`)) + geom_boxplot() + geom_jitter() + my_theme) %>%
+				ggsave(filename = "level_1_test_error.png", device = "png", width = 8)
 		(.)
 	} %>%
-	group_by(combination,level) %>%
-	summarise(`error mean` = error %>% mean) %>%
-	separate(combination, c("ct1", "ct2"), sep=" ") %>%
+
+	# mutate(error = ifelse(error < 1e-4, 0, error)) %>%
+	# {
+	# 	{(.) %>% ggplot(aes(y=error, x=combination, label=sample)) + geom_boxplot(outlier.shape = NA) + geom_jitter(size=0.2) + facet_wrap(~ level + real, scales = "free_x") + my_theme} %>%
+	# 		ggsave(filename = "level_1_test_error.png", device = "png", width = 8)
+	# 	(.)
+	# } %>%
+
 
 	# Correct temporary mistake
-	anti_join(ref %>% filter(level <2) %>% distinct(`Cell type category`) %>% setNames("ct1") %>% mutate(level=2)) %>%
-	anti_join(ref %>% filter(level <2) %>% distinct(`Cell type category`) %>% setNames("ct2") %>% mutate(level=2)) %>%
-
-	arrange(`error mean` %>% desc) %>%
-	mutate(`error min` = `error mean` %>% min) %>%
-	mutate(`error mean relative` = (`error mean` / `error min`) %>% log) %>%
-	mutate(`n markers` = (`error mean relative` * 20) %>% ceiling) %>%
-	write_csv("docs/num_markers_based_on_error_levels_1_2_first_run.csv")
+	# anti_join(ref %>% filter(level <2) %>% distinct(`Cell type category`) %>% setNames("ct1") %>% mutate(level=2)) %>%
+	# anti_join(ref %>% filter(level <2) %>% distinct(`Cell type category`) %>% setNames("ct2") %>% mutate(level=2)) %>%
+	separate(pair, c("ct1", "ct2"), remove = F, sep=" ") %>%
+	mutate(`error min` = 0.05) %>% # `error mean` %>% min) %>%
+	mutate(`error mean relative` = (`error mean` / `error min`) %>% sqrt) %>%
+	left_join(
+		read_csv("docs/num_markers_based_on_error_levels_1_2_first_run.csv") %>%
+			distinct(ct1, ct2, `n markers`) %>% rename(`n markers pass 1` = `n markers`)
+	) %>%
+	mutate(`n markers` = (`error mean relative` * `n markers pass 1` ) %>% ceiling) %>%
+	mutate(`n markers` = max(20, `n markers`)) %>%
+	write_csv("docs/num_markers_based_on_error_levels_1_2_second_run.csv")
 
 
 

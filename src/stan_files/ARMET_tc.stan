@@ -144,11 +144,6 @@ data {
 	int idx_1[I1];
 	int idx_2[I2];
 
-	// Normalisation if not full bayes
-	int ND;
-	vector[ND] y_normalise_data_reals[2];
-	int y_normalise_data_ints[2, ND];
-
 }
 transformed data {
 
