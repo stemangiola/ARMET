@@ -1,7 +1,7 @@
-#' ARMET-tc main
+#' format_for_MPI
 #'
-#' @description Formated data frame to be readable by MPI map_rect of Stan
-format_for_MPI = function(df){
+#' @description Format reference data frame for MPI
+format_for_MPI = function(df, shards){
 	df %>%
 
 		left_join(
@@ -48,6 +48,24 @@ format_for_MPI = function(df){
 				mutate(G = 1:n())
 		)
 
+}
+
+#' add_partition
+#'
+#' @description Add partition column dto data frame
+add_partition = function(df.input, partition_by, n_partitions){
+	df.input %>%
+		left_join(
+			(.) %>%
+				select(!!partition_by) %>%
+				distinct %>%
+				mutate(
+					partition = 1:n() %>%
+						divide_by(length((.))) %>%
+						multiply_by(n_partitions) %>%
+						ceiling
+				)
+		)
 }
 
 #' ARMET-tc main
@@ -165,6 +183,7 @@ ARMET_tc = function(
 		) %>%
 
 		# Add sample indeces
+		arrange((`Cell type category` == "query") %>% desc) %>%
 		mutate(S = sample %>% as.factor %>% as.integer) %>%
 
 		# Add query samples indeces
@@ -191,7 +210,7 @@ ARMET_tc = function(
 		# Create unique symbol ID
 		unite(ct_symbol, c("Cell type category", "symbol"), remove = F) %>%
 
-		format_for_MPI
+		format_for_MPI(shards)
 
 	S = df %>% distinct(sample) %>% nrow()
 	N = counts_baseline %>% distinct(idx_MPI, `read count`, `read count MPI row`) %>%  count(idx_MPI) %>% summarise(max(n)) %>% pull(1)
@@ -234,7 +253,7 @@ ARMET_tc = function(
 		df %>%
 		filter(`Cell type category` == "query") %>%
 		select(S, Q, `symbol`, `read count`) %>%
-		left_join(	counts_baseline %>% distinct(`symbol`, G, `Cell type category`, level, lambda) ) %>%
+		left_join(	counts_baseline %>% distinct(`symbol`, G, `Cell type category`, level, lambda, sigma_raw) ) %>%
 		arrange(level, `Cell type category`, Q, symbol) %>%
 		mutate(`Cell type category` = factor(`Cell type category`, unique(`Cell type category`)))
 
@@ -246,6 +265,59 @@ ARMET_tc = function(
 	I2 = idx_2 %>% length
 	I1_dim = c(idx_1_source %>% distinct(symbol) %>% nrow, idx_1_source %>% distinct(`Cell type category`) %>% nrow)
 	I2_dim = c(idx_2_source %>% distinct(symbol) %>% nrow, idx_2_source %>% distinct(`Cell type category`) %>% nrow)
+
+
+	y_MPI_source =
+		y_source %>%
+		distinct(level, Q, S, symbol, G, `Cell type category`, `read count`) %>%
+		filter(level==1)  %>%
+		arrange(Q, symbol) %>%
+		add_partition("symbol", shards) %>%
+		group_by(partition) %>%
+		left_join( (.) %>% distinct(symbol) %>% mutate(MPI_row = 1:n())) %>%
+		ungroup()
+
+	y_MPI_symbol_per_shard =
+		y_MPI_source %>%
+		distinct(symbol, partition) %>%
+		count(partition) %>%
+		spread(partition, n) %>%
+		as_vector
+
+	y_MPI_G_per_shard =
+		y_MPI_source %>%
+		distinct(symbol, `Cell type category`, partition) %>%
+		count(partition) %>%
+		spread(partition, n) %>%
+		as_vector
+
+	y_MPI_idx =
+		y_MPI_source %>%
+		distinct(partition, symbol, G, `Cell type category`, MPI_row) %>%
+		select(-symbol) %>%
+		spread(partition, G) %>%
+		arrange(MPI_row, `Cell type category`) %>%
+		select(-MPI_row,-`Cell type category`) %>%
+		replace(is.na(.), 0 %>% as.integer) %>%
+		as_matrix %>%
+		t
+
+	y_MPI_N_per_shard =
+		y_MPI_source %>%
+		distinct(MPI_row, `read count`, partition, Q) %>%
+		count(partition) %>%
+		spread(partition, n) %>%
+		as_vector
+
+	y_MPI_count =
+		y_MPI_source %>%
+		distinct(MPI_row, `read count`, partition, Q) %>%
+		spread(partition, `read count`) %>%
+		arrange(Q, MPI_row) %>%
+		select(-MPI_row,-Q) %>%
+		replace(is.na(.), 0 %>% as.integer) %>%
+		as_matrix %>%
+		t
 
 	y = y_source %>% distinct(level, Q, S, symbol, `read count`) %>% arrange(level, Q, symbol) %>% select(`read count`, S) %>% as_matrix
 	I = y %>% nrow
