@@ -1,7 +1,7 @@
 #' ARMET-tc main
 #'
 #' @description Formated data frame to be readable by MPI map_rect of Stan
-format_for_MPI = function(df){
+format_for_MPI = function(df,shards){
 	df %>%
 
 		left_join(
@@ -191,7 +191,7 @@ ARMET_tc = function(
 		# Create unique symbol ID
 		unite(ct_symbol, c("Cell type category", "symbol"), remove = F) %>%
 
-		format_for_MPI
+		format_for_MPI(shards)
 
 	S = df %>% distinct(sample) %>% nrow()
 	N = counts_baseline %>% distinct(idx_MPI, `read count`, `read count MPI row`) %>%  count(idx_MPI) %>% summarise(max(n)) %>% pull(1)
