@@ -282,14 +282,14 @@ ARMET_tc = function(
 		distinct(symbol, partition) %>%
 		count(partition) %>%
 		spread(partition, n) %>%
-		as_vector
+		as_vector %>% array
 
 	y_MPI_G_per_shard =
 		y_MPI_source %>%
 		distinct(symbol, `Cell type category`, partition) %>%
 		count(partition) %>%
 		spread(partition, n) %>%
-		as_vector
+		as_vector %>% array
 
 	y_MPI_idx =
 		y_MPI_source %>%
@@ -307,7 +307,7 @@ ARMET_tc = function(
 		distinct(MPI_row, `read count`, partition, Q) %>%
 		count(partition) %>%
 		spread(partition, n) %>%
-		as_vector
+		as_vector %>% array
 
 	y_MPI_count =
 		y_MPI_source %>%
