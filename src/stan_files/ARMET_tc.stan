@@ -326,8 +326,8 @@ transformed parameters {
 					    	lambda[y_MPI_idx[i, 1:y_MPI_G_per_shard[i]]],
 			    		  sigma[y_MPI_idx[i, 1:y_MPI_G_per_shard[i]]]
 			    		),
-			  	exposure_rate[1:Q]
-				  ),
+			  		exposure_rate[1:Q]
+				  	),
 				  vector_array_to_vector(prop_1)
 				  ),
 				buffer
@@ -340,8 +340,8 @@ model {
 	//	vector[y_1_rows * 2] sum1 = sum_NB( lambda[idx_1], sigma[idx_1], I1_dim, prop_1);
 	vector[y_2_rows * 2] sum2 = sum_NB( lambda[idx_2], sigma[idx_2], I2_dim, prop_2);
 
-	//target += sum( map_rect( sum_reduce , global_parameters , lambda_sigma_exposure_prop_MPI_lv1 , xr , int_MPI_lv1 ) );
-	target +=  sum_reduce (global_parameters , lambda_sigma_exposure_prop_MPI_lv1[1] , xr[1] , int_MPI_lv1[1] ) ;
+	target += sum( map_rect( sum_reduce , global_parameters , lambda_sigma_exposure_prop_MPI_lv1 , xr , int_MPI_lv1 ) );
+	//target +=  sum_reduce (global_parameters , lambda_sigma_exposure_prop_MPI_lv1[1] , xr[1] , int_MPI_lv1[1] ) ;
 
 	// Vecotrised sampling
 	y[y_1_rows+1:size(y),1]  ~ neg_binomial_2(
