@@ -146,13 +146,13 @@ functions{
 		);
 
 
-// print( to_matrix( lambda_MPI, y_MPI_symbol_per_shard, ct_in_levels, 0));
-// print(to_matrix( sigma_MPI,  y_MPI_symbol_per_shard, ct_in_levels, 0));
-// print(to_matrix( prop, Q, ct_in_levels)');
-//
-// print(my_sum[1:y_MPI_N_per_shard]);
-// print(my_sum[(y_MPI_N_per_shard+1):(y_MPI_N_per_shard*2)]);
-// print(to_vector(rep_matrix(to_row_vector(exp(exposure_rate)), y_MPI_symbol_per_shard)));
+print( to_matrix( lambda_MPI, y_MPI_symbol_per_shard, ct_in_levels, 0));
+print(to_matrix( sigma_MPI,  y_MPI_symbol_per_shard, ct_in_levels, 0));
+print(to_matrix( prop, Q, ct_in_levels)');
+
+print(my_sum[1:y_MPI_N_per_shard]);
+print(my_sum[(y_MPI_N_per_shard+1):(y_MPI_N_per_shard*2)]);
+print(to_vector(rep_matrix(to_row_vector(exp(exposure_rate)), y_MPI_symbol_per_shard)));
 
 		// Vecotrised sampling
 		return [
@@ -210,6 +210,9 @@ data {
 	int y_MPI_N_per_shard[n_shards];
 	int y_MPI_count[n_shards, max(y_MPI_N_per_shard)];
 
+	vector[S] exposure_rate;
+	simplex[ct_in_levels[1]] prop_1[Q]; // Root
+
 }
 transformed data {
 
@@ -261,14 +264,14 @@ parameters {
   // Overall properties of the data
   real<lower=0> lambda_mu; // So is compatible with logGamma prior
   //real<lower=0> lambda_sigma;
-  vector[S] exposure_rate;
+  //vector[S] exposure_rate;
 
   // Gene-wise properties of the data
   vector[G * do_infer] lambda_log_param;
   vector[G * do_infer] sigma_raw_param;
 
   // Proportions
-  simplex[ct_in_levels[1]] prop_1[Q]; // Root
+  //simplex[ct_in_levels[1]] prop_1[Q]; // Root
   simplex[ct_in_levels[2]] prop_immune[Q]; // Immune cells
 
 }

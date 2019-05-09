@@ -344,9 +344,9 @@ ARMET_tc = function(
 		distinct(G, sigma_raw) %>% pull(sigma_raw)
 
   # Testing
-	# exposure_rate = df %>% distinct(S) %>% nrow %>% seq(-1, 1, length.out = .);
-	# set.seed(143)
-	# prop_1 = gtools::rdirichlet(Q, c(1,1,1,1))
+	exposure_rate = df %>% distinct(S) %>% nrow %>% seq(-1, 1, length.out = .);
+	set.seed(143)
+	prop_1 = gtools::rdirichlet(Q, c(1,1,1,1))
 
 
 	fileConn<-file("~/.R/Makevars")
@@ -359,13 +359,8 @@ ARMET_tc = function(
 	fit =
 		sampling(
 			ARMET_tc, #stanmodels$ARMET_tc,
-			chains=3, cores=3,
-			iter=300, warmup=200,
-			#,
-			#init=foreach(chain = 1:3) %do% {(function() list( lambda_log = lambda_log_data, sigma_raw = sigma_raw_data	))()}
-			# ,
-			save_warmup = FALSE,
-			pars = c(		"prop_1", "prop_2"	)
+			chains=1,
+			iter=1
 		)
 	Sys.time()
 
