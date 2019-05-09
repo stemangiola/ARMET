@@ -282,16 +282,16 @@ ARMET_tc = function(
 	Sys.setenv("STAN_NUM_THREADS" = cores)
 	ARMET_tc = stan_model("src/stan_files/ARMET_tc.stan")
 
-	Sys.time()
+	Sys.time() %>% print
 	fit =
 		sampling(
 			ARMET_tc, #stanmodels$ARMET_tc,
-			chains=1,
-			iter=1
+			chains=3, cores=3,
+			iter=300, warmup=200
 		)
-	Sys.time()
+	Sys.time() %>% print
 
-	stop()
+#	stop()
 
 	# Produce results
 	prop = fit %>%
