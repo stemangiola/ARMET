@@ -270,6 +270,11 @@ ARMET_tc = function(
 		filter(!(`Cell type category` == "house_keeping" & sigma_raw %>% is.na)) %>%
 		distinct(G, sigma_raw) %>% pull(sigma_raw)
 
+	# Testing
+	exposure_rate = df %>% distinct(S) %>% nrow %>% seq(-1, 1, length.out = .);
+	set.seed(143)
+	prop_1 = gtools::rdirichlet(Q, c(1,1,1,1))
+
 
 	fileConn<-file("~/.R/Makevars")
 	writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)

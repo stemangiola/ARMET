@@ -144,6 +144,8 @@ data {
 	int idx_1[I1];
 	int idx_2[I2];
 
+	simplex[ct_in_levels[1]] prop_1[Q]; // Root
+	vector[S] exposure_rate;
 }
 transformed data {
 
@@ -171,14 +173,14 @@ parameters {
   // Overall properties of the data
   real<lower=0> lambda_mu; // So is compatible with logGamma prior
   //real<lower=0> lambda_sigma;
-  vector[S] exposure_rate;
+  //vector[S] exposure_rate;
 
   // Gene-wise properties of the data
   vector[G * do_infer] lambda_log_param;
   vector[G * do_infer] sigma_raw_param;
 
   // Proportions
-  simplex[ct_in_levels[1]] prop_1[Q]; // Root
+  //simplex[ct_in_levels[1]] prop_1[Q]; // Root
   simplex[ct_in_levels[2]] prop_immune[Q]; // Immune cells
 
 }
@@ -217,6 +219,13 @@ model {
 	vector[G] lambda = exp(lambda_log);
 	vector[y_1_rows * 2] sum1 = sum_NB( lambda[idx_1], sigma[idx_1], I1_dim, prop_1);
 	vector[y_2_rows * 2] sum2 = sum_NB( lambda[idx_2], sigma[idx_2], I2_dim, prop_2);
+
+print( lambda[idx_1]);
+print(sigma[idx_1]);
+print(prop_1);
+print(sum1[1:y_1_rows]);
+print( sum1[(y_1_rows+1):(y_1_rows*2)]);
+print( exp(exposure_rate)[y[,2]]);
 
 	// Vecotrised sampling
 	y[,1]  ~ neg_binomial_2(
