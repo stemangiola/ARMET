@@ -275,7 +275,7 @@ mix =
 
 # Run ARMET
 source("R/ARMET_tc.R")
-res = ARMET_tc(mix)
+res = ARMET_tc(mix, cores = 1)
 save(list = c("res", "mix_source", "mix"), file="temp_res_pass2.RData")
 
 res %$%
