@@ -40,6 +40,10 @@ functions{
 					to_matrix(sigma, matrix_dim[1], matrix_dim[2]) //sigma_mat
 				) * square(prop_mat)) ;
 
+print(lambda_mat);
+print(	to_matrix(sigma, matrix_dim[1], matrix_dim[2]) );
+print(prop_mat);
+
 				return(append_row( to_vector(lambda_sum), to_vector(sigma_sum)));
 		}
 
@@ -218,20 +222,18 @@ model {
 	// Deconvolution
 	vector[G] lambda = exp(lambda_log);
 	vector[y_1_rows * 2] sum1 = sum_NB( lambda[idx_1], sigma[idx_1], I1_dim, prop_1);
-	vector[y_2_rows * 2] sum2 = sum_NB( lambda[idx_2], sigma[idx_2], I2_dim, prop_2);
+	//vector[y_2_rows * 2] sum2 = sum_NB( lambda[idx_2], sigma[idx_2], I2_dim, prop_2);
 
-print( lambda[idx_1]);
-print(sigma[idx_1]);
-print(prop_1);
+
 print(sum1[1:y_1_rows]);
 print( sum1[(y_1_rows+1):(y_1_rows*2)]);
 print( exp(exposure_rate)[y[,2]]);
 
 	// Vecotrised sampling
-	y[,1]  ~ neg_binomial_2(
-		append_row( sum1[1:y_1_rows], sum2[1:y_2_rows]) .* exp(exposure_rate)[y[,2]] ,
-		append_row( sum1[(y_1_rows+1):(y_1_rows*2)], sum2[(y_2_rows+1):(y_2_rows*2)])
-	);
+	// y[,1]  ~ neg_binomial_2(
+	// 	append_row( sum1[1:y_1_rows], sum2[1:y_2_rows]) .* exp(exposure_rate)[y[,2]] ,
+	// 	append_row( sum1[(y_1_rows+1):(y_1_rows*2)], sum2[(y_2_rows+1):(y_2_rows*2)])
+	// );
 
   // Overall properties of the data
   lambda_mu ~ normal(lambda_mu_mu,2);
