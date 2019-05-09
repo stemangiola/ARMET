@@ -286,15 +286,12 @@ ARMET_tc = function(
 	fit =
 		sampling(
 			ARMET_tc, #stanmodels$ARMET_tc,
-			chains=3, cores=3,
-			iter=300, warmup=200,
-			#,
-			#init=foreach(chain = 1:3) %do% {(function() list( lambda_log = lambda_log_data, sigma_raw = sigma_raw_data	))()}
-			# ,
-			save_warmup = FALSE,
-			pars = c(		"prop_1", "prop_2"	)
+			chains=1,
+			iter=1
 		)
 	Sys.time()
+
+	stop()
 
 	# Produce results
 	prop = fit %>%
