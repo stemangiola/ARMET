@@ -80,7 +80,8 @@ decrease_replicates = function(my_df, n_pass=1){
 
 
 
-markers =	read_csv("docs/markers_pass2.csv")
+#markers =	read_csv("docs/markers_pass2.csv")
+markers =	read_csv("docs/markers_pass0.csv")
 
 ## Trouble shoot
 # plot_df =
@@ -113,12 +114,6 @@ markers =	read_csv("docs/markers_pass2.csv")
 # 		geom_point() + my_theme
 # 	} %>%
 # 	plotly::ggplotly()
-
-house_keeping =
-	ref %>% filter(`house keeping`) %>%
-	distinct(`symbol`) %>%
-	pull(1) %>%
-	head(n=200)
 
 
 reference =
@@ -157,7 +152,7 @@ reference =
 
 	# decrease number of house keeping
 	anti_join(
-		(.) %>% filter(`house keeping`) %>% distinct(symbol) %>% sample_frac(0.7)
+		(.) %>% filter(`house keeping`) %>% distinct(symbol) %>% slice(100) #sample_frac(0.7)
 	) %>%
 
 	select(  -contains("idx")) %>%
@@ -177,7 +172,7 @@ reference =
 
 # Create mix
 set.seed(123)
-reps = 10
+reps = 1
 
 sample_blacklist = c("666CRI", "972UYG", "344KCP", "555QVG", "370KKZ", "511TST", "13816.11933", "13819.11936", "13817.11934", "13818.11935", "096DQV", "711SNV")
 
@@ -275,8 +270,8 @@ mix =
 
 # Run ARMET
 source("R/ARMET_tc.R")
-res = ARMET_tc(mix)
-save(list = c("res", "mix_source", "mix"), file="temp_res_pass2.RData")
+res = ARMET_tc(mix, cores = 1)
+#save(list = c("res", "mix_source", "mix"), file="temp_res_pass2_run2.RData")
 
 res %$%
 	proportions %>%
