@@ -62,6 +62,7 @@ add_partition = function(df.input, partition_by, n_partitions){
 				mutate(
 					partition = 1:n() %>%
 						divide_by(length((.))) %>%
+						#	multiply_by(min(n_partitions, df.input %>% distinct(symbol) %>% nrow)) %>%
 						multiply_by(n_partitions) %>%
 						ceiling
 				)
@@ -123,13 +124,13 @@ ARMET_tc = function(
 	cores = 14
 ){
 
-	full_bayesian = 0
-	ct_to_omit =                        c("t_CD4_naive", "adipocyte")
-	verbose =                           F
-	omit_regression =                   F
-	save_fit =                          F
-	seed =                              NULL
-	cores = 14
+	# full_bayesian = 0
+	# ct_to_omit =                        c("t_CD4_naive", "adipocyte")
+	# verbose =                           F
+	# omit_regression =                   F
+	# save_fit =                          F
+	# seed =                              NULL
+	# cores = 1
 
 	source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/e4ec6a2348efc2f62b88f10b12e70f4c6273a10a/tidy_extensions.R")
 	source("https://gist.githubusercontent.com/stemangiola/90a528038b8c52b21f9cfa6bb186d583/raw/4a5798857362d946bd3029188b1cc9eb9b625456/transcription_tool_kit.R")
@@ -138,7 +139,7 @@ ARMET_tc = function(
 	library(rstan)
 
 	input = c(as.list(environment()))
-	shards = cores * 4
+	shards = cores * 1
 
 	my_theme =
 		theme_bw() +
@@ -341,6 +342,11 @@ ARMET_tc = function(
 		# Ths is bcause mix lacks lambda info and produces NA in the df
 		filter(!(`Cell type category` == "house_keeping" & sigma_raw %>% is.na)) %>%
 		distinct(G, sigma_raw) %>% pull(sigma_raw)
+
+  # Testing
+	exposure_rate = df %>% distinct(S) %>% nrow %>% seq(-1, 1, length.out = .);
+	set.seed(143)
+	prop_1 = gtools::rdirichlet(Q, c(1,1,1,1))
 
 
 	fileConn<-file("~/.R/Makevars")
