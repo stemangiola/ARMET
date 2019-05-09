@@ -102,7 +102,8 @@ ARMET_tc = function(
 	omit_regression =                   F,
 	save_fit =                          F,
 	seed =                              NULL,
-	cores = 14
+	cores = 14,
+	iterations = 300
 ){
 
 	full_bayesian = 0
@@ -287,7 +288,7 @@ ARMET_tc = function(
 		sampling(
 			ARMET_tc, #stanmodels$ARMET_tc,
 			chains=3, cores=3,
-			iter=300, warmup=200
+			iter=iterations, warmup=iterations-100
 		)
 	Sys.time() %>% print
 
