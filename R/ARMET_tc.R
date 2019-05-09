@@ -344,9 +344,9 @@ ARMET_tc = function(
 		distinct(G, sigma_raw) %>% pull(sigma_raw)
 
   # Testing
-	exposure_rate = df %>% distinct(S) %>% nrow %>% seq(-1, 1, length.out = .);
-	set.seed(143)
-	prop_1 = gtools::rdirichlet(Q, c(1,1,1,1))
+	# exposure_rate = df %>% distinct(S) %>% nrow %>% seq(-1, 1, length.out = .);
+	# set.seed(143)
+	# prop_1 = gtools::rdirichlet(Q, c(1,1,1,1))
 
 
 	fileConn<-file("~/.R/Makevars")
