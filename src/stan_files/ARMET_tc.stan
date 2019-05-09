@@ -146,10 +146,13 @@ functions{
 		);
 
 
+print( to_matrix( lambda_MPI, y_MPI_symbol_per_shard, ct_in_levels, 0));
+print(to_matrix( sigma_MPI,  y_MPI_symbol_per_shard, ct_in_levels, 0));
+print(to_matrix( prop, Q, ct_in_levels)');
 
-		print(my_sum[1:y_MPI_N_per_shard]);
-		print(my_sum[(y_MPI_N_per_shard+1):(y_MPI_N_per_shard*2)]);
-		print(to_vector(rep_matrix(exp(exposure_rate), y_MPI_symbol_per_shard)));
+print(my_sum[1:y_MPI_N_per_shard]);
+print(my_sum[(y_MPI_N_per_shard+1):(y_MPI_N_per_shard*2)]);
+print(to_vector(rep_matrix(exp(exposure_rate), y_MPI_symbol_per_shard)));
 
 		// Vecotrised sampling
 		return [
