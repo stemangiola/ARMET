@@ -121,7 +121,8 @@ ARMET_tc = function(
 	omit_regression =                   F,
 	save_fit =                          F,
 	seed =                              NULL,
-	cores = 14
+	cores = 14,
+	iterations
 ){
 
 	# full_bayesian = 0
@@ -355,14 +356,14 @@ ARMET_tc = function(
 	Sys.setenv("STAN_NUM_THREADS" = cores)
 	ARMET_tc = stan_model("src/stan_files/ARMET_tc.stan")
 
-	Sys.time()
+	Sys.time() %>% print
 	fit =
 		sampling(
 			ARMET_tc, #stanmodels$ARMET_tc,
-			chains=1,
-			iter=1
+			chains=3, cores=3,
+			iter=iterations, warmup=iterations-100
 		)
-	Sys.time()
+	Sys.time() %>% print
 
 	# Produce results
 	prop = fit %>%
