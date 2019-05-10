@@ -125,13 +125,13 @@ ARMET_tc = function(
 	iterations
 ){
 
-	# full_bayesian = 0
-	# ct_to_omit =                        c("t_CD4_naive", "adipocyte")
-	# verbose =                           F
-	# omit_regression =                   F
-	# save_fit =                          F
-	# seed =                              NULL
-	# cores = 1
+	full_bayesian = 0
+	ct_to_omit =                        c("t_CD4_naive", "adipocyte")
+	verbose =                           F
+	omit_regression =                   F
+	save_fit =                          F
+	seed =                              NULL
+	cores = 4
 
 	source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/e4ec6a2348efc2f62b88f10b12e70f4c6273a10a/tidy_extensions.R")
 	source("https://gist.githubusercontent.com/stemangiola/90a528038b8c52b21f9cfa6bb186d583/raw/4a5798857362d946bd3029188b1cc9eb9b625456/transcription_tool_kit.R")
@@ -315,7 +315,7 @@ ARMET_tc = function(
 		y_MPI_source %>%
 		distinct(MPI_row, `read count`, partition, Q) %>%
 		spread(partition, `read count`) %>%
-		arrange(Q, MPI_row) %>%
+		arrange(MPI_row, Q) %>%
 		select(-MPI_row,-Q) %>%
 		replace(is.na(.), 0 %>% as.integer) %>%
 		as_matrix %>%

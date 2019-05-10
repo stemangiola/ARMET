@@ -112,16 +112,21 @@ functions{
 
 		vector sum_NB_MPI(matrix lambda_mat, matrix sigma_mat, matrix prop_mat){
 
-			matrix[rows(lambda_mat) , cols(prop_mat)] lambda_sum = lambda_mat * prop_mat;
-			matrix[rows(sigma_mat), cols(prop_mat)] sigma_sum =
+			matrix[rows(prop_mat), cols(lambda_mat)] lambda_sum = prop_mat * lambda_mat; //Q rows, G columns
+			matrix[rows(prop_mat), cols(sigma_mat)] sigma_sum =                          //Q rows, G columns
 				square(lambda_sum) ./
-				((
-					square(lambda_mat) ./
-					sigma_mat
-				) * square(prop_mat)) ;
+				(
+					square(prop_mat) *
+					(
+						square(lambda_mat) ./
+						sigma_mat
+					)
+				) ;
 
+				// The vectorisation is G1-Q1, G1-Q2, G1-Q3 etc..
 				return(append_row( to_vector(lambda_sum), to_vector(sigma_sum)));
 		}
+
 
 	vector sum_reduce( vector global_parameters , vector local_parameters , real[] xr , int[] xi ) {
 
@@ -140,9 +145,9 @@ functions{
 
 
 		vector[y_MPI_N_per_shard * 2] my_sum = sum_NB_MPI(
-			to_matrix( lambda_MPI, y_MPI_symbol_per_shard, ct_in_levels, 0), // Row major
-			to_matrix( sigma_MPI,  y_MPI_symbol_per_shard, ct_in_levels, 0), // Row major
-			to_matrix( prop, Q, ct_in_levels)'
+			to_matrix( lambda_MPI, ct_in_levels, y_MPI_symbol_per_shard), // ct rows, G columns
+			to_matrix( sigma_MPI,  ct_in_levels, y_MPI_symbol_per_shard), // ct rows, G columns
+			to_matrix( prop, Q, ct_in_levels)
 		);
 
 
@@ -154,11 +159,11 @@ functions{
 // print(my_sum[(y_MPI_N_per_shard+1):(y_MPI_N_per_shard*2)]);
 // print(to_vector(rep_matrix(to_row_vector(exp(exposure_rate)), y_MPI_symbol_per_shard)));
 
-		// Vecotrised sampling
+		// Vecotrised sampling, all vectors should be G1-Q1, G1-Q2, G1-Q3
 		return [
 			neg_binomial_2_lpmf(
 				counts |
-				my_sum[1:y_MPI_N_per_shard] .*  to_vector(rep_matrix(to_row_vector(exp(exposure_rate)), y_MPI_symbol_per_shard)),
+				my_sum[1:y_MPI_N_per_shard] .*  to_vector(rep_matrix((exp(exposure_rate)), y_MPI_symbol_per_shard)),
 				my_sum[(y_MPI_N_per_shard+1):(y_MPI_N_per_shard*2)]
 			)]';
   }
