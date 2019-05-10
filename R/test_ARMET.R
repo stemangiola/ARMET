@@ -81,7 +81,7 @@ decrease_replicates = function(my_df, n_pass=1){
 
 
 #markers =	read_csv("docs/markers_pass2.csv")
-markers =	read_csv("docs/markers_pass0.csv")
+markers =	read_csv("docs/markers_pass.csv")
 
 ## Trouble shoot
 # plot_df =
@@ -270,7 +270,7 @@ mix =
 
 # Run ARMET
 source("R/ARMET_tc.R")
-res = ARMET_tc(mix, cores = 1)
+res = ARMET_tc(mix)
 #save(list = c("res", "mix_source", "mix"), file="temp_res_pass2_run2.RData")
 
 res %$%

@@ -69,6 +69,67 @@ add_partition = function(df.input, partition_by, n_partitions){
 		)
 }
 
+#' get_MPI_deconv
+#'
+#' @description Get data format for MPI deconvolution part
+get_MPI_deconv = function(y_source, shards, my_level){
+	y_MPI_source =
+		y_source %>%
+		distinct(level, Q, S, symbol, G, `Cell type category`, `read count`) %>%
+		filter(level==my_level)  %>%
+		arrange(Q, symbol) %>%
+		add_partition("symbol", shards) %>%
+		group_by(partition) %>%
+		left_join( (.) %>% distinct(symbol) %>% mutate(MPI_row = 1:n())) %>%
+		ungroup()
+
+	list(
+		y_MPI_source = y_MPI_source,
+
+		y_MPI_symbol_per_shard =
+			y_MPI_source %>%
+			distinct(symbol, partition) %>%
+			count(partition) %>%
+			spread(partition, n) %>%
+			as_vector %>% array,
+
+		y_MPI_G_per_shard =
+			y_MPI_source %>%
+			distinct(symbol, `Cell type category`, partition) %>%
+			count(partition) %>%
+			spread(partition, n) %>%
+			as_vector %>% array,
+
+		y_MPI_idx =
+			y_MPI_source %>%
+			distinct(partition, symbol, G, `Cell type category`, MPI_row) %>%
+			select(-symbol) %>%
+			spread(partition, G) %>%
+			arrange(MPI_row, `Cell type category`) %>%
+			select(-MPI_row,-`Cell type category`) %>%
+			replace(is.na(.), 0 %>% as.integer) %>%
+			as_matrix %>%
+			t,
+
+		y_MPI_N_per_shard =
+			y_MPI_source %>%
+			distinct(MPI_row, `read count`, partition, Q) %>%
+			count(partition) %>%
+			spread(partition, n) %>%
+			as_vector %>% array,
+
+		y_MPI_count =
+			y_MPI_source %>%
+			distinct(MPI_row, `read count`, partition, Q) %>%
+			spread(partition, `read count`) %>%
+			arrange(MPI_row, Q) %>%
+			select(-MPI_row,-Q) %>%
+			replace(is.na(.), 0 %>% as.integer) %>%
+			as_matrix %>%
+			t
+	)
+}
+
 #' ARMET-tc main
 #'
 #' @description This function calls the stan model.
@@ -122,7 +183,7 @@ ARMET_tc = function(
 	save_fit =                          F,
 	seed =                              NULL,
 	cores = 14,
-	iterations
+	iterations = 300
 ){
 
 	full_bayesian = 0
@@ -268,59 +329,25 @@ ARMET_tc = function(
 	I1_dim = c(idx_1_source %>% distinct(symbol) %>% nrow, idx_1_source %>% distinct(`Cell type category`) %>% nrow)
 	I2_dim = c(idx_2_source %>% distinct(symbol) %>% nrow, idx_2_source %>% distinct(`Cell type category`) %>% nrow)
 
+	# Data MPI for deconvolution level 1
+	y_MPI_lv1 = y_source %>% get_MPI_deconv(shards, 1)
+	y_MPI_source_lv1 = y_MPI_lv1 %$% y_MPI_source
+	y_MPI_symbol_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_symbol_per_shard
+	y_MPI_G_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_G_per_shard
+	y_MPI_idx_lv1 = y_MPI_lv1 %$% y_MPI_idx
+	y_MPI_N_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_N_per_shard
+	y_MPI_count_lv1 = y_MPI_lv1 %$% y_MPI_count
 
-	y_MPI_source =
-		y_source %>%
-		distinct(level, Q, S, symbol, G, `Cell type category`, `read count`) %>%
-		filter(level==1)  %>%
-		arrange(Q, symbol) %>%
-		add_partition("symbol", shards) %>%
-		group_by(partition) %>%
-		left_join( (.) %>% distinct(symbol) %>% mutate(MPI_row = 1:n())) %>%
-		ungroup()
+	# Data MPI for deconvolution level 2
+	y_MPI_lv2 = y_source %>% get_MPI_deconv(shards, 2)
+	y_MPI_source_lv2 = y_MPI_lv2 %$% y_MPI_source
+	y_MPI_symbol_per_shard_lv2 = y_MPI_lv2 %$% y_MPI_symbol_per_shard
+	y_MPI_G_per_shard_lv2 = y_MPI_lv2 %$% y_MPI_G_per_shard
+	y_MPI_idx_lv2 = y_MPI_lv2 %$% y_MPI_idx
+	y_MPI_N_per_shard_lv2 = y_MPI_lv2 %$% y_MPI_N_per_shard
+	y_MPI_count_lv2 = y_MPI_lv2 %$% y_MPI_count
 
-	y_MPI_symbol_per_shard =
-		y_MPI_source %>%
-		distinct(symbol, partition) %>%
-		count(partition) %>%
-		spread(partition, n) %>%
-		as_vector %>% array
-
-	y_MPI_G_per_shard =
-		y_MPI_source %>%
-		distinct(symbol, `Cell type category`, partition) %>%
-		count(partition) %>%
-		spread(partition, n) %>%
-		as_vector %>% array
-
-	y_MPI_idx =
-		y_MPI_source %>%
-		distinct(partition, symbol, G, `Cell type category`, MPI_row) %>%
-		select(-symbol) %>%
-		spread(partition, G) %>%
-		arrange(MPI_row, `Cell type category`) %>%
-		select(-MPI_row,-`Cell type category`) %>%
-		replace(is.na(.), 0 %>% as.integer) %>%
-		as_matrix %>%
-		t
-
-	y_MPI_N_per_shard =
-		y_MPI_source %>%
-		distinct(MPI_row, `read count`, partition, Q) %>%
-		count(partition) %>%
-		spread(partition, n) %>%
-		as_vector %>% array
-
-	y_MPI_count =
-		y_MPI_source %>%
-		distinct(MPI_row, `read count`, partition, Q) %>%
-		spread(partition, `read count`) %>%
-		arrange(MPI_row, Q) %>%
-		select(-MPI_row,-Q) %>%
-		replace(is.na(.), 0 %>% as.integer) %>%
-		as_matrix %>%
-		t
-
+	# OLD data format
 	y = y_source %>% distinct(level, Q, S, symbol, `read count`) %>% arrange(level, Q, symbol) %>% select(`read count`, S) %>% as_matrix
 	I = y %>% nrow
 
@@ -345,9 +372,9 @@ ARMET_tc = function(
 		distinct(G, sigma_raw) %>% pull(sigma_raw)
 
   # Testing
-	exposure_rate = df %>% distinct(S) %>% nrow %>% seq(-1, 1, length.out = .);
-	set.seed(143)
-	prop_1 = gtools::rdirichlet(Q, c(1,1,1,1))
+	# exposure_rate = df %>% distinct(S) %>% nrow %>% seq(-1, 1, length.out = .);
+	# set.seed(143)
+	# prop_1 = gtools::rdirichlet(Q, c(1,1,1,1))
 
 
 	fileConn<-file("~/.R/Makevars")
