@@ -81,7 +81,7 @@ decrease_replicates = function(my_df, n_pass=1){
 
 
 #markers =	read_csv("docs/markers_pass2.csv")
-markers =	read_csv("docs/markers_pass.csv")
+markers =	read_csv("docs/markers_pass1.csv")
 
 ## Trouble shoot
 # plot_df =
