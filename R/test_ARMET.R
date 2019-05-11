@@ -152,7 +152,7 @@ reference =
 
 	# decrease number of house keeping
 	anti_join(
-		(.) %>% filter(`house keeping`) %>% distinct(symbol) %>% slice(100) #sample_frac(0.7)
+		(.) %>% filter(`house keeping`) %>% distinct(symbol) %>% slice(1:400) #sample_frac(0.7)
 	) %>%
 
 	select(  -contains("idx")) %>%
@@ -172,7 +172,7 @@ reference =
 
 # Create mix
 set.seed(123)
-reps = 1
+reps = 10
 
 sample_blacklist = c("666CRI", "972UYG", "344KCP", "555QVG", "370KKZ", "511TST", "13816.11933", "13819.11936", "13817.11934", "13818.11935", "096DQV", "711SNV")
 
@@ -341,7 +341,7 @@ res %$%
 			distinct(ct1, ct2, `n markers`) %>% rename(`n markers pass 1` = `n markers`)
 	) %>%
 	mutate(`n markers` = (`error mean relative` * `n markers pass 1` ) %>% ceiling) %>%
-	mutate(`n markers` = max(20, `n markers`)) %>%
+	mutate(`n markers` = ifelse(`n markers`< 20, 20, `n markers`)) %>%
 	write_csv("docs/num_markers_based_on_error_levels_1_2_second_run.csv")
 
 
