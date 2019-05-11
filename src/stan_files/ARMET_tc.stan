@@ -169,6 +169,7 @@ data {
   int n_shards;
 	int<lower=0> counts[n_shards, N];
 	int<lower=0> symbol_end[n_shards, M+1];
+	int<lower=0> G_ind[n_shards, M];
 	int<lower=0> sample_idx[n_shards, N];
 	int<lower=0> G_per_shard[n_shards];
 	int<lower=0> G_per_shard_idx[n_shards + 1];
@@ -322,8 +323,8 @@ transformed parameters {
   		append_row(
   		  append_row(
 	  		    append_row(
-	  		    	lambda_log[(G_per_shard_idx[i]+1):(G_per_shard_idx[i+1])],
-	      		  sigma[(G_per_shard_idx[i]+1):(G_per_shard_idx[i+1])]
+	  		    	lambda_log[G_ind[i, 1:G_per_shard[i]]],
+	      		  sigma[G_ind[i, 1:G_per_shard[i]]]
 	      		),
       		buffer
       	),

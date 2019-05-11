@@ -6,10 +6,11 @@ format_for_MPI = function(df, shards){
 
 		left_join(
 			(.) %>%
-				distinct(ct_symbol) %>%
+				distinct(G) %>%
+				arrange(G) %>%
 				mutate( idx_MPI = head( rep(1:shards, (.) %>% nrow %>% `/` (shards) %>% ceiling ), n=(.) %>% nrow) )
 		) %>%
-		arrange(idx_MPI, ct_symbol) %>%
+		arrange(idx_MPI, G) %>%
 
 		# Decide start - end location
 		group_by(idx_MPI) %>%
@@ -17,28 +18,30 @@ format_for_MPI = function(df, shards){
 			(.) %>%
 				left_join(
 					(.) %>%
-						distinct(idx_MPI, sample, ct_symbol) %>%
-						arrange(idx_MPI, ct_symbol) %>%
-						count(idx_MPI, ct_symbol) %>%
+						distinct(sample, G) %>%
+						arrange(G) %>%
+						count(G) %>%
 						mutate(end = cumsum(n)) %>%
 						mutate(start = c(1, .$end %>% rev() %>% `[` (-1) %>% rev %>% `+` (1)))
 				)
 		) %>%
 		ungroup() %>%
 
-		# Add counts MPI rows indexes
-		group_by(idx_MPI) %>%
-		mutate(`read count MPI row` = 1:n()) %>%
-		ungroup %>%
-
-		# Add ct_symbol MPI rows indexes
+		# Add ct_symbol MPI rows indexes - otherwise spread below gives error
 		left_join(
 			(.) %>%
 				group_by(idx_MPI) %>%
-				distinct(ct_symbol) %>%
+				distinct(G) %>%
+				arrange(G) %>%
 				mutate(`symbol MPI row` = 1:n()) %>%
 				ungroup
-		)
+		) %>%
+
+		# Add counts MPI rows indexes
+		group_by(idx_MPI) %>%
+		arrange(G) %>%
+		mutate(`read count MPI row` = 1:n()) %>%
+		ungroup
 
 }
 
@@ -221,15 +224,18 @@ ARMET_tc = function(
 	# Merge data sets
 	df =
 		bind_rows(
-			reference %>% filter(`symbol` %in% ( mix %>% colnames )),
+			reference %>%
+				filter(`symbol` %in% ( mix %>% colnames )) %>%
+				mutate(`query` = FALSE),
 			mix %>%
 				gather(`symbol`, `read count`, -sample) %>%
 				inner_join(reference %>% distinct(symbol) ) %>%
 				left_join( reference %>% distinct(symbol, `house keeping`) ) %>%
-				mutate(`Cell type category` = "query")
+				mutate(`Cell type category` = "query") %>%
+				mutate(`query` = TRUE)
 		)	%>%
 
-		# Add symbol indeces
+		# Add marker symbol indeces
 		left_join(
 			(.) %>%
 				filter(!`house keeping`) %>%
@@ -238,13 +244,13 @@ ARMET_tc = function(
 		) %>%
 
 		# Add sample indeces
-		arrange((`Cell type category` == "query") %>% desc) %>%
+		arrange(!`query`) %>% # query first
 		mutate(S = sample %>% as.factor %>% as.integer) %>%
 
 		# Add query samples indeces
 		left_join(
 			(.) %>%
-				filter(`Cell type category` == "query"  ) %>%
+				filter(`query`) %>%
 				distinct(`sample`) %>%
 				mutate(Q = 1:n())
 		) %>%
@@ -261,8 +267,9 @@ ARMET_tc = function(
 		# Add gene idx
 		left_join(
 			(.) %>%
-				distinct(`Cell type category`, ct_symbol) %>%
-				arrange(`Cell type category` != "house_keeping", ct_symbol) %>%
+				filter(!`query`) %>%
+				distinct(`Cell type category`, ct_symbol, `house keeping`) %>%
+				arrange(!`house keeping`, ct_symbol) %>% # House keeping first
 				mutate(G = 1:n())
 		)
 
@@ -272,11 +279,12 @@ ARMET_tc = function(
 		df %>%
 
 		# Eliminate the query part, not the house keeping of the query
-		filter(`Cell type category` != "query")  %>%
+		filter(!`query`)  %>%
+
 
 		format_for_MPI(shards)
 
-	browser()
+	#browser()
 
 	############################################
 	# For reference - exposure inference
@@ -316,6 +324,15 @@ ARMET_tc = function(
 		replace(is.na(.), 0 %>% as.integer) %>%
 		as_matrix() %>% t
 
+	G_ind =
+		counts_baseline %>%
+		distinct(idx_MPI, G, `symbol MPI row`)  %>%
+		spread(idx_MPI, G) %>%
+		arrange(`symbol MPI row`) %>%
+		select(-`symbol MPI row`) %>%
+		replace(is.na(.), 0 %>% as.integer) %>%
+		as_matrix() %>% t
+
 	############################################
 	# For deconvolution
 	############################################
@@ -324,7 +341,7 @@ ARMET_tc = function(
 
 	y_source =
 		df %>%
-		filter(`Cell type category` == "query") %>%
+		filter(`query` & !`house keeping`) %>%
 		select(S, Q, `symbol`, `read count`) %>%
 		left_join(	df %>% distinct(`symbol`, G, `Cell type category`, level, lambda, sigma_raw) ) %>%
 		arrange(level, `Cell type category`, Q, symbol) %>%
@@ -361,7 +378,7 @@ ARMET_tc = function(
 	y = y_source %>% distinct(level, Q, S, symbol, `read count`) %>% arrange(level, Q, symbol) %>% select(`read count`, S) %>% as_matrix
 	I = y %>% nrow
 
-	Q = df %>% filter(`Cell type category` == "query") %>% distinct(Q) %>% nrow
+	Q = df %>% filter(`query`) %>% distinct(Q) %>% nrow
 	idx_ct_root = c(1:4)
 	idx_ct_immune = c(1:3, 5:11)
 	y_idx_ct_root = idx_ct_root + 3
@@ -371,10 +388,10 @@ ARMET_tc = function(
 	do_infer = full_bayesian
 
 	lambda_log_data =
-		counts_baseline %>%
+		df %>%
 
 		# Eliminate the query part, not the house keeping of the query
-		filter(`Cell type category` != "query")  %>%
+		filter(!`query`)  %>%
 
 		# Ths is bcause mix lacks lambda info and produces NA in the df
 		filter(!(`Cell type category` == "house_keeping" & lambda %>% is.na)) %>%
@@ -384,10 +401,10 @@ ARMET_tc = function(
 		pull(lambda)
 
 	sigma_raw_data =
-		counts_baseline %>%
+		df %>%
 
 		# Eliminate the query part, not the house keeping of the query
-		filter(`Cell type category` != "query")  %>%
+		filter(!`query`)  %>%
 
 		# Ths is bcause mix lacks lambda info and produces NA in the df
 		filter(!(`Cell type category` == "house_keeping" & sigma_raw %>% is.na)) %>%
@@ -413,7 +430,7 @@ ARMET_tc = function(
 		sampling(
 			ARMET_tc, #stanmodels$ARMET_tc,
 			chains=3, cores=3,
-			iter=iterations, warmup=iterations-100
+			iter=iterations, warmup=iterations-100, pars = c("prop_1", "prop_2")
 		)
 	Sys.time() %>% print
 
@@ -442,7 +459,7 @@ ARMET_tc = function(
 		) %>%
 		left_join(
 			df %>%
-		 	filter(`Cell type category` == "query") %>%
+		 	filter(`query`) %>%
 		 	distinct(Q, sample)
 		)
 
