@@ -38,14 +38,6 @@ format_for_MPI = function(df, shards){
 				distinct(ct_symbol) %>%
 				mutate(`symbol MPI row` = 1:n()) %>%
 				ungroup
-		) %>%
-
-		# Add gene idx
-		left_join(
-			(.) %>%
-				distinct(ct_symbol, idx_MPI, `symbol MPI row`) %>%
-				arrange(idx_MPI, `symbol MPI row`) %>%
-				mutate(G = 1:n())
 		)
 
 }
@@ -261,7 +253,19 @@ ARMET_tc = function(
 		mutate(`Cell type category` = ifelse(`house keeping`, "house_keeping", `Cell type category`)) %>%
 		anti_join(
 			(.) %>% filter(`house keeping`) %>% distinct(symbol, level) %>% group_by(symbol) %>% arrange(level) %>% slice(2) %>% ungroup()
+		) %>%
+
+		# Create unique symbol ID
+		unite(ct_symbol, c("Cell type category", "symbol"), remove = F) %>%
+
+		# Add gene idx
+		left_join(
+			(.) %>%
+				distinct(`Cell type category`, ct_symbol) %>%
+				arrange(`Cell type category` != "house_keeping", ct_symbol) %>%
+				mutate(G = 1:n())
 		)
+
 
 	# For  reference MPI inference
 	counts_baseline =
@@ -270,10 +274,13 @@ ARMET_tc = function(
 		# Eliminate the query part, not the house keeping of the query
 		filter(`Cell type category` != "query")  %>%
 
-		# Create unique symbol ID
-		unite(ct_symbol, c("Cell type category", "symbol"), remove = F) %>%
-
 		format_for_MPI(shards)
+
+	browser()
+
+	############################################
+	# For reference - exposure inference
+	############################################
 
 	S = df %>% distinct(sample) %>% nrow()
 	N = counts_baseline %>% distinct(idx_MPI, `read count`, `read count MPI row`) %>%  count(idx_MPI) %>% summarise(max(n)) %>% pull(1)
@@ -309,14 +316,17 @@ ARMET_tc = function(
 		replace(is.na(.), 0 %>% as.integer) %>%
 		as_matrix() %>% t
 
+	############################################
 	# For deconvolution
+	############################################
+
 	ct_in_levels = c(4,7)
 
 	y_source =
 		df %>%
 		filter(`Cell type category` == "query") %>%
 		select(S, Q, `symbol`, `read count`) %>%
-		left_join(	counts_baseline %>% distinct(`symbol`, G, `Cell type category`, level, lambda, sigma_raw) ) %>%
+		left_join(	df %>% distinct(`symbol`, G, `Cell type category`, level, lambda, sigma_raw) ) %>%
 		arrange(level, `Cell type category`, Q, symbol) %>%
 		mutate(`Cell type category` = factor(`Cell type category`, unique(`Cell type category`)))
 
@@ -359,17 +369,32 @@ ARMET_tc = function(
 
 	# Pass previously infered parameters
 	do_infer = full_bayesian
+
 	lambda_log_data =
 		counts_baseline %>%
+
+		# Eliminate the query part, not the house keeping of the query
+		filter(`Cell type category` != "query")  %>%
+
 		# Ths is bcause mix lacks lambda info and produces NA in the df
 		filter(!(`Cell type category` == "house_keeping" & lambda %>% is.na)) %>%
-		distinct(G, lambda) %>% pull(lambda)
+
+		distinct(G, lambda) %>%
+		arrange(G)%>%
+		pull(lambda)
 
 	sigma_raw_data =
 		counts_baseline %>%
+
+		# Eliminate the query part, not the house keeping of the query
+		filter(`Cell type category` != "query")  %>%
+
 		# Ths is bcause mix lacks lambda info and produces NA in the df
 		filter(!(`Cell type category` == "house_keeping" & sigma_raw %>% is.na)) %>%
-		distinct(G, sigma_raw) %>% pull(sigma_raw)
+
+		distinct(G, sigma_raw) %>%
+		arrange(G)%>%
+		pull(sigma_raw)
 
   # Testing
 	# exposure_rate = df %>% distinct(S) %>% nrow %>% seq(-1, 1, length.out = .);
