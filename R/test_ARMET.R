@@ -80,7 +80,8 @@ decrease_replicates = function(my_df, n_pass=1){
 
 
 
-markers =	read_csv("docs/markers_pass2.csv")
+#markers =	read_csv("docs/markers_pass2.csv")
+markers =	read_csv("docs/markers_pass1.csv")
 
 ## Trouble shoot
 # plot_df =
@@ -113,12 +114,6 @@ markers =	read_csv("docs/markers_pass2.csv")
 # 		geom_point() + my_theme
 # 	} %>%
 # 	plotly::ggplotly()
-
-house_keeping =
-	ref %>% filter(`house keeping`) %>%
-	distinct(`symbol`) %>%
-	pull(1) %>%
-	head(n=200)
 
 
 reference =
@@ -157,7 +152,7 @@ reference =
 
 	# decrease number of house keeping
 	anti_join(
-		(.) %>% filter(`house keeping`) %>% distinct(symbol) %>% sample_frac(0.7)
+		(.) %>% filter(`house keeping`) %>% distinct(symbol) %>% slice(1:400) #sample_frac(0.7)
 	) %>%
 
 	select(  -contains("idx")) %>%
@@ -275,8 +270,8 @@ mix =
 
 # Run ARMET
 source("R/ARMET_tc.R")
-res = ARMET_tc(mix, cores = 1)
-save(list = c("res", "mix_source", "mix"), file="temp_res_pass2.RData")
+res = ARMET_tc(mix)
+#save(list = c("res", "mix_source", "mix"), file="temp_res_pass2_run2.RData")
 
 res %$%
 	proportions %>%
@@ -346,7 +341,7 @@ res %$%
 			distinct(ct1, ct2, `n markers`) %>% rename(`n markers pass 1` = `n markers`)
 	) %>%
 	mutate(`n markers` = (`error mean relative` * `n markers pass 1` ) %>% ceiling) %>%
-	mutate(`n markers` = max(20, `n markers`)) %>%
+	mutate(`n markers` = ifelse(`n markers`< 20, 20, `n markers`)) %>%
 	write_csv("docs/num_markers_based_on_error_levels_1_2_second_run.csv")
 
 
