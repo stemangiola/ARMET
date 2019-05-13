@@ -281,7 +281,7 @@ ARMET_tc = function(
 
 		# Add sample indeces
 		arrange(!`query`) %>% # query first
-		mutate(S = sample %>% as.factor %>% as.integer) %>%
+		mutate(S = factor(sample, levels = .$sample %>% unique) %>% as.integer) %>%
 
 		# Add query samples indeces
 		left_join(
@@ -325,13 +325,13 @@ ARMET_tc = function(
 
 		format_for_MPI(shards)
 
-	S = df %>% distinct(sample) %>% nrow()
+
 	G = df %>% filter(!`query`) %>% distinct(G) %>% nrow()
 
 	############################################
 	# For reference - exposure inference
 	############################################
-
+	S = df %>% distinct(sample) %>% nrow()
 	N = counts_baseline %>% distinct(idx_MPI, `read count`, `read count MPI row`) %>%  count(idx_MPI) %>% summarise(max(n)) %>% pull(1)
 	M = counts_baseline %>% distinct(start, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
 	G_per_shard = counts_baseline %>% distinct(ct_symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% as.array
@@ -465,7 +465,7 @@ ARMET_tc = function(
 			ARMET_tc, #stanmodels$ARMET_tc,
 			chains=3, cores=3,
 			iter=iterations, warmup=iterations-100,
-			pars = c("prop_1", "prop_2")
+			pars = c("prop_1", "prop_2", "exposure_rate")
 		)
 	Sys.time() %>% print
 

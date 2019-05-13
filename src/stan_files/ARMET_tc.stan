@@ -396,7 +396,7 @@ model {
 
 	// Exposure prior
   exposure_rate ~ normal(0,1);
-  sum(exposure_rate) ~ normal(0, 0.001 * S);
+  if(do_infer) sum(exposure_rate) ~ normal(0, 0.001 * S);
 
   // Gene-wise properties of the data
   if(do_infer) lambda_log_param ~ exp_gamma_meanSd(lambda_mu,lambda_sigma);
