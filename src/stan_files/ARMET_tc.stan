@@ -385,14 +385,8 @@ transformed parameters {
 
 model {
 
-	//	vector[y_1_rows * 2] sum1 = sum_NB( lambda[idx_1], sigma[idx_1], I1_dim, prop_1);
-	// vector[y_2_rows * 2] sum2 = sum_NB( lambda[idx_2], sigma[idx_2], I2_dim, prop_2);
-
-	// Vecotrised sampling
-	// y[y_1_rows+1:size(y),1]  ~ neg_binomial_2(
-	// 	sum2[1:y_2_rows] .* exp(exposure_rate)[y[y_1_rows+1:size(y),2]] ,
-	//  	sum2[(y_2_rows+1):(y_2_rows*2)]
-	// );
+	for(q in 1:Q) prop_1[q] ~ dirichlet(rep_vector(1, ct_in_levels[1]));
+	for(q in 1:Q) prop_immune[q] ~ dirichlet(rep_vector(1, ct_in_levels[2]));
 
 	target += sum( map_rect( sum_reduce , global_parameters , lambda_sigma_exposure_prop_MPI_lv1 , xr , int_MPI_lv1 ) );
 	target += sum( map_rect( sum_reduce , global_parameters , lambda_sigma_exposure_prop_MPI_lv2 , xr , int_MPI_lv2 ) );

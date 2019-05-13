@@ -125,6 +125,41 @@ get_MPI_deconv = function(y_source, shards, my_level){
 	)
 }
 
+
+
+plot_differences_in_lambda = function(){
+
+	# Plot differences in lambda
+	(fit %>%
+	 	tidybayes::gather_draws(lambda_log[G]) %>%
+	 	tidybayes::median_qi() %>%
+	 	left_join(
+	 		counts_baseline %>%
+	 			distinct(`symbol`, G, `Cell type category`)
+	 	) %>%
+	 	left_join(
+	 		reference %>%
+	 			distinct(symbol, lambda, `Cell type category`) %>%
+	 			rename(`lambda_log` = lambda)
+	 	) %>%
+	 	ggplot(aes(x=lambda_log, y=.value, label=G)) + geom_point() + geom_abline(intercept = 0, slope = 1, color="red") + my_theme
+	)  %>% plotly::ggplotly()
+
+	#
+	(
+		fit %>%
+			extract(pars=c("lambda_mu", "lambda_sigma", "exposure_rate",  "lambda_log", "sigma_raw", "prop")) %>%
+			as.data.frame %>% as_tibble() %>%
+			mutate(chain = rep(1:3, 100) %>% sort %>% as.factor ) %>%
+			select(chain, everything()) %>% gather(par, draw, -chain) %>%
+			group_by(chain, par) %>%
+			summarise(d = draw %>% median) %>%
+			ggplot(aes(y=d, x=par, color=chain)) + geom_point()
+	) %>% plotly::ggplotly()
+
+}
+
+
 #' ARMET-tc main
 #'
 #' @description This function calls the stan model.
@@ -171,6 +206,7 @@ get_MPI_deconv = function(y_source, shards, my_level){
 #'
 ARMET_tc = function(
 	mix,
+	reference,
 	full_bayesian = 0,
 	ct_to_omit =                        c("t_CD4_naive", "adipocyte"),
 	verbose =                           F,
@@ -181,13 +217,13 @@ ARMET_tc = function(
 	iterations = 300
 ){
 
-	full_bayesian = 0
-	ct_to_omit =                        c("t_CD4_naive", "adipocyte")
-	verbose =                           F
-	omit_regression =                   F
-	save_fit =                          F
-	seed =                              NULL
-	cores = 4
+	# full_bayesian = 0
+	# ct_to_omit =                        c("t_CD4_naive", "adipocyte")
+	# verbose =                           F
+	# omit_regression =                   F
+	# save_fit =                          F
+	# seed =                              NULL
+	# cores = 4
 
 	source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/e4ec6a2348efc2f62b88f10b12e70f4c6273a10a/tidy_extensions.R")
 	source("https://gist.githubusercontent.com/stemangiola/90a528038b8c52b21f9cfa6bb186d583/raw/4a5798857362d946bd3029188b1cc9eb9b625456/transcription_tool_kit.R")
@@ -196,7 +232,7 @@ ARMET_tc = function(
 	library(rstan)
 
 	input = c(as.list(environment()))
-	shards = cores * 1
+	shards = cores * 4
 
 	my_theme =
 		theme_bw() +
@@ -258,7 +294,7 @@ ARMET_tc = function(
 		# Add house keeping into Cell type label
 		mutate(`Cell type category` = ifelse(`house keeping`, "house_keeping", `Cell type category`)) %>%
 		anti_join(
-			(.) %>% filter(`house keeping`) %>% distinct(symbol, level) %>% group_by(symbol) %>% arrange(level) %>% slice(2) %>% ungroup()
+			(.) %>% filter(`house keeping` & !`query`) %>% distinct(symbol, level) %>% group_by(symbol) %>% arrange(level) %>% slice(2) %>% ungroup()
 		) %>%
 
 		# Create unique symbol ID
@@ -279,21 +315,25 @@ ARMET_tc = function(
 		df %>%
 
 		# Eliminate the query part, not the house keeping of the query
-		filter(!`query`)  %>%
+		filter(!`query` | `house keeping`)  %>%
 
+		# If full Bayesian false just keep house keeping
+		{
+			if(!full_bayesian) (.) %>% filter(`house keeping` & `query`)
+			else (.)
+		} %>%
 
 		format_for_MPI(shards)
 
-	#browser()
+	S = df %>% distinct(sample) %>% nrow()
+	G = df %>% filter(!`query`) %>% distinct(G) %>% nrow()
 
 	############################################
 	# For reference - exposure inference
 	############################################
 
-	S = df %>% distinct(sample) %>% nrow()
 	N = counts_baseline %>% distinct(idx_MPI, `read count`, `read count MPI row`) %>%  count(idx_MPI) %>% summarise(max(n)) %>% pull(1)
 	M = counts_baseline %>% distinct(start, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
-	G = counts_baseline %>% distinct(ct_symbol) %>% nrow()
 	G_per_shard = counts_baseline %>% distinct(ct_symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% as.array
 	n_shards = min(shards, counts_baseline %>% distinct(idx_MPI) %>% nrow)
 	G_per_shard_idx = c(0, counts_baseline %>% distinct(ct_symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% cumsum)
@@ -391,7 +431,7 @@ ARMET_tc = function(
 		df %>%
 
 		# Eliminate the query part, not the house keeping of the query
-		filter(!`query`)  %>%
+		filter(!`query` | `house keeping`)  %>%
 
 		# Ths is bcause mix lacks lambda info and produces NA in the df
 		filter(!(`Cell type category` == "house_keeping" & lambda %>% is.na)) %>%
@@ -404,7 +444,7 @@ ARMET_tc = function(
 		df %>%
 
 		# Eliminate the query part, not the house keeping of the query
-		filter(!`query`)  %>%
+		filter(!`query` | `house keeping`)  %>%
 
 		# Ths is bcause mix lacks lambda info and produces NA in the df
 		filter(!(`Cell type category` == "house_keeping" & sigma_raw %>% is.na)) %>%
@@ -412,12 +452,6 @@ ARMET_tc = function(
 		distinct(G, sigma_raw) %>%
 		arrange(G)%>%
 		pull(sigma_raw)
-
-  # Testing
-	# exposure_rate = df %>% distinct(S) %>% nrow %>% seq(-1, 1, length.out = .);
-	# set.seed(143)
-	# prop_1 = gtools::rdirichlet(Q, c(1,1,1,1))
-
 
 	fileConn<-file("~/.R/Makevars")
 	writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
@@ -430,15 +464,28 @@ ARMET_tc = function(
 		sampling(
 			ARMET_tc, #stanmodels$ARMET_tc,
 			chains=3, cores=3,
-			iter=iterations, warmup=iterations-100, pars = c("prop_1", "prop_2")
+			iter=iterations, warmup=iterations-100,
+			pars = c("prop_1", "prop_2")
 		)
 	Sys.time() %>% print
 
 	# Produce results
-	prop = fit %>%
+	prop =
+		fit %>%
 		tidybayes::gather_draws(prop_1[Q, C], prop_2[Q, C]) %>%
-		tidybayes::median_qi() %>%
+
+		{
+			left_join(
+				# Get summary statistics
+				(.) %>% tidybayes::median_qi(),
+
+				# Check if bimodal
+				(.) %>% summarise(	converged = diptest::dip.test(`.value`) %$%	`p.value` > 0.05)
+			)
+		}	%>%
 		ungroup() %>%
+
+		# Parse
 		separate(.variable, c(".variable", "level"), convert = T) %>%
 		left_join(
 
@@ -462,39 +509,6 @@ ARMET_tc = function(
 		 	filter(`query`) %>%
 		 	distinct(Q, sample)
 		)
-
-if(0){
-
-	# Plot differences in lambda
-	 (fit %>%
-		tidybayes::gather_draws(lambda_log[G]) %>%
-		tidybayes::median_qi() %>%
-		left_join(
-			counts_baseline %>%
-				distinct(`symbol`, G, `Cell type category`)
-		) %>%
-		left_join(
-			reference %>%
-				distinct(symbol, lambda, `Cell type category`) %>%
-				rename(`lambda_log` = lambda)
-		) %>%
-		ggplot(aes(x=lambda_log, y=.value, label=G)) + geom_point() + geom_abline(intercept = 0, slope = 1, color="red") + my_theme
-)  %>% plotly::ggplotly()
-
-	#
-	(
-		fit %>%
-			extract(pars=c("lambda_mu", "lambda_sigma", "exposure_rate",  "lambda_log", "sigma_raw", "prop")) %>%
-			as.data.frame %>% as_tibble() %>%
-			mutate(chain = rep(1:3, 100) %>% sort %>% as.factor ) %>%
-			select(chain, everything()) %>% gather(par, draw, -chain) %>%
-			group_by(chain, par) %>%
-			summarise(d = draw %>% median) %>%
-			ggplot(aes(y=d, x=par, color=chain)) + geom_point()
-	) %>% plotly::ggplotly()
-
-}
-
 
 	# Return
 	list(
