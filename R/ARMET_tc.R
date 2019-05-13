@@ -96,6 +96,7 @@ format_for_MPI = function(df,shards){
 #'
 ARMET_tc = function(
 	mix,
+	reference,
 	full_bayesian = 0,
 	ct_to_omit =                        c("t_CD4_naive", "adipocyte"),
 	verbose =                           F,
