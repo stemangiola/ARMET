@@ -159,6 +159,22 @@ plot_differences_in_lambda = function(){
 
 }
 
+get_overlap_descriptive_stats = function(mix_tbl, ref_tbl){
+
+	writeLines(
+		sprintf(
+			"%s house keeping genes are missing from the input mixture",
+			ref_tbl %>% filter(`house keeping`) %>% distinct(symbol) %>% anti_join( mix_tbl %>% distinct(symbol) ) %>% nrow
+		)
+	)
+
+	writeLines(
+		sprintf(
+			"%s marker genes are missing from the input mixture",
+			ref_tbl %>% filter(!`house keeping`) %>% distinct(symbol) %>% anti_join( mix_tbl %>% distinct(symbol) ) %>% nrow
+		)
+	)
+}
 
 #' ARMET-tc main
 #'
@@ -256,6 +272,9 @@ ARMET_tc = function(
 	sigma_sigma = 1.1720851
 	lambda_mu_mu = 5.612671
 	lambda_sigma = 7.131593
+
+	# Print overlap descriptive stats
+	get_overlap_descriptive_stats(mix %>%	gather(`symbol`, `read count`, -sample), reference)
 
 	# Merge data sets
 	df =
