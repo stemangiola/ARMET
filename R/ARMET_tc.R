@@ -331,7 +331,7 @@ ARMET_tc = function(
 	############################################
 	# For reference - exposure inference
 	############################################
-	S = df %>% distinct(sample) %>% nrow()
+	S = counts_baseline %>% distinct(sample) %>% nrow()
 	N = counts_baseline %>% distinct(idx_MPI, `read count`, `read count MPI row`) %>%  count(idx_MPI) %>% summarise(max(n)) %>% pull(1)
 	M = counts_baseline %>% distinct(start, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
 	G_per_shard = counts_baseline %>% distinct(ct_symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% as.array
