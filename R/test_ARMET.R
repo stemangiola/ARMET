@@ -125,6 +125,8 @@ my_ref = 	ref %>%
 	distinct(sample, `Cell type category`) %>%
 	filter( ! grepl(sample_blacklist %>% paste(collapse="|"), sample))
 
+reps = 1
+
 mix_source =
 	ref %>%
 
@@ -182,19 +184,29 @@ mix_source =
 	left_join(
 		(.) %>%
 			group_by(run) %>%
-			do(
+			do({
+
 				(.) %>%
 					distinct(`symbol`, `read count normalised bayes`, `Cell type category`, run, level) %>%
 					spread(`Cell type category`, `read count normalised bayes`) %>%
-					drop_na %>%
+					{
+						bind_rows(
+							(.) %>% filter(symbol %in% (ref %>% filter(`house keeping`) %>% distinct(symbol) %>% pull(1))) %>% drop_na,
+							(.) %>% filter(!symbol %in% (ref %>% filter(`house keeping`) %>% distinct(symbol) %>% pull(1))) %>%
+								replace(is.na(.), 0 %>% as.integer)
+						)
+					} %>%
 					mutate(pair = names((.))[4:5] %>% paste(collapse=" ")) %>%
 					setNames(c("symbol", "run", "level", "1", "2", "pair")) %>%
 					mutate( `read count mix` = ( (`1` + `2`) / 2 ) %>% as.integer ) %>%
 					unite(sample_mix, c("run", "pair"), remove = F)
-			) %>%
+			}) %>%
 			ungroup() %>%
 			distinct(symbol, run, level, pair, sample_mix,  `read count mix`)
 	) %>%
+
+	# Eliminate misterious missing sample NA
+	filter(sample_mix %>% is.na %>% `!`) %>%
 
 	# Eliminate duplicated of difference levels for example house keepng genes
 	group_by(run, symbol, sample) %>%
@@ -239,10 +251,10 @@ get_input_data = function(markers, reps, pass){
 				)
 			} %>%
 
-			# decrease number of house keeping
-			anti_join(
-				(.) %>% filter(`house keeping`) %>% distinct(symbol) %>% slice(500) #sample_frac(0.7)
-			) %>%
+			# # decrease number of house keeping
+			# anti_join(
+			# 	(.) %>% filter(`house keeping`) %>% distinct(symbol) %>% slice(500) #sample_frac(0.7)
+			# ) %>%
 
 			select(  -contains("idx")) %>%
 			mutate(`read count` = `read count` %>% as.integer)
@@ -250,9 +262,14 @@ get_input_data = function(markers, reps, pass){
 		mix =
 			mix_source %>%
 			distinct(symbol, sample_mix, `read count mix`) %>%
-			drop_na %>%
 			spread(`sample_mix`, `read count mix`) %>%
-			drop_na %>%
+			{
+				bind_rows(
+					(.) %>% filter(symbol %in% (ref %>% filter(`house keeping`) %>% distinct(symbol) %>% pull(1))) %>% drop_na,
+					(.) %>% filter(!symbol %in% (ref %>% filter(`house keeping`) %>% distinct(symbol) %>% pull(1))) %>%
+						replace(is.na(.), 0 %>% as.integer)
+				)
+			} %>%
 			gather(sample_mix, `read count mix`, -symbol) %>%
 			spread(`symbol`, `read count mix`) %>%
 			rename(sample = sample_mix)
@@ -268,11 +285,6 @@ get_input_data = function(markers, reps, pass){
 
 load("fit_df_feature_selection.RData")
 
-marker_df =
-	get_marker_df_source(fit_df_1, 1, 0.5) %>%
-	rbind(get_marker_df_source(fit_df_2, 2, 0.4)) %>%
-	separate(pair, c("ct1", "ct2"), sep=" ", remove = F)
-
 get_markers_number = function(pass, res, num_markers_previous_level){
 
 	if(pass == 0 | (num_markers_previous_level %>% is.null))
@@ -281,7 +293,7 @@ get_markers_number = function(pass, res, num_markers_previous_level){
 
 	else
 
-	res %$%
+		res %$%
 		proportions %>%
 		ungroup() %>%
 
@@ -329,19 +341,19 @@ get_markers_number = function(pass, res, num_markers_previous_level){
 				) %>%
 				inner_join(marker_df %>% distinct(level, ct1, ct2))
 
-				bind_rows(
-					tbl1,
-					tbl %>%
-						bind_rows(
-							(.) %>% mutate(dummy = ct1, ct1=ct2, ct2=dummy) %>% select(-dummy) %>% unite(pair, c("ct1", "ct2"), sep=" ", remove = F)
-						) %>%
-						anti_join( tbl1 %>% distinct(pair)) %>%
-						group_by(pair) %>%
-						arrange(error %>% desc) %>%
-						slice(1) %>%
-						rename(`error mean` = error) %>%
-						ungroup
-				)
+			bind_rows(
+				tbl1,
+				tbl %>%
+					bind_rows(
+						(.) %>% mutate(dummy = ct1, ct1=ct2, ct2=dummy) %>% select(-dummy) %>% unite(pair, c("ct1", "ct2"), sep=" ", remove = F)
+					) %>%
+					anti_join( tbl1 %>% distinct(pair)) %>%
+					group_by(pair) %>%
+					arrange(error %>% desc) %>%
+					slice(1) %>%
+					rename(`error mean` = error) %>%
+					ungroup
+			)
 		} %>%
 
 		group_by(pair, level) %>%
@@ -366,7 +378,6 @@ get_markers_number = function(pass, res, num_markers_previous_level){
 			(.)
 		}
 }
-
 
 get_marker_df_source = function(fit_df, level, fit_threshold, lambda_threshold =4){
 
@@ -437,8 +448,15 @@ get_markers_df = function(markers_number, pass){
 		}
 }
 
+
+marker_df =
+	get_marker_df_source(fit_df_1, 1, 0.5) %>%
+	rbind(get_marker_df_source(fit_df_2, 2, 0.4)) %>%
+	separate(pair, c("ct1", "ct2"), sep=" ", remove = F)
+
+
 source("R/ARMET_tc.R")
-reps = 1
+
 ##################################
 # Pass 0
 ##################################
@@ -449,6 +467,7 @@ res_0 =
 	get_markers_df(0) %>%
 	get_input_data(reps = reps, pass = 0) %>%
 	{	ARMET_tc((.)$mix, (.)$reference) }
+res_0 %$% proportions %>% filter(!converged)
 
 ##################################
 # Pass 1
@@ -459,7 +478,8 @@ res_1 =
 	n_markers_1 %>%
 	get_markers_df(1) %>%
 	get_input_data(reps = reps, pass = 1) %>%
-	{	ARMET_tc((.)$mix, (.)$reference) }
+	{	ARMET_tc((.)$mix %>% filter(sample=="22_mono_derived t_cell"), (.)$reference) }
+res_1 %$% proportions %>% filter(!converged)
 
 ##################################
 # Pass 2
@@ -470,5 +490,5 @@ res_2 =
 	n_markers_2 %>%
 	get_markers_df(2) %>%
 	get_input_data(reps = reps, pass = 2) %>%
-	{	ARMET_tc((.)$mix, (.)$reference) }
+	{	ARMET_tc((.)$mix %>% filter(sample=="18_granulocyte mono_derived"), (.)$reference) }
 
