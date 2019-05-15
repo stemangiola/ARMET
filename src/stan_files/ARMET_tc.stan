@@ -99,7 +99,7 @@ functions{
 	 	  exposure_rate[sample_idx[(symbol_end[g]+1):symbol_end[g+1]]] +
 	 	  lambda_MPI[g],
 	 	  sigma_MPI[g]
-	 	 );
+	 	 ) * 4;
 	 }
 
 
