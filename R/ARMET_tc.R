@@ -1,15 +1,16 @@
-#' ARMET-tc main
+#' format_for_MPI
 #'
-#' @description Formated data frame to be readable by MPI map_rect of Stan
-format_for_MPI = function(df,shards){
+#' @description Format reference data frame for MPI
+format_for_MPI = function(df, shards){
 	df %>%
 
 		left_join(
 			(.) %>%
-				distinct(ct_symbol) %>%
+				distinct(G) %>%
+				arrange(G) %>%
 				mutate( idx_MPI = head( rep(1:shards, (.) %>% nrow %>% `/` (shards) %>% ceiling ), n=(.) %>% nrow) )
 		) %>%
-		arrange(idx_MPI, ct_symbol) %>%
+		arrange(idx_MPI, G) %>%
 
 		# Decide start - end location
 		group_by(idx_MPI) %>%
@@ -17,36 +18,186 @@ format_for_MPI = function(df,shards){
 			(.) %>%
 				left_join(
 					(.) %>%
-						distinct(idx_MPI, sample, ct_symbol) %>%
-						arrange(idx_MPI, ct_symbol) %>%
-						count(idx_MPI, ct_symbol) %>%
+						distinct(sample, G) %>%
+						arrange(G) %>%
+						count(G) %>%
 						mutate(end = cumsum(n)) %>%
 						mutate(start = c(1, .$end %>% rev() %>% `[` (-1) %>% rev %>% `+` (1)))
 				)
 		) %>%
 		ungroup() %>%
 
-		# Add counts MPI rows indexes
-		group_by(idx_MPI) %>%
-		mutate(`read count MPI row` = 1:n()) %>%
-		ungroup %>%
-
-		# Add ct_symbol MPI rows indexes
+		# Add ct_symbol MPI rows indexes - otherwise spread below gives error
 		left_join(
 			(.) %>%
 				group_by(idx_MPI) %>%
-				distinct(ct_symbol) %>%
+				distinct(G) %>%
+				arrange(G) %>%
 				mutate(`symbol MPI row` = 1:n()) %>%
 				ungroup
 		) %>%
 
-		# Add gene idx
+		# Add counts MPI rows indexes
+		group_by(idx_MPI) %>%
+		arrange(G) %>%
+		mutate(`read count MPI row` = 1:n()) %>%
+		ungroup
+
+}
+
+#' add_partition
+#'
+#' @description Add partition column dto data frame
+add_partition = function(df.input, partition_by, n_partitions){
+	df.input %>%
 		left_join(
 			(.) %>%
-				distinct(ct_symbol, idx_MPI, `symbol MPI row`) %>%
-				arrange(idx_MPI, `symbol MPI row`) %>%
-				mutate(G = 1:n())
+				select(!!partition_by) %>%
+				distinct %>%
+				mutate(
+					partition = 1:n() %>%
+						divide_by(length((.))) %>%
+						#	multiply_by(min(n_partitions, df.input %>% distinct(symbol) %>% nrow)) %>%
+						multiply_by(n_partitions) %>%
+						ceiling
+				)
 		)
+}
+
+#' get_MPI_deconv
+#'
+#' @description Get data format for MPI deconvolution part
+get_MPI_deconv = function(y_source, shards, my_level){
+	y_MPI_source =
+		y_source %>%
+		distinct(level, Q, S, symbol, G, `Cell type category`, `read count`) %>%
+		filter(level==my_level)  %>%
+		arrange(Q, symbol) %>%
+		add_partition("symbol", shards) %>%
+		group_by(partition) %>%
+		left_join( (.) %>% distinct(symbol) %>% mutate(MPI_row = 1:n())) %>%
+		ungroup()
+
+	list(
+		y_MPI_source = y_MPI_source,
+
+		y_MPI_symbol_per_shard =
+			y_MPI_source %>%
+			distinct(symbol, partition) %>%
+			count(partition) %>%
+			spread(partition, n) %>%
+			as_vector %>% array,
+
+		y_MPI_G_per_shard =
+			y_MPI_source %>%
+			distinct(symbol, `Cell type category`, partition) %>%
+			count(partition) %>%
+			spread(partition, n) %>%
+			as_vector %>% array,
+
+		y_MPI_idx =
+			y_MPI_source %>%
+			distinct(partition, symbol, G, `Cell type category`, MPI_row) %>%
+			select(-symbol) %>%
+			spread(partition, G) %>%
+			arrange(MPI_row, `Cell type category`) %>%
+			select(-MPI_row,-`Cell type category`) %>%
+			replace(is.na(.), 0 %>% as.integer) %>%
+			as_matrix %>%
+			t,
+
+		y_MPI_N_per_shard =
+			y_MPI_source %>%
+			distinct(MPI_row, `read count`, partition, Q) %>%
+			count(partition) %>%
+			spread(partition, n) %>%
+			as_vector %>% array,
+
+		y_MPI_count =
+			y_MPI_source %>%
+			distinct(MPI_row, `read count`, partition, Q) %>%
+			spread(partition, `read count`) %>%
+			arrange(MPI_row, Q) %>%
+			select(-MPI_row,-Q) %>%
+			replace(is.na(.), 0 %>% as.integer) %>%
+			as_matrix %>%
+			t
+	)
+}
+
+plot_differences_in_lambda = function(){
+
+	# Plot differences in lambda
+	(fit %>%
+	 	tidybayes::gather_draws(lambda_log[G]) %>%
+	 	tidybayes::median_qi() %>%
+	 	left_join(
+	 		counts_baseline %>%
+	 			distinct(`symbol`, G, `Cell type category`)
+	 	) %>%
+	 	left_join(
+	 		reference %>%
+	 			distinct(symbol, lambda, `Cell type category`) %>%
+	 			rename(`lambda_log` = lambda)
+	 	) %>%
+	 	ggplot(aes(x=lambda_log, y=.value, label=G)) + geom_point() + geom_abline(intercept = 0, slope = 1, color="red") + my_theme
+	)  %>% plotly::ggplotly()
+
+	#
+	(
+		fit %>%
+			extract(pars=c("lambda_mu", "lambda_sigma", "exposure_rate",  "lambda_log", "sigma_raw", "prop")) %>%
+			as.data.frame %>% as_tibble() %>%
+			mutate(chain = rep(1:3, 100) %>% sort %>% as.factor ) %>%
+			select(chain, everything()) %>% gather(par, draw, -chain) %>%
+			group_by(chain, par) %>%
+			summarise(d = draw %>% median) %>%
+			ggplot(aes(y=d, x=par, color=chain)) + geom_point()
+	) %>% plotly::ggplotly()
+
+}
+
+get_overlap_descriptive_stats = function(mix_tbl, ref_tbl){
+
+	writeLines(
+		sprintf(
+			"%s house keeping genes are missing from the input mixture",
+			ref_tbl %>% filter(`house keeping`) %>% distinct(symbol) %>% anti_join( mix_tbl %>% distinct(symbol) ) %>% nrow
+		)
+	)
+
+	writeLines(
+		sprintf(
+			"%s marker genes are missing from the input mixture",
+			ref_tbl %>% filter(!`house keeping`) %>% distinct(symbol) %>% anti_join( mix_tbl %>% distinct(symbol) ) %>% nrow
+		)
+	)
+}
+
+get_plot_predicted_real = function(fit_parsed){
+	fit_parsed %>%
+		filter(.variable %in% c("mu_sum", "phi_sum")) %>%
+		median_qi() %>%
+		bind_cols(
+			y_source %>% distinct(level, Q, S, symbol, `read count`) %>% arrange(level, Q, symbol)
+		) %>%
+		filter(Q==24) %>%
+		select(-mu_sum.lower, -mu_sum.upper, -phi_sum.lower, -phi_sum.upper) %>%
+		group_by(I) %>%
+		do(
+			bind_cols(
+				(.),
+				rnbinom(10000, mu = (.) %>% pull(mu_sum), size = (.) %>% pull(phi_sum)) %>% quantile(probs = c(0.1, 0.9)) %>% enframe %>% spread(name, value)
+			)
+		) %>%
+		ungroup() %>%
+		ggplot(aes(x=`read count` + 1, y=mu_sum + 1)) +
+		geom_point()  +
+		geom_abline(slope = 1, intercept = 0) +
+		geom_errorbar(aes(ymin=`10%`, ymax=`90%`)) +
+		facet_wrap(~Q) +
+		scale_y_log10() +
+		scale_x_log10()
 
 }
 
@@ -107,13 +258,13 @@ ARMET_tc = function(
 	iterations = 300
 ){
 
-	full_bayesian = 0
-	ct_to_omit =                        c("t_CD4_naive", "adipocyte")
-	verbose =                           F
-	omit_regression =                   F
-	save_fit =                          F
-	seed =                              NULL
-	cores = 14
+	# full_bayesian = 0
+	# ct_to_omit =                        c("t_CD4_naive", "adipocyte")
+	# verbose =                           F
+	# omit_regression =                   F
+	# save_fit =                          F
+	# seed =                              NULL
+	# cores = 14
 
 	source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/e4ec6a2348efc2f62b88f10b12e70f4c6273a10a/tidy_extensions.R")
 	source("https://gist.githubusercontent.com/stemangiola/90a528038b8c52b21f9cfa6bb186d583/raw/4a5798857362d946bd3029188b1cc9eb9b625456/transcription_tool_kit.R")
@@ -147,18 +298,24 @@ ARMET_tc = function(
 	lambda_mu_mu = 5.612671
 	lambda_sigma = 7.131593
 
+	# Print overlap descriptive stats
+	get_overlap_descriptive_stats(mix %>%	gather(`symbol`, `read count`, -sample), reference)
+
 	# Merge data sets
 	df =
 		bind_rows(
-			reference %>% filter(`symbol` %in% ( mix %>% colnames )),
+			reference %>%
+				filter(`symbol` %in% ( mix %>% colnames )) %>%
+				mutate(`query` = FALSE),
 			mix %>%
 				gather(`symbol`, `read count`, -sample) %>%
 				inner_join(reference %>% distinct(symbol) ) %>%
 				left_join( reference %>% distinct(symbol, `house keeping`) ) %>%
-				mutate(`Cell type category` = "query")
+				mutate(`Cell type category` = "query") %>%
+				mutate(`query` = TRUE)
 		)	%>%
 
-		# Add symbol indeces
+		# Add marker symbol indeces
 		left_join(
 			(.) %>%
 				filter(!`house keeping`) %>%
@@ -167,12 +324,13 @@ ARMET_tc = function(
 		) %>%
 
 		# Add sample indeces
-		mutate(S = sample %>% as.factor %>% as.integer) %>%
+		arrange(!`query`) %>% # query first
+		mutate(S = factor(sample, levels = .$sample %>% unique) %>% as.integer) %>%
 
 		# Add query samples indeces
 		left_join(
 			(.) %>%
-				filter(`Cell type category` == "query"  ) %>%
+				filter(`query`) %>%
 				distinct(`sample`) %>%
 				mutate(Q = 1:n())
 		) %>%
@@ -180,25 +338,41 @@ ARMET_tc = function(
 		# Add house keeping into Cell type label
 		mutate(`Cell type category` = ifelse(`house keeping`, "house_keeping", `Cell type category`)) %>%
 		anti_join(
-			(.) %>% filter(`house keeping`) %>% distinct(symbol, level) %>% group_by(symbol) %>% arrange(level) %>% slice(2) %>% ungroup()
+			(.) %>% filter(`house keeping` & !`query`) %>% distinct(symbol, level) %>% group_by(symbol) %>% arrange(level) %>% slice(2) %>% ungroup()
+		) %>%
+
+		# Create unique symbol ID
+		unite(ct_symbol, c("Cell type category", "symbol"), remove = F) %>%
+
+		# Add gene idx
+		left_join(
+			(.) %>%
+				filter(!`query`) %>%
+				distinct(`Cell type category`, ct_symbol, `house keeping`) %>%
+				arrange(!`house keeping`, ct_symbol) %>% # House keeping first
+				mutate(G = 1:n())
 		)
+
 
 	# For  reference MPI inference
 	counts_baseline =
 		df %>%
 
 		# Eliminate the query part, not the house keeping of the query
-		filter(`Cell type category` != "query")  %>%
+		filter(!`query` | `house keeping`)  %>%
 
-		# Create unique symbol ID
-		unite(ct_symbol, c("Cell type category", "symbol"), remove = F) %>%
+		# If full Bayesian false just keep house keeping
+		{
+			if(!full_bayesian) (.) %>% filter(`house keeping` & `query`)
+			else (.)
+		} %>%
 
 		format_for_MPI(shards)
 
-	S = df %>% distinct(sample) %>% nrow()
+	S = counts_baseline %>% distinct(sample) %>% nrow()
 	N = counts_baseline %>% distinct(idx_MPI, `read count`, `read count MPI row`) %>%  count(idx_MPI) %>% summarise(max(n)) %>% pull(1)
 	M = counts_baseline %>% distinct(start, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
-	G = counts_baseline %>% distinct(ct_symbol) %>% nrow()
+	G = df %>% filter(!`query`) %>% distinct(G) %>% nrow()
 	G_per_shard = counts_baseline %>% distinct(ct_symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% as.array
 	n_shards = min(shards, counts_baseline %>% distinct(idx_MPI) %>% nrow)
 	G_per_shard_idx = c(0, counts_baseline %>% distinct(ct_symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% cumsum)
@@ -229,14 +403,23 @@ ARMET_tc = function(
 		replace(is.na(.), 0 %>% as.integer) %>%
 		as_matrix() %>% t
 
+	G_ind =
+		counts_baseline %>%
+		distinct(idx_MPI, G, `symbol MPI row`)  %>%
+		spread(idx_MPI, G) %>%
+		arrange(`symbol MPI row`) %>%
+		select(-`symbol MPI row`) %>%
+		replace(is.na(.), 0 %>% as.integer) %>%
+		as_matrix() %>% t
+
 	# For deconvolution
 	ct_in_levels = c(4,7)
 
 	y_source =
 		df %>%
-		filter(`Cell type category` == "query") %>%
+		filter(`query` & !`house keeping`) %>%
 		select(S, Q, `symbol`, `read count`) %>%
-		left_join(	counts_baseline %>% distinct(`symbol`, G, `Cell type category`, level, lambda) ) %>%
+		left_join(	df %>% filter(!query) %>% distinct(`symbol`, G, `Cell type category`, level, lambda, sigma_raw) ) %>%
 		arrange(level, `Cell type category`, Q, symbol) %>%
 		mutate(`Cell type category` = factor(`Cell type category`, unique(`Cell type category`)))
 
@@ -252,7 +435,7 @@ ARMET_tc = function(
 	y = y_source %>% distinct(level, Q, S, symbol, `read count`) %>% arrange(level, Q, symbol) %>% select(`read count`, S) %>% as_matrix
 	I = y %>% nrow
 
-	Q = df %>% filter(`Cell type category` == "query") %>% distinct(Q) %>% nrow
+	Q = df %>% filter(`query`) %>% distinct(Q) %>% nrow
 	idx_ct_root = c(1:4)
 	idx_ct_immune = c(1:3, 5:11)
 	y_idx_ct_root = idx_ct_root + 3
@@ -260,22 +443,37 @@ ARMET_tc = function(
 
 	# Pass previously infered parameters
 	do_infer = full_bayesian
+
 	lambda_log_data =
-		counts_baseline %>%
+		df %>%
+
+		# Eliminate the query part, not the house keeping of the query
+		filter(!`query` | `house keeping`)  %>%
+
 		# Ths is bcause mix lacks lambda info and produces NA in the df
 		filter(!(`Cell type category` == "house_keeping" & lambda %>% is.na)) %>%
-		distinct(G, lambda) %>% pull(lambda)
+
+		distinct(G, lambda) %>%
+		arrange(G)%>%
+		pull(lambda)
 
 	sigma_raw_data =
-		counts_baseline %>%
+		df %>%
+
+		# Eliminate the query part, not the house keeping of the query
+		filter(!`query` | `house keeping`)  %>%
+
 		# Ths is bcause mix lacks lambda info and produces NA in the df
 		filter(!(`Cell type category` == "house_keeping" & sigma_raw %>% is.na)) %>%
-		distinct(G, sigma_raw) %>% pull(sigma_raw)
+
+		distinct(G, sigma_raw) %>%
+		arrange(G)%>%
+		pull(sigma_raw)
 
 	# Testing
-	exposure_rate = df %>% distinct(S) %>% nrow %>% seq(-1, 1, length.out = .);
-	set.seed(143)
-	prop_1 = gtools::rdirichlet(Q, c(1,1,1,1))
+	# exposure_rate = df %>% distinct(S) %>% nrow %>% seq(-1, 1, length.out = .);
+	# set.seed(143)
+	# prop_1 = gtools::rdirichlet(Q, c(1,1,1,1))
 
 
 	fileConn<-file("~/.R/Makevars")
@@ -289,17 +487,28 @@ ARMET_tc = function(
 		sampling(
 			ARMET_tc, #stanmodels$ARMET_tc,
 			chains=3, cores=3,
-			iter=iterations, warmup=iterations-100
+			iter=iterations, warmup=iterations-100,
+			pars = c("prop_1", "prop_2", "exposure_rate")
 		)
 	Sys.time() %>% print
 
-#	stop()
-
 	# Produce results
-	prop = fit %>%
-		tidybayes::gather_draws(prop_1[Q, C], prop_2[Q, C]) %>%
-		tidybayes::median_qi() %>%
+	prop =
+		fit %>% tidybayes::gather_draws(prop_1[Q, C], prop_2[Q, C]) %>%
+		filter(.variable %in% c("prop_1", "prop_2")) %>%
+
+		{
+			left_join(
+				# Get summary statistics
+				(.) %>% tidybayes::median_qi(),
+
+				# Check if bimodal
+				(.) %>% summarise(	converged = diptest::dip.test(`.value`) %$%	`p.value` > 0.05)
+			)
+		}	%>%
 		ungroup() %>%
+
+		# Parse
 		separate(.variable, c(".variable", "level"), convert = T) %>%
 		left_join(
 
@@ -309,52 +518,20 @@ ARMET_tc = function(
 				{
 					ys = (.)
 					ys %>%
-					slice(!!idx_ct_root) %>%
-					mutate(C = 1:n(), level=1) %>%
-					bind_rows(
-						ys %>%
-						slice(!!idx_ct_immune) %>%
-						mutate(C = 1:n(), level=2)
-					)
+						slice(!!idx_ct_root) %>%
+						mutate(C = 1:n(), level=1) %>%
+						bind_rows(
+							ys %>%
+								slice(!!idx_ct_immune) %>%
+								mutate(C = 1:n(), level=2)
+						)
 				}
 		) %>%
 		left_join(
 			df %>%
-		 	filter(`Cell type category` == "query") %>%
-		 	distinct(Q, sample)
+				filter(`query`) %>%
+				distinct(Q, sample)
 		)
-
-if(0){
-
-	# Plot differences in lambda
-	 (fit %>%
-		tidybayes::gather_draws(lambda_log[G]) %>%
-		tidybayes::median_qi() %>%
-		left_join(
-			counts_baseline %>%
-				distinct(`symbol`, G, `Cell type category`)
-		) %>%
-		left_join(
-			reference %>%
-				distinct(symbol, lambda, `Cell type category`) %>%
-				rename(`lambda_log` = lambda)
-		) %>%
-		ggplot(aes(x=lambda_log, y=.value, label=G)) + geom_point() + geom_abline(intercept = 0, slope = 1, color="red") + my_theme
-)  %>% plotly::ggplotly()
-
-	#
-	(
-		fit %>%
-			extract(pars=c("lambda_mu", "lambda_sigma", "exposure_rate",  "lambda_log", "sigma_raw", "prop")) %>%
-			as.data.frame %>% as_tibble() %>%
-			mutate(chain = rep(1:3, 100) %>% sort %>% as.factor ) %>%
-			select(chain, everything()) %>% gather(par, draw, -chain) %>%
-			group_by(chain, par) %>%
-			summarise(d = draw %>% median) %>%
-			ggplot(aes(y=d, x=par, color=chain)) + geom_point()
-	) %>% plotly::ggplotly()
-
-}
 
 
 	# Return

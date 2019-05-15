@@ -117,6 +117,7 @@ data {
   int n_shards;
 	int<lower=0> counts[n_shards, N];
 	int<lower=0> symbol_end[n_shards, M+1];
+	int<lower=0> G_ind[n_shards, M];
 	int<lower=0> sample_idx[n_shards, N];
 	int<lower=0> G_per_shard[n_shards];
 	int<lower=0> G_per_shard_idx[n_shards + 1];
@@ -207,8 +208,8 @@ transformed parameters {
   		append_row(
   		  append_row(
 	  		    append_row(
-	  		    	lambda_log[(G_per_shard_idx[i]+1):(G_per_shard_idx[i+1])],
-	      		  sigma[(G_per_shard_idx[i]+1):(G_per_shard_idx[i+1])]
+	  		    	lambda_log[G_ind[i, 1:G_per_shard[i]]],
+	      		  sigma[G_ind[i, 1:G_per_shard[i]]]
 	      		),
       		buffer
       	),
@@ -224,11 +225,6 @@ model {
 	vector[y_1_rows * 2] sum1 = sum_NB( lambda[idx_1], sigma[idx_1], I1_dim, prop_1);
 	vector[y_2_rows * 2] sum2 = sum_NB( lambda[idx_2], sigma[idx_2], I2_dim, prop_2);
 
-
-// print(sum1[1:y_1_rows]);
-// print( sum1[(y_1_rows+1):(y_1_rows*2)]);
-// print( exp(exposure_rate)[y[,2]]);
-
 	// Vecotrised sampling
 	y[,1]  ~ neg_binomial_2(
 		append_row( sum1[1:y_1_rows], sum2[1:y_2_rows]) .* exp(exposure_rate)[y[,2]] ,
@@ -240,7 +236,7 @@ model {
 
 	// Exposure prior
   exposure_rate ~ normal(0,1);
-  sum(exposure_rate) ~ normal(0, 0.001 * S);
+  if(do_infer) sum(exposure_rate) ~ normal(0, 0.001 * S);
 
   // Gene-wise properties of the data
   if(do_infer) lambda_log_param ~ exp_gamma_meanSd(lambda_mu,lambda_sigma);
