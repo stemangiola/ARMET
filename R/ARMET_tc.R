@@ -136,7 +136,7 @@ plot_differences_in_lambda = function(){
 	 			distinct(`symbol`, G, `Cell type category`)
 	 	) %>%
 	 	left_join(
-	 		reference %>%
+	 		reference_filtered %>%
 	 			distinct(symbol, lambda, `Cell type category`) %>%
 	 			rename(`lambda_log` = lambda)
 	 	) %>%
@@ -172,16 +172,21 @@ get_overlap_descriptive_stats = function(mix_tbl, ref_tbl){
 			ref_tbl %>% filter(!`house keeping`) %>% distinct(symbol) %>% anti_join( mix_tbl %>% distinct(symbol) ) %>% nrow
 		)
 	)
+
+	ref_tbl %>%
+		filter(!`house keeping`) %>% distinct(symbol, ct1, ct2) %>% anti_join( mix_tbl %>% distinct(symbol)) %>%
+		count(ct1, ct2) %>%
+		rename(`missing markers` = n) %>%
+		print(n=999)
+
 }
 
-get_plot_predicted_real = function(fit_parsed){
+get_plot_predicted_real = function(fit_parsed, y_source){
 	fit_parsed %>%
-		filter(.variable %in% c("mu_sum", "phi_sum")) %>%
-		median_qi() %>%
+		tidybayes::median_qi() %>%
 		bind_cols(
 			y_source %>% distinct(level, Q, S, symbol, `read count`) %>% arrange(level, Q, symbol)
 		) %>%
-		filter(Q==24) %>%
 		select(-mu_sum.lower, -mu_sum.upper, -phi_sum.lower, -phi_sum.upper) %>%
 		group_by(I) %>%
 		do(
@@ -191,15 +196,58 @@ get_plot_predicted_real = function(fit_parsed){
 			)
 		) %>%
 		ungroup() %>%
-		ggplot(aes(x=`read count` + 1, y=mu_sum + 1)) +
-		geom_point()  +
+		rowwise %>%
+		mutate(inside = between(`read count`, `10%`, `90%`)) %>%
+		ungroup %>%
+		ggplot(aes(x=`read count` + 1, y=mu_sum + 1, color=inside)) +
+		geom_point(alpha=0.5)  +
 		geom_abline(slope = 1, intercept = 0) +
-		geom_errorbar(aes(ymin=`10%`, ymax=`90%`)) +
+		geom_errorbar(aes(ymin=`10%`, ymax=`90%`), alpha=0.5) +
 		facet_wrap(~Q) +
 		scale_y_log10() +
 		scale_x_log10()
 
 }
+
+choose_chains_majority_roule = function(fit_parsed){
+
+	fit_parsed %>%
+		inner_join(
+
+			# Calculate modes
+			fit_parsed %>%
+				select(.chain, .value) %>%
+				{
+					main_cluster =
+						(.) %>%
+						pull(.value) %>%
+						kmeans(centers = 2) %>% {
+							bind_cols(
+								(.) %$% centers %>% as_tibble(.name_repair = "minimal") %>% setNames("center") ,
+								(.) %$% size %>% as_tibble(.name_repair = "minimal")  %>% setNames("size")
+							)
+						} %>%
+						arrange(size %>% desc) %>%
+						slice(1)
+
+					(.) %>%
+						group_by(.chain) %>%
+						summarise(.lower_chain = quantile(.value, probs = c(0.025)), .upper_chain = quantile(.value, probs = c(0.975))) %>%
+						ungroup %>%
+						mutate(center = main_cluster %>% pull(center))
+				} %>%
+
+				# Filter cains
+				rowwise() %>%
+				filter(between(center, .lower_chain, .upper_chain)) %>%
+				ungroup %>%
+				distinct(.chain)
+
+		)
+filter_reference = function(reference, mix){
+	reference %>%
+		inner_join(mix %>% slice(1) %>%	gather(`symbol`, `read count`, -sample) %>% distinct(symbol)) %>%
+		{
 
 #' ARMET-tc main
 #'
@@ -299,17 +347,19 @@ ARMET_tc = function(
 	lambda_sigma = 7.131593
 
 	# Print overlap descriptive stats
-	get_overlap_descriptive_stats(mix %>%	gather(`symbol`, `read count`, -sample), reference)
+	#get_overlap_descriptive_stats(mix %>% slice(1) %>% gather(`symbol`, `read count`, -sample), reference)
 
 	# Merge data sets
+
+
+	reference_filtered = filter_reference(reference, mix)
+
 	df =
 		bind_rows(
-			reference %>%
-				filter(`symbol` %in% ( mix %>% colnames )) %>%
-				mutate(`query` = FALSE),
+			# Get reference based on mix genes
+			reference_filtered %>% mutate(`query` = FALSE),
 			mix %>%
 				gather(`symbol`, `read count`, -sample) %>%
-				inner_join(reference %>% distinct(symbol) ) %>%
 				left_join( reference %>% distinct(symbol, `house keeping`) ) %>%
 				mutate(`Cell type category` = "query") %>%
 				mutate(`query` = TRUE)
@@ -372,7 +422,6 @@ ARMET_tc = function(
 	S = counts_baseline %>% distinct(sample) %>% nrow()
 	N = counts_baseline %>% distinct(idx_MPI, `read count`, `read count MPI row`) %>%  count(idx_MPI) %>% summarise(max(n)) %>% pull(1)
 	M = counts_baseline %>% distinct(start, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
-	G = df %>% filter(!`query`) %>% distinct(G) %>% nrow()
 	G_per_shard = counts_baseline %>% distinct(ct_symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% as.array
 	n_shards = min(shards, counts_baseline %>% distinct(idx_MPI) %>% nrow)
 	G_per_shard_idx = c(0, counts_baseline %>% distinct(ct_symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% cumsum)
@@ -475,6 +524,9 @@ ARMET_tc = function(
 	# set.seed(143)
 	# prop_1 = gtools::rdirichlet(Q, c(1,1,1,1))
 
+	# browser()
+	# load("temp_fit.RData")
+	exposure_rate = c(1.5, 1.6, 1.9, 1.8, 1.5, 1.9, 2.0, 1.7, 1.6, 1.5)
 
 	fileConn<-file("~/.R/Makevars")
 	writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
@@ -482,30 +534,42 @@ ARMET_tc = function(
 	Sys.setenv("STAN_NUM_THREADS" = cores)
 	ARMET_tc = stan_model("src/stan_files/ARMET_tc.stan")
 
+
+
 	Sys.time() %>% print
 	fit =
 		sampling(
 			ARMET_tc, #stanmodels$ARMET_tc,
 			chains=3, cores=3,
 			iter=iterations, warmup=iterations-100,
-			pars = c("prop_1", "prop_2", "exposure_rate")
+			pars = c("prop_1", "prop_2", "mu_sum", "phi_sum", "exposure_rate", "sigma_raw_global") #, "exposure_rate")
 		)
 	Sys.time() %>% print
 
+
+	browser()
+
 	# Produce results
 	prop =
-		fit %>% tidybayes::gather_draws(prop_1[Q, C], prop_2[Q, C]) %>%
+		fit %>%
+		tidybayes::gather_draws(prop_1[Q, C], prop_2[Q, C]) %>%
 		filter(.variable %in% c("prop_1", "prop_2")) %>%
 
+		# If not converged choose the majority chains
+		mutate(	converged = diptest::dip.test(`.value`) %$%	`p.value` > 0.05) %>%
+
+		do({
+			if((.) %>% distinct(converged) %>% pull(1)) (.)
+			else (.) %>% choose_chains_majority_roule
+		}) %>%
+
+		# Summarise
 		{
 			left_join(
-				# Get summary statistics
-				(.) %>% tidybayes::median_qi(),
-
-				# Check if bimodal
-				(.) %>% summarise(	converged = diptest::dip.test(`.value`) %$%	`p.value` > 0.05)
+				(.) %>% select(-converged) %>% tidybayes::median_qi(),
+				(.) %>% distinct(converged)
 			)
-		}	%>%
+		} %>%
 		ungroup() %>%
 
 		# Parse
@@ -532,6 +596,9 @@ ARMET_tc = function(
 				filter(`query`) %>%
 				distinct(Q, sample)
 		)
+
+
+	get_plot_predicted_real( fit %>% tidybayes::spread_draws(mu_sum[I], phi_sum[I]) %>% filter(.chain==2), y_source ) + my_theme
 
 
 	# Return

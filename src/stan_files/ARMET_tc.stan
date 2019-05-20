@@ -99,7 +99,7 @@ functions{
 	 	  exposure_rate[sample_idx[(symbol_end[g]+1):symbol_end[g+1]]] +
 	 	  lambda_MPI[g],
 	 	  sigma_MPI[g]
-	 	 ) * 4;
+	 	 );
 	 }
 
 
@@ -150,7 +150,8 @@ data {
 	int idx_2[I2];
 
 	//simplex[ct_in_levels[1]] prop_1[Q]; // Root
-	//vector[S] exposure_rate;
+// 	  vector[S] exposure_rate;
+
 }
 transformed data {
 
@@ -183,20 +184,29 @@ parameters {
   // Gene-wise properties of the data
   vector[G * do_infer] lambda_log_param;
   vector[G * do_infer] sigma_raw_param;
+  vector[Q] sigma_raw_global;
 
   // Proportions
   simplex[ct_in_levels[1]] prop_1[Q]; // Root
   simplex[ct_in_levels[2]] prop_immune[Q]; // Immune cells
 
+
 }
 transformed parameters {
   // Sigma
-  vector[G] sigma = 1.0 ./ exp(do_infer ? sigma_raw_param : sigma_raw_data) ;
+  vector[G] sigma = 1.0 ./ exp(do_infer ? sigma_raw_param : sigma_raw_data ) ;
 	vector[G] lambda_log = do_infer ? lambda_log_param : lambda_log_data;
 
 	// proportion of the higher level
 	vector[sum(ct_in_levels) - 1] prop_2[Q] =
 		append_vector_array(	prop_1[, 1:3], multiply_by_column(prop_immune, prop_1[, 4]) );
+
+	// Deconvolution
+	vector[G] lambda = exp(lambda_log);
+	vector[y_1_rows * 2] sum1 = sum_NB( lambda[idx_1], sigma[idx_1], I1_dim, prop_1);
+	vector[y_2_rows * 2] sum2 = sum_NB( lambda[idx_2], sigma[idx_2], I2_dim, prop_2);
+	vector[I] mu_sum = append_row( sum1[1:y_1_rows], sum2[1:y_2_rows]) .* exp(exposure_rate)[y[,2]] ;
+	vector[I] phi_sum = append_row( sum1[(y_1_rows+1):(y_1_rows*2)], sum2[(y_2_rows+1):(y_2_rows*2)]) .* ( 1 ./ exp(sigma_raw_global))[y[,2]] ;
 
 	// Shards - MPI
 	vector[2*M + S] lambda_sigma_exposure_MPI[n_shards];
@@ -220,19 +230,14 @@ transformed parameters {
 
 model {
 
-	// Deconvolution
-	vector[G] lambda = exp(lambda_log);
-	vector[y_1_rows * 2] sum1 = sum_NB( lambda[idx_1], sigma[idx_1], I1_dim, prop_1);
-	vector[y_2_rows * 2] sum2 = sum_NB( lambda[idx_2], sigma[idx_2], I2_dim, prop_2);
 
 	// Vecotrised sampling
-	y[,1]  ~ neg_binomial_2(
-		append_row( sum1[1:y_1_rows], sum2[1:y_2_rows]) .* exp(exposure_rate)[y[,2]] ,
-		append_row( sum1[(y_1_rows+1):(y_1_rows*2)], sum2[(y_2_rows+1):(y_2_rows*2)])
-	);
+  target += neg_binomial_2_lpmf(y[1:y_1_rows,1]                       | mu_sum[1:y_1_rows], phi_sum[1:y_1_rows]);
+	target += neg_binomial_2_lpmf(y[(y_1_rows+1):(y_1_rows+y_2_rows),1] | mu_sum[(y_1_rows+1):(y_1_rows+y_2_rows)], phi_sum[(y_1_rows+1):(y_1_rows+y_2_rows)]);
 
   // Overall properties of the data
   lambda_mu ~ normal(lambda_mu_mu,2);
+	sigma_raw_global ~ normal(0,1);
 
 	// Exposure prior
   exposure_rate ~ normal(0,1);
@@ -243,7 +248,7 @@ model {
   if(do_infer) sigma_raw_param ~ normal(sigma_slope * lambda_log_param + sigma_intercept,sigma_sigma);
 
 	// Gene-wise properties of the data
-	target += sum( map_rect( lp_reduce , global_parameters , lambda_sigma_exposure_MPI , xr , int_MPI ) );
+	target += sum( map_rect( lp_reduce , global_parameters , lambda_sigma_exposure_MPI , xr , int_MPI ) ) * 10;
 
 }
 // generated quantities{
