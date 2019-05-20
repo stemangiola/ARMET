@@ -244,10 +244,54 @@ choose_chains_majority_roule = function(fit_parsed){
 				distinct(.chain)
 
 		)
+}
+
 filter_reference = function(reference, mix){
 	reference %>%
 		inner_join(mix %>% slice(1) %>%	gather(`symbol`, `read count`, -sample) %>% distinct(symbol)) %>%
 		{
+			bind_rows(
+
+				# Get markers based on common genes with mix
+				(.) %>%
+					filter(!`house keeping`) %>%
+					group_by(ct1, ct2) %>%
+					do({
+						n_markers = (.) %>% slice(1) %>% pull(`n markers`)
+						(.) %>%
+							inner_join(
+								(.) %>%
+									distinct(symbol, rank) %>%
+									arrange(rank) %>%
+									slice(1: n_markers)
+							)
+
+					}) %>%
+					ungroup() %>%
+
+					# Filter markers in upper levels that have been selected for lower levels
+					inner_join(
+						(.) %>%
+							distinct(symbol, level) %>%
+							group_by(symbol) %>%
+							arrange(level %>% desc) %>%
+							slice(1) %>%
+							ungroup
+					) %>%
+
+					# Print number of markewrs per comparison
+					{
+						(.) %>% distinct(symbol, ct1, ct2) %>% count(ct1, ct2) %>% print(n=99)
+						(.)
+					},
+
+				# Get house keeping genes
+				(.) %>% filter(`house keeping`)
+			)
+		} %>%
+		select(-ct1, -ct2, -rank, -`n markers`) %>%	distinct
+}
+
 
 #' ARMET-tc main
 #'
@@ -360,7 +404,8 @@ ARMET_tc = function(
 			reference_filtered %>% mutate(`query` = FALSE),
 			mix %>%
 				gather(`symbol`, `read count`, -sample) %>%
-				left_join( reference %>% distinct(symbol, `house keeping`) ) %>%
+				inner_join(reference_filtered %>% distinct(symbol) ) %>%
+				left_join( reference_filtered %>% distinct(symbol, `house keeping`) ) %>%
 				mutate(`Cell type category` = "query") %>%
 				mutate(`query` = TRUE)
 		)	%>%
@@ -403,6 +448,7 @@ ARMET_tc = function(
 				mutate(G = 1:n())
 		)
 
+	G = df %>% filter(!`query`) %>% distinct(G) %>% nrow()
 
 	# For  reference MPI inference
 	counts_baseline =
