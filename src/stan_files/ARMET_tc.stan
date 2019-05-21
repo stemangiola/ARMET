@@ -1,5 +1,12 @@
 functions{
 
+		matrix vector_array_to_transposed_matrix(vector[] x) {
+		  matrix[rows(x[1]), size(x)] y;
+		  for (m in 1:size(x))
+		    y[,m] = x[m];
+		  return y;
+		}
+
 		vector[] append_vector_array(vector[] v1, vector[] v2){
 			vector[num_elements(v1[1]) + num_elements(v2[1])] v3[num_elements(v1[,1])];
 
@@ -10,8 +17,11 @@ functions{
 		}
 
 		vector[] multiply_by_column(vector[] v, real[] r){
-			vector[num_elements(v[1])] v_mult [num_elements(v[,1])];
-			for(i in 1:num_elements(v[1])) v_mult[,i] = to_array_1d(to_row_vector(v[,i]) .* to_row_vector(r));
+			int n_rows = num_elements(v[,1]);
+			int n_cols = num_elements(v[1]);
+
+			vector[n_cols] v_mult [n_rows];
+			for(i in 1:n_cols) v_mult[,i] = to_array_1d(to_row_vector(v[,i]) .* to_row_vector(r));
 
 			return v_mult;
 		}
@@ -20,10 +30,6 @@ functions{
 
       // This function is the  probability of the log gamma function
       // in case you have data that is aleady in log form
-
-      // real v = square(s);
-      // real a = square(m) / v;
-      // real b = m / v;
 
       real m = exp(m_log);
       real v = m + square(m) * s;
@@ -49,15 +55,23 @@ functions{
   	  return log(gamma_rng(a, b));
   	}
 
-	vector get_sum_NB(vector mu, vector phi){
+		vector sum_NB(vector lambda, vector sigma, int[] matrix_dim, vector[] prop){
 
-			vector[2] mu_sigma;
+			int Q = size(prop);
+			matrix[matrix_dim[1], matrix_dim[2]] lambda_mat = to_matrix(lambda, matrix_dim[1], matrix_dim[2]); // Bug prone
+			matrix[rows(prop[1]),Q] prop_mat = vector_array_to_transposed_matrix(prop);
+			matrix[matrix_dim[1] , Q] lambda_sum = lambda_mat * prop_mat;
+			matrix[matrix_dim[1], Q] sigma_sum =
+				square(lambda_sum) ./
+				((
+					square(lambda_mat) ./
+					to_matrix(sigma, matrix_dim[1], matrix_dim[2]) //sigma_mat
+				) * square(prop_mat)) ;
 
-			mu_sigma[1] = sum(mu);
-			mu_sigma[2] = square(mu_sigma[1]) / sum(square(mu) ./ phi);
 
-			return mu_sigma;
+				return(append_row( to_vector(lambda_sum), to_vector(sigma_sum)));
 		}
+
 
 	vector lp_reduce( vector global_parameters , vector local_parameters , real[] xr , int[] xi ) {
 	 	int M = xi[1];
@@ -91,6 +105,8 @@ functions{
 
 }
 data {
+
+	// Reference matrix inference
   int<lower=0> N;
   int<lower=0> M;
 	int<lower=0> G;
@@ -98,6 +114,7 @@ data {
   int n_shards;
 	int<lower=0> counts[n_shards, N];
 	int<lower=0> symbol_end[n_shards, M+1];
+	int<lower=0> G_ind[n_shards, M];
 	int<lower=0> sample_idx[n_shards, N];
 	int<lower=0> G_per_shard[n_shards];
 	int<lower=0> G_per_shard_idx[n_shards + 1];
@@ -112,20 +129,31 @@ data {
   // Deconvolution
   //int<lower=1> C;
   int<lower=0> Q;
-  int<lower=0> I[2];
+  int<lower=0> I;
   int<lower=1> ct_in_levels[2];
-  int y[sum(I), 3 + ct_in_levels[1] + ct_in_levels[2]]; // `read count`  S Q mapping_with_ct
-  int y_idx_ct_root[4];
-  int y_idx_ct_immune[sum(ct_in_levels) - 1];
-
+  int y[I,2]; // `read count`  S Q mapping_with_ct
 
   // Skip lambda imputaton
  	int<lower=0, upper=1> do_infer;
  	vector[G] lambda_log_data;
   vector[G] sigma_raw_data;
 
+  // Efficient sum calculation
+  int I1;
+  int I2;
+  int I1_dim[2];
+  int I2_dim[2];
+	int idx_1[I1];
+	int idx_2[I2];
+
+	//simplex[ct_in_levels[1]] prop_1[Q]; // Root
+// 	  vector[S] exposure_rate;
+
 }
 transformed data {
+
+	int y_1_rows = I1_dim[1] * Q;
+	int y_2_rows = I2_dim[1] * Q;
 
   vector[0] global_parameters;
   real xr[n_shards, 0];
@@ -152,21 +180,30 @@ parameters {
 
   // Gene-wise properties of the data
   vector[G * do_infer] lambda_log_param;
-  vector[G * do_infer] sigma_raw;
+  vector[G * do_infer] sigma_raw_param;
+  vector[Q] sigma_raw_global;
 
   // Proportions
   simplex[ct_in_levels[1]] prop_1[Q]; // Root
   simplex[ct_in_levels[2]] prop_immune[Q]; // Immune cells
 
+
 }
 transformed parameters {
   // Sigma
-  vector[G] sigma = 1.0 ./ exp(do_infer ? sigma_raw : sigma_raw_data) ;
+  vector[G] sigma = 1.0 ./ exp(do_infer ? sigma_raw_param : sigma_raw_data ) ;
 	vector[G] lambda_log = do_infer ? lambda_log_param : lambda_log_data;
 
 	// proportion of the higher level
 	vector[sum(ct_in_levels) - 1] prop_2[Q] =
 		append_vector_array(	prop_1[, 1:3], multiply_by_column(prop_immune, prop_1[, 4]) );
+
+	// Deconvolution
+	vector[G] lambda = exp(lambda_log);
+	vector[y_1_rows * 2] sum1 = sum_NB( lambda[idx_1], sigma[idx_1], I1_dim, prop_1);
+	vector[y_2_rows * 2] sum2 = sum_NB( lambda[idx_2], sigma[idx_2], I2_dim, prop_2);
+	vector[I] mu_sum = append_row( sum1[1:y_1_rows], sum2[1:y_2_rows]) .* exp(exposure_rate)[y[,2]] ;
+	vector[I] phi_sum = append_row( sum1[(y_1_rows+1):(y_1_rows*2)], sum2[(y_2_rows+1):(y_2_rows*2)]) .* ( 1 ./ exp(sigma_raw_global))[y[,2]] ;
 
 	// Shards - MPI
 	vector[2*M + S] lambda_sigma_exposure_MPI[n_shards];
@@ -178,57 +215,37 @@ transformed parameters {
   		append_row(
   		  append_row(
 	  		    append_row(
-	  		    	lambda_log[(G_per_shard_idx[i]+1):(G_per_shard_idx[i+1])],
-	      		  sigma[(G_per_shard_idx[i]+1):(G_per_shard_idx[i+1])]
+	  		    	lambda_log[G_ind[i, 1:G_per_shard[i]]],
+	      		  sigma[G_ind[i, 1:G_per_shard[i]]]
 	      		),
       		buffer
       	),
       	exposure_rate
       );
-
 	}
 }
 
 model {
 
-	vector[2] y_sum[sum(I)];
+
+	// Vecotrised sampling
+  target += neg_binomial_2_lpmf(y[1:y_1_rows,1]                       | mu_sum[1:y_1_rows], phi_sum[1:y_1_rows]);
+	target += neg_binomial_2_lpmf(y[(y_1_rows+1):(y_1_rows+y_2_rows),1] | mu_sum[(y_1_rows+1):(y_1_rows+y_2_rows)], phi_sum[(y_1_rows+1):(y_1_rows+y_2_rows)]);
 
   // Overall properties of the data
   lambda_mu ~ normal(lambda_mu_mu,2);
-  //lambda_sigma ~ normal(0,2);
+	sigma_raw_global ~ normal(0,1);
 
-  //sigma_raw ~ normal(0,1);
+	// Exposure prior
   exposure_rate ~ normal(0,1);
-  sum(exposure_rate) ~ normal(0, 0.001 * S);
+  if(do_infer) sum(exposure_rate) ~ normal(0, 0.001 * S);
 
   // Gene-wise properties of the data
-  if(do_infer) lambda_log ~ exp_gamma_meanSd(lambda_mu,lambda_sigma);
-  if(do_infer) sigma_raw ~ normal(sigma_slope * lambda_log + sigma_intercept,sigma_sigma);
+  if(do_infer) lambda_log_param ~ exp_gamma_meanSd(lambda_mu,lambda_sigma);
+  if(do_infer) sigma_raw_param ~ normal(sigma_slope * lambda_log_param + sigma_intercept,sigma_sigma);
 
 	// Gene-wise properties of the data
-	target += sum( map_rect( lp_reduce , global_parameters , lambda_sigma_exposure_MPI , xr , int_MPI ) );
-
-	// Deconvolution
-	// for(q in 1:Q) prop_1[q] ~ dirichlet(rep_vector(1*ct_in_levels[1], ct_in_levels[1]));
-	// for(q in 1:Q) prop_immune[q] ~ dirichlet(rep_vector(1*ct_in_levels[2], ct_in_levels[2]));
-
-	// Root
-	for(i in 1:I[1]) y_sum[i] =
-		get_sum_NB(
-			exp(lambda_log[y[i,y_idx_ct_root]]) .* prop_1[y[i,3]] ,
-			sigma[y[i,y_idx_ct_root]]
-		);
-
-	// Immune
-	for(i in I[1]+1 : sum(I)) y_sum[i] =
-		get_sum_NB(
-			exp(lambda_log[y[i,y_idx_ct_immune]] ) .* prop_2[y[i,3]] ,
-			sigma[y[i,y_idx_ct_immune]]
-		);
-
-
-	// Vecotrised sampling
-	y[,1]  ~ neg_binomial_2_log(to_vector( log( y_sum[,1]) ) + exposure_rate[y[,2]] , y_sum[,2]);
+	target += sum( map_rect( lp_reduce , global_parameters , lambda_sigma_exposure_MPI , xr , int_MPI ) ) * 10;
 
 
 
