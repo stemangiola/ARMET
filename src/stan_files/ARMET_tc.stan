@@ -349,12 +349,6 @@ model {
 	));
 
 
-
-
-	// target += sum( map_rect( sum_reduce , global_parameters , lambda_sigma_exposure_prop_MPI_lv1 , xr , lev1_package ) );
-	// target += sum( map_rect( sum_reduce , global_parameters , lambda_sigma_exposure_prop_MPI_lv2 , xr , lev2_package ) );
-	//
-
   // Overall properties of the data
   lambda_mu ~ normal(lambda_mu_mu,2);
 	sigma_raw_global ~ normal(0,1);
@@ -366,11 +360,6 @@ model {
   // Gene-wise properties of the data
   if(do_infer) lambda_log_param ~ exp_gamma_meanSd(lambda_mu,lambda_sigma);
   if(do_infer) sigma_raw_param ~ normal(sigma_slope * lambda_log_param + sigma_intercept,sigma_sigma);
-
-	// // Gene-wise properties of the data
-	// target += sum( map_rect( lp_reduce , global_parameters , lambda_sigma_exposure_MPI , xr , counts_package ) );
-
-
 
 }
 // generated quantities{
