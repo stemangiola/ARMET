@@ -593,7 +593,7 @@ ARMET_tc = function(
 	Sys.time() %>% print
 
 
-	browser()
+	#browser()
 
 	# Produce results
 	prop =

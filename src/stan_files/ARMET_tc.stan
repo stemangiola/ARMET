@@ -26,27 +26,6 @@ functions{
 			return v_mult;
 		}
 
-
-		vector sum_NB(vector lambda, vector sigma, int[] matrix_dim, vector[] prop){
-
-			int Q = size(prop);
-			matrix[matrix_dim[1], matrix_dim[2]] lambda_mat = to_matrix(lambda, matrix_dim[1], matrix_dim[2]); // Bug prone
-			matrix[rows(prop[1]),Q] prop_mat = vector_array_to_transposed_matrix(prop);
-			matrix[matrix_dim[1] , Q] lambda_sum = lambda_mat * prop_mat;
-			matrix[matrix_dim[1], Q] sigma_sum =
-				square(lambda_sum) ./
-				((
-					square(lambda_mat) ./
-					to_matrix(sigma, matrix_dim[1], matrix_dim[2]) //sigma_mat
-				) * square(prop_mat)) ;
-
-// print(lambda_mat);
-// print(	to_matrix(sigma, matrix_dim[1], matrix_dim[2]) );
-// print(prop_mat);
-
-				return(append_row( to_vector(lambda_sum), to_vector(sigma_sum)));
-		}
-
   	real exp_gamma_meanSd_lpdf(vector x_log, real m_log, real s){
 
       // This function is the  probability of the log gamma function
@@ -75,6 +54,24 @@ functions{
 
   	  return log(gamma_rng(a, b));
   	}
+
+		vector sum_NB(vector lambda, vector sigma, int[] matrix_dim, vector[] prop){
+
+			int Q = size(prop);
+			matrix[matrix_dim[1], matrix_dim[2]] lambda_mat = to_matrix(lambda, matrix_dim[1], matrix_dim[2]); // Bug prone
+			matrix[rows(prop[1]),Q] prop_mat = vector_array_to_transposed_matrix(prop);
+			matrix[matrix_dim[1] , Q] lambda_sum = lambda_mat * prop_mat;
+			matrix[matrix_dim[1], Q] sigma_sum =
+				square(lambda_sum) ./
+				((
+					square(lambda_mat) ./
+					to_matrix(sigma, matrix_dim[1], matrix_dim[2]) //sigma_mat
+				) * square(prop_mat)) ;
+
+
+				return(append_row( to_vector(lambda_sum), to_vector(sigma_sum)));
+		}
+
 
 	vector lp_reduce( vector global_parameters , vector local_parameters , real[] xr , int[] xi ) {
 	 	int M = xi[1];

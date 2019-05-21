@@ -538,6 +538,6 @@ n_markers_3 = get_markers_number(3, res_2, n_markers_2)
 x=n_markers_0 %>%
 	get_markers_df(2) %>%
 	get_input_data(reps = reps, pass = 2) %>%
-	{	ARMET_tc(read_csv("docs/GBM.csv") %>% slice(1:10), (.)$reference, full_bayesian = T) }
+	{	ARMET_tc(read_csv("docs/GBM.csv") %>% slice(1:10), (.)$reference, full_bayesian = F) }
 x %$% proportions %>% filter(!converged)
 
