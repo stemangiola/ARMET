@@ -74,6 +74,8 @@ functions{
 
 
 	vector lp_reduce( vector global_parameters , vector local_parameters , real[] xr , int[] xi ) {
+
+		// Data
 	 	int M = xi[1];
 	 	int N = xi[2];
 	 	int S = xi[3];
@@ -82,25 +84,28 @@ functions{
 	 	int sample_idx[N] = xi[(4+1+M+1):(4+1+M+1+N-1)];
 	 	int counts[N] = xi[(4+1+M+1+N):size(xi)];
 
-
+		// Parameters
 	 	vector[G_per_shard] lambda_MPI = local_parameters[1:G_per_shard];
 	 	vector[G_per_shard] sigma_MPI = local_parameters[(G_per_shard+1):(G_per_shard*2)];
 	 	vector[S] exposure_rate = local_parameters[((M*2)+1):rows(local_parameters)];
 
-	 	vector[G_per_shard] lp;
+		// Vectorise lpmf
+		vector[symbol_end[G_per_shard+1]] lambda_MPI_c;
+		vector[symbol_end[G_per_shard+1]] sigma_MPI_c;
+		for(g in 1:G_per_shard){
+			int how_many = symbol_end[g+1] - (symbol_end[g]);
+			lambda_MPI_c[(symbol_end[g]+1):symbol_end[g+1]] = rep_vector(lambda_MPI[g], how_many);
+			sigma_MPI_c [(symbol_end[g]+1):symbol_end[g+1]] = rep_vector(sigma_MPI[g],  how_many);
+		}
 
+		// Return
+    return [neg_binomial_2_log_lpmf(
+    	counts[1:symbol_end[G_per_shard+1]] |
+    	exposure_rate[sample_idx[1:symbol_end[G_per_shard+1]]] +
+    	lambda_MPI_c,
+    	sigma_MPI_c
+    )]';
 
-	 for(g in 1:G_per_shard){
-	 	lp[g] =  neg_binomial_2_log_lpmf(
-	 	  counts[(symbol_end[g]+1):symbol_end[g+1]] |
-	 	  exposure_rate[sample_idx[(symbol_end[g]+1):symbol_end[g+1]]] +
-	 	  lambda_MPI[g],
-	 	  sigma_MPI[g]
-	 	 );
-	 }
-
-
-    return [sum(lp)]';
   }
 
 }
@@ -146,8 +151,8 @@ data {
 	int idx_1[I1];
 	int idx_2[I2];
 
-	//simplex[ct_in_levels[1]] prop_1[Q]; // Root
-// 	  vector[S] exposure_rate;
+  int<lower=0> counts_package[n_shards, 4+(M+1)+N+N];
+
 
 }
 transformed data {
@@ -158,19 +163,6 @@ transformed data {
   vector[0] global_parameters;
   real xr[n_shards, 0];
 
-  int<lower=0> int_MPI[n_shards, 4+(M+1)+N+N];
-
-  // Shards - MPI
-  for ( i in 1:n_shards ) {
-  int M_N_Gps[4];
-  M_N_Gps[1] = M;
-  M_N_Gps[2] = N;
-  M_N_Gps[3] = S;
-  M_N_Gps[4] = G_per_shard[i];
-
-  int_MPI[i,] = append_array(append_array(append_array(M_N_Gps, symbol_end[i]), sample_idx[i]), counts[i]);
-
-  }
 }
 parameters {
   // Overall properties of the data
@@ -245,7 +237,7 @@ model {
   if(do_infer) sigma_raw_param ~ normal(sigma_slope * lambda_log_param + sigma_intercept,sigma_sigma);
 
 	// Gene-wise properties of the data
-	target += sum( map_rect( lp_reduce , global_parameters , lambda_sigma_exposure_MPI , xr , int_MPI ) ) * 10;
+	target += sum( map_rect( lp_reduce , global_parameters , lambda_sigma_exposure_MPI , xr , counts_package ) ) * 10;
 
 
 

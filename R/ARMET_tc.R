@@ -450,7 +450,10 @@ ARMET_tc = function(
 
 	G = df %>% filter(!`query`) %>% distinct(G) %>% nrow()
 
+	#########################################
 	# For  reference MPI inference
+	#########################################
+
 	counts_baseline =
 		df %>%
 
@@ -507,7 +510,10 @@ ARMET_tc = function(
 		replace(is.na(.), 0 %>% as.integer) %>%
 		as_matrix() %>% t
 
+	#######################################
 	# For deconvolution
+	#######################################
+
 	ct_in_levels = c(4,7)
 
 	y_source =
@@ -527,14 +533,35 @@ ARMET_tc = function(
 	I1_dim = c(idx_1_source %>% distinct(symbol) %>% nrow, idx_1_source %>% distinct(`Cell type category`) %>% nrow)
 	I2_dim = c(idx_2_source %>% distinct(symbol) %>% nrow, idx_2_source %>% distinct(`Cell type category`) %>% nrow)
 
-	y = y_source %>% distinct(level, Q, S, symbol, `read count`) %>% arrange(level, Q, symbol) %>% select(`read count`, S) %>% as_matrix
-	I = y %>% nrow
 
 	Q = df %>% filter(`query`) %>% distinct(Q) %>% nrow
 	idx_ct_root = c(1:4)
 	idx_ct_immune = c(1:3, 5:11)
 	y_idx_ct_root = idx_ct_root + 3
 	y_idx_ct_immune = idx_ct_immune + 3
+
+	#######################################
+	# Merge all MPI
+	#######################################
+browser()
+	# Reference
+	counts_package =
+		rep(c(M, N, S), shards) %>% matrix(nrow = shards, byrow = T) %>%
+		cbind(G_per_shard) %>%
+		cbind(symbol_end) %>%
+		cbind(sample_idx) %>%
+		cbind(counts)
+
+	# level 1
+
+	########################################
+	########################################
+
+	# Old daa structure
+
+	y = y_source %>% distinct(level, Q, S, symbol, `read count`) %>% arrange(level, Q, symbol) %>% select(`read count`, S) %>% as_matrix
+	I = y %>% nrow
+
 
 	# Pass previously infered parameters
 	do_infer = full_bayesian
@@ -572,7 +599,7 @@ ARMET_tc = function(
 
 	# browser()
 	# load("temp_fit.RData")
-	exposure_rate = c(1.5, 1.6, 1.9, 1.8, 1.5, 1.9, 2.0, 1.7, 1.6, 1.5)
+	# exposure_rate = c(1.5, 1.6, 1.9, 1.8, 1.5, 1.9, 2.0, 1.7, 1.6, 1.5)
 
 	fileConn<-file("~/.R/Makevars")
 	writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
