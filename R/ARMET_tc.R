@@ -560,7 +560,7 @@ ARMET_tc = function(
 	#######################################
 	# Merge all MPI
 	#######################################
-browser()
+
 	# Reference
 	counts_package =
 		rep(c(M, N, S), shards) %>% matrix(nrow = shards, byrow = T) %>%
@@ -587,9 +587,22 @@ browser()
 
 	# Integrate everything
 	data_package =
-		rep(ncol(counts_package), shards) %>% matrix(nrow = shards, byrow = T) %>%
-		cbind(rep(ncol(lev1_package), shards) %>% matrix(nrow = shards, byrow = T)) %>%
-		cbind(rep(ncol(lev2_package), shards) %>% matrix(nrow = shards, byrow = T)) %>%
+
+		# Size 3 data data sets
+		rep(c(ncol(counts_package), ncol(lev1_package), ncol(lev2_package)), shards) %>%
+		matrix(nrow = shards, byrow = T) %>%
+
+		# Size parameter datasets
+		cbind(
+			rep(c(
+				(2*M + S),
+				(max(y_MPI_G_per_shard_lv1) * 2 + Q + Q + (Q * ct_in_levels[1])),
+				(max(y_MPI_G_per_shard_lv2) * 2 + Q + Q + (Q * (sum(ct_in_levels) - 1)))
+			), shards) %>%
+			matrix(nrow = shards, byrow = T)
+		) %>%
+
+		# Data sets
 		cbind(counts_package) %>%
 		cbind(lev1_package) %>%
 		cbind(lev2_package)
@@ -655,7 +668,7 @@ browser()
 			ARMET_tc, #stanmodels$ARMET_tc,
 			chains=3, cores=3,
 			iter=iterations, warmup=iterations-100,
-			pars = c("prop_1", "prop_2", "mu_sum", "phi_sum", "exposure_rate", "sigma_raw_global") #, "exposure_rate")
+			pars = c("prop_1", "prop_2", "exposure_rate", "sigma_raw_global") #,"mu_sum", "phi_sum")
 		)
 	Sys.time() %>% print
 
@@ -711,7 +724,7 @@ browser()
 		)
 
 
-	get_plot_predicted_real( fit %>% tidybayes::spread_draws(mu_sum[I], phi_sum[I]) %>% filter(.chain==2), y_source ) + my_theme
+	#get_plot_predicted_real( fit %>% tidybayes::spread_draws(mu_sum[I], phi_sum[I]) %>% filter(.chain==2), y_source ) + my_theme
 
 
 	# Return
