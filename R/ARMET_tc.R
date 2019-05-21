@@ -295,58 +295,6 @@ filter_reference = function(reference, mix){
 
 #' ARMET-tc main
 #'
-#' @description Formated data frame to be readable by MPI map_rect of Stan
-format_for_MPI = function(df){
-	df %>%
-
-		left_join(
-			(.) %>%
-				distinct(ct_symbol) %>%
-				mutate( idx_MPI = head( rep(1:shards, (.) %>% nrow %>% `/` (shards) %>% ceiling ), n=(.) %>% nrow) )
-		) %>%
-		arrange(idx_MPI, ct_symbol) %>%
-
-		# Decide start - end location
-		group_by(idx_MPI) %>%
-		do(
-			(.) %>%
-				left_join(
-					(.) %>%
-						distinct(idx_MPI, sample, ct_symbol) %>%
-						arrange(idx_MPI, ct_symbol) %>%
-						count(idx_MPI, ct_symbol) %>%
-						mutate(end = cumsum(n)) %>%
-						mutate(start = c(1, .$end %>% rev() %>% `[` (-1) %>% rev %>% `+` (1)))
-				)
-		) %>%
-		ungroup() %>%
-
-		# Add counts MPI rows indexes
-		group_by(idx_MPI) %>%
-		mutate(`read count MPI row` = 1:n()) %>%
-		ungroup %>%
-
-		# Add ct_symbol MPI rows indexes
-		left_join(
-			(.) %>%
-				group_by(idx_MPI) %>%
-				distinct(ct_symbol) %>%
-				mutate(`symbol MPI row` = 1:n()) %>%
-				ungroup
-		) %>%
-
-		# Add gene idx
-		left_join(
-			(.) %>%
-				distinct(ct_symbol, idx_MPI, `symbol MPI row`) %>%
-				arrange(idx_MPI, `symbol MPI row`) %>%
-				mutate(G = 1:n())
-		)
-
-}
-
-#' ARMET-tc main
-#'
 #' @description This function calls the stan model.
 #'
 #'
