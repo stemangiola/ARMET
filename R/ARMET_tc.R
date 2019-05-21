@@ -533,6 +533,23 @@ ARMET_tc = function(
 	I1_dim = c(idx_1_source %>% distinct(symbol) %>% nrow, idx_1_source %>% distinct(`Cell type category`) %>% nrow)
 	I2_dim = c(idx_2_source %>% distinct(symbol) %>% nrow, idx_2_source %>% distinct(`Cell type category`) %>% nrow)
 
+	# Data MPI for deconvolution level 1
+	y_MPI_lv1 = y_source %>% get_MPI_deconv(shards, 1)
+	y_MPI_source_lv1 = y_MPI_lv1 %$% y_MPI_source
+	y_MPI_symbol_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_symbol_per_shard
+	y_MPI_G_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_G_per_shard
+	y_MPI_idx_lv1 = y_MPI_lv1 %$% y_MPI_idx
+	y_MPI_N_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_N_per_shard
+	y_MPI_count_lv1 = y_MPI_lv1 %$% y_MPI_count
+
+	# Data MPI for deconvolution level 2
+	y_MPI_lv2 = y_source %>% get_MPI_deconv(shards, 2)
+	y_MPI_source_lv2 = y_MPI_lv2 %$% y_MPI_source
+	y_MPI_symbol_per_shard_lv2 = y_MPI_lv2 %$% y_MPI_symbol_per_shard
+	y_MPI_G_per_shard_lv2 = y_MPI_lv2 %$% y_MPI_G_per_shard
+	y_MPI_idx_lv2 = y_MPI_lv2 %$% y_MPI_idx
+	y_MPI_N_per_shard_lv2 = y_MPI_lv2 %$% y_MPI_N_per_shard
+	y_MPI_count_lv2 = y_MPI_lv2 %$% y_MPI_count
 
 	Q = df %>% filter(`query`) %>% distinct(Q) %>% nrow
 	idx_ct_root = c(1:4)
@@ -553,6 +570,29 @@ browser()
 		cbind(counts)
 
 	# level 1
+	lev1_package =
+		rep(c(ct_in_levels[1], Q, S), shards) %>% matrix(nrow = shards, byrow = T) %>%
+		cbind(y_MPI_symbol_per_shard_lv1) %>%
+		cbind(y_MPI_G_per_shard_lv1) %>%
+		cbind(y_MPI_N_per_shard_lv1) %>%
+		cbind(y_MPI_count_lv1)
+
+	# level 1
+	lev2_package =
+		rep(c(sum(ct_in_levels[1:2]) - 1, Q, S), shards) %>% matrix(nrow = shards, byrow = T) %>%
+		cbind(y_MPI_symbol_per_shard_lv2) %>%
+		cbind(y_MPI_G_per_shard_lv2) %>%
+		cbind(y_MPI_N_per_shard_lv2) %>%
+		cbind(y_MPI_count_lv2)
+
+	# Integrate everything
+	data_package =
+		rep(ncol(counts_package), shards) %>% matrix(nrow = shards, byrow = T) %>%
+		cbind(rep(ncol(lev1_package), shards) %>% matrix(nrow = shards, byrow = T)) %>%
+		cbind(rep(ncol(lev2_package), shards) %>% matrix(nrow = shards, byrow = T)) %>%
+		cbind(counts_package) %>%
+		cbind(lev1_package) %>%
+		cbind(lev2_package)
 
 	########################################
 	########################################
