@@ -365,7 +365,7 @@ ARMET_tc = function(
 	library(rstan)
 
 	input = c(as.list(environment()))
-	shards = cores * 4
+	shards = cores * 2
 
 	my_theme =
 		theme_bw() +
@@ -516,6 +516,8 @@ ARMET_tc = function(
 
 	ct_in_levels = c(4,7)
 
+	n_house_keeping = df %>% filter(!`query` & `house keeping`) %>% distinct(G, `house keeping`) %>% nrow
+
 	y_source =
 		df %>%
 		filter(`query` & !`house keeping`) %>%
@@ -596,8 +598,8 @@ ARMET_tc = function(
 		cbind(
 			rep(c(
 				(2*M + S),
-				(max(y_MPI_G_per_shard_lv1) * 2 + Q + Q + (Q * ct_in_levels[1])),
-				(max(y_MPI_G_per_shard_lv2) * 2 + Q + Q + (Q * (sum(ct_in_levels) - 1)))
+				(max(y_MPI_G_per_shard_lv1) * 2 + Q + (Q * ct_in_levels[1])),
+				(max(y_MPI_G_per_shard_lv2) * 2 + Q + (Q * (sum(ct_in_levels) - 1)))
 			), shards) %>%
 			matrix(nrow = shards, byrow = T)
 		) %>%
@@ -654,21 +656,23 @@ ARMET_tc = function(
 	# load("temp_fit.RData")
 	# exposure_rate = c(1.5, 1.6, 1.9, 1.8, 1.5, 1.9, 2.0, 1.7, 1.6, 1.5)
 
+	browser()
+
 	fileConn<-file("~/.R/Makevars")
 	writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
 	close(fileConn)
 	Sys.setenv("STAN_NUM_THREADS" = cores)
-	ARMET_tc = stan_model("src/stan_files/ARMET_tc.stan")
+	ARMET_tc_model = stan_model("src/stan_files/ARMET_tc.stan")
 
 
 
 	Sys.time() %>% print
 	fit =
 		sampling(
-			ARMET_tc, #stanmodels$ARMET_tc,
+			ARMET_tc_model, #stanmodels$ARMET_tc,
 			chains=3, cores=3,
 			iter=iterations, warmup=iterations-100,
-			pars = c("prop_1", "prop_2", "exposure_rate", "sigma_raw_global") #,"mu_sum", "phi_sum")
+			pars = c("prop_1", "prop_2", "exposure_rate") #,"mu_sum", "phi_sum")
 		)
 	Sys.time() %>% print
 
