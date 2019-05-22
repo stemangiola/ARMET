@@ -393,8 +393,11 @@ ARMET_tc = function(
 	# Print overlap descriptive stats
 	#get_overlap_descriptive_stats(mix %>% slice(1) %>% gather(`symbol`, `read count`, -sample), reference)
 
-	# Merge data sets
-
+	#########################################
+	# Prepare data frames -
+	# For Q query first
+	# For G house keeing first
+	#########################################
 
 	reference_filtered = filter_reference(reference, mix)
 
