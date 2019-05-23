@@ -372,7 +372,7 @@ transformed parameters {
 	vector[G] lambda = exp(lambda_log);
 
 	// Horseshoe
-	vector<lower=0>[GM] sigma_correction = horseshoe_get_tp(sigma_correction_z, hs_local, hs_global, par_ratio / sqrt(Q), hs_scale_slab^2 * hs_c2);
+	vector<lower=0>[GM] sigma_correction = horseshoe_get_tp(sigma_correction_z, hs_local, hs_global, par_ratio / sqrt(Q * GM), hs_scale_slab^2 * hs_c2);
 
 }
 
