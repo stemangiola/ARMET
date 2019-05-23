@@ -127,7 +127,7 @@ functions{
 }
 	real reference_reduce( vector global_parameters , vector local_parameters , real[] xr , int[] xi ) {
 
-		// Data
+		// Data unpack
 	 	int M = xi[1];
 	 	int N = xi[2];
 	 	int S = xi[3];
@@ -136,7 +136,7 @@ functions{
 	 	int sample_idx[N] = xi[(4+1+M+1):(4+1+M+1+N-1)];
 	 	int counts[N] = xi[(4+1+M+1+N):size(xi)];
 
-		// Parameters
+		// Parameters unpack
 	 	vector[G_per_shard] lambda_MPI = local_parameters[1:G_per_shard];
 	 	vector[G_per_shard] sigma_MPI = local_parameters[(G_per_shard+1):(G_per_shard*2)];
 	 	vector[S] exposure_rate = local_parameters[((M*2)+1):rows(local_parameters)];
@@ -162,23 +162,25 @@ functions{
 
 	vector sum_NB_MPI(matrix lambda_mat, matrix sigma_mat, matrix prop_mat){
 
-			matrix[rows(prop_mat), cols(lambda_mat)] lambda_sum = prop_mat * lambda_mat; //Q rows, G columns
-			matrix[rows(prop_mat), cols(sigma_mat)] sigma_sum =                          //Q rows, G columns
-				square(lambda_sum) ./
+		// Matrix operation for sum
+		matrix[rows(prop_mat), cols(lambda_mat)] lambda_sum = prop_mat * lambda_mat; //Q rows, G columns
+		matrix[rows(prop_mat), cols(sigma_mat)] sigma_sum =                          //Q rows, G columns
+			square(lambda_sum) ./
+			(
+				square(prop_mat) *
 				(
-					square(prop_mat) *
-					(
-						square(lambda_mat) ./
-						sigma_mat
-					)
-				) ;
+					square(lambda_mat) ./
+					sigma_mat
+				)
+			) ;
 
-				// The vectorisation is G1-Q1, G1-Q2, G1-Q3 etc..
-				return(append_row( to_vector(lambda_sum), to_vector(sigma_sum)));
+			// The vectorisation is G1-Q1, G1-Q2, G1-Q3 etc..
+			return(append_row( to_vector(lambda_sum), to_vector(sigma_sum)));
 	}
 
   real sum_reduce( vector global_parameters , vector local_parameters , real[] xr , int[] xi ) {
 
+		// Data unpack
 		int ct_in_levels = xi[1];
 		int Q = xi[2];
 		int S = xi[3];
@@ -187,12 +189,14 @@ functions{
 		int y_MPI_N_per_shard = xi[6];
 	 	int counts[y_MPI_N_per_shard] = xi[6+1: 6+y_MPI_N_per_shard];
 
+		// Parameters unpack
 	 	vector[y_MPI_G_per_shard] lambda_MPI = local_parameters[1:y_MPI_G_per_shard];
 	 	vector[y_MPI_G_per_shard] sigma_MPI = local_parameters[(y_MPI_G_per_shard+1):(y_MPI_G_per_shard+y_MPI_G_per_shard)];
 	 	vector[y_MPI_symbol_per_shard] sigma_correction = local_parameters[(y_MPI_G_per_shard+y_MPI_G_per_shard+1):(y_MPI_G_per_shard+y_MPI_G_per_shard + y_MPI_symbol_per_shard)];
 	 	vector[Q] exposure_rate = local_parameters[(y_MPI_G_per_shard+y_MPI_G_per_shard + y_MPI_symbol_per_shard+1):(y_MPI_G_per_shard+y_MPI_G_per_shard + y_MPI_symbol_per_shard + Q)];
 	 	vector[Q * ct_in_levels] prop = local_parameters[(y_MPI_G_per_shard+y_MPI_G_per_shard + y_MPI_symbol_per_shard + Q +1)	:	(y_MPI_G_per_shard+y_MPI_G_per_shard + y_MPI_symbol_per_shard + Q + (Q * ct_in_levels))];
 
+		// Calculate sum
 		vector[y_MPI_N_per_shard * 2] my_sum = sum_NB_MPI(
 			to_matrix( lambda_MPI, ct_in_levels, y_MPI_symbol_per_shard), // ct rows, G columns
 			to_matrix( sigma_MPI,  ct_in_levels, y_MPI_symbol_per_shard), // ct rows, G columns
@@ -214,7 +218,10 @@ functions{
 
 		vector[3] lp;
 
+		// Reference / exposure rate
 		lp[1] = reference_reduce(global_parameters , local_parameters[1:dim_param[1]] , xr , xi[7:(6+dim_data[1])] );
+
+		// Deconvolution
 		lp[2] = sum_reduce(
 			global_parameters ,
 			local_parameters[(dim_param[1]+1):(dim_param[1] + dim_param[2])] ,
@@ -353,7 +360,6 @@ model {
 		xr,
 		data_package
 	));
-
 
   // Overall properties of the data
   lambda_mu ~ normal(lambda_mu_mu,2);
