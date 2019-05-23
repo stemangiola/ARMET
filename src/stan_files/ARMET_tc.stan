@@ -221,7 +221,7 @@ functions{
 
 		vector[y_MPI_N_per_shard * 2] my_sum = sum_NB_MPI(
 			to_matrix( lambda_MPI, ct_in_levels, y_MPI_symbol_per_shard), // ct rows, G columns
-			to_matrix( sigma_MPI,  ct_in_levels, y_MPI_symbol_per_shard), // ct rows, G columns0
+			to_matrix( sigma_MPI,  ct_in_levels, y_MPI_symbol_per_shard), // ct rows, G columns
 			to_matrix( prop, Q, ct_in_levels)
 		);
 
