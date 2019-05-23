@@ -70,7 +70,7 @@ add_partition = function(df.input, partition_by, n_partitions){
 get_MPI_deconv = function(y_source, shards, my_level){
 	y_MPI_source =
 		y_source %>%
-		distinct(level, Q, S, symbol, G, `Cell type category`, `read count`) %>%
+		distinct(level, Q, S, symbol, G, GM, `Cell type category`, `read count`) %>%
 		filter(level==my_level)  %>%
 		arrange(Q, symbol) %>%
 		add_partition("symbol", shards) %>%
@@ -87,6 +87,15 @@ get_MPI_deconv = function(y_source, shards, my_level){
 			count(partition) %>%
 			spread(partition, n) %>%
 			as_vector %>% array,
+
+		y_MPI_idx_symbol =
+			y_MPI_source %>%
+			distinct(MPI_row, GM, partition, Q) %>%
+			spread(partition, GM) %>%
+			select(-Q) %>% distinct %>%
+			replace(is.na(.), 0 %>% as.integer) %>%
+			as_matrix(rownames = "MPI_row") %>%
+			t,
 
 		y_MPI_G_per_shard =
 			y_MPI_source %>%
@@ -449,9 +458,17 @@ ARMET_tc = function(
 				distinct(`Cell type category`, ct_symbol, `house keeping`) %>%
 				arrange(!`house keeping`, ct_symbol) %>% # House keeping first
 				mutate(G = 1:n())
+		) %>%
+		left_join(
+			(.) %>%
+				filter(!`house keeping`) %>%
+				distinct(symbol) %>%
+				arrange(symbol) %>% # House keeping first
+				mutate(GM = 1:n())
 		)
 
 	G = df %>% filter(!`query`) %>% distinct(G) %>% nrow()
+	GM = df %>% filter(!`house keeping`) %>% distinct(symbol) %>% nrow()
 
 	#########################################
 	# For  reference MPI inference
@@ -524,8 +541,8 @@ ARMET_tc = function(
 	y_source =
 		df %>%
 		filter(`query` & !`house keeping`) %>%
-		select(S, Q, `symbol`, `read count`) %>%
-		left_join(	df %>% filter(!query) %>% distinct(`symbol`, G, `Cell type category`, level, lambda, sigma_raw) ) %>%
+		select(S, Q, `symbol`, `read count`, GM) %>%
+		left_join(	df %>% filter(!query) %>% distinct(`symbol`, G, `Cell type category`, level, lambda, sigma_raw, GM) ) %>%
 		arrange(level, `Cell type category`, Q, symbol) %>%
 		mutate(`Cell type category` = factor(`Cell type category`, unique(`Cell type category`)))
 
@@ -542,6 +559,7 @@ ARMET_tc = function(
 	y_MPI_lv1 = y_source %>% get_MPI_deconv(shards, 1)
 	y_MPI_source_lv1 = y_MPI_lv1 %$% y_MPI_source
 	y_MPI_symbol_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_symbol_per_shard
+	y_MPI_idx_symbol_lv1 = y_MPI_lv1 %$% y_MPI_idx_symbol
 	y_MPI_G_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_G_per_shard
 	y_MPI_idx_lv1 = y_MPI_lv1 %$% y_MPI_idx
 	y_MPI_N_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_N_per_shard
@@ -551,6 +569,7 @@ ARMET_tc = function(
 	y_MPI_lv2 = y_source %>% get_MPI_deconv(shards, 2)
 	y_MPI_source_lv2 = y_MPI_lv2 %$% y_MPI_source
 	y_MPI_symbol_per_shard_lv2 = y_MPI_lv2 %$% y_MPI_symbol_per_shard
+	y_MPI_idx_symbol_lv2 = y_MPI_lv2 %$% y_MPI_idx_symbol
 	y_MPI_G_per_shard_lv2 = y_MPI_lv2 %$% y_MPI_G_per_shard
 	y_MPI_idx_lv2 = y_MPI_lv2 %$% y_MPI_idx
 	y_MPI_N_per_shard_lv2 = y_MPI_lv2 %$% y_MPI_N_per_shard
@@ -601,8 +620,8 @@ ARMET_tc = function(
 		cbind(
 			rep(c(
 				(2*M + S),
-				(max(y_MPI_G_per_shard_lv1) * 2 + Q + (Q * ct_in_levels[1])),
-				(max(y_MPI_G_per_shard_lv2) * 2 + Q + (Q * (sum(ct_in_levels) - 1)))
+				(max(y_MPI_G_per_shard_lv1) * 2 + Q + max(y_MPI_symbol_per_shard_lv1) + (Q * ct_in_levels[1])),
+				(max(y_MPI_G_per_shard_lv2) * 2 + Q + max(y_MPI_symbol_per_shard_lv2) + (Q * (sum(ct_in_levels) - 1)))
 			), shards) %>%
 			matrix(nrow = shards, byrow = T)
 		) %>%
