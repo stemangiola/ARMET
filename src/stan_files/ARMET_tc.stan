@@ -316,7 +316,7 @@ parameters {
   // Gene-wise properties of the data
   vector[G * do_infer] lambda_log_param;
   vector[G * do_infer] sigma_raw_param;
-  // vector[Q] sigma_raw_global;
+  vector<lower=0>[GM] sigma_correction;
 
   // Proportions
   simplex[ct_in_levels[1]] prop_1[Q]; // Root
