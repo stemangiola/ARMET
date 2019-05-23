@@ -669,14 +669,10 @@ ARMET_tc = function(
 		arrange(G)%>%
 		pull(sigma_raw)
 
-	# Testing
-	# exposure_rate = df %>% distinct(S) %>% nrow %>% seq(-1, 1, length.out = .);
-	# set.seed(143)
-	# prop_1 = gtools::rdirichlet(Q, c(1,1,1,1))
-
-	# browser()
-	# load("temp_fit.RData")
-	# exposure_rate = c(1.5, 1.6, 1.9, 1.8, 1.5, 1.9, 2.0, 1.7, 1.6, 1.5)
+	# Horseshoe prior
+	hs_df = 1 # If divergencies increase this
+	par_ratio = 0.1
+	hs_scale_slab = 3
 
 	browser()
 

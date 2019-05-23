@@ -1,5 +1,31 @@
 functions{
 
+	 vector horseshoe_get_tp(vector zb, vector[] local, real[] global, real scale_global, real c2) {
+	    int K = rows(zb);
+	    vector[K] lambda = local[1] .* sqrt(local[2]);
+	    vector[K] lambda2 = square(lambda);
+	    real tau = global[1] * sqrt(global[2]) * scale_global;
+	    vector[K] lambda_tilde = sqrt(c2 * lambda2 ./ (c2 + tau^2 * lambda2));
+	    return zb .* lambda_tilde * tau;
+	  }
+
+  real horseshoe_get_lp(vector zb, vector[] local, real df, real[] global, real df_global, real c2, real df_slab){
+
+    // real<lower=0> hs_df; // == 1  // If divergencies increase this
+	  // real<lower=0> hs_df_global; // == 1
+	  // real<lower=0> hs_df_slab; // == 4 // df of the outliers
+
+  	vector[6] lp;
+
+  	lp[1] = normal_lpdf(zb | 0, 1);
+	  lp[2] = normal_lpdf(local[1] | 0, 1) - 101 * log(0.5);
+	  lp[3] = inv_gamma_lpdf(local[2] | 0.5 * df, 0.5 * df);
+	  lp[4] = normal_lpdf(global[1] | 0, 1)  - 1 * log(0.5);
+	  lp[5] = inv_gamma_lpdf(global[2] | 0.5 * df_global, 0.5 * df_global);
+	  lp[6] = inv_gamma_lpdf(c2 | 0.5 * df_slab, 0.5 * df_slab);
+
+	  return(sum(lp));
+  }
 
 	vector vector_array_to_vector(vector[] x) {
 				// This operation is column major
@@ -195,7 +221,7 @@ functions{
 
 		vector[y_MPI_N_per_shard * 2] my_sum = sum_NB_MPI(
 			to_matrix( lambda_MPI, ct_in_levels, y_MPI_symbol_per_shard), // ct rows, G columns
-			to_matrix( sigma_MPI,  ct_in_levels, y_MPI_symbol_per_shard), // ct rows, G columns
+			to_matrix( sigma_MPI,  ct_in_levels, y_MPI_symbol_per_shard), // ct rows, G columns0
 			to_matrix( prop, Q, ct_in_levels)
 		);
 
@@ -297,6 +323,11 @@ data {
 	int<lower=0> lev2_package[n_shards, 6 + max(y_MPI_N_per_shard_lv2)];
 
 	int data_package[n_shards, 3 + 3 + (4+(M+1)+N+N) + (6 + max(y_MPI_N_per_shard_lv1)) + (6 + max(y_MPI_N_per_shard_lv2))];
+
+	// Horseshoe tuning
+  real<lower=0> hs_df; // == 1  // If divergencies increase this
+  real<lower=0, upper=1> par_ratio; // real<lower=0> hs_scale_global; // from par ratio   !! KEY PARAMETER
+  real<lower=0> hs_scale_slab; // == 2 // regularisation/scale of outliers                !! KEY PARAMETER
 }
 transformed data {
 
@@ -316,12 +347,16 @@ parameters {
   // Gene-wise properties of the data
   vector[G * do_infer] lambda_log_param;
   vector[G * do_infer] sigma_raw_param;
-  // vector[Q] sigma_raw_global;
+  vector<lower=0>[GM] sigma_correction_z;
 
   // Proportions
   simplex[ct_in_levels[1]] prop_1[Q]; // Root
   simplex[ct_in_levels[2]] prop_immune[Q]; // Immune cells
 
+  // Horseshoe
+  vector<lower=0>[GM] hs_local[2]; // local parameters for horseshoe prior
+  real<lower=0> hs_global[2]; // horseshoe shrinkage parameters
+  real<lower=0> hs_c2; // horseshoe shrinkage parameters
 
 }
 transformed parameters {
@@ -335,6 +370,9 @@ transformed parameters {
 
 	// Deconvolution
 	vector[G] lambda = exp(lambda_log);
+
+	// Horseshoe
+	vector<lower=0>[GM] sigma_correction = horseshoe_get_tp(sigma_correction_z, hs_local, hs_global, par_ratio / sqrt(Q), hs_scale_slab^2 * hs_c2);
 
 }
 
@@ -366,9 +404,12 @@ model {
   // Gene-wise properties of the data
   if(do_infer) lambda_log_param ~ exp_gamma_meanSd(lambda_mu,lambda_sigma);
   if(do_infer) sigma_raw_param ~ normal(sigma_slope * lambda_log_param + sigma_intercept,sigma_sigma);
-	sigma_correction ~ double_exponential(0, 1); // Lasso prior for correction
+	//sigma_correction ~ double_exponential(0, 1); // Lasso prior for correction
 
+ // Horseshoe
+	target += horseshoe_get_lp(sigma_correction_z, hs_local, hs_df, hs_global, 1, hs_c2, 4);
 }
+
 // generated quantities{
 //   vector[G] sigma_raw_gen;
 //   vector[G] lambda_gen;
