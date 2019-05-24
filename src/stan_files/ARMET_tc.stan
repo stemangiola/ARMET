@@ -156,7 +156,7 @@ functions{
     	exposure_rate[sample_idx[1:symbol_end[G_per_shard+1]]] +
     	lambda_MPI_c,
     	sigma_MPI_c
-    ) * 10);
+    ) * 10); // Conditional if do_infer
 
   }
 
@@ -178,7 +178,7 @@ functions{
 			return(append_row( to_vector(lambda_sum), to_vector(sigma_sum)));
 	}
 
-  real sum_reduce( vector global_parameters , vector local_parameters , real[] xr , int[] xi ) {
+  vector sum_reduce( vector global_parameters , vector local_parameters , real[] xr , int[] xi ) {
 
 		// Data unpack
 		int ct_in_levels = xi[1];
@@ -204,38 +204,51 @@ functions{
 		);
 
 		// Vecotrised sampling, all vectors should be G1-Q1, G1-Q2, G1-Q3
-		return (neg_binomial_2_lpmf(
-				counts |
-				my_sum[1:y_MPI_N_per_shard] .* to_vector(rep_matrix((exp(exposure_rate)), y_MPI_symbol_per_shard)),
-				my_sum[(y_MPI_N_per_shard+1):(y_MPI_N_per_shard*2)] ./ to_vector(rep_matrix((exp(to_row_vector(sigma_correction))), Q))
-			));
+
+		vector[y_MPI_N_per_shard] lambda_sum = my_sum[1:y_MPI_N_per_shard] .* to_vector(rep_matrix((exp(exposure_rate)), y_MPI_symbol_per_shard));
+		vector[y_MPI_N_per_shard] sigma_sum = my_sum[(y_MPI_N_per_shard+1):(y_MPI_N_per_shard*2)] ./ to_vector(rep_matrix((exp(to_row_vector(sigma_correction))), Q));
+
+		return (
+			append_row(
+				neg_binomial_2_lpmf(counts | lambda_sum, sigma_sum),
+				append_row(lambda_sum, sigma_sum)
+			)
+
+		);
+
 }
 
 	vector lp_reduce( vector global_parameters , vector local_parameters , real[] xr , int[] xi ) {
 
 		int dim_data[3] = xi[1:3];
 		int dim_param[3] = xi[4:6];
-
 		vector[3] lp;
 
-		// Reference / exposure rate
-		lp[1] = reference_reduce(global_parameters , local_parameters[1:dim_param[1]] , xr , xi[7:(6+dim_data[1])] );
-
 		// Deconvolution
-		lp[2] = sum_reduce(
+		int y_MPI_N_per_shard_lv1 = xi[(6+dim_data[1]+6)] * 2 + 1 ;
+		vector[y_MPI_N_per_shard_lv1] lp_sum_lv1 = sum_reduce(
 			global_parameters ,
 			local_parameters[(dim_param[1]+1):(dim_param[1] + dim_param[2])] ,
 			xr ,
 			xi[(6+dim_data[1]+1):(6+dim_data[1] + dim_data[2])]
 		);
-		lp[3] = sum_reduce(
+		//length_sum_lv1 = (cols(lp_sum_lv1)-1)/2
+
+		int y_MPI_N_per_shard_lv2 = xi[(6+dim_data[1] + dim_data[2] + 6)] * 2 + 1;
+		vector[y_MPI_N_per_shard_lv2] lp_sum_lv2 = sum_reduce(
 			global_parameters ,
 			local_parameters[(dim_param[1] + dim_param[2] +1): (dim_param[1] + dim_param[2] + dim_param[3])] ,
 			xr ,
 			xi[(6+dim_data[1] + dim_data[2] + 1):(6+dim_data[1] + dim_data[2] + dim_data[3])]
 		);
+		//length_sum_lv2 = (cols(lp_sum_lv2)-1)/2
 
-	 return [sum(lp)]';
+		lp[1] = reference_reduce(global_parameters , local_parameters[1:dim_param[1]] , xr , xi[7:(6+dim_data[1])] );
+		lp[2] = lp_sum_lv1[1];
+		lp[3] = lp_sum_lv2[1];
+
+	// Return log probability and sums for plotting
+	 return append_row(sum(lp), append_row(lp_sum_lv1[1:cols(lp_sum_lv1)], lp_sum_lv2[1:cols(lp_sum_lv2)]));
 
 	}
 
@@ -343,27 +356,30 @@ transformed parameters {
 	// Deconvolution
 	vector[G] lambda = exp(lambda_log);
 
+	vector[1 + (max(y_MPI_symbol_per_shard_lv1) + max(y_MPI_symbol_per_shard_lv2)) * 2] lp_sum[n_shards] =
+		map_rect(
+			lp_reduce ,
+			global_parameters ,
+			append_vector_array(
+				get_reference_parameters_MPI(	n_shards,	M, G_per_shard,	G_ind,	lambda_log,	sigma,	exposure_rate),
+				append_vector_array(
+					get_deconvolution_parameters_MPI(n_shards, y_MPI_G_per_shard_lv1, y_MPI_idx_lv1, lambda, sigma, exposure_rate, Q, prop_1, y_MPI_symbol_per_shard_lv1, y_MPI_idx_symbol_lv1, sigma_correction),
+					get_deconvolution_parameters_MPI(n_shards, y_MPI_G_per_shard_lv2, y_MPI_idx_lv2, lambda, sigma, exposure_rate, Q, prop_2, y_MPI_symbol_per_shard_lv2, y_MPI_idx_symbol_lv2, sigma_correction)
+				)
+			),
+			xr,
+			data_package
+		);
+
+		print(lp_sum[1]);
 }
 
 model {
 
-	target += sum(map_rect(
-		lp_reduce ,
-		global_parameters ,
-		append_vector_array(
-			get_reference_parameters_MPI(	n_shards,	M, G_per_shard,	G_ind,	lambda_log,	sigma,	exposure_rate),
-			append_vector_array(
-				get_deconvolution_parameters_MPI(n_shards, y_MPI_G_per_shard_lv1, y_MPI_idx_lv1, lambda, sigma, exposure_rate, Q, prop_1, y_MPI_symbol_per_shard_lv1, y_MPI_idx_symbol_lv1, sigma_correction),
-				get_deconvolution_parameters_MPI(n_shards, y_MPI_G_per_shard_lv2, y_MPI_idx_lv2, lambda, sigma, exposure_rate, Q, prop_2, y_MPI_symbol_per_shard_lv2, y_MPI_idx_symbol_lv2, sigma_correction)
-			)
-		),
-		xr,
-		data_package
-	));
+	//target += sum();
 
   // Overall properties of the data
   lambda_mu ~ normal(lambda_mu_mu,2);
-
 
 	// Exposure prior
   exposure_rate ~ normal(0,1);
