@@ -669,24 +669,11 @@ ARMET_tc = function(
 		arrange(G)%>%
 		pull(sigma_raw)
 
-	# Testing
-	# exposure_rate = df %>% distinct(S) %>% nrow %>% seq(-1, 1, length.out = .);
-	# set.seed(143)
-	# prop_1 = gtools::rdirichlet(Q, c(1,1,1,1))
-
-	# browser()
-	# load("temp_fit.RData")
-	# exposure_rate = c(1.5, 1.6, 1.9, 1.8, 1.5, 1.9, 2.0, 1.7, 1.6, 1.5)
-
-	browser()
-
 	fileConn<-file("~/.R/Makevars")
 	writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
 	close(fileConn)
 	Sys.setenv("STAN_NUM_THREADS" = cores)
 	ARMET_tc_model = stan_model("src/stan_files/ARMET_tc.stan")
-
-
 
 	Sys.time() %>% print
 	fit =
@@ -697,9 +684,6 @@ ARMET_tc = function(
 			pars = c("prop_1", "prop_2", "exposure_rate", "sigma_correction") #,"mu_sum", "phi_sum")
 		)
 	Sys.time() %>% print
-
-
-	#browser()
 
 	# Produce results
 	prop =
