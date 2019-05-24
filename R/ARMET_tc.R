@@ -694,7 +694,7 @@ ARMET_tc = function(
 			ARMET_tc_model, #stanmodels$ARMET_tc,
 			chains=3, cores=3,
 			iter=iterations, warmup=iterations-100,
-			pars = c("prop_1", "prop_2", "exposure_rate") #,"mu_sum", "phi_sum")
+			pars = c("prop_1", "prop_2", "exposure_rate", "sigma_correction") #,"mu_sum", "phi_sum")
 		)
 	Sys.time() %>% print
 
