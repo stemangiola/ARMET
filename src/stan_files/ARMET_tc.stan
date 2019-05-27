@@ -235,11 +235,6 @@ functions{
 			to_matrix( prop, Q, ct_in_levels)
 		);
 
-			// print("-normal mu sum");
-			// print(my_sum[1] .* to_vector(rep_matrix((exp(exposure_rate)), y_MPI_symbol_per_shard)));
-			// print("- mu matrix");
-			// print(to_vector(my_sum_mat[1] .* rep_matrix((exp(exposure_rate)), y_MPI_symbol_per_shard)));
-
 		// Vecotrised sampling, all vectors should be G1-Q1, G1-Q2, G1-Q3
 		return (neg_binomial_2_lpmf(
 				counts |
@@ -414,19 +409,27 @@ model {
 	sigma_correction ~ double_exponential(0, 1); // Lasso prior for correction
 
 }
-// generated quantities{
-//
-//
-// 	 	vector[y_MPI_N_per_shard] my_sum_lv1[2] = sum_NB_MPI(
-// 			to_matrix( lambda_MPI[y_idx_lv1], ct_in_levels[1], sum(y_MPI_symbol_per_shard)), // ct rows, G columns
-// 			to_matrix( sigma_MPI [y_idx_lv1], ct_in_levels[1], sum(y_MPI_symbol_per_shard)), // ct rows, G columns
-// 			to_matrix( prop_1 )
-// 		);
-//
-//
-// 			mu_sum =    my_sum[1] .* to_vector(rep_matrix(exp(exposure_rate), sum(y_MPI_symbol_per_shard)));
-// 			sigma_sum = my_sum[2] ./ to_vector(rep_matrix(exp(to_row_vector(sigma_correction)), Q));
-//
-//
-// 		my_sum[1]
-// }
+generated quantities{
+
+
+		matrix[Q, y_MPI_symbol_per_shard] my_sum_mat_lv1[2] = sum_NB_MPI_mat(
+			to_matrix( lambda_MPI[inx_lv1], ct_in_levels[1], y_MPI_symbol_per_shard), // ct rows, G columns
+			to_matrix( sigma_MPI[idx_lv1],  ct_in_levels[1], y_MPI_symbol_per_shard), // ct rows,	 G columns
+			to_matrix( prop_1 )
+		);
+
+		mu_sum_lv1 =    my_sum_mat_lv1[1] .* rep_matrix(exp(exposure_rate), sum(y_MPI_symbol_per_shard));
+		sigma_sum_lv1 = my_sum_mat_lv1[2] ./ rep_matrix(exp(to_row_vector(sigma_correction[idx_lv1])), Q);
+
+		matrix[Q, y_MPI_symbol_per_shard] my_sum_mat_lv2[2] = sum_NB_MPI_mat(
+			to_matrix( lambda_MPI[inx_lv2], ct_in_levels[2], y_MPI_symbol_per_shard), // ct rows, G columns
+			to_matrix( sigma_MPI[idx_lv2],  ct_in_levels[2], y_MPI_symbol_per_shard), // ct rows,	 G columns
+			to_matrix( prop_2 )
+		);
+
+		mu_sum_lv2 =    my_sum_mat_lv2[1] .* rep_matrix(exp(exposure_rate), sum(y_MPI_symbol_per_shard));
+		sigma_sum_lv2 = my_sum_mat_lv2[2] ./ rep_matrix(exp(to_row_vector(sigma_correction[idx_lv2])), Q);
+
+
+
+}
