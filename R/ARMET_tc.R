@@ -406,6 +406,7 @@ ARMET_tc = function(
 	# Prepare data frames -
 	# For Q query first
 	# For G house keeing first
+	# For GM level 1 first
 	#########################################
 
 	reference_filtered = filter_reference(reference, mix)
@@ -461,10 +462,11 @@ ARMET_tc = function(
 		) %>%
 		left_join(
 			(.) %>%
-				filter(!`house keeping`) %>%
-				distinct(symbol) %>%
-				arrange(symbol) %>% # House keeping first
-				mutate(GM = 1:n())
+				filter(!`house keeping` & !`query`) %>%
+				distinct(level, symbol) %>%
+				arrange(level, symbol) %>%
+				mutate(GM = 1:n()) %>%
+				select(-level)
 		)
 
 	G = df %>% filter(!`query`) %>% distinct(G) %>% nrow()
@@ -669,6 +671,8 @@ ARMET_tc = function(
 		arrange(G)%>%
 		pull(sigma_raw)
 
+	browser()
+
 	fileConn<-file("~/.R/Makevars")
 	writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
 	close(fileConn)
@@ -680,7 +684,7 @@ ARMET_tc = function(
 		sampling(
 			ARMET_tc_model, #stanmodels$ARMET_tc,
 			chains=3, cores=3,
-			iter=iterations, warmup=iterations-100,
+			iter=iterations, warmup=iterations-100, #  save_warmup = FALSE,
 			pars = c("prop_1", "prop_2", "exposure_rate", "sigma_correction") #,"mu_sum", "phi_sum")
 		)
 	Sys.time() %>% print
