@@ -160,7 +160,7 @@ functions{
 
   }
 
-	vector sum_NB_MPI(matrix lambda_mat, matrix sigma_mat, matrix prop_mat){
+	vector[] sum_NB_MPI(matrix lambda_mat, matrix sigma_mat, matrix prop_mat){
 
 		// Matrix operation for sum
 		matrix[rows(prop_mat), cols(lambda_mat)] lambda_sum = prop_mat * lambda_mat; //Q rows, G columns
@@ -174,8 +174,12 @@ functions{
 				)
 			) ;
 
-			// The vectorisation is G1-Q1, G1-Q2, G1-Q3 etc..
-			return(append_row( to_vector(lambda_sum), to_vector(sigma_sum)));
+		vector[rows(prop_mat) * cols(sigma_mat)] sum_obj[2];
+		sum_obj[1] = to_vector(lambda_sum);
+		sum_obj[2] = to_vector(sigma_sum);
+
+		// The vectorisation is G1-Q1, G1-Q2, G1-Q3 etc..
+		return(sum_obj);
 	}
 
   real sum_reduce( vector global_parameters , vector local_parameters , real[] xr , int[] xi ) {
@@ -197,7 +201,7 @@ functions{
 	 	vector[Q * ct_in_levels] prop = local_parameters[(y_MPI_G_per_shard+y_MPI_G_per_shard + y_MPI_symbol_per_shard + Q +1)	:	(y_MPI_G_per_shard+y_MPI_G_per_shard + y_MPI_symbol_per_shard + Q + (Q * ct_in_levels))];
 
 		// Calculate sum
-		vector[y_MPI_N_per_shard * 2] my_sum = sum_NB_MPI(
+		vector[y_MPI_N_per_shard] my_sum[2] = sum_NB_MPI(
 			to_matrix( lambda_MPI, ct_in_levels, y_MPI_symbol_per_shard), // ct rows, G columns
 			to_matrix( sigma_MPI,  ct_in_levels, y_MPI_symbol_per_shard), // ct rows, G columns
 			to_matrix( prop, Q, ct_in_levels)
@@ -206,8 +210,8 @@ functions{
 		// Vecotrised sampling, all vectors should be G1-Q1, G1-Q2, G1-Q3
 		return (neg_binomial_2_lpmf(
 				counts |
-				my_sum[1:y_MPI_N_per_shard] .* to_vector(rep_matrix((exp(exposure_rate)), y_MPI_symbol_per_shard)),
-				my_sum[(y_MPI_N_per_shard+1):(y_MPI_N_per_shard*2)] ./ to_vector(rep_matrix((exp(to_row_vector(sigma_correction))), Q))
+				my_sum[1] .* to_vector(rep_matrix((exp(exposure_rate)), y_MPI_symbol_per_shard)),
+				my_sum[2] ./ to_vector(rep_matrix((exp(to_row_vector(sigma_correction))), Q))
 			));
 }
 
