@@ -193,14 +193,22 @@ get_overlap_descriptive_stats = function(mix_tbl, ref_tbl){
 
 }
 
-get_plot_predicted_real = function(fit_parsed, y_source){
+plot_counts_inferred_sum = function(fit_obj, samples = NULL){
 
-	fit %>%
+	fit_obj %$% fit %>%
 		summary(par=c("nb_sum")) %$% summary %>%
 		as_tibble(rownames="par") %>% select(par, `2.5%`, `50%`, `97.5%`) %>%
 		separate(par, c(".variable", "Q", "GM"), sep="\\[|,|\\]") %>%
 		mutate(Q = Q %>% as.integer, GM = GM %>% as.integer) %>%
-		left_join(y_source %>% distinct(Q, GM, symbol, `read count`)) %>%
+		left_join(fit_obj %$% data_source %>% distinct(Q, GM, symbol, `read count`)) %>%
+
+		# Select samples
+		{
+			if(samples %>% is.null %>% `!`) (.) %>% filter(sample %in% !samples)
+			else (.)
+		} %>%
+
+		# Check if inside
 		rowwise %>%
 		mutate(inside = between(`read count`, `2.5%`, `97.5%`)) %>%
 		ungroup %>%
@@ -208,7 +216,7 @@ get_plot_predicted_real = function(fit_parsed, y_source){
 		geom_point(alpha=0.5)  +
 		geom_abline(slope = 1, intercept = 0) +
 		geom_errorbar(aes(ymin=`2.5%`, ymax=`97.5%`), alpha=0.5) +
-		facet_wrap(~Q) +
+		facet_wrap(~sample) +
 		scale_y_log10() +
 		scale_x_log10()
 
@@ -541,7 +549,7 @@ ARMET_tc = function(
 	y_source =
 		df %>%
 		filter(`query` & !`house keeping`) %>%
-		select(S, Q, `symbol`, `read count`, GM) %>%
+		select(S, Q, `symbol`, `read count`, GM, sample) %>%
 		left_join(	df %>% filter(!query) %>% distinct(`symbol`, G, `Cell type category`, level, lambda, sigma_raw, GM) ) %>%
 		arrange(level, `Cell type category`, Q, symbol) %>%
 		mutate(`Cell type category` = factor(`Cell type category`, unique(`Cell type category`)))
@@ -737,7 +745,7 @@ ARMET_tc = function(
 				distinct(Q, sample)
 		)
 
-	get_plot_predicted_real( fit , y_source ) + my_theme
+	#plot_counts_inferrd_sum( fit , y_source )
 
 
 	# Return
@@ -750,7 +758,10 @@ ARMET_tc = function(
 		input = input,
 
 		# Return the fitted object
-		fit = fit
+		fit = fit,
+
+		# Return data source
+		data_source = y_source
 	)
 
 }
