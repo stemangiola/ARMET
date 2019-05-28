@@ -115,6 +115,9 @@ get_MPI_deconv = function(y_source, shards, my_level){
 			as_matrix %>%
 			t,
 
+		y_idx =
+			y_MPI_source %>% distinct(symbol, G, `Cell type category`) %>% arrange(symbol, `Cell type category`) %>% pull(G),
+
 		y_MPI_N_per_shard =
 			y_MPI_source %>%
 			distinct(MPI_row, `read count`, partition, Q) %>%
@@ -191,27 +194,20 @@ get_overlap_descriptive_stats = function(mix_tbl, ref_tbl){
 }
 
 get_plot_predicted_real = function(fit_parsed, y_source){
-	fit_parsed %>%
-		tidybayes::median_qi() %>%
-		bind_cols(
-			y_source %>% distinct(level, Q, S, symbol, `read count`) %>% arrange(level, Q, symbol)
-		) %>%
-		select(-mu_sum.lower, -mu_sum.upper, -phi_sum.lower, -phi_sum.upper) %>%
-		group_by(I) %>%
-		do(
-			bind_cols(
-				(.),
-				rnbinom(10000, mu = (.) %>% pull(mu_sum), size = (.) %>% pull(phi_sum)) %>% quantile(probs = c(0.1, 0.9)) %>% enframe %>% spread(name, value)
-			)
-		) %>%
-		ungroup() %>%
+
+	fit %>%
+		summary(par=c("nb_sum")) %$% summary %>%
+		as_tibble(rownames="par") %>% select(par, `2.5%`, `50%`, `97.5%`) %>%
+		separate(par, c(".variable", "Q", "GM"), sep="\\[|,|\\]") %>%
+		mutate(Q = Q %>% as.integer, GM = GM %>% as.integer) %>%
+		left_join(y_source %>% distinct(Q, GM, symbol, `read count`)) %>%
 		rowwise %>%
-		mutate(inside = between(`read count`, `10%`, `90%`)) %>%
+		mutate(inside = between(`read count`, `2.5%`, `97.5%`)) %>%
 		ungroup %>%
-		ggplot(aes(x=`read count` + 1, y=mu_sum + 1, color=inside)) +
+		ggplot(aes(x=`read count` + 1, y=`50%` + 1, color=inside)) +
 		geom_point(alpha=0.5)  +
 		geom_abline(slope = 1, intercept = 0) +
-		geom_errorbar(aes(ymin=`10%`, ymax=`90%`), alpha=0.5) +
+		geom_errorbar(aes(ymin=`2.5%`, ymax=`97.5%`), alpha=0.5) +
 		facet_wrap(~Q) +
 		scale_y_log10() +
 		scale_x_log10()
@@ -471,6 +467,8 @@ ARMET_tc = function(
 
 	G = df %>% filter(!`query`) %>% distinct(G) %>% nrow()
 	GM = df %>% filter(!`house keeping`) %>% distinct(symbol) %>% nrow()
+	GM_lv1 = df %>% filter(!`house keeping`) %>% filter(level==1) %>% distinct(symbol) %>% nrow()
+	GM_lv2 = df %>% filter(!`house keeping`) %>% filter(level==2) %>% distinct(symbol) %>% nrow()
 
 	#########################################
 	# For  reference MPI inference
@@ -563,6 +561,7 @@ ARMET_tc = function(
 	y_MPI_symbol_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_symbol_per_shard
 	y_MPI_idx_symbol_lv1 = y_MPI_lv1 %$% y_MPI_idx_symbol
 	y_MPI_G_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_G_per_shard
+	y_idx_lv1 =  y_MPI_lv1 %$% y_idx
 	y_MPI_idx_lv1 = y_MPI_lv1 %$% y_MPI_idx
 	y_MPI_N_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_N_per_shard
 	y_MPI_count_lv1 = y_MPI_lv1 %$% y_MPI_count
@@ -573,6 +572,7 @@ ARMET_tc = function(
 	y_MPI_symbol_per_shard_lv2 = y_MPI_lv2 %$% y_MPI_symbol_per_shard
 	y_MPI_idx_symbol_lv2 = y_MPI_lv2 %$% y_MPI_idx_symbol
 	y_MPI_G_per_shard_lv2 = y_MPI_lv2 %$% y_MPI_G_per_shard
+	y_idx_lv2 =  y_MPI_lv2 %$% y_idx
 	y_MPI_idx_lv2 = y_MPI_lv2 %$% y_MPI_idx
 	y_MPI_N_per_shard_lv2 = y_MPI_lv2 %$% y_MPI_N_per_shard
 	y_MPI_count_lv2 = y_MPI_lv2 %$% y_MPI_count
@@ -684,8 +684,8 @@ ARMET_tc = function(
 		sampling(
 			ARMET_tc_model, #stanmodels$ARMET_tc,
 			chains=3, cores=3,
-			iter=iterations, warmup=iterations-100, #  save_warmup = FALSE,
-			pars = c("prop_1", "prop_2", "exposure_rate", "sigma_correction") #,"mu_sum", "phi_sum")
+			iter=iterations, warmup=iterations-100,   save_warmup = FALSE,
+			pars = c("prop_1", "prop_2", "exposure_rate", "sigma_correction", "nb_sum") #,"mu_sum", "phi_sum")
 		)
 	Sys.time() %>% print
 
@@ -737,8 +737,7 @@ ARMET_tc = function(
 				distinct(Q, sample)
 		)
 
-
-	#get_plot_predicted_real( fit %>% tidybayes::spread_draws(mu_sum[I], phi_sum[I]) %>% filter(.chain==2), y_source ) + my_theme
+	get_plot_predicted_real( fit , y_source ) + my_theme
 
 
 	# Return

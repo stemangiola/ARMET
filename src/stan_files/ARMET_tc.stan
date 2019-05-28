@@ -1,5 +1,11 @@
 functions{
 
+	matrix vector_array_to_matrix(vector[] x) {
+			matrix[size(x), rows(x[1])] y;
+			for (m in 1:size(x))
+			  y[m] = x[m]';
+			return y;
+	}
 
 	vector vector_array_to_vector(vector[] x) {
 				// This operation is column major
@@ -222,12 +228,12 @@ functions{
 	 	vector[Q] exposure_rate = local_parameters[(y_MPI_G_per_shard+y_MPI_G_per_shard + y_MPI_symbol_per_shard+1):(y_MPI_G_per_shard+y_MPI_G_per_shard + y_MPI_symbol_per_shard + Q)];
 	 	vector[Q * ct_in_levels] prop = local_parameters[(y_MPI_G_per_shard+y_MPI_G_per_shard + y_MPI_symbol_per_shard + Q +1)	:	(y_MPI_G_per_shard+y_MPI_G_per_shard + y_MPI_symbol_per_shard + Q + (Q * ct_in_levels))];
 
-		// Calculate sum
-		vector[y_MPI_N_per_shard] my_sum[2] = sum_NB_MPI(
-			to_matrix( lambda_MPI, ct_in_levels, y_MPI_symbol_per_shard), // ct rows, G columns
-			to_matrix( sigma_MPI,  ct_in_levels, y_MPI_symbol_per_shard), // ct rows, G columns
-			to_matrix( prop, Q, ct_in_levels)
-		);
+		// // Calculate sum
+		// vector[y_MPI_N_per_shard] my_sum[2] = sum_NB_MPI(
+		// 	to_matrix( lambda_MPI, ct_in_levels, y_MPI_symbol_per_shard), // ct rows, G columns
+		// 	to_matrix( sigma_MPI,  ct_in_levels, y_MPI_symbol_per_shard), // ct rows, G columns
+		// 	to_matrix( prop, Q, ct_in_levels)
+		// );
 
 		matrix[Q, y_MPI_symbol_per_shard] my_sum_mat[2] = sum_NB_MPI_mat(
 			to_matrix( lambda_MPI, ct_in_levels, y_MPI_symbol_per_shard), // ct rows, G columns
@@ -238,8 +244,8 @@ functions{
 		// Vecotrised sampling, all vectors should be G1-Q1, G1-Q2, G1-Q3
 		return (neg_binomial_2_lpmf(
 				counts |
-				my_sum[1] .* to_vector(rep_matrix((exp(exposure_rate)), y_MPI_symbol_per_shard)),
-				my_sum[2] ./ to_vector(rep_matrix((exp(to_row_vector(sigma_correction))), Q))
+				to_vector(my_sum_mat[1] .* rep_matrix((exp(exposure_rate)), y_MPI_symbol_per_shard)),
+				to_vector(my_sum_mat[2] ./ rep_matrix((exp(to_row_vector(sigma_correction))), Q))
 			));
 
 
@@ -281,6 +287,8 @@ data {
   int<lower=0> M;
 	int<lower=0> G;
 	int<lower=0> GM; // Marker symbols
+	int<lower=0> GM_lv1; // Marker symbols
+	int<lower=0> GM_lv2; // Marker symbols
 	int<lower=0> S;
   int n_shards;
 	int<lower=0> counts[n_shards, N];
@@ -324,6 +332,7 @@ data {
 	int y_MPI_idx_symbol_lv1[n_shards,max(y_MPI_symbol_per_shard_lv1)];
 	int y_MPI_G_per_shard_lv1[n_shards];
 	int y_MPI_idx_lv1[n_shards,max(y_MPI_G_per_shard_lv1)];
+	int y_idx_lv1[GM_lv1 * ct_in_levels[1]];
 	int y_MPI_N_per_shard_lv1[n_shards];
 	int y_MPI_count_lv1[n_shards, max(y_MPI_N_per_shard_lv1)];
 	int<lower=0> lev1_package[n_shards, 6 + max(y_MPI_N_per_shard_lv1)];
@@ -333,6 +342,7 @@ data {
 	int y_MPI_idx_symbol_lv2[n_shards,max(y_MPI_symbol_per_shard_lv2)];
 	int y_MPI_G_per_shard_lv2[n_shards];
 	int y_MPI_idx_lv2[n_shards,max(y_MPI_G_per_shard_lv2)];
+	int y_idx_lv2[GM_lv2 * (ct_in_levels[1] + ct_in_levels[2] - 1)];
 	int y_MPI_N_per_shard_lv2[n_shards];
 	int y_MPI_count_lv2[n_shards, max(y_MPI_N_per_shard_lv2)];
 	int<lower=0> lev2_package[n_shards, 6 + max(y_MPI_N_per_shard_lv2)];
@@ -412,24 +422,29 @@ model {
 generated quantities{
 
 
-		matrix[Q, y_MPI_symbol_per_shard] my_sum_mat_lv1[2] = sum_NB_MPI_mat(
-			to_matrix( lambda_MPI[inx_lv1], ct_in_levels[1], y_MPI_symbol_per_shard), // ct rows, G columns
-			to_matrix( sigma_MPI[idx_lv1],  ct_in_levels[1], y_MPI_symbol_per_shard), // ct rows,	 G columns
-			to_matrix( prop_1 )
+		matrix[Q, GM_lv1] my_sum_mat_lv1[2] = sum_NB_MPI_mat(
+			to_matrix( lambda[y_idx_lv1], ct_in_levels[1], GM_lv1), // ct rows, G columns
+			to_matrix( sigma[y_idx_lv1],  ct_in_levels[1], GM_lv1), // ct rows,	 G columns
+			vector_array_to_matrix( prop_1 )
 		);
 
-		mu_sum_lv1 =    my_sum_mat_lv1[1] .* rep_matrix(exp(exposure_rate), sum(y_MPI_symbol_per_shard));
-		sigma_sum_lv1 = my_sum_mat_lv1[2] ./ rep_matrix(exp(to_row_vector(sigma_correction[idx_lv1])), Q);
-
-		matrix[Q, y_MPI_symbol_per_shard] my_sum_mat_lv2[2] = sum_NB_MPI_mat(
-			to_matrix( lambda_MPI[inx_lv2], ct_in_levels[2], y_MPI_symbol_per_shard), // ct rows, G columns
-			to_matrix( sigma_MPI[idx_lv2],  ct_in_levels[2], y_MPI_symbol_per_shard), // ct rows,	 G columns
-			to_matrix( prop_2 )
+		matrix[Q, GM_lv2] my_sum_mat_lv2[2] = sum_NB_MPI_mat(
+			to_matrix( lambda[y_idx_lv2], ct_in_levels[1] + ct_in_levels[2] - 1, GM_lv2), // ct rows, G columns
+			to_matrix( sigma[y_idx_lv2],  ct_in_levels[1] + ct_in_levels[2] - 1, GM_lv2), // ct rows,	 G columns
+			vector_array_to_matrix( prop_2 )
 		);
 
-		mu_sum_lv2 =    my_sum_mat_lv2[1] .* rep_matrix(exp(exposure_rate), sum(y_MPI_symbol_per_shard));
-		sigma_sum_lv2 = my_sum_mat_lv2[2] ./ rep_matrix(exp(to_row_vector(sigma_correction[idx_lv2])), Q);
+		matrix[Q, GM] mu_sum = append_col(
+			my_sum_mat_lv1[1] .* rep_matrix(exp(exposure_rate), GM_lv1),
+			my_sum_mat_lv2[1] .* rep_matrix(exp(exposure_rate), GM_lv2)
+		);
 
+		matrix[Q, GM] sigma_sum = append_col(
+			my_sum_mat_lv1[2] ./ rep_matrix(exp(to_row_vector(sigma_correction[1:GM_lv1])), Q),
+			my_sum_mat_lv2[2] ./ rep_matrix(exp(to_row_vector(sigma_correction[GM_lv1+1:GM_lv1+GM_lv2])), Q)
+		);
 
+		matrix[Q, GM] nb_sum;
+		for(q in 1:Q) for(g in 1:GM) nb_sum[q,g] = neg_binomial_2_rng(mu_sum[q,g], sigma_sum[q,g]);
 
 }
