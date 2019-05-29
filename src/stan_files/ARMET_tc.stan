@@ -131,16 +131,16 @@ functions{
 	return(lambda_sigma_exposure_prop_MPI);
 
 }
-	real reference_reduce( vector global_parameters , vector local_parameters , real[] xr , int[] xi ) {
+	real reference_reduce( vector global_parameters , vector local_parameters , real[] real_data , int[] int_data ) {
 
 		// Data unpack
-	 	int M = xi[1];
-	 	int N = xi[2];
-	 	int S = xi[3];
-	 	int G_per_shard = xi[4];
-	 	int symbol_end[M+1] = xi[(4+1):(4+1+M)];
-	 	int sample_idx[N] = xi[(4+1+M+1):(4+1+M+1+N-1)];
-	 	int counts[N] = xi[(4+1+M+1+N):size(xi)];
+	 	int M = int_data[1];
+	 	int N = int_data[2];
+	 	int S = int_data[3];
+	 	int G_per_shard = int_data[4];
+	 	int symbol_end[M+1] = int_data[(4+1):(4+1+M)];
+	 	int sample_idx[N] = int_data[(4+1+M+1):(4+1+M+1+N-1)];
+	 	int counts[N] = int_data[(4+1+M+1+N):size(int_data)];
 
 		// Parameters unpack
 	 	vector[G_per_shard] lambda_MPI = local_parameters[1:G_per_shard];
@@ -210,16 +210,16 @@ functions{
 		return(sum_obj);
 	}
 
-  real sum_reduce( vector global_parameters , vector local_parameters , real[] xr , int[] xi ) {
+  real sum_reduce( vector global_parameters , vector local_parameters , real[] real_data , int[] int_data ) {
 
 		// Data unpack
-		int ct_in_levels = xi[1];
-		int Q = xi[2];
-		int S = xi[3];
-		int y_MPI_symbol_per_shard = xi[4];
-		int y_MPI_G_per_shard = xi[5];
-		int y_MPI_N_per_shard = xi[6];
-	 	int counts[y_MPI_N_per_shard] = xi[6+1: 6+y_MPI_N_per_shard];
+		int ct_in_levels = int_data[1];
+		int Q = int_data[2];
+		int S = int_data[3];
+		int y_MPI_symbol_per_shard = int_data[4];
+		int y_MPI_G_per_shard = int_data[5];
+		int y_MPI_N_per_shard = int_data[6];
+	 	int counts[y_MPI_N_per_shard] = int_data[6+1: 6+y_MPI_N_per_shard];
 
 		// Parameters unpack
 	 	vector[y_MPI_G_per_shard] lambda_MPI = local_parameters[1:y_MPI_G_per_shard];
@@ -251,28 +251,28 @@ functions{
 
 }
 
-	vector lp_reduce( vector global_parameters , vector local_parameters , real[] xr , int[] xi ) {
+	vector lp_reduce( vector global_parameters , vector local_parameters , real[] real_data , int[] int_data ) {
 
-		int dim_data[3] = xi[1:3];
-		int dim_param[3] = xi[4:6];
+		int dim_data[3] = int_data[1:3];
+		int dim_param[3] = int_data[4:6];
 
 		vector[3] lp;
 
 		// Reference / exposure rate
-		lp[1] = reference_reduce(global_parameters , local_parameters[1:dim_param[1]] , xr , xi[7:(6+dim_data[1])] );
+		lp[1] = reference_reduce(global_parameters , local_parameters[1:dim_param[1]] , real_data , int_data[7:(6+dim_data[1])] );
 
 		// Deconvolution
 		lp[2] = sum_reduce(
 			global_parameters ,
 			local_parameters[(dim_param[1]+1):(dim_param[1] + dim_param[2])] ,
-			xr ,
-			xi[(6+dim_data[1]+1):(6+dim_data[1] + dim_data[2])]
+			real_data ,
+			int_data[(6+dim_data[1]+1):(6+dim_data[1] + dim_data[2])]
 		);
 		lp[3] = sum_reduce(
 			global_parameters ,
 			local_parameters[(dim_param[1] + dim_param[2] +1): (dim_param[1] + dim_param[2] + dim_param[3])] ,
-			xr ,
-			xi[(6+dim_data[1] + dim_data[2] + 1):(6+dim_data[1] + dim_data[2] + dim_data[3])]
+			real_data ,
+			int_data[(6+dim_data[1] + dim_data[2] + 1):(6+dim_data[1] + dim_data[2] + dim_data[3])]
 		);
 
 	 return [sum(lp)]';
@@ -351,11 +351,12 @@ data {
 }
 transformed data {
 
+	real normalisation_weight = do_infer == 1 ? 1 : 10;
 	int y_1_rows = I1_dim[1] * Q;
 	int y_2_rows = I2_dim[1] * Q;
 
   vector[0] global_parameters;
-  real xr[n_shards, 0];
+  real real_data[n_shards, 1] = normalisation_weight;
 
 }
 parameters {
@@ -401,7 +402,7 @@ model {
 				get_deconvolution_parameters_MPI(n_shards, y_MPI_G_per_shard_lv2, y_MPI_idx_lv2, lambda, sigma, exposure_rate, Q, prop_2, y_MPI_symbol_per_shard_lv2, y_MPI_idx_symbol_lv2, sigma_correction)
 			)
 		),
-		xr,
+		real_data,
 		data_package
 	));
 
