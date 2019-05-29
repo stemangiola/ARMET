@@ -499,7 +499,7 @@ res_0 =
 	n_markers_0 %>%
 	get_markers_df(0) %>%
 	get_input_data(reps = reps, pass = 0) %>%
-	{	ARMET_tc((.)$mix, (.)$reference) }
+	{	ARMET_tc((.)$mix, (.)$reference, iterations = 600, cores = 5) }
 res_0 %$% proportions %>% filter(!converged)
 
 ##################################
@@ -511,7 +511,7 @@ res_1 =
 	n_markers_1 %>%
 	get_markers_df(1) %>%
 	get_input_data(reps = reps, pass = 1) %>%
-	{	ARMET_tc((.)$mix, (.)$reference) }
+	{	ARMET_tc((.)$mix, (.)$reference, iterations = 600) }
 res_1 %$% proportions %>% filter(!converged)
 
 ##################################
@@ -523,7 +523,7 @@ res_2 =
 	n_markers_2 %>%
 	get_markers_df(2) %>%
 	get_input_data(reps = reps, pass = 2) %>%
-	{	ARMET_tc((.)$mix, (.)$reference) }
+	{	ARMET_tc((.)$mix, (.)$reference, iterations = 600) }
 res_2 %$% proportions %>% filter(!converged)
 
 ##################################
@@ -539,7 +539,7 @@ n_markers_3 = get_markers_number(3, res_2, n_markers_2)
 x=n_markers_0 %>%
 	get_markers_df(2) %>%
 	get_input_data(reps = reps, pass = 2) %>%
-	{	ARMET_tc(read_csv("docs/GBM.csv") %>% slice(1:10), (.)$reference, full_bayesian = F) }
+	{	ARMET_tc(read_csv("docs/GBM.csv") %>% slice(1:10), (.)$reference, full_bayesian = F, iterations = 500) }
 x %$% proportions %>% filter(!converged)
 
 ##################################
