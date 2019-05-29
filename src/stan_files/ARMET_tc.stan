@@ -133,7 +133,10 @@ functions{
 }
 	real reference_reduce( vector global_parameters , vector local_parameters , real[] real_data , int[] int_data ) {
 
-		// Data unpack
+		// Real data unpack
+		real normalisation_weight = real_data[1];
+
+		// Integer data unpack
 	 	int M = int_data[1];
 	 	int N = int_data[2];
 	 	int S = int_data[3];
@@ -162,7 +165,7 @@ functions{
     	exposure_rate[sample_idx[1:symbol_end[G_per_shard+1]]] +
     	lambda_MPI_c,
     	sigma_MPI_c
-    ) * 10);
+    ) * normalisation_weight);
 
   }
 
