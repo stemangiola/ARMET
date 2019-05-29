@@ -49,8 +49,8 @@ level_df = foreach( l = list(
 	c("natural_killer", "immune_cell", "natural_killer", "natural_killer"),
 	c("neutrophil", "immune_cell", "granulocyte", "neutrophil"),
 	c("t_CD4", "immune_cell","t_cell"),
-	c("t_CD8", "immune_cell","t_cell"),
-	c("t_CD8_memory_effector", "immune_cell","t_cell", "t_CD8_memory_effector"),
+	c("t_CD8", "immune_cell","t_cell", "t_CD8"),
+	c("t_CD8_memory_effector", "immune_cell","t_cell", "t_CD8"),
 	c("t_cell", "immune_cell","t_cell"),
 	c("t_gamma_delta", "immune_cell","t_cell", "t_gamma_delta"),
 	c("t_helper", "immune_cell","t_cell", "t_helper"),
@@ -164,8 +164,8 @@ get_input_data = function(markers, reps, pass){
 		# 	mutate(sigma_raw = ifelse(`house keeping extended rank` %>% is.na %>% `!`, sigma_raw_avg, sigma_raw)) %>%
 		# 	select(-sd,-lambda_avg,- sigma_raw_sd,-sigma_raw_avg,- `house keeping extended rank`) %>%
 
-			# Get house keeping and markwrs
-			left_join(markers %>% distinct(level, symbol, ct1, ct2, rank, `n markers`) %>% filter(rank < 500)) %>%
+		# Get house keeping and markwrs
+		left_join(markers %>% distinct(level, symbol, ct1, ct2, rank, `n markers`) %>% filter(rank < 500)) %>%
 			filter(`house keeping` | rank %>% is.na %>% `!`) %>%
 			# {
 			# 	bind_rows(
@@ -191,11 +191,11 @@ get_input_data = function(markers, reps, pass){
 			spread(`symbol`, `read count mix`) %>%
 			rename(sample = sample_mix)
 	) %>%
-	{
-		input =	(.)
-		save(input, file=sprintf("docs/input_test_pass_%s.RData", pass))
-		(.)
-	}
+		{
+			input =	(.)
+			save(input, file=sprintf("docs/input_test_pass_%s.RData", pass))
+			(.)
+		}
 
 
 }
@@ -206,7 +206,7 @@ get_markers_number = function(pass, res, num_markers_previous_level, min_n_sampl
 
 	if(pass == 0 | (num_markers_previous_level %>% is.null))
 
-		marker_df %>% distinct(pair, ct1, ct2, level) %>% left_join( tibble(level=c(1,2), `n markers` = c( min_n_samples * 2.5, min_n_samples)) )
+		marker_df %>% distinct(pair, ct1, ct2, level) %>% left_join( tibble(level=c(1,2, 3), `n markers` = c( min_n_samples * 2.5, min_n_samples, min_n_samples)) )
 
 	else
 
@@ -303,8 +303,8 @@ get_markers_number = function(pass, res, num_markers_previous_level, min_n_sampl
 			)
 		} %>%
 
-		group_by(pair, level) %>%
-		summarise(`error mean` = `error mean` %>% mean) %>%
+		# group_by(pair, level) %>%
+		# summarise(`error mean` = `error mean` %>% mean) %>%
 		{
 			((.) %>% ggplot(aes(x=pair, y=`error mean`)) + geom_boxplot() + geom_jitter() + my_theme) %>%
 				ggsave(filename = sprintf("pass_%s_test_error.png", pass), device = "png", width = 8)
@@ -389,10 +389,10 @@ get_markers_df = function(markers_number, pass){
 	# ) %>%
 
 	# Write table
-		{
-			(.)  %>%	write_csv(sprintf("docs/markers_pass%s.csv", pass))
-			(.)
-		}
+	{
+		(.)  %>%	write_csv(sprintf("docs/markers_pass%s.csv", pass))
+		(.)
+	}
 }
 
 set.seed(123)
@@ -405,6 +405,7 @@ my_ref = 	ref %>%
 marker_df =
 	get_marker_df_source(fit_df_1, 1, 0.5) %>%
 	rbind(get_marker_df_source(fit_df_2, 2, 0.4)) %>%
+	rbind(get_marker_df_source(fit_df_3, 3, 0.7)) %>%
 	separate(pair, c("ct1", "ct2"), sep=" ", remove = F)
 
 reps = 1
