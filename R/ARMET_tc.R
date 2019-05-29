@@ -200,7 +200,7 @@ plot_counts_inferred_sum = function(fit_obj, samples = NULL){
 		as_tibble(rownames="par") %>% select(par, `2.5%`, `50%`, `97.5%`) %>%
 		separate(par, c(".variable", "Q", "GM"), sep="\\[|,|\\]") %>%
 		mutate(Q = Q %>% as.integer, GM = GM %>% as.integer) %>%
-		left_join(fit_obj %$% data_source %>% distinct(Q, GM, symbol, `read count`)) %>%
+		left_join(fit_obj %$% data_source %>% distinct(Q, GM, symbol, `read count`, sample)) %>%
 
 		# Select samples
 		{
