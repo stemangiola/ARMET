@@ -540,3 +540,14 @@ x=n_markers_0 %>%
 	get_input_data(reps = reps, pass = 2) %>%
 	{	ARMET_tc(read_csv("docs/GBM.csv") %>% slice(1:10), (.)$reference, full_bayesian = F) }
 x %$% proportions %>% filter(!converged)
+
+##################################
+# Melanoma
+##################################
+
+
+y=n_markers_0 %>%
+	get_markers_df(2) %>%
+	get_input_data(reps = reps, pass = 2) %>%
+	{	ARMET_tc(read_csv("~/third_party_analyses/ismael_RNAseq_CyTOF/mix_counts.csv") %>% mutate_if(is.numeric, as.integer), (.)$reference, full_bayesian = F, iterations = 500) }
+y %$% proportions %>% filter(!converged)
