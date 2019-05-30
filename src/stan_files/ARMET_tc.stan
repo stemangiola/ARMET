@@ -251,7 +251,6 @@ functions{
 				to_vector(my_sum_mat[2] ./ rep_matrix((exp(to_row_vector(sigma_correction))), Q))
 			));
 
-
 }
 
 	vector lp_reduce( vector global_parameters , vector local_parameters , real[] real_data , int[] int_data ) {
@@ -279,6 +278,8 @@ functions{
 		);
 
 	 return [sum(lp)]';
+
+	 //return [lp[1]]';
 
 	}
 
@@ -359,7 +360,7 @@ transformed data {
 	int y_2_rows = I2_dim[1] * Q;
 
   vector[0] global_parameters;
-  real real_data[n_shards, 1] = normalisation_weight;
+  real real_data[n_shards, 1] = rep_array(normalisation_weight, n_shards, 1);
 
 }
 parameters {
@@ -371,7 +372,7 @@ parameters {
   // Gene-wise properties of the data
   vector[G * do_infer] lambda_log_param;
   vector[G * do_infer] sigma_raw_param;
-  vector<lower=0>[GM] sigma_correction;
+  vector<lower=0>[ do_infer == 1 ? 1 : GM] sigma_correction_param;
 
   // Proportions
   simplex[ct_in_levels[1]] prop_1[Q]; // Root
@@ -390,6 +391,9 @@ transformed parameters {
 
 	// Deconvolution
 	vector[G] lambda = exp(lambda_log);
+
+	// Sigma correction (if full bayes this is a unique value otherwise is gene-wise)
+	vector<lower=0>[GM] sigma_correction = do_infer == 1 ? rep_vector(0.0, GM) : sigma_correction_param; // sigma_correction_param[1]
 
 }
 
@@ -412,6 +416,9 @@ model {
   // Overall properties of the data
   lambda_mu ~ normal(lambda_mu_mu,2);
 
+	// roportion prior
+	for(q in 1:Q) prop_1[q] ~ dirichlet(rep_vector(num_elements(prop_1[1]), num_elements(prop_1[1])));
+	for(q in 1:Q) prop_immune[q] ~ dirichlet(rep_vector(num_elements(prop_immune[1]), num_elements(prop_immune[1])));
 
 	// Exposure prior
   exposure_rate ~ normal(0,1);
@@ -420,7 +427,7 @@ model {
   // Gene-wise properties of the data
   if(do_infer) lambda_log_param ~ exp_gamma_meanSd(lambda_mu,lambda_sigma);
   if(do_infer) sigma_raw_param ~ normal(sigma_slope * lambda_log_param + sigma_intercept,sigma_sigma);
-	sigma_correction ~ double_exponential(0, 1); // Lasso prior for correction
+	sigma_correction_param ~ exponential(1); // Lasso prior for correction
 
 }
 generated quantities{
@@ -439,8 +446,8 @@ generated quantities{
 		);
 
 		matrix[Q, GM] mu_sum = append_col(
-			my_sum_mat_lv1[1] .* rep_matrix(exp(exposure_rate), GM_lv1),
-			my_sum_mat_lv2[1] .* rep_matrix(exp(exposure_rate), GM_lv2)
+			my_sum_mat_lv1[1] .* rep_matrix(exp(exposure_rate[1:Q]), GM_lv1),
+			my_sum_mat_lv2[1] .* rep_matrix(exp(exposure_rate[1:Q]), GM_lv2)
 		);
 
 		matrix[Q, GM] sigma_sum = append_col(

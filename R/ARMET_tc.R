@@ -681,6 +681,10 @@ ARMET_tc = function(
 
 	browser()
 
+	########################################
+	# MODEL
+	########################################
+
 	fileConn<-file("~/.R/Makevars")
 	writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
 	close(fileConn)
@@ -693,9 +697,13 @@ ARMET_tc = function(
 			ARMET_tc_model, #stanmodels$ARMET_tc,
 			chains=3, cores=3,
 			iter=iterations, warmup=iterations-100,   save_warmup = FALSE,
-			pars = c("prop_1", "prop_2", "exposure_rate", "sigma_correction", "nb_sum") #,"mu_sum", "phi_sum")
+			pars = c("prop_1", "prop_2", "exposure_rate", "sigma_correction_param", "nb_sum") #,"mu_sum", "phi_sum")
 		)
 	Sys.time() %>% print
+
+	########################################
+	# Parse results
+	########################################
 
 	# Produce results
 	prop =
@@ -745,7 +753,7 @@ ARMET_tc = function(
 				distinct(Q, sample)
 		)
 
-	#plot_counts_inferrd_sum( fit , y_source )
+	plot_counts_inferred_sum( list(fit = fit , data_source = y_source ))
 
 
 	# Return
