@@ -435,13 +435,13 @@ generated quantities{
 
 		matrix[Q, GM_lv1] my_sum_mat_lv1[2] = sum_NB_MPI_mat(
 			to_matrix( lambda[y_idx_lv1], ct_in_levels[1], GM_lv1), // ct rows, G columns
-			to_matrix( sigma[y_idx_lv1],  ct_in_levels[1], GM_lv1), // ct rows,	 G columns
+			to_matrix( sigma[y_idx_lv1],  ct_in_levels[1], GM_lv1), // ct rows,	G columns
 			vector_array_to_matrix( prop_1 )
 		);
 
 		matrix[Q, GM_lv2] my_sum_mat_lv2[2] = sum_NB_MPI_mat(
 			to_matrix( lambda[y_idx_lv2], ct_in_levels[1] + ct_in_levels[2] - 1, GM_lv2), // ct rows, G columns
-			to_matrix( sigma[y_idx_lv2],  ct_in_levels[1] + ct_in_levels[2] - 1, GM_lv2), // ct rows,	 G columns
+			to_matrix( sigma[y_idx_lv2],  ct_in_levels[1] + ct_in_levels[2] - 1, GM_lv2), // ct rows,	G columns
 			vector_array_to_matrix( prop_2 )
 		);
 
