@@ -406,6 +406,7 @@ ARMET_tc = function(
 	# Print overlap descriptive stats
 	#get_overlap_descriptive_stats(mix %>% slice(1) %>% gather(`symbol`, `read count`, -sample), reference)
 
+
 	#########################################
 	# Prepare data frames -
 	# For Q query first
@@ -586,10 +587,27 @@ ARMET_tc = function(
 	y_MPI_count_lv2 = y_MPI_lv2 %$% y_MPI_count
 
 	Q = df %>% filter(`query`) %>% distinct(Q) %>% nrow
-	idx_ct_root = c(1:4)
-	idx_ct_immune = c(1:3, 5:11)
-	y_idx_ct_root = idx_ct_root + 3
-	y_idx_ct_immune = idx_ct_immune + 3
+
+	#############################
+	# set structure
+	#############################
+
+	# Numeric structure of cell types
+	cell_type_num_struc =
+		level_df %>%
+		gather(level, `Cell type category`, -`Cell type formatted`) %>% separate(level, c("label", "level")) %>%
+		mutate(level = level %>% as.integer) %>%
+		left_join(
+			y_source %>% mutate(C = `Cell type category` %>% as.integer) %>% distinct(`Cell type category`, C)
+		) %>%
+		unite(level, c("label", "level"), sep=" ") %>%
+		select(-`Cell type category`) %>%
+		spread(level, C) %>%
+		select(`level 1`, `level 2`) %>%
+		drop_na %>%
+		distinct %>%
+		arrange(`level 1`, `level 2`) %>%
+		as_matrix %>% t
 
 	#######################################
 	# Merge all MPI
@@ -681,6 +699,8 @@ ARMET_tc = function(
 
 	browser()
 
+
+
 	########################################
 	# MODEL
 	########################################
@@ -738,11 +758,11 @@ ARMET_tc = function(
 				{
 					ys = (.)
 					ys %>%
-						slice(!!idx_ct_root) %>%
+						slice(!!cell_type_num_struc[1,] %>% unique) %>%
 						mutate(C = 1:n(), level=1) %>%
 						bind_rows(
 							ys %>%
-								slice(!!idx_ct_immune) %>%
+								slice(!!cell_type_num_struc[2,] %>% unique) %>%
 								mutate(C = 1:n(), level=2)
 						)
 				}
