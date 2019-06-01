@@ -66,10 +66,11 @@ level_df = foreach( l = list(
 	c("b_cell", "immune_cell", "b_cell"),
 	c("b_memory", "immune_cell", "b_cell", "b_memory"),
 	c("b_naive", "immune_cell", "b_cell", "b_naive"),
-	c("dendritic",  "immune_cell", "dendritic"),
-	c("dendritic_m",  "immune_cell", "dendritic"),
-	c("dendritic_m_immature",  "immune_cell", "dendritic", "dendritic_m_immature"),
-	c("dendritic_m_mature",  "immune_cell", "dendritic", "dendritic_m_mature"),
+	c("dendritic",  "immune_cell", "dendritic_myeloid"),
+	c("dendritic_plasmacytoid",  "immune_cell", "dendritic_plasmacytoid"),
+	c("dendritic_myeloid",  "immune_cell", "dendritic_myeloid"),
+	c("dendritic_myeloid_immature",  "immune_cell", "dendritic_myeloid", "dendritic_myeloid_immature"),
+	c("dendritic_myeloid_mature",  "immune_cell", "dendritic_myeloid", "dendritic_myeloid_mature"),
 	c("endothelial", "endothelial", "endothelial", "endothelial"),
 	c("eosinophil", "immune_cell", "granulocyte", "eosinophil"),
 	c("epithelial", "epithelial", "epithelial", "epithelial"),
@@ -271,17 +272,17 @@ counts =
 				select(- `threshold contribution`)
 
 			}) %>%
-			ungroup %>%
-
-			mutate(symbol = symbol %>% as.factor) %>%
-			mutate(sample = sample %>% as.factor)
+			ungroup
 
 		(.) %>%
 			filter(`Cell type category` == "house_keeping") %>%
 			inner_join( nr %>% distinct(sample)) %>%
 			bind_rows( nr )
 
-	}
+	} %>%
+
+	mutate(symbol = symbol %>% as.factor) %>%
+	mutate(sample = sample %>% as.factor)
 
 # MPI
 
