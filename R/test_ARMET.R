@@ -206,7 +206,7 @@ get_markers_number = function(pass, res, num_markers_previous_level, min_n_sampl
 
 	if(pass == 0 | (num_markers_previous_level %>% is.null))
 
-		marker_df %>% distinct(pair, ct1, ct2, level) %>% left_join( tibble(level=c(1,2), `n markers` = c( min_n_samples * 2.5, min_n_samples)) )
+		marker_df %>% distinct(pair, ct1, ct2, level) %>% left_join( tibble(level=c(1,2), `n markers` = c( (min_n_samples * 2.5) %>% ceiling, min_n_samples)) )
 
 	else
 
@@ -487,13 +487,14 @@ mix_source =
 	ungroup
 
 
+
 source("R/ARMET_tc.R")
 
 ##################################
 # Pass 0
 ##################################
 
-n_markers_0 = get_markers_number(0, NULL, NULL)
+n_markers_0 = get_markers_number(0, NULL, NULL, min_n_samples = 5)
 res_0 =
 	n_markers_0 %>%
 	get_markers_df(0) %>%
@@ -549,5 +550,5 @@ x %$% proportions %>% filter(!converged)
 y=n_markers_0 %>%
 	get_markers_df(2) %>%
 	get_input_data(reps = reps, pass = 2) %>%
-	{	ARMET_tc(read_csv("~/third_party_analyses/ismael_RNAseq_CyTOF/mix_counts.csv") %>% mutate_if(is.numeric, as.integer), (.)$reference, full_bayesian = F, iterations = 500) }
+	{	ARMET_tc(read_csv("~/unix3XX/third_party_analyses/ismael_RNAseq_CyTOF/mix_counts.csv") %>% mutate_if(is.numeric, as.integer), (.)$reference, full_bayesian = F, iterations = 500) }
 y %$% proportions %>% filter(!converged)
