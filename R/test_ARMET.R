@@ -200,8 +200,6 @@ get_input_data = function(markers, reps, pass){
 
 }
 
-load("fit_df_feature_selection.RData")
-
 get_markers_number = function(pass, res, num_markers_previous_level, min_n_samples=30){
 
 	if(pass == 0 | (num_markers_previous_level %>% is.null))
@@ -326,7 +324,7 @@ get_markers_number = function(pass, res, num_markers_previous_level, min_n_sampl
 		}
 }
 
-get_marker_df_source = function(fit_df, level, fit_threshold, lambda_threshold =4){
+give_rank_to_ref = function(fit_df, level, fit_threshold, lambda_threshold =4){
 
 	fit_df %>%
 		left_join(level_df %>% mutate(`level 0` = "root")) %>%
@@ -403,9 +401,9 @@ my_ref = 	ref %>%
 
 
 marker_df =
-	get_marker_df_source(fit_df_1, 1, 0.5) %>%
-	rbind(get_marker_df_source(fit_df_2, 2, 0.4)) %>%
-	rbind(get_marker_df_source(fit_df_3, 3, 0.7)) %>%
+	give_rank_to_ref(ref %>% filter(level ==1), 1, 0.5) %>%
+	rbind(give_rank_to_ref(ref %>% filter(level ==2), 2, 0.4)) %>%
+	#rbind(give_rank_to_ref(ref %>% filter(level ==3), 3, 0.7)) %>%
 	separate(pair, c("ct1", "ct2"), sep=" ", remove = F)
 
 reps = 1
@@ -550,5 +548,5 @@ x %$% proportions %>% filter(!converged)
 y=n_markers_0 %>%
 	get_markers_df(2) %>%
 	get_input_data(reps = reps, pass = 2) %>%
-	{	ARMET_tc(read_csv("~/third_party_analyses/ismael_RNAseq_CyTOF/mix_counts.csv") %>% mutate_if(is.numeric, as.integer), (.)$reference, full_bayesian = F, iterations = 500) }
+	{	ARMET_tc(read_csv("~/unix3XX/third_party_analyses/ismael_RNAseq_CyTOF/mix_counts.csv") %>% mutate_if(is.numeric, as.integer), (.)$reference, full_bayesian = F, iterations = 500) }
 y %$% proportions %>% filter(!converged)
