@@ -393,7 +393,7 @@ transformed parameters {
 	vector[G] lambda = exp(lambda_log);
 
 	// Sigma correction (if full bayes this is a unique value otherwise is gene-wise)
-	vector<lower=0>[GM] sigma_correction = do_infer == 1 ? rep_vector(0.0, GM) : sigma_correction_param; // sigma_correction_param[1]
+	vector<lower=0>[GM] sigma_correction = do_infer == 1 ? rep_vector(sigma_correction_param[1], GM) : sigma_correction_param; // sigma_correction_param[1]
 
 }
 
