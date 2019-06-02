@@ -131,16 +131,19 @@ functions{
 	return(lambda_sigma_exposure_prop_MPI);
 
 }
-	real reference_reduce( vector global_parameters , vector local_parameters , real[] xr , int[] xi ) {
+	real reference_reduce( vector global_parameters , vector local_parameters , real[] real_data , int[] int_data ) {
 
-		// Data unpack
-	 	int M = xi[1];
-	 	int N = xi[2];
-	 	int S = xi[3];
-	 	int G_per_shard = xi[4];
-	 	int symbol_end[M+1] = xi[(4+1):(4+1+M)];
-	 	int sample_idx[N] = xi[(4+1+M+1):(4+1+M+1+N-1)];
-	 	int counts[N] = xi[(4+1+M+1+N):size(xi)];
+		// Real data unpack
+		real normalisation_weight = real_data[1];
+
+		// Integer data unpack
+	 	int M = int_data[1];
+	 	int N = int_data[2];
+	 	int S = int_data[3];
+	 	int G_per_shard = int_data[4];
+	 	int symbol_end[M+1] = int_data[(4+1):(4+1+M)];
+	 	int sample_idx[N] = int_data[(4+1+M+1):(4+1+M+1+N-1)];
+	 	int counts[N] = int_data[(4+1+M+1+N):size(int_data)];
 
 		// Parameters unpack
 	 	vector[G_per_shard] lambda_MPI = local_parameters[1:G_per_shard];
@@ -162,7 +165,7 @@ functions{
     	exposure_rate[sample_idx[1:symbol_end[G_per_shard+1]]] +
     	lambda_MPI_c,
     	sigma_MPI_c
-    ) * 10);
+    ) * normalisation_weight);
 
   }
 
@@ -210,16 +213,16 @@ functions{
 		return(sum_obj);
 	}
 
-  real sum_reduce( vector global_parameters , vector local_parameters , real[] xr , int[] xi ) {
+  real sum_reduce( vector global_parameters , vector local_parameters , real[] real_data , int[] int_data ) {
 
 		// Data unpack
-		int ct_in_levels = xi[1];
-		int Q = xi[2];
-		int S = xi[3];
-		int y_MPI_symbol_per_shard = xi[4];
-		int y_MPI_G_per_shard = xi[5];
-		int y_MPI_N_per_shard = xi[6];
-	 	int counts[y_MPI_N_per_shard] = xi[6+1: 6+y_MPI_N_per_shard];
+		int ct_in_levels = int_data[1];
+		int Q = int_data[2];
+		int S = int_data[3];
+		int y_MPI_symbol_per_shard = int_data[4];
+		int y_MPI_G_per_shard = int_data[5];
+		int y_MPI_N_per_shard = int_data[6];
+	 	int counts[y_MPI_N_per_shard] = int_data[6+1: 6+y_MPI_N_per_shard];
 
 		// Parameters unpack
 	 	vector[y_MPI_G_per_shard] lambda_MPI = local_parameters[1:y_MPI_G_per_shard];
@@ -248,34 +251,35 @@ functions{
 				to_vector(my_sum_mat[2] ./ rep_matrix((exp(to_row_vector(sigma_correction))), Q))
 			));
 
-
 }
 
-	vector lp_reduce( vector global_parameters , vector local_parameters , real[] xr , int[] xi ) {
+	vector lp_reduce( vector global_parameters , vector local_parameters , real[] real_data , int[] int_data ) {
 
-		int dim_data[3] = xi[1:3];
-		int dim_param[3] = xi[4:6];
+		int dim_data[3] = int_data[1:3];
+		int dim_param[3] = int_data[4:6];
 
 		vector[3] lp;
 
 		// Reference / exposure rate
-		lp[1] = reference_reduce(global_parameters , local_parameters[1:dim_param[1]] , xr , xi[7:(6+dim_data[1])] );
+		lp[1] = reference_reduce(global_parameters , local_parameters[1:dim_param[1]] , real_data , int_data[7:(6+dim_data[1])] );
 
 		// Deconvolution
 		lp[2] = sum_reduce(
 			global_parameters ,
 			local_parameters[(dim_param[1]+1):(dim_param[1] + dim_param[2])] ,
-			xr ,
-			xi[(6+dim_data[1]+1):(6+dim_data[1] + dim_data[2])]
+			real_data ,
+			int_data[(6+dim_data[1]+1):(6+dim_data[1] + dim_data[2])]
 		);
 		lp[3] = sum_reduce(
 			global_parameters ,
 			local_parameters[(dim_param[1] + dim_param[2] +1): (dim_param[1] + dim_param[2] + dim_param[3])] ,
-			xr ,
-			xi[(6+dim_data[1] + dim_data[2] + 1):(6+dim_data[1] + dim_data[2] + dim_data[3])]
+			real_data ,
+			int_data[(6+dim_data[1] + dim_data[2] + 1):(6+dim_data[1] + dim_data[2] + dim_data[3])]
 		);
 
 	 return [sum(lp)]';
+
+	 //return [lp[1]]';
 
 	}
 
@@ -351,11 +355,12 @@ data {
 }
 transformed data {
 
+	real normalisation_weight = do_infer == 1 ? 1 : 10;
 	int y_1_rows = I1_dim[1] * Q;
 	int y_2_rows = I2_dim[1] * Q;
 
   vector[0] global_parameters;
-  real xr[n_shards, 0];
+  real real_data[n_shards, 1] = rep_array(normalisation_weight, n_shards, 1);
 
 }
 parameters {
@@ -367,7 +372,7 @@ parameters {
   // Gene-wise properties of the data
   vector[G * do_infer] lambda_log_param;
   vector[G * do_infer] sigma_raw_param;
-  vector<lower=0>[GM] sigma_correction;
+  vector<lower=0>[ do_infer == 1 ? 1 : GM] sigma_correction_param;
 
   // Proportions
   simplex[ct_in_levels[1]] prop_1[Q]; // Root
@@ -387,6 +392,9 @@ transformed parameters {
 	// Deconvolution
 	vector[G] lambda = exp(lambda_log);
 
+	// Sigma correction (if full bayes this is a unique value otherwise is gene-wise)
+	vector<lower=0>[GM] sigma_correction = do_infer == 1 ? rep_vector(sigma_correction_param[1], GM) : sigma_correction_param; // sigma_correction_param[1]
+
 }
 
 model {
@@ -401,13 +409,16 @@ model {
 				get_deconvolution_parameters_MPI(n_shards, y_MPI_G_per_shard_lv2, y_MPI_idx_lv2, lambda, sigma, exposure_rate, Q, prop_2, y_MPI_symbol_per_shard_lv2, y_MPI_idx_symbol_lv2, sigma_correction)
 			)
 		),
-		xr,
+		real_data,
 		data_package
 	));
 
   // Overall properties of the data
   lambda_mu ~ normal(lambda_mu_mu,2);
 
+	// roportion prior
+	for(q in 1:Q) prop_1[q] ~ dirichlet(rep_vector(num_elements(prop_1[1]), num_elements(prop_1[1])));
+	for(q in 1:Q) prop_immune[q] ~ dirichlet(rep_vector(num_elements(prop_immune[1]), num_elements(prop_immune[1])));
 
 	// Exposure prior
   exposure_rate ~ normal(0,1);
@@ -416,7 +427,7 @@ model {
   // Gene-wise properties of the data
   if(do_infer) lambda_log_param ~ exp_gamma_meanSd(lambda_mu,lambda_sigma);
   if(do_infer) sigma_raw_param ~ normal(sigma_slope * lambda_log_param + sigma_intercept,sigma_sigma);
-	sigma_correction ~ double_exponential(0, 1); // Lasso prior for correction
+	sigma_correction_param ~ exponential(1); // Lasso prior for correction
 
 }
 generated quantities{
@@ -424,19 +435,19 @@ generated quantities{
 
 		matrix[Q, GM_lv1] my_sum_mat_lv1[2] = sum_NB_MPI_mat(
 			to_matrix( lambda[y_idx_lv1], ct_in_levels[1], GM_lv1), // ct rows, G columns
-			to_matrix( sigma[y_idx_lv1],  ct_in_levels[1], GM_lv1), // ct rows,	 G columns
+			to_matrix( sigma[y_idx_lv1],  ct_in_levels[1], GM_lv1), // ct rows,	G columns
 			vector_array_to_matrix( prop_1 )
 		);
 
 		matrix[Q, GM_lv2] my_sum_mat_lv2[2] = sum_NB_MPI_mat(
 			to_matrix( lambda[y_idx_lv2], ct_in_levels[1] + ct_in_levels[2] - 1, GM_lv2), // ct rows, G columns
-			to_matrix( sigma[y_idx_lv2],  ct_in_levels[1] + ct_in_levels[2] - 1, GM_lv2), // ct rows,	 G columns
+			to_matrix( sigma[y_idx_lv2],  ct_in_levels[1] + ct_in_levels[2] - 1, GM_lv2), // ct rows,	G columns
 			vector_array_to_matrix( prop_2 )
 		);
 
 		matrix[Q, GM] mu_sum = append_col(
-			my_sum_mat_lv1[1] .* rep_matrix(exp(exposure_rate), GM_lv1),
-			my_sum_mat_lv2[1] .* rep_matrix(exp(exposure_rate), GM_lv2)
+			my_sum_mat_lv1[1] .* rep_matrix(exp(exposure_rate[1:Q]), GM_lv1),
+			my_sum_mat_lv2[1] .* rep_matrix(exp(exposure_rate[1:Q]), GM_lv2)
 		);
 
 		matrix[Q, GM] sigma_sum = append_col(

@@ -212,7 +212,7 @@ plot_counts_inferred_sum = function(fit_obj, samples = NULL){
 		rowwise %>%
 		mutate(inside = between(`read count`, `2.5%`, `97.5%`)) %>%
 		ungroup %>%
-		ggplot(aes(x=`read count` + 1, y=`50%` + 1, color=inside)) +
+		ggplot(aes(x=`read count` + 1, y=`50%` + 1, color=inside, label = symbol)) +
 		geom_point(alpha=0.5)  +
 		geom_abline(slope = 1, intercept = 0) +
 		geom_errorbar(aes(ymin=`2.5%`, ymax=`97.5%`), alpha=0.5) +
@@ -406,6 +406,7 @@ ARMET_tc = function(
 	# Print overlap descriptive stats
 	#get_overlap_descriptive_stats(mix %>% slice(1) %>% gather(`symbol`, `read count`, -sample), reference)
 
+
 	#########################################
 	# Prepare data frames -
 	# For Q query first
@@ -586,10 +587,27 @@ ARMET_tc = function(
 	y_MPI_count_lv2 = y_MPI_lv2 %$% y_MPI_count
 
 	Q = df %>% filter(`query`) %>% distinct(Q) %>% nrow
-	idx_ct_root = c(1:4)
-	idx_ct_immune = c(1:3, 5:11)
-	y_idx_ct_root = idx_ct_root + 3
-	y_idx_ct_immune = idx_ct_immune + 3
+
+	#############################
+	# set structure
+	#############################
+
+	# Numeric structure of cell types
+	cell_type_num_struc =
+		level_df %>%
+		gather(level, `Cell type category`, -`Cell type formatted`) %>% separate(level, c("label", "level")) %>%
+		mutate(level = level %>% as.integer) %>%
+		left_join(
+			y_source %>% mutate(C = `Cell type category` %>% as.integer) %>% distinct(`Cell type category`, C)
+		) %>%
+		unite(level, c("label", "level"), sep=" ") %>%
+		select(-`Cell type category`) %>%
+		spread(level, C) %>%
+		select(`level 1`, `level 2`) %>%
+		drop_na %>%
+		distinct %>%
+		arrange(`level 1`, `level 2`) %>%
+		as_matrix %>% t
 
 	#######################################
 	# Merge all MPI
@@ -679,7 +697,9 @@ ARMET_tc = function(
 		arrange(G)%>%
 		pull(sigma_raw)
 
-	browser()
+	########################################
+	# MODEL
+	########################################
 
 	fileConn<-file("~/.R/Makevars")
 	writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
@@ -693,9 +713,13 @@ ARMET_tc = function(
 			ARMET_tc_model, #stanmodels$ARMET_tc,
 			chains=3, cores=3,
 			iter=iterations, warmup=iterations-100,   save_warmup = FALSE,
-			pars = c("prop_1", "prop_2", "exposure_rate", "sigma_correction", "nb_sum") #,"mu_sum", "phi_sum")
+			pars = c("prop_1", "prop_2", "exposure_rate", "sigma_correction_param", "nb_sum") #,"mu_sum", "phi_sum")
 		)
 	Sys.time() %>% print
+
+	########################################
+	# Parse results
+	########################################
 
 	# Produce results
 	prop =
@@ -730,11 +754,11 @@ ARMET_tc = function(
 				{
 					ys = (.)
 					ys %>%
-						slice(!!idx_ct_root) %>%
+						slice(!!cell_type_num_struc[1,] %>% unique) %>%
 						mutate(C = 1:n(), level=1) %>%
 						bind_rows(
 							ys %>%
-								slice(!!idx_ct_immune) %>%
+								slice(!!cell_type_num_struc[2,] %>% unique) %>%
 								mutate(C = 1:n(), level=2)
 						)
 				}
@@ -745,7 +769,7 @@ ARMET_tc = function(
 				distinct(Q, sample)
 		)
 
-	#plot_counts_inferrd_sum( fit , y_source )
+	plot_counts_inferred_sum( list(fit = fit , data_source = y_source ))
 
 
 	# Return

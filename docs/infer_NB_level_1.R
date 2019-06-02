@@ -57,8 +57,6 @@ my_theme =
 		axis.title.y  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10))
 	)
 
-
-
 # Tools
 source("https://gist.githubusercontent.com/stemangiola/90a528038b8c52b21f9cfa6bb186d583/raw/dbd92c49fb03fb05ab0b465704b99c0a39e654d5/transcription_tool_kit.R")
 source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/e4ec6a2348efc2f62b88f10b12e70f4c6273a10a/tidy_extensions.R")
@@ -68,10 +66,11 @@ level_df = foreach( l = list(
 	c("b_cell", "immune_cell", "b_cell"),
 	c("b_memory", "immune_cell", "b_cell", "b_memory"),
 	c("b_naive", "immune_cell", "b_cell", "b_naive"),
-	c("dendritic",  "immune_cell", "dendritic"),
-	c("dendritic_m",  "immune_cell", "dendritic"),
-	c("dendritic_m_immature",  "immune_cell", "dendritic", "dendritic_m_immature"),
-	c("dendritic_m_mature",  "immune_cell", "dendritic", "dendritic_m_mature"),
+	c("dendritic",  "immune_cell", "dendritic_myeloid"),
+	c("dendritic_plasmacytoid",  "immune_cell", "dendritic_plasmacytoid"),
+	c("dendritic_myeloid",  "immune_cell", "dendritic_myeloid"),
+	c("dendritic_myeloid_immature",  "immune_cell", "dendritic_myeloid", "dendritic_myeloid_immature"),
+	c("dendritic_myeloid_mature",  "immune_cell", "dendritic_myeloid", "dendritic_myeloid_mature"),
 	c("endothelial", "endothelial", "endothelial", "endothelial"),
 	c("eosinophil", "immune_cell", "granulocyte", "eosinophil"),
 	c("epithelial", "epithelial", "epithelial", "epithelial"),
@@ -86,8 +85,8 @@ level_df = foreach( l = list(
 	c("natural_killer", "immune_cell", "natural_killer", "natural_killer"),
 	c("neutrophil", "immune_cell", "granulocyte", "neutrophil"),
 	c("t_CD4", "immune_cell","t_cell"),
-	c("t_CD8", "immune_cell","t_cell"),
-	c("t_CD8_memory_effector", "immune_cell","t_cell", "t_CD8_memory_effector"),
+	c("t_CD8", "immune_cell","t_cell", "t_CD8"),
+	c("t_CD8_memory_effector", "immune_cell","t_cell", "t_CD8"),
 	c("t_cell", "immune_cell","t_cell"),
 	c("t_gamma_delta", "immune_cell","t_cell", "t_gamma_delta"),
 	c("t_helper", "immune_cell","t_cell", "t_helper"),
@@ -103,6 +102,20 @@ level_df = foreach( l = list(
 		setNames(c("Cell type formatted", sprintf("level %s",  1:((.)%>%ncol()-1) ) ))
 } %>%
 	mutate(`level 0` = "root")
+
+ct_to_correlation_threshold =
+	level_df %>%
+	select(-`Cell type formatted`) %>%
+	gather(label, `Cell type category`) %>%
+	separate(label, c("dummy", "level")) %>%
+	mutate(level = level %>% as.integer) %>%
+	filter(level %in% 1:3) %>%
+	group_by(`Cell type category`) %>%
+	arrange(level) %>%
+	slice(1) %>%
+	left_join(
+		tibble(level=1:3, threshold=c(0.9, 0.95, 0.99))
+	)
 
 # if(0){
 # Get data
@@ -147,7 +160,7 @@ counts =
 		library(magrittr)
 
 		(.) %>%
-			group_by(sample, symbol, `Cell type category`, `Cell type formatted`,  `Data base`) %>%
+			group_by(sample, symbol, `Cell type`, `Cell type category`, `Cell type formatted`,  `Data base`) %>%
 			summarise(`read count` = `read count` %>% median(na.rm = T)) %>%
 			ungroup()
 	}) %>%
@@ -157,7 +170,8 @@ counts =
 	norm_RNAseq(
 		sample_column = "sample",
 		gene_column = "symbol",
-		value_column = "read count",cpm_threshold = 0.5
+		value_column = "read count",
+		cpm_threshold = 0.5
 	) %>%
 	mutate(`read count normalised` = `read count normalised` %>% as.integer) %>%
 	mutate(`read count normalised log` = `read count normalised` %>% `+` (1) %>% log) %>%
@@ -222,9 +236,53 @@ counts =
 	) %>%
 	mutate(`soft bimodality` = `anova p-value` < 0.0001) %>%
 
+	# Remove redundant samples
+	{
+
+		nr =
+			(.) %>%
+			filter(`Cell type category` != "house_keeping") %>%
+			group_by(`Cell type category`) %>%
+			do({
+
+				threshold = (.) %>% distinct(`Cell type category`) %>% left_join( ct_to_correlation_threshold ) %>% pull(threshold)
+
+
+				# Remove redundant samples
+				(.) %>%
+					anti_join(
+					(.) %>%
+						distinct(symbol, sample, `read count`) %>%
+						spread(sample, `read count`) %>%
+						drop_na %>%
+						gather(sample, `read count`, -symbol) %>%
+						rename(rc = `read count`) %>%
+						mutate_if(is.factor, as.character) %>%
+						widyr::pairwise_cor(sample, symbol, rc, sort=T, diag = FALSE, upper = F) %>%
+						filter(correlation > threshold) %>%
+						distinct(item1) %>%
+						rename(sample = item1)
+				) %>%
+
+				# Sample homogeneous population
+				mutate( `threshold contribution` = (.) %>%  distinct(sample, `Cell type formatted`) %>% count(`Cell type formatted`) %>% pull(n) %>% quantile(0.8) %>% floor) %>%
+				group_by(`Cell type formatted`) %>%
+				inner_join( (.) %>% distinct(sample, `threshold contribution`) %>%  filter(row_number(sample) <= `threshold contribution`)) %>%
+				ungroup() %>%
+				select(- `threshold contribution`)
+
+			}) %>%
+			ungroup
+
+		(.) %>%
+			filter(`Cell type category` == "house_keeping") %>%
+			inner_join( nr %>% distinct(sample)) %>%
+			bind_rows( nr )
+
+	} %>%
+
 	mutate(symbol = symbol %>% as.factor) %>%
 	mutate(sample = sample %>% as.factor)
-
 
 # MPI
 
@@ -240,7 +298,7 @@ counts_stan_MPI =
 	# 	) %>% distinct(symbol)
 	# )%>%
 
-	mutate(sample_idx = as.integer(factor(sample))) %>%
+	mutate(sample_idx = as.integer(sample)) %>%
 
 	left_join(
 		(.) %>%
