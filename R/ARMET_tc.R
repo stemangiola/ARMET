@@ -212,7 +212,7 @@ plot_counts_inferred_sum = function(fit_obj, samples = NULL){
 		rowwise %>%
 		mutate(inside = between(`read count`, `2.5%`, `97.5%`)) %>%
 		ungroup %>%
-		ggplot(aes(x=`read count` + 1, y=`50%` + 1, color=inside)) +
+		ggplot(aes(x=`read count` + 1, y=`50%` + 1, color=inside, label = symbol)) +
 		geom_point(alpha=0.5)  +
 		geom_abline(slope = 1, intercept = 0) +
 		geom_errorbar(aes(ymin=`2.5%`, ymax=`97.5%`), alpha=0.5) +
@@ -696,10 +696,6 @@ ARMET_tc = function(
 		distinct(G, sigma_raw) %>%
 		arrange(G)%>%
 		pull(sigma_raw)
-
-	browser()
-
-
 
 	########################################
 	# MODEL
