@@ -216,7 +216,7 @@ functions{
   real sum_reduce( vector global_parameters , vector local_parameters , real[] real_data , int[] int_data ) {
 
 		// Data unpack
-		int ct_in_levels = int_data[1];
+		int ct_in_nodes = int_data[1];
 		int Q = int_data[2];
 		int S = int_data[3];
 		int y_MPI_symbol_per_shard = int_data[4];
@@ -229,19 +229,12 @@ functions{
 	 	vector[y_MPI_G_per_shard] sigma_MPI = local_parameters[(y_MPI_G_per_shard+1):(y_MPI_G_per_shard+y_MPI_G_per_shard)];
 	 	vector[y_MPI_symbol_per_shard] sigma_correction = local_parameters[(y_MPI_G_per_shard+y_MPI_G_per_shard+1):(y_MPI_G_per_shard+y_MPI_G_per_shard + y_MPI_symbol_per_shard)];
 	 	vector[Q] exposure_rate = local_parameters[(y_MPI_G_per_shard+y_MPI_G_per_shard + y_MPI_symbol_per_shard+1):(y_MPI_G_per_shard+y_MPI_G_per_shard + y_MPI_symbol_per_shard + Q)];
-	 	vector[Q * ct_in_levels] prop = local_parameters[(y_MPI_G_per_shard+y_MPI_G_per_shard + y_MPI_symbol_per_shard + Q +1)	:	(y_MPI_G_per_shard+y_MPI_G_per_shard + y_MPI_symbol_per_shard + Q + (Q * ct_in_levels))];
-
-		// // Calculate sum
-		// vector[y_MPI_N_per_shard] my_sum[2] = sum_NB_MPI(
-		// 	to_matrix( lambda_MPI, ct_in_levels, y_MPI_symbol_per_shard), // ct rows, G columns
-		// 	to_matrix( sigma_MPI,  ct_in_levels, y_MPI_symbol_per_shard), // ct rows, G columns
-		// 	to_matrix( prop, Q, ct_in_levels)
-		// );
+	 	vector[Q * ct_in_nodes] prop = local_parameters[(y_MPI_G_per_shard+y_MPI_G_per_shard + y_MPI_symbol_per_shard + Q +1)	:	(y_MPI_G_per_shard+y_MPI_G_per_shard + y_MPI_symbol_per_shard + Q + (Q * ct_in_nodes))];
 
 		matrix[Q, y_MPI_symbol_per_shard] my_sum_mat[2] = sum_NB_MPI_mat(
-			to_matrix( lambda_MPI, ct_in_levels, y_MPI_symbol_per_shard), // ct rows, G columns
-			to_matrix( sigma_MPI,  ct_in_levels, y_MPI_symbol_per_shard), // ct rows, G columns
-			to_matrix( prop, Q, ct_in_levels)
+			to_matrix( lambda_MPI, ct_in_nodes, y_MPI_symbol_per_shard), // ct rows, G columns
+			to_matrix( sigma_MPI,  ct_in_nodes, y_MPI_symbol_per_shard), // ct rows, G columns
+			to_matrix( prop, Q, ct_in_nodes)
 		);
 
 		// Vecotrised sampling, all vectors should be G1-Q1, G1-Q2, G1-Q3
@@ -313,6 +306,7 @@ data {
   //int<lower=1> C;
   int<lower=0> Q;
   int<lower=0> I;
+  int<lower=1> ct_in_nodes[2];
   int<lower=1> ct_in_levels[2];
   int y[I,2]; // `read count`  S Q mapping_with_ct
 
@@ -336,7 +330,7 @@ data {
 	int y_MPI_idx_symbol_lv1[n_shards,max(y_MPI_symbol_per_shard_lv1)];
 	int y_MPI_G_per_shard_lv1[n_shards];
 	int y_MPI_idx_lv1[n_shards,max(y_MPI_G_per_shard_lv1)];
-	int y_idx_lv1[GM_lv1 * ct_in_levels[1]];
+	int y_idx_lv1[GM_lv1 * ct_in_nodes[1]];
 	int y_MPI_N_per_shard_lv1[n_shards];
 	int y_MPI_count_lv1[n_shards, max(y_MPI_N_per_shard_lv1)];
 	int<lower=0> lev1_package[n_shards, 6 + max(y_MPI_N_per_shard_lv1)];
@@ -346,12 +340,19 @@ data {
 	int y_MPI_idx_symbol_lv2[n_shards,max(y_MPI_symbol_per_shard_lv2)];
 	int y_MPI_G_per_shard_lv2[n_shards];
 	int y_MPI_idx_lv2[n_shards,max(y_MPI_G_per_shard_lv2)];
-	int y_idx_lv2[GM_lv2 * (ct_in_levels[1] + ct_in_levels[2] - 1)];
+	int y_idx_lv2[GM_lv2 * (ct_in_nodes[1] + ct_in_nodes[2] - 1)];
 	int y_MPI_N_per_shard_lv2[n_shards];
 	int y_MPI_count_lv2[n_shards, max(y_MPI_N_per_shard_lv2)];
 	int<lower=0> lev2_package[n_shards, 6 + max(y_MPI_N_per_shard_lv2)];
 
 	int data_package[n_shards, 3 + 3 + (4+(M+1)+N+N) + (6 + max(y_MPI_N_per_shard_lv1)) + (6 + max(y_MPI_N_per_shard_lv2))]; // All integer data
+
+	// Tree structure
+	int<lower=1> OLV2;
+	int<lower=1> LLV2;
+	int parents_lv2[LLV2]; // Level one parents
+	int other_lv2[OLV2]; // Level 1 leafs
+
 }
 transformed data {
 
@@ -375,8 +376,8 @@ parameters {
   vector<lower=0>[ do_infer == 1 ? 1 : GM] sigma_correction_param;
 
   // Proportions
-  simplex[ct_in_levels[1]] prop_1[Q]; // Root
-  simplex[ct_in_levels[2]] prop_immune[Q]; // Immune cells
+  simplex[ct_in_nodes[1]] prop_1[Q]; // Root
+  simplex[ct_in_nodes[2]] prop_immune[Q]; // Immune cells
 
 
 }
@@ -386,8 +387,8 @@ transformed parameters {
 	vector[G] lambda_log = do_infer ? lambda_log_param : lambda_log_data;
 
 	// proportion of the higher level
-	vector[sum(ct_in_levels) - 1] prop_2[Q] =
-		append_vector_array(	prop_1[, 1:3], multiply_by_column(prop_immune, prop_1[, 4]) );
+	vector[ct_in_levels[2]] prop_2[Q] =
+		append_vector_array(	prop_1[,other_lv2], multiply_by_column(prop_immune, prop_1[,parents_lv2[1]]) );
 
 	// Deconvolution
 	vector[G] lambda = exp(lambda_log);
@@ -434,14 +435,14 @@ generated quantities{
 
 
 		matrix[Q, GM_lv1] my_sum_mat_lv1[2] = sum_NB_MPI_mat(
-			to_matrix( lambda[y_idx_lv1], ct_in_levels[1], GM_lv1), // ct rows, G columns
-			to_matrix( sigma[y_idx_lv1],  ct_in_levels[1], GM_lv1), // ct rows,	G columns
+			to_matrix( lambda[y_idx_lv1], ct_in_nodes[1], GM_lv1), // ct rows, G columns
+			to_matrix( sigma[y_idx_lv1],  ct_in_nodes[1], GM_lv1), // ct rows,	G columns
 			vector_array_to_matrix( prop_1 )
 		);
 
 		matrix[Q, GM_lv2] my_sum_mat_lv2[2] = sum_NB_MPI_mat(
-			to_matrix( lambda[y_idx_lv2], ct_in_levels[1] + ct_in_levels[2] - 1, GM_lv2), // ct rows, G columns
-			to_matrix( sigma[y_idx_lv2],  ct_in_levels[1] + ct_in_levels[2] - 1, GM_lv2), // ct rows,	G columns
+			to_matrix( lambda[y_idx_lv2], ct_in_nodes[1] + ct_in_nodes[2] - 1, GM_lv2), // ct rows, G columns
+			to_matrix( sigma[y_idx_lv2],  ct_in_nodes[1] + ct_in_nodes[2] - 1, GM_lv2), // ct rows,	G columns
 			vector_array_to_matrix( prop_2 )
 		);
 

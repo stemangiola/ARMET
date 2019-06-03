@@ -1,0 +1,57 @@
+name: Tissue
+epithelial:
+  o:
+fibroblast:
+  o:
+endothelial:
+  o:
+immune_cell:
+  b_cell:
+    b_memory:
+      o:
+    b_naive:
+      o:
+  granulocyte:
+    eosinophil:
+      o:
+    neutrophil:
+      o:
+  mast_cell:
+    o:
+  mono_derived:
+    monocyte:
+      o:
+    macrophage:
+      macrophage_M1:
+        o:
+      macrophage_M2:
+        o:
+    dendritic_myeloid:
+      dendritic_myeloid_immature:
+        o:
+      dendritic_myeloid_mature:
+        o:
+  natural_killer:
+    o:
+  t_cell:
+    t_CD8:
+      o:
+    t_gamma_delta:
+      o:
+    t_helper:
+      t_helper_h1:
+        o:
+      t_helper_h17:
+        o:
+      t_helper_h2:
+        o:
+    t_memory:
+      o:
+      t_memory_central:
+        o:
+      t_memory_effector:
+        o:
+    t_naive:
+      o:
+    t_reg:
+      o:
