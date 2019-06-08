@@ -839,7 +839,7 @@ ARMET_tc = function(
 	prop =
 		fit %>%
 		tidybayes::gather_draws(prop_1[Q, C], prop_2[Q, C], prop_3[Q, C]) %>%
-		filter(.variable %in% c("prop_1", "prop_2")) %>%
+		filter(.variable %in% c("prop_1", "prop_2", "prop_3")) %>%
 
 		# If not converged choose the majority chains
 		mutate(	converged = diptest::dip.test(`.value`) %$%	`p.value` > 0.05) %>%
@@ -861,21 +861,14 @@ ARMET_tc = function(
 		# Parse
 		separate(.variable, c(".variable", "level"), convert = T) %>%
 		left_join(
-
-			y_source %>%
-				distinct(`Cell type category`) %>%
-				arrange(`Cell type category`) %>%
-				{
-					ys = (.)
-					ys %>%
-						slice(!!cell_type_num_struc[1,] %>% unique) %>%
-						mutate(C = 1:n(), level=1) %>%
-						bind_rows(
-							ys %>%
-								slice(!!cell_type_num_struc[2,] %>% unique) %>%
-								mutate(C = 1:n(), level=2)
-						)
-				}
+			tree %>% ToDataFrameTree("name", "C1", "C2", "C3") %>%
+				as_tibble %>%
+				select(-1) %>%
+				rename(`Cell type category` = name) %>%
+				gather(level, C, -`Cell type category`) %>%
+				mutate(level = gsub("C", "", level)) %>%
+				drop_na %>%
+				mutate(C = C %>% as.integer, level = level %>% as.integer)
 		) %>%
 		left_join(
 			df %>%
@@ -883,7 +876,8 @@ ARMET_tc = function(
 				distinct(Q, sample)
 		)
 
-	plot_counts_inferred_sum( list(fit = fit , data_source = y_source ))
+
+	#plot_counts_inferred_sum( list(fit = fit , data_source = y_source ))
 
 
 	# Return

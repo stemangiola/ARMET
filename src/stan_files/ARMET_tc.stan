@@ -489,32 +489,32 @@ model {
 	sigma_correction_param ~ exponential(1); // Lasso prior for correction
 
 }
-generated quantities{
-
-
-		matrix[Q, GM_lv1] my_sum_mat_lv1[2] = sum_NB_MPI_mat(
-			to_matrix( lambda[y_idx_lv1], ct_in_levels[1], GM_lv1), // ct rows, G columns
-			to_matrix( sigma[y_idx_lv1],  ct_in_levels[1], GM_lv1), // ct rows,	G columns
-			vector_array_to_matrix( prop_1 )
-		);
-
-		matrix[Q, GM_lv2] my_sum_mat_lv2[2] = sum_NB_MPI_mat(
-			to_matrix( lambda[y_idx_lv2], ct_in_levels[2], GM_lv2), // ct rows, G columns
-			to_matrix( sigma[y_idx_lv2],  ct_in_levels[2], GM_lv2), // ct rows,	G columns
-			vector_array_to_matrix( prop_2 )
-		);
-
-		matrix[Q, GM] mu_sum = append_col(
-			my_sum_mat_lv1[1] .* rep_matrix(exp(exposure_rate[1:Q]), GM_lv1),
-			my_sum_mat_lv2[1] .* rep_matrix(exp(exposure_rate[1:Q]), GM_lv2)
-		);
-
-		matrix[Q, GM] sigma_sum = append_col(
-			my_sum_mat_lv1[2] ./ rep_matrix(exp(to_row_vector(sigma_correction[1:GM_lv1])), Q),
-			my_sum_mat_lv2[2] ./ rep_matrix(exp(to_row_vector(sigma_correction[GM_lv1+1:GM_lv1+GM_lv2])), Q)
-		);
-
-		matrix[Q, GM] nb_sum;
-		for(q in 1:Q) for(g in 1:GM) nb_sum[q,g] = neg_binomial_2_rng(mu_sum[q,g], sigma_sum[q,g]);
-
-}
+// generated quantities{
+//
+//
+// 		matrix[Q, GM_lv1] my_sum_mat_lv1[2] = sum_NB_MPI_mat(
+// 			to_matrix( lambda[y_idx_lv1], ct_in_levels[1], GM_lv1), // ct rows, G columns
+// 			to_matrix( sigma[y_idx_lv1],  ct_in_levels[1], GM_lv1), // ct rows,	G columns
+// 			vector_array_to_matrix( prop_1 )
+// 		);
+//
+// 		matrix[Q, GM_lv2] my_sum_mat_lv2[2] = sum_NB_MPI_mat(
+// 			to_matrix( lambda[y_idx_lv2], ct_in_levels[2], GM_lv2), // ct rows, G columns
+// 			to_matrix( sigma[y_idx_lv2],  ct_in_levels[2], GM_lv2), // ct rows,	G columns
+// 			vector_array_to_matrix( prop_2 )
+// 		);
+//
+// 		matrix[Q, GM] mu_sum = append_col(
+// 			my_sum_mat_lv1[1] .* rep_matrix(exp(exposure_rate[1:Q]), GM_lv1),
+// 			my_sum_mat_lv2[1] .* rep_matrix(exp(exposure_rate[1:Q]), GM_lv2)
+// 		);
+//
+// 		matrix[Q, GM] sigma_sum = append_col(
+// 			my_sum_mat_lv1[2] ./ rep_matrix(exp(to_row_vector(sigma_correction[1:GM_lv1])), Q),
+// 			my_sum_mat_lv2[2] ./ rep_matrix(exp(to_row_vector(sigma_correction[GM_lv1+1:GM_lv1+GM_lv2])), Q)
+// 		);
+//
+// 		matrix[Q, GM] nb_sum;
+// 		for(q in 1:Q) for(g in 1:GM) nb_sum[q,g] = neg_binomial_2_rng(mu_sum[q,g], sigma_sum[q,g]);
+//
+// }
