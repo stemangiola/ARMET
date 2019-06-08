@@ -469,7 +469,7 @@ source("R/ARMET_tc.R")
 # Pass 0
 ##################################
 
-n_markers_0 = get_markers_number(0, NULL, NULL, min_n_samples = 5)
+n_markers_0 = get_markers_number(0, NULL, NULL, min_n_samples = 10)
 res_0 =
 	n_markers_0 %>%
 	get_markers_df(0) %>%
