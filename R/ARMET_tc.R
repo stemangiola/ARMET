@@ -270,6 +270,7 @@ filter_reference = function(reference, mix){
 					filter(!`house keeping`) %>%
 					group_by(ct1, ct2) %>%
 					do({
+
 						n_markers = (.) %>% slice(1) %>% pull(`n markers`)
 						(.) %>%
 							inner_join(
@@ -304,6 +305,49 @@ filter_reference = function(reference, mix){
 		} %>%
 		select(-ct1, -ct2, -rank, -`n markers`) %>%	distinct
 }
+
+get_idx_level = function(tree, my_level){
+	left_join(
+		tree %>% ToDataFrameTree("name") %>% as_tibble,
+		Clone(tree) %>%
+			{ Prune(., function(x) x$level <= my_level + 1); . } %>%
+			ToDataFrameTree("level", "C", "isLeaf", "name") %>%
+			as_tibble %>%
+			filter(isLeaf) %>%
+			mutate(C2 = C %>% rank) %>%
+			select(name, C2)
+	) %>%
+		pull(C2)
+}
+library(data.tree)
+tree =
+	yaml:: yaml.load_file("data/tree.yaml") %>%
+	data.tree::as.Node() %>%
+
+	{
+
+		# Sort tree by name
+		Sort(., "name")
+
+		# Add C indexes
+		.$Set(
+			C =
+				tibble( name = .$Get('name'), level = .$Get('level')) %>%
+				left_join( (.) %>% arrange(level, name) %>%	 	mutate(C = 0:(n()-1))  )	%>%
+				pull(C)
+		)
+		.$Set(	C1 = get_idx_level(.,1)	)
+		.$Set(	C2 = get_idx_level(.,2)	)
+		.$Set(	C3 = get_idx_level(.,3)	)
+		#		if(max(levels)>1) for(l in 2:max(levels)) { my_c = sprintf("C%s", l); .$Set(	my_c = get_idx_level(.,2)	); . }
+
+		# Set Cell type category label
+		.$Set("Cell type category" = .$Get("name"))
+
+	}
+
+
+
 
 #' ARMET-tc main
 #'
@@ -360,7 +404,7 @@ ARMET_tc = function(
 	seed =                              NULL,
 	cores = 14,
 	iterations = 300,
-	levels = 1:2
+	levels = 1:3
 ){
 
 	# full_bayesian = 0
@@ -374,6 +418,8 @@ ARMET_tc = function(
 
 	source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/e4ec6a2348efc2f62b88f10b12e70f4c6273a10a/tidy_extensions.R")
 	source("https://gist.githubusercontent.com/stemangiola/90a528038b8c52b21f9cfa6bb186d583/raw/4a5798857362d946bd3029188b1cc9eb9b625456/transcription_tool_kit.R")
+	source("https://gist.githubusercontent.com/stemangiola/9d2ba5d599b7ac80404c753cdee04a01/raw/ad571ea2bbc3f13441a7d845b5ae8ed67a45d8ec/tidy_data_tree.R")
+
 	library(tidyverse)
 	library(foreach)
 	library(rstan)
@@ -408,42 +454,36 @@ ARMET_tc = function(
 	# Set up tree structure
 	#########################################
 
-	tree =
-		yaml:: yaml.load_file("data/tree.yaml") %>%
-		data.tree::as.Node() %>%
-		{
-			.$Set(
-				C =
-					tibble( name = .$Get('name'), level = .$Get('level')) %>%
-					left_join( (.) %>% arrange(level, name) %>%	 	mutate(C = 0:(n()-1))  )	%>%
-					pull(C)
-			)
-		} %>%
-		{
-			.$Set("Cell type category" = .$Get("name"))
-		} %>%
-
+	tree = 	tree %>%	{
 		# Filter selected levels
-		{ Prune(., function(x) x$level <= max(levels) + 1)
+			Prune(., function(x) x$level <= max(levels) + 1)
 			.
 		}
 
 	ct_in_nodes = tree %>% ToDataFrameTree("name", "level", "C", "count", "isLeaf") %>% as_tibble %>% arrange(level, C) %>% filter(!isLeaf) %>% pull(count)
 	ct_in_levels = foreach(l=levels+1, .combine = c) %do% {
 
-		Clone(tree) %>%
-			{ Prune(., function(x) x$level <= l);	. 	} %>%
-			ToDataFrameTree("name", "level", "C", "count", "isLeaf") %>%
-			as_tibble %>%
-			arrange(level, C) %>%
-			filter(isLeaf) %>%
-			nrow
+	Clone(tree) %>%
+		{ Prune(., function(x) x$level <= l);	. 	} %>%
+		ToDataFrameTree("name", "level", "C", "count", "isLeaf") %>%
+		as_tibble %>%
+		arrange(level, C) %>%
+		filter(isLeaf) %>%
+		nrow
 	}
 
-	other_lv2 = tree %>%	ToDataFrameTree("level", "C", "isLeaf") %>% as_tibble %>% filter(level <= 2) %>% filter(isLeaf) %>% pull(C) %>% as.array
-	OLV2 = length(other_lv2)
-	parents_lv2 = tree %>%	ToDataFrameTree("level", "C", "isLeaf") %>% as_tibble %>% filter(!isLeaf & level == 2) %>% pull(C) %>% as.array
-	LLV2 = length(parents_lv2)
+	n_nodes = ct_in_nodes %>% length
+	n_levels = ct_in_levels %>% length
+
+	singles_lv2 = tree$Get("C1", filterFun = isLeaf) %>% na.omit %>% as.array
+	SLV2 = length(singles_lv2)
+	parents_lv2 = tree$Get("C1", filterFun = isNotLeaf) %>% na.omit %>% as.array
+	PLV2 = length(parents_lv2)
+
+	singles_lv3 = tree$Get("C2", filterFun = isLeaf) %>% na.omit %>% as.array
+	SLV3 = length(singles_lv3)
+	parents_lv3 = tree$Get("C2", filterFun = isNotLeaf) %>% na.omit %>% as.array
+	PLV3 = length(parents_lv3)
 
 	# Print overlap descriptive stats
 	#get_overlap_descriptive_stats(mix %>% slice(1) %>% gather(`symbol`, `read count`, -sample), reference)
@@ -502,7 +542,13 @@ ARMET_tc = function(
 		# Add house keeping into Cell type label
 		mutate(`Cell type category` = ifelse(`house keeping`, "house_keeping", `Cell type category`)) %>%
 		anti_join(
-			(.) %>% filter(`house keeping` & !`query`) %>% distinct(symbol, level) %>% group_by(symbol) %>% arrange(level) %>% slice(2) %>% ungroup()
+			(.) %>%
+				filter(`house keeping` & !`query`) %>%
+				distinct(symbol, level) %>%
+				group_by(symbol) %>%
+				arrange(level) %>%
+				slice(2:n()) %>%
+				ungroup()
 		) %>%
 
 		# Create unique symbol ID
@@ -527,8 +573,6 @@ ARMET_tc = function(
 
 	G = df %>% filter(!`query`) %>% distinct(G) %>% nrow()
 	GM = df %>% filter(!`house keeping`) %>% distinct(symbol) %>% nrow()
-	GM_lv1 = df %>% filter(!`house keeping`) %>% filter(level==1) %>% distinct(symbol) %>% nrow()
-	GM_lv2 = df %>% filter(!`house keeping`) %>% filter(level==2) %>% distinct(symbol) %>% nrow()
 
 	#########################################
 	# For  reference MPI inference
@@ -604,21 +648,17 @@ ARMET_tc = function(
 		arrange(C, Q, symbol) %>%
 		mutate(`Cell type category` = factor(`Cell type category`, unique(`Cell type category`)))
 
-	idx_1_source = y_source %>% filter(level == 1) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
-	idx_2_source = y_source %>% filter(level == 2) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
-	idx_1 = idx_1_source %>% pull(G)
-	idx_2 = idx_2_source %>% pull(G)
-	I1 = idx_1 %>% length
-	I2 = idx_2 %>% length
-	I1_dim = c(idx_1_source %>% distinct(symbol) %>% nrow, idx_1_source %>% distinct(`Cell type category`) %>% nrow)
-	I2_dim = c(idx_2_source %>% distinct(symbol) %>% nrow, idx_2_source %>% distinct(`Cell type category`) %>% nrow)
-
 	# Data MPI for deconvolution level 1
 	y_MPI_lv1 = y_source %>% get_MPI_deconv(shards, 1)
+	idx_1_source = y_source %>% filter(level == 1) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
+	idx_1 = idx_1_source %>% pull(G)
+	I1 = idx_1 %>% length
+	I1_dim = c(idx_1_source %>% distinct(symbol) %>% nrow, idx_1_source %>% distinct(`Cell type category`) %>% nrow)
 	y_MPI_source_lv1 = y_MPI_lv1 %$% y_MPI_source
 	y_MPI_symbol_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_symbol_per_shard
 	y_MPI_idx_symbol_lv1 = y_MPI_lv1 %$% y_MPI_idx_symbol
 	y_MPI_G_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_G_per_shard
+	GM_lv1 = df %>% filter(!`house keeping`) %>% filter(level==1) %>% distinct(symbol) %>% nrow()
 	y_idx_lv1 =  y_MPI_lv1 %$% y_idx
 	y_MPI_idx_lv1 = y_MPI_lv1 %$% y_MPI_idx
 	y_MPI_N_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_N_per_shard
@@ -626,14 +666,35 @@ ARMET_tc = function(
 
 	# Data MPI for deconvolution level 2
 	y_MPI_lv2 = y_source %>% get_MPI_deconv(shards, 2)
+	idx_2_source = y_source %>% filter(level == 2) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
+	idx_2 = idx_2_source %>% pull(G)
+	I2 = idx_2 %>% length
+	I2_dim = c(idx_2_source %>% distinct(symbol) %>% nrow, idx_2_source %>% distinct(`Cell type category`) %>% nrow)
 	y_MPI_source_lv2 = y_MPI_lv2 %$% y_MPI_source
 	y_MPI_symbol_per_shard_lv2 = y_MPI_lv2 %$% y_MPI_symbol_per_shard
 	y_MPI_idx_symbol_lv2 = y_MPI_lv2 %$% y_MPI_idx_symbol
 	y_MPI_G_per_shard_lv2 = y_MPI_lv2 %$% y_MPI_G_per_shard
+	GM_lv2 = df %>% filter(!`house keeping`) %>% filter(level==2) %>% distinct(symbol) %>% nrow()
 	y_idx_lv2 =  y_MPI_lv2 %$% y_idx
 	y_MPI_idx_lv2 = y_MPI_lv2 %$% y_MPI_idx
 	y_MPI_N_per_shard_lv2 = y_MPI_lv2 %$% y_MPI_N_per_shard
 	y_MPI_count_lv2 = y_MPI_lv2 %$% y_MPI_count
+
+	# Data MPI for deconvolution level 3
+	y_MPI_lv3 = y_source %>% get_MPI_deconv(shards, 3)
+	idx_3_source = y_source %>% filter(level == 3) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
+	idx_3 = idx_3_source %>% pull(G)
+	I3 = idx_3 %>% length
+	I3_dim = c(idx_3_source %>% distinct(symbol) %>% nrow, idx_3_source %>% distinct(`Cell type category`) %>% nrow)
+	y_MPI_source_lv3 = y_MPI_lv3 %$% y_MPI_source
+	y_MPI_symbol_per_shard_lv3 = y_MPI_lv3 %$% y_MPI_symbol_per_shard
+	y_MPI_idx_symbol_lv3 = y_MPI_lv3 %$% y_MPI_idx_symbol
+	y_MPI_G_per_shard_lv3 = y_MPI_lv3 %$% y_MPI_G_per_shard
+	GM_lv3 = df %>% filter(!`house keeping`) %>% filter(level==3) %>% distinct(symbol) %>% nrow()
+	y_idx_lv3 =  y_MPI_lv3 %$% y_idx
+	y_MPI_idx_lv3 = y_MPI_lv3 %$% y_MPI_idx
+	y_MPI_N_per_shard_lv3 = y_MPI_lv3 %$% y_MPI_N_per_shard
+	y_MPI_count_lv3 = y_MPI_lv3 %$% y_MPI_count
 
 	Q = df %>% filter(`query`) %>% distinct(Q) %>% nrow
 
@@ -654,36 +715,52 @@ ARMET_tc = function(
 	# level 1
 	lev1_package =
 		# Dimensions data sets
-		rep(c(ct_in_nodes[1], Q, S), shards) %>%
+		rep(c(ct_in_levels[1], Q, S), shards) %>%
 		matrix(nrow = shards, byrow = T) %>%
 		cbind(y_MPI_symbol_per_shard_lv1) %>%
 		cbind(y_MPI_G_per_shard_lv1) %>%
 		cbind(y_MPI_N_per_shard_lv1) %>%
 		cbind(y_MPI_count_lv1)
 
-	# level 1
+	# level 2
 	lev2_package =
 		# Dimensions data sets
-		rep(c(sum(ct_in_nodes[1:2]) - 1, Q, S), shards) %>%
+		rep(c(ct_in_levels[2], Q, S), shards) %>%
 		matrix(nrow = shards, byrow = T) %>%
 		cbind(y_MPI_symbol_per_shard_lv2) %>%
 		cbind(y_MPI_G_per_shard_lv2) %>%
 		cbind(y_MPI_N_per_shard_lv2) %>%
 		cbind(y_MPI_count_lv2)
 
+	# level 3
+	lev3_package =
+		# Dimensions data sets
+		rep(c(ct_in_levels[3], Q, S), shards) %>%
+		matrix(nrow = shards, byrow = T) %>%
+		cbind(y_MPI_symbol_per_shard_lv3) %>%
+		cbind(y_MPI_G_per_shard_lv3) %>%
+		cbind(y_MPI_N_per_shard_lv3) %>%
+		cbind(y_MPI_count_lv3)
+
 	# Integrate everything
 	data_package =
 
 		# Size 3 data data sets
-		rep(c(ncol(counts_package), ncol(lev1_package), ncol(lev2_package)), shards) %>%
+		rep(c(
+			ncol(counts_package),
+			ncol(lev1_package),
+			ncol(lev2_package),
+			ncol(lev3_package)
+		), shards) %>%
 		matrix(nrow = shards, byrow = T) %>%
 
 		# Size parameter datasets
 		cbind(
 			rep(c(
 				(2*M + S),
-				(max(y_MPI_G_per_shard_lv1) * 2 + Q + max(y_MPI_symbol_per_shard_lv1) + (Q * ct_in_nodes[1])),
-				(max(y_MPI_G_per_shard_lv2) * 2 + Q + max(y_MPI_symbol_per_shard_lv2) + (Q * (sum(ct_in_nodes) - 1)))
+				(max(y_MPI_G_per_shard_lv1) * 2 + Q + max(y_MPI_symbol_per_shard_lv1) + (Q * ct_in_levels[1])),
+				(max(y_MPI_G_per_shard_lv2) * 2 + Q + max(y_MPI_symbol_per_shard_lv2) + (Q * ct_in_levels[2])),
+				(max(y_MPI_G_per_shard_lv3) * 2 + Q + max(y_MPI_symbol_per_shard_lv3) + (Q * ct_in_levels[3]))
 			), shards) %>%
 			matrix(nrow = shards, byrow = T)
 		) %>%
@@ -691,7 +768,8 @@ ARMET_tc = function(
 		# Data sets
 		cbind(counts_package) %>%
 		cbind(lev1_package) %>%
-		cbind(lev2_package)
+		cbind(lev2_package) %>%
+		cbind(lev3_package)
 
 	########################################
 	########################################
@@ -741,13 +819,15 @@ ARMET_tc = function(
 	Sys.setenv("STAN_NUM_THREADS" = cores)
 	ARMET_tc_model = stan_model("src/stan_files/ARMET_tc.stan")
 
+	browser()
+
 	Sys.time() %>% print
 	fit =
 		sampling(
 			ARMET_tc_model, #stanmodels$ARMET_tc,
 			chains=3, cores=3,
 			iter=iterations, warmup=iterations-100,   save_warmup = FALSE,
-			pars = c("prop_1", "prop_2", "exposure_rate", "sigma_correction_param", "nb_sum") #,"mu_sum", "phi_sum")
+			pars = c("prop_1", "prop_2", "prop_3", "exposure_rate", "sigma_correction_param", "nb_sum") #,"mu_sum", "phi_sum")
 		)
 	Sys.time() %>% print
 
@@ -758,7 +838,7 @@ ARMET_tc = function(
 	# Produce results
 	prop =
 		fit %>%
-		tidybayes::gather_draws(prop_1[Q, C], prop_2[Q, C]) %>%
+		tidybayes::gather_draws(prop_1[Q, C], prop_2[Q, C], prop_3[Q, C]) %>%
 		filter(.variable %in% c("prop_1", "prop_2")) %>%
 
 		# If not converged choose the majority chains
