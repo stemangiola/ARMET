@@ -2,7 +2,7 @@
 library(tidyverse)
 library(foreach)
 library(magrittr)
-
+source("R/ARMET_tc.R")
 
 my_theme =
 	theme_bw() +
@@ -394,7 +394,7 @@ mix_source =
 		combn(
 			(.) %>%
 				distinct(`Cell type category`) %>%
-				anti_join(ref %>% distinct(`Cell type category`, level) %>% filter(level < my_level ) %>% distinct(`Cell type category`)) %>%
+				anti_join(ref %>% distinct(`Cell type category`, level) %>% filter(level < my_level ) %>% distinct(`Cell type category`) %>% drop_na()) %>%
 				pull(1),
 			m = 2
 		)  %>%
@@ -463,7 +463,7 @@ mix_source =
 
 
 
-source("R/ARMET_tc.R")
+
 
 ##################################
 # Pass 0
