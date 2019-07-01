@@ -394,7 +394,9 @@ mix_source =
 		combn(
 			(.) %>%
 				distinct(`Cell type category`) %>%
-				anti_join(ref %>% distinct(`Cell type category`, level) %>% filter(level < my_level ) %>% distinct(`Cell type category`) %>% drop_na()) %>%
+				anti_join(ref %>% distinct(`Cell type category`, level) %>% filter(level < my_level ) %>% distinct(`Cell type category`)) %>%
+				# Little bug in the way I collect level cell types, I need to use tree
+				drop_na() %>%
 				pull(1),
 			m = 2
 		)  %>%
@@ -460,9 +462,6 @@ mix_source =
 	arrange(level) %>%
 	slice(1) %>%
 	ungroup
-
-
-
 
 
 ##################################
