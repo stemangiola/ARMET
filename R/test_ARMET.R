@@ -384,26 +384,39 @@ marker_df =
 
 reps = 1
 
-mix_source =
-	ref %>%
 
-	# Create the combinations
-	group_by(level) %>%
-	do({
-		my_level = (.) %>% distinct(level) %>% pull(1)
-		combn(
-			(.) %>%
-				distinct(`Cell type category`) %>%
-				anti_join(ref %>% distinct(`Cell type category`, level) %>% filter(level < my_level ) %>% distinct(`Cell type category`)) %>%
-				# Little bug in the way I collect level cell types, I need to use tree
-				drop_na() %>%
-				pull(1),
-			m = 2
-		)  %>%
-			t %>%
-			as_tibble
-	}) %>%
-	ungroup %>%
+
+mix_source =
+	{
+
+		# This function goes thought nodes and grubs names of the cluster
+		gn = function(node) {
+			if(length(node$children) > 0) {
+
+				result =
+
+					# Get cildren names
+					#tibble(parent = node$name, children = foreach(cc = node$children, .combine = c) %do% {cc$name}) %>%
+					foreach(cc = node$children, .combine = c) %do% {cc$name} %>%
+
+					#create cmbinations
+					combn(m = 2) %>%
+					t %>%
+					as_tibble %>%
+					mutate(parent = node$name, level = node$level )
+
+				# Merge results with other nodes
+				result %<>%
+					bind_rows(
+						foreach(nc = node$children, .combine = bind_rows) %do% {gn(nc)}
+					)
+
+				return (result)
+			}
+		}
+
+		gn(tree)
+	} %>%
 	mutate(`#` = 1:n()) %>%
 
 	# Make more runs
@@ -422,11 +435,11 @@ mix_source =
 
 		bind_rows(
 			my_ref %>%
-				filter(`Cell type category` == (cc %>% pull(2))) %>%
+				filter(`Cell type category` == (cc %>% pull(V1))) %>%
 				sample_n(1) %>%
 				distinct(sample, `Cell type category`),
 			my_ref %>%
-				filter(`Cell type category` == (cc %>% pull(3))) %>%
+				filter(`Cell type category` == (cc %>% pull(V2))) %>%
 				sample_n(1) %>%
 				distinct(sample, `Cell type category`)
 		) %>%
@@ -473,7 +486,7 @@ res_0 =
 	n_markers_0 %>%
 	get_markers_df(0) %>%
 	get_input_data(reps = reps, pass = 0) %>%
-	{	ARMET_tc((.)$mix, (.)$reference, iterations = 600, cores = 5) }
+	{	ARMET_tc((.)$mix, (.)$reference, iterations = 600) }
 res_0 %$% proportions %>% filter(!converged)
 
 ##################################
