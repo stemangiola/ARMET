@@ -2,7 +2,7 @@
 library(tidyverse)
 library(foreach)
 library(magrittr)
-
+source("R/ARMET_tc.R")
 
 my_theme =
 	theme_bw() +
@@ -22,51 +22,12 @@ my_theme =
 
 ref = read_csv("docs/ref.csv")
 
+source("https://gist.githubusercontent.com/stemangiola/9d2ba5d599b7ac80404c753cdee04a01/raw/686c0f1c973703b515509e97aa078f49b9653caf/tidy_data_tree.R")
+
+
 ######################################
 # Variable should be already set
 ######################################
-
-# Setup table of name conversion
-level_df = foreach( l = list(
-	c("b_cell", "immune_cell", "b_cell"),
-	c("b_memory", "immune_cell", "b_cell", "b_memory"),
-	c("b_naive", "immune_cell", "b_cell", "b_naive"),
-	c("dendritic",  "immune_cell", "dendritic"),
-	c("dendritic_m",  "immune_cell", "dendritic"),
-	c("dendritic_m_immature",  "immune_cell", "dendritic", "dendritic_m_immature"),
-	c("dendritic_m_mature",  "immune_cell", "dendritic", "dendritic_m_mature"),
-	c("endothelial", "endothelial", "endothelial", "endothelial"),
-	c("eosinophil", "immune_cell", "granulocyte", "eosinophil"),
-	c("epithelial", "epithelial", "epithelial", "epithelial"),
-	c("fibroblast","fibroblast", "fibroblast", "fibroblast"),
-	c("immune_cell", "immune_cell"),
-	c("macrophage", "immune_cell", "mono_derived"),
-	c("macrophage_M1", "immune_cell", "mono_derived", "macrophage_M1"),
-	c("macrophage_M2", "immune_cell", "mono_derived", "macrophage_M2"),
-	c("mast_cell", "immune_cell", "mast_cell", "mast_cell"),
-	c("monocyte","immune_cell", "mono_derived",  "monocyte"),
-	c("myeloid", "immune_cell"),
-	c("natural_killer", "immune_cell", "natural_killer", "natural_killer"),
-	c("neutrophil", "immune_cell", "granulocyte", "neutrophil"),
-	c("t_CD4", "immune_cell","t_cell"),
-	c("t_CD8", "immune_cell","t_cell", "t_CD8"),
-	c("t_CD8_memory_effector", "immune_cell","t_cell", "t_CD8"),
-	c("t_cell", "immune_cell","t_cell"),
-	c("t_gamma_delta", "immune_cell","t_cell", "t_gamma_delta"),
-	c("t_helper", "immune_cell","t_cell", "t_helper"),
-	c("t_memory_central", "immune_cell","t_cell", "t_memory_central"),
-	c("t_memory", "immune_cell","t_cell"),
-	c("t_memory_effector", "immune_cell","t_cell", "t_memory_effector"),
-	c("t_naive", "immune_cell","t_cell", "t_naive"),
-	c("t_reg", "immune_cell","t_cell", "t_reg"),
-	c("t_reg_memory", "immune_cell","t_cell", "t_reg")
-), .combine = bind_rows) %do% {
-	l %>%
-		as.data.frame %>% t %>% as_tibble(.name_repair = "minimal") %>%
-		setNames(c("Cell type formatted", sprintf("level %s",  1:((.)%>%ncol()-1) ) ))
-} %>%
-	mutate(`level 0` = "root")
-
 
 sample_blacklist = c("666CRI", "972UYG", "344KCP", "555QVG", "370KKZ", "511TST", "13816.11933", "13819.11936", "13817.11934", "13818.11935", "096DQV", "711SNV")
 
@@ -204,7 +165,7 @@ get_markers_number = function(pass, res, num_markers_previous_level, min_n_sampl
 
 	if(pass == 0 | (num_markers_previous_level %>% is.null))
 
-		marker_df %>% distinct(pair, ct1, ct2, level) %>% left_join( tibble(level=c(1,2), `n markers` = c( (min_n_samples * 2.5) %>% ceiling, min_n_samples)) )
+		marker_df %>% distinct(pair, ct1, ct2, level) %>% left_join( tibble(level=c(1,2, 3), `n markers` = c( (min_n_samples * 2.5) %>% ceiling, min_n_samples, min_n_samples)) )
 
 	else
 
@@ -327,32 +288,47 @@ get_markers_number = function(pass, res, num_markers_previous_level, min_n_sampl
 give_rank_to_ref = function(fit_df, level, fit_threshold, lambda_threshold =4){
 
 	fit_df %>%
-		left_join(level_df %>% mutate(`level 0` = "root")) %>%
+		left_join(  tree %>% ToDataFrameTypeColFull("name") %>% as_tibble() %>% rename(`Cell type formatted`= name)) %>%
 		filter(`Cell type category` != "house_keeping") %>%
+
+		# Select only branches that have childs
 		inner_join(
 			(.) %>%
-				select(!!sprintf("level %s", level -1), !!sprintf("level %s", level)) %>%
+				select(!!sprintf("level_%s", level), !!sprintf("level_%s", level + 1)) %>%
 				distinct %>%
 				group_by_at(1) %>%
 				summarise(n = n()) %>%
 				filter(n > 1)
 		) %>%
-		group_by(!!sym(sprintf("level %s", level -1))) %>%
+
+		# For each category
+		group_by(!!sym(sprintf("level_%s", level))) %>%
 		do(
 			gtools::permutations(
-				n=(.) %>% select(!!sprintf("level %s", level)) %>% distinct %>% drop_na %>% nrow,
+				n=(.) %>% select(!!sprintf("level_%s", level + 1)) %>% distinct %>% drop_na %>% nrow,
 				r=2,
-				v=(.) %>% select(!!sprintf("level %s", level)) %>% distinct %>% drop_na %>% pull(1),
+				v=(.) %>% select(!!sprintf("level_%s", level + 1)) %>% distinct %>% drop_na %>% pull(1),
 				repeats.allowed=F
 			) %>%
 				as_tibble
 		) %>%
 		mutate(comparison = 1:n()) %>%
 		unite(pair, c("V1", "V2"), remove = F, sep=" ") %>%
-		gather(which, `Cell type category`, -!!sprintf("level %s", level -1), -comparison, -pair) %>%
+		gather(which, `Cell type category`, -!!sprintf("level_%s", level), -comparison, -pair) %>%
 		left_join(
 			fit_df %>% distinct(symbol, `Cell type category`, CI_low, CI_high)
 		) %>%
+
+		##########################
+		# Temporary for cell nameserror
+		##########################
+
+		filter(symbol %>% is.na %>% `!`) %>%
+		anti_join(
+			(.) %>% distinct(pair, `Cell type category`, symbol) %>% count(pair, symbol) %>% arrange(n) %>% filter(n==1) %>% ungroup %>% distinct(pair)
+		) %>%
+		##########################
+
 		mutate(relevant_CI = ifelse(which == "V1", CI_low, CI_high)) %>%
 		group_by(comparison, pair, symbol) %>%
 		arrange(which) %>%
@@ -403,29 +379,44 @@ my_ref = 	ref %>%
 marker_df =
 	give_rank_to_ref(ref %>% filter(level ==1), 1, 0.5) %>%
 	rbind(give_rank_to_ref(ref %>% filter(level ==2), 2, 0.4)) %>%
-	#rbind(give_rank_to_ref(ref %>% filter(level ==3), 3, 0.7)) %>%
+	rbind(give_rank_to_ref(ref %>% filter(level ==3), 3, 0.7)) %>%
 	separate(pair, c("ct1", "ct2"), sep=" ", remove = F)
 
 reps = 1
 
-mix_source =
-	ref %>%
 
-	# Create the combinations
-	group_by(level) %>%
-	do({
-		my_level = (.) %>% distinct(level) %>% pull(1)
-		combn(
-			(.) %>%
-				distinct(`Cell type category`) %>%
-				anti_join(ref %>% distinct(`Cell type category`, level) %>% filter(level < my_level ) %>% distinct(`Cell type category`)) %>%
-				pull(1),
-			m = 2
-		)  %>%
-			t %>%
-			as_tibble
-	}) %>%
-	ungroup %>%
+
+mix_source =
+	{
+
+		# This function goes thought nodes and grubs names of the cluster
+		gn = function(node) {
+			if(length(node$children) > 0) {
+
+				result =
+
+					# Get cildren names
+					#tibble(parent = node$name, children = foreach(cc = node$children, .combine = c) %do% {cc$name}) %>%
+					foreach(cc = node$children, .combine = c) %do% {cc$name} %>%
+
+					#create cmbinations
+					combn(m = 2) %>%
+					t %>%
+					as_tibble %>%
+					mutate(parent = node$name, level = node$level )
+
+				# Merge results with other nodes
+				result %<>%
+					bind_rows(
+						foreach(nc = node$children, .combine = bind_rows) %do% {gn(nc)}
+					)
+
+				return (result)
+			}
+		}
+
+		gn(tree)
+	} %>%
 	mutate(`#` = 1:n()) %>%
 
 	# Make more runs
@@ -444,11 +435,11 @@ mix_source =
 
 		bind_rows(
 			my_ref %>%
-				filter(`Cell type category` == (cc %>% pull(2))) %>%
+				filter(`Cell type category` == (cc %>% pull(V1))) %>%
 				sample_n(1) %>%
 				distinct(sample, `Cell type category`),
 			my_ref %>%
-				filter(`Cell type category` == (cc %>% pull(3))) %>%
+				filter(`Cell type category` == (cc %>% pull(V2))) %>%
 				sample_n(1) %>%
 				distinct(sample, `Cell type category`)
 		) %>%
@@ -486,19 +477,16 @@ mix_source =
 	ungroup
 
 
-
-source("R/ARMET_tc.R")
-
 ##################################
 # Pass 0
 ##################################
 
-n_markers_0 = get_markers_number(0, NULL, NULL, min_n_samples = 5)
+n_markers_0 = get_markers_number(0, NULL, NULL, min_n_samples = 10)
 res_0 =
 	n_markers_0 %>%
 	get_markers_df(0) %>%
 	get_input_data(reps = reps, pass = 0) %>%
-	{	ARMET_tc((.)$mix, (.)$reference, iterations = 600, cores = 5) }
+	{	ARMET_tc((.)$mix, (.)$reference, iterations = 600) }
 res_0 %$% proportions %>% filter(!converged)
 
 ##################################
