@@ -277,7 +277,7 @@ filter_reference = function(reference, mix){
 								(.) %>%
 									distinct(symbol, rank) %>%
 									arrange(rank) %>%
-									slice(1: n_markers)
+									slice(1:n_markers)
 							)
 
 					}) %>%

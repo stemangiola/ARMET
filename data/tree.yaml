@@ -34,17 +34,17 @@ immune_cell:
   natural_killer:
     o:
   t_cell:
-    CD8:
-      CD8_memory:
-        CD8_memory_central:
+    t_CD8:
+      t_CD8_memory:
+        t_CD8_memory_central:
           o:
-        CD8_memory_effector:
+        t_CD8_memory_effector:
           o:
-      CD8_naive:
+      t_CD8_naive:
          o:
     t_gamma_delta:
       o:
-    CD4:
+    t_CD4:
       t_helper:
         t_helper_h1:
           o:
@@ -54,10 +54,11 @@ immune_cell:
           o:
         t_reg:
           o:
-      t_memory:
-        t_memory_central:
+      t_CD4_memory:
+        t_CD4_memory_central:
           o:
-        t_memory_effector:
+        t_CD4_memory_effector:
           o:
-    t_naive:
-      o:
+      t_CD4_naive_conventional:
+        o:
+
