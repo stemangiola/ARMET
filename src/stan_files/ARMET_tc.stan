@@ -471,7 +471,7 @@ model {
   // Overall properties of the data
   lambda_mu ~ normal(lambda_mu_mu,2);
 
-	// roportion prior
+	// Proportion prior
 	for(q in 1:Q) prop_1[q] ~ dirichlet(rep_vector(num_elements(prop_1[1]), num_elements(prop_1[1])));
 	for(q in 1:Q) prop_a[q] ~ dirichlet(rep_vector(num_elements(prop_a[1]), num_elements(prop_a[1])));
 	for(q in 1:Q) prop_b[q] ~ dirichlet(rep_vector(num_elements(prop_b[1]), num_elements(prop_b[1])));

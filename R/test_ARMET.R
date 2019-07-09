@@ -92,6 +92,9 @@ get_input_data = function(markers, reps, pass){
 					filter( !grepl(sample_blacklist %>% paste(collapse="|"), sample))
 			) %>%
 
+			# Filter FANTOM
+			#filter(`Data base` != "FANTOM5") %>%
+
 			# Decrese number of samples
 			# inner_join(
 			# 	(.) %>%
@@ -161,7 +164,7 @@ get_input_data = function(markers, reps, pass){
 
 }
 
-get_markers_number = function(pass, res, num_markers_previous_level, min_n_samples=30){
+get_markers_number = function(pass, res, num_markers_previous_level, min_n_samples=20){
 
 	if(pass == 0 | (num_markers_previous_level %>% is.null))
 
@@ -277,7 +280,11 @@ get_markers_number = function(pass, res, num_markers_previous_level, min_n_sampl
 			num_markers_previous_level %>%
 				distinct(pair, ct1, ct2, `n markers`) %>% rename(`n markers pass 1` = `n markers`)
 		) %>%
-		mutate(`n markers` = (`error mean relative` * `n markers pass 1` ) %>% ceiling) %>%
+		group_by(pair, ct1, ct2, level, `n markers pass 1`) %>%
+		summarise(`error mean relative mean` = `error mean relative` %>% mean) %>%
+		ungroup() %>%
+
+		mutate(`n markers` = (`error mean relative mean` * `n markers pass 1` ) %>% ceiling) %>%
 		mutate(`n markers` = ifelse(`n markers` < mean(`n markers pass 1`, !!min_n_samples), mean(`n markers pass 1`, !!min_n_samples) , `n markers`)) %>%
 		{
 			(.) %>% write_csv(sprintf("docs/num_markers_based_on_error_levels_1_2_pass_%s.csv", pass))
@@ -382,7 +389,7 @@ marker_df =
 	rbind(give_rank_to_ref(ref %>% filter(level ==3), 3, 0.7)) %>%
 	separate(pair, c("ct1", "ct2"), sep=" ", remove = F)
 
-reps = 1
+reps = 10
 
 
 
@@ -477,11 +484,23 @@ mix_source =
 	ungroup
 
 
+# (xx %>%
+# 		#filter(symbol %in% (read_csv("docs/hk_600.txt", col_names = FALSE) %>% pull(1))) %>%
+# 		#inner_join((.) %>% distinct(symbol) %>% head(n=300)) %>%
+# 		aggregate_duplicated_gene_symbols(value_column = "read count normalised bayes") %>%
+# 		add_MDS_components(feature_column  = "symbol", elements_column  = "sample", value_column = "read count normalised bayes", components_list = list(1:2, 3:4, 5:6)) %>%
+# 		#rotate_MDS_components(rotation_degrees = -50) %>%
+# 		select(contains("Dimension"), sample,  `Cell type formatted`, `Data base`) %>%
+# 		distinct() %>%
+# 		GGally::ggpairs(columns = 1:6, ggplot2::aes(colour=`Data base`, label=`Cell type formatted`))
+# 	) %>% plotly::ggplotly()
+
+
 ##################################
 # Pass 0
 ##################################
 
-n_markers_0 = get_markers_number(0, NULL, NULL, min_n_samples = 10)
+n_markers_0 = get_markers_number(0, NULL, NULL)
 res_0 =
 	n_markers_0 %>%
 	get_markers_df(0) %>%
@@ -514,10 +533,30 @@ res_2 =
 res_2 %$% proportions %>% filter(!converged)
 
 ##################################
-# Pass 2
+# Pass 3
 ##################################
 
 n_markers_3 = get_markers_number(3, res_2, n_markers_2)
+res_3 =
+	n_markers_3 %>%
+	get_markers_df(3) %>%
+	get_input_data(reps = reps, pass = 3) %>%
+	{	ARMET_tc((.)$mix, (.)$reference, iterations = 600) }
+res_3 %$% proportions %>% filter(!converged)
+
+##################################
+# Pass 4
+##################################
+
+n_markers_4 = get_markers_number(4, res_3, n_markers_3)
+res_4 =
+	n_markers_4 %>%
+	get_markers_df(4) %>%
+	get_input_data(reps = reps, pass = 4) %>%
+	{	ARMET_tc((.)$mix, (.)$reference, iterations = 600) }
+res_4 %$% proportions %>% filter(!converged)
+
+save(list=c(sprintf("res_%s", 0:4), sprintf("n_markers_%s", 0:4)), file="output.RData")
 
 ##################################
 # GBM
@@ -528,12 +567,12 @@ x=n_markers_0 %>%
 	get_input_data(reps = reps, pass = 2) %>%
 	{	ARMET_tc(read_csv("docs/GBM.csv") %>% slice(1:10), (.)$reference, full_bayesian = F, iterations = 500) }
 x %$% proportions %>% filter(!converged)
-
-##################################
-# Melanoma
-##################################
-
-
+#
+# ##################################
+# # Melanoma
+# ##################################
+#
+#
 y=n_markers_0 %>%
 	get_markers_df(2) %>%
 	get_input_data(reps = reps, pass = 2) %>%
