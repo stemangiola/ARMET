@@ -67,12 +67,22 @@ add_partition = function(df.input, partition_by, n_partitions){
 #' get_MPI_deconv
 #'
 #' @description Get data format for MPI deconvolution part
-get_MPI_deconv = function(y_source, shards, my_level){
+get_MPI_deconv = function(y_source, shards, my_level, tree){
 	y_MPI_source =
 		y_source %>%
 		distinct(level, Q, S, symbol, G, GM, `Cell type category`, `read count`) %>%
 		filter(level==my_level)  %>%
-		arrange(Q, symbol) %>%
+
+		# Add universal cell type rank
+		left_join(
+			tree %>%
+				ToDataFrameTree("name", sprintf("C%s", my_level)) %>%
+				select(-1) %>%
+				setNames(c("Cell type category" , "ct_rank"))
+		) %>%
+
+		# Arrange very important for consistency
+		arrange(Q, symbol, ct_rank) %>%
 		add_partition("symbol", shards) %>%
 		group_by(partition) %>%
 		left_join( (.) %>% distinct(symbol) %>% mutate(MPI_row = 1:n())) %>%
@@ -314,10 +324,21 @@ get_idx_level = function(tree, my_level){
 			ToDataFrameTree("level", "C", "isLeaf", "name") %>%
 			as_tibble %>%
 			filter(isLeaf) %>%
-			mutate(C2 = C %>% rank) %>%
-			select(name, C2)
+			left_join(
+
+				tree %>%
+					ToDataFrameTree("name", "level", "isLeaf") %>%
+					as_tibble %>%
+					filter(level <= my_level & isLeaf) %>%
+					mutate(isAncestorLeaf = !isLeaf) %>%
+					select(name, isAncestorLeaf)
+
+			) %>%
+			arrange(isAncestorLeaf) %>%
+			mutate(my_C = 1:n()) %>%
+			select(name, my_C)
 	) %>%
-		pull(C2)
+		pull(my_C)
 }
 library(data.tree)
 tree =
@@ -345,9 +366,6 @@ tree =
 		.$Set("Cell type category" = .$Get("name"))
 
 	}
-
-
-
 
 #' ARMET-tc main
 #'
@@ -649,7 +667,7 @@ ARMET_tc = function(
 		mutate(`Cell type category` = factor(`Cell type category`, unique(`Cell type category`)))
 
 	# Data MPI for deconvolution level 1
-	y_MPI_lv1 = y_source %>% get_MPI_deconv(shards, 1)
+	y_MPI_lv1 = y_source %>% get_MPI_deconv(shards, 1, tree)
 	idx_1_source = y_source %>% filter(level == 1) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
 	idx_1 = idx_1_source %>% pull(G)
 	I1 = idx_1 %>% length
@@ -665,7 +683,7 @@ ARMET_tc = function(
 	y_MPI_count_lv1 = y_MPI_lv1 %$% y_MPI_count
 
 	# Data MPI for deconvolution level 2
-	y_MPI_lv2 = y_source %>% get_MPI_deconv(shards, 2)
+	y_MPI_lv2 = y_source %>% get_MPI_deconv(shards, 2, tree)
 	idx_2_source = y_source %>% filter(level == 2) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
 	idx_2 = idx_2_source %>% pull(G)
 	I2 = idx_2 %>% length
@@ -681,7 +699,7 @@ ARMET_tc = function(
 	y_MPI_count_lv2 = y_MPI_lv2 %$% y_MPI_count
 
 	# Data MPI for deconvolution level 3
-	y_MPI_lv3 = y_source %>% get_MPI_deconv(shards, 3)
+	y_MPI_lv3 = y_source %>% get_MPI_deconv(shards, 3, tree)
 	idx_3_source = y_source %>% filter(level == 3) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
 	idx_3 = idx_3_source %>% pull(G)
 	I3 = idx_3 %>% length
