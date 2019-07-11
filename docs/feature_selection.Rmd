@@ -39,14 +39,9 @@ nb_to_gamma = function(mu, phi){
 
 source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/e4ec6a2348efc2f62b88f10b12e70f4c6273a10a/tidy_extensions.R")
 source("https://gist.githubusercontent.com/stemangiola/90a528038b8c52b21f9cfa6bb186d583/raw/4ac3a7d74d4f7971bd8dd8eb470279eb7f42bbf8/transcription_tool_kit.R")
-```
 
-
-## R Markdown
-```{r, cache=TRUE}
-
-get_fit_df = function(fit_MPI, data_for_stan_MPI, counts_stan_MPI){
-
+get_fit_df = function(fit_MPI, data_for_stan_MPI, counts_stan_MPI, level){
+library(data.tree)
 	fit_MPI %>%
 	summary() %$% summary %>%
 	as_tibble(rownames="par") %>%
@@ -61,8 +56,18 @@ get_fit_df = function(fit_MPI, data_for_stan_MPI, counts_stan_MPI){
 			drop_na() %>% mutate(G=1:n())
 	) %>%
 	left_join( counts_stan_MPI %>% distinct(symbol, `Cell type category`)  ) %>%
-	
-	
+
+	# Filter if cell types are not in tree for temporary bug
+	filter(
+		`Cell type category` %in%
+			(
+				yaml:: yaml.load_file("/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/data/tree.yaml") %>%
+			  data.tree::as.Node() %>%
+			  {	data.tree::Prune(., function(x) x$level <= level + 1); . } %>%
+			  { .$Get("name", filterFun = isLeaf) } %>% c("house_keeping") 	
+			)
+	) %>%
+
 	# Add stan normalisation constants
 	left_join(counts) %>%
 	left_join(
@@ -100,11 +105,15 @@ get_fit_df = function(fit_MPI, data_for_stan_MPI, counts_stan_MPI){
 					arrange(`read count normalised bayes`) %>%
 					mutate(
 						predicted_NB =
+						
 							qnbinom(
-								ppoints(`read count normalised bayes`),
+								
+								# If 1 sample, just use median
+									switch(	((.) %>% nrow>1) %>% `!` %>% `+` (1), ppoints(`read count normalised bayes`), 0.5	),
 								size=.$sigma_raw %>% unique %>% exp %>% `^` (-1),
 								mu=.$lambda %>% unique %>% exp
 							)
+						
 					)
 			) %>%
 			ungroup()
@@ -135,7 +144,7 @@ get_fit_df = function(fit_MPI, data_for_stan_MPI, counts_stan_MPI){
 	# Convert to gamma	
 	mutate(
 		shape = nb_to_gamma(lambda %>% exp, 1/exp(sigma_raw)) %$% shape,
-		rate = nb_to_gamma(lambda %>% exp, 1/exp(sigma_raw)) %$% rate
+		rate  = nb_to_gamma(lambda %>% exp, 1/exp(sigma_raw)) %$% rate
 	) %>%
 	
 	# Calculate confidence interval	
@@ -143,32 +152,66 @@ get_fit_df = function(fit_MPI, data_for_stan_MPI, counts_stan_MPI){
 	mutate(CI_high = qgamma(0.975, shape = shape, rate = rate)) 
 }
 
-
-level = 1
-load(sprintf("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/fit_MPI_level1_23042019.RData", level))
-load(sprintf("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/level_1_input_23042019.RData", level))
-
-fit_df_1 = get_fit_df(fit_MPI, data_for_stan_MPI, counts_stan_MPI) %>% mutate(level = level)
+```
 
 
-level = 2
-load(sprintf("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/fit_MPI_level2.RData", level))
-load(sprintf("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/level_2_input.RData", level))
+## R Markdown
+```{r, cache=TRUE}
 
-fit_df_2 = get_fit_df(fit_MPI, data_for_stan_MPI, counts_stan_MPI) %>% mutate(level = level)
 
+# level = 1
+# load(sprintf("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/fit_MPI_level1_07062019_new_tree.RData", level))
+# load(sprintf("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/level_1_input_07062019_new_tree.RData", level))
+# fit_df_1 = get_fit_df(fit_MPI, data_for_stan_MPI, counts_stan_MPI, level) %>% mutate(level = level)
+# 
+# 
+# level = 2
+# load(sprintf("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/fit_MPI_level2_07062019_new_tree.RData", level))
+# load(sprintf("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/level_2_input_07062019_new_tree.RData", level))
+# fit_df_2 = get_fit_df(fit_MPI, data_for_stan_MPI, counts_stan_MPI, level) %>% mutate(level = level)
+# 
+# level = 3
+# load(sprintf("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/fit_MPI_level3_07062019_new_tree.RData", level))
+# load(sprintf("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/level_3_input_07062019_new_tree.RData", level))
+# fit_df_3 = get_fit_df(fit_MPI, data_for_stan_MPI, counts_stan_MPI, level) %>% mutate(level = level)
+# 
+
+#load("fit_df_feature_selection.RData")
 
 fit_df_1 %>% mutate(level = 1) %>%
 	bind_rows(fit_df_2 %>% mutate(level = 2)) %>%
-	distinct(level, sample, symbol, `Cell type category`, `read count`, `read count normalised bayes`, `Data base`, lambda, sigma_raw) %>%
+	bind_rows(fit_df_3 %>% mutate(level = 3)) %>%
+	distinct(
+		level, sample, symbol, `Cell type formatted`, `Cell type category`, 
+		`read count`, `read count normalised bayes`, 
+		`Data base`, lambda, sigma_raw, CI_low, CI_high, `gene error mean`
+	) %>%
 	
 	# Replace the category house_keeping
 	mutate(`house keeping` = `Cell type category` == "house_keeping") %>%
 	rename(temp = `Cell type category`) %>%
-	left_join( (.) %>% filter(temp != "house_keeping") %>% distinct(sample, temp, level) %>% rename(`Cell type category` = temp)) %>%
+	left_join( 
+		(.) %>% 
+			filter(temp != "house_keeping") %>% 
+			distinct(sample, temp, level) %>% 
+			rename(`Cell type category` = temp)
+	) %>%
 	select(-temp) %>%
+	filter(`Cell type category` %>% is.null %>% `!`) %>%
 	
-	write_csv(sprintf("docs/ref.csv", level))
+	# Eliminate house keeping that are not in all levels 
+	inner_join( 
+		bind_rows(
+			(.) %>% filter(!`house keeping`),
+			(.) %>% filter(`house keeping`) %>% 
+				distinct(symbol, level) %>% 
+				count(symbol) %>% 
+				filter(n == max(n)) 
+		) %>% 
+		distinct(symbol)
+	) %>%
+
+	write_csv("docs/ref.csv")
 
 
 ```
@@ -204,13 +247,13 @@ The threshold seems to be 0.5
 ```{r}
 
 (
-	fit_df %>%
+	fit_df_3 %>%
 	distinct(symbol, `Cell type category`, lambda, CI_low, CI_high, shape, rate, `gene error mean`) %>%
 	inner_join(
 		(.) %>%
 		distinct(symbol, `Cell type category`) %>%
 		count(symbol) %>%
-		filter(n == fit_df %>% distinct(`Cell type category`) %>% nrow %>% `-` (1))
+		filter(n == fit_df_3 %>% distinct(`Cell type category`) %>% nrow %>% `-` (1))
 	) %>% 
  	unite(symbol_ct, c("symbol", "Cell type category"), remove=F) %>% 
  	sample_frac(0.01)  %>% 
@@ -226,8 +269,8 @@ The threshold seems to be 0.5
 	) 
 ) %>% plotly::ggplotly()
 
-fit_df %>% 
-  filter(symbol %in% c("MFSD7")) %>%
+fit_df_3 %>% 
+  filter(symbol %in% c("MATN2")) %>%
 	ggplot(aes(x=`predicted_NB` + 1, y=`read count normalised bayes` + 1, label=symbol, color=`Cell type category`)) + 
 	geom_abline(intercept = 0, slope = 1, color="grey") + 
 	geom_point() + 
@@ -244,178 +287,47 @@ fit_df %>%
 
 ```{r}
 
-get_marker_df = function(fit_df, level, fit_threshold){
 
-		fit_df %>% 
-		left_join(level_df %>% mutate(`level 0` = "root")) %>%
-		filter(`Cell type category` != "house_keeping") %>%
-		inner_join( 
-			(.) %>% 
-				select(!!sprintf("level %s", level -1), !!sprintf("level %s", level)) %>% 
-				distinct %>%
-				group_by_at(1) %>% 
-				summarise(n = n()) %>%
-				filter(n > 1) 
-		) %>%
-		group_by(!!sym(sprintf("level %s", level -1))) %>%
-		do(
-				gtools::permutations(
-					n=(.) %>% select(!!sprintf("level %s", level)) %>% distinct %>% drop_na %>% nrow,
-					r=2,
-					v=(.) %>% select(!!sprintf("level %s", level)) %>% distinct %>% drop_na %>% pull(1),
-					repeats.allowed=F
-				) %>%
-				as_tibble
-		) %>%
-		mutate(comparison = 1:n()) %>%
-		unite(pair, c("V1", "V2"), remove = F, sep=" ") %>%
-		gather(which, `Cell type category`, -!!sprintf("level %s", level -1), -comparison, -pair) %>%
-		left_join(
-			fit_df %>% distinct(symbol, `Cell type category`, CI_low, CI_high)
-		) %>% 
-		mutate(relevant_CI = ifelse(which == "V1", CI_low, CI_high)) %>%
-		group_by(comparison, pair, symbol) %>%
-		arrange(which) %>%
-		summarise(delta = diff(relevant_CI)) %>%
-		separate(pair, c("Cell type category", "other Cell type category"), sep=" ", remove = F) %>%
-		left_join( fit_df %>% distinct(`Cell type category`, symbol, lambda, `gene error mean`) ) %>%
-		filter(lambda > 4) %>%
-		filter(`gene error mean` < fit_threshold) %>%
-		arrange(delta) %>%
-		mutate(rank = 1:n()) %>%
-		ungroup() %>% 
-		mutate(level = !!level)
-}
-
-n_markers = 10
-
-marker_df = 
-	get_marker_df(fit_df_1, 1, 0.5) %>% 
-	rbind(get_marker_df(fit_df_2, 2, 0.4))
+	marker_df %>% 
+	distinct(pair, ct1, ct2, level) %>% 
+	left_join( tibble(level=c(1,2, 3), `n markers` = c( 10, 10, 10)) ) %>%
+	get_markers_df(NA) %>%
+	get_input_data(reps = 1, pass = 99) %$% reference %>%
+	filter(!`house keeping`) %>%
+	filter(rank <= `n markers`) %>%
+	unite(pair, c("ct1", "ct2"), remove = F, sep=" ") %>%
 	
-marker_df %>%
-
-# Filter markers
-filter(rank < n_markers) %>%
-	
-# Filter markers in upper levels that have been selected for lower levels
-inner_join(
-	(.) %>% 
-	distinct(symbol, level) %>%
-	group_by(symbol) %>%
-	arrange(level %>% desc) %>%
-	slice(1) %>%
-	ungroup
-) %>%
-
-
-# Write table
-{
-	(.)  %>%	write_csv("docs/markers.csv")
-	(.)
-} %>%
-
 
 # Plot
-select(-`Cell type category`, `other Cell type category`) %>%
-left_join(
-	rbind(fit_df_1, fit_df_2) %>% 
-		distinct(`Cell type category`, symbol, sample, `read count normalised bayes`, level)
-) %>%
 
-mutate( symbol_err = sprintf("%s\n%s", symbol, `gene error mean` %>% round(2))) %>% 
-{
-	n_tot_markers = (.) %>% distinct(symbol) %>% nrow
+
+mutate( symbol_err = 0) %>% #sprintf("%s\n%s", symbol, `gene error mean` %>% round(2))) %>% 
+	group_by(level, ct1) %>%
+do({
 	
-	{ ggplot((.), aes(y=`read count normalised bayes` + 1, x=`Cell type category` %>% substring(1, 2), fill=`Cell type category`)) + 
+	n_tot_markers = (.) %>% distinct(symbol) %>% nrow
+	level = (.) %>% distinct(level) %>% pull(1)
+	ct = (.) %>% distinct(ct1) %>% pull(1)
+	
+	(.) %>% 
+		distinct()
+		{ ggplot((.), aes(y=`read count normalised bayes` + 1, x=`Cell type category`, fill=`Cell type category`)) + 
 		geom_boxplot() + 
-		facet_wrap(~ pair + symbol_err, scale="free", ncol = 6 ) + 
+		facet_wrap(~ pair + symbol, scale="free", ncol = 6 ) + 
 		scale_y_log10() + 
 		my_theme +
 		theme(text = element_text(size = 6)	)
 	} %>%
 	ggsave(
-		filename = sprintf('docs/markers_level_%s.pdf', level ), 
+		filename = sprintf('docs/markers_level_%s_%s.pdf', level, ct ), 
 		height= 28 %>% divide_by(8) %>% multiply_by( n_tot_markers  ) %>% ceiling, 
 		width= 21, 
 		units = "cm", limitsize = FALSE
 	)
-}
+	
+	(.) %>% distinct(level)
+})
 
 ```
 
-OLD
-
-```{r}
-# Add proportion of markers based on cell differenc
-left_join(
- (.)	%>% 
- 	filter(delta_lambda>0) %>% 
- 	group_by(`Cell type category query`, other_ct) %>% 
- 	summarise(s = delta_lambda %>% sum) %>% 
- 	ungroup() %>% 
- 	mutate(p = 1/s) %>% 
- 	mutate(p = p/max(p)) %>%
- 	mutate(n_markers = (p * n_markers) %>% ceiling) %>%
- 	select(-s, -p)
-) %>%
-	
-# Select markers
-group_by(`Cell type category query`, other_ct) %>%
-filter(delta_lambda > 0) %>%
-filter(rank < n_markers) %>%
-ungroup() %>%
-distinct(`Cell type category query`, symbol, `gene error mean`) 
-
-
-marker_df %>%
-# Write table
-{
-	(.) %>%	write_csv(sprintf("docs/markers_level%s.csv", level ))
-	(.)
-} %>%
-	
-
-# Plot
-
-
-left_join(
-fit_df %>% distinct(`Cell type category`, symbol, sample, `read count normalised bayes`)
-) %>%
-	
-
-	
-mutate( symbol_err = sprintf("%s %s", symbol,  `gene error mean` %>% round(2))) %>% 
-{ ggplot((.), aes(y=`read count normalised bayes` + 1, x=`Cell type category` %>% substring(1, 2), fill=`Cell type category`)) + 
-	geom_boxplot() + 
-	facet_wrap(~ `Cell type category query` + symbol_err, scale="free", ncol = 6 ) + 
-	scale_y_log10() + 
-	my_theme +
-	theme(text = element_text(size = 6)	)
-} %>%
-ggsave(
-	filename = sprintf('docs/markers_level_%s.pdf', level ), 
-	height= 28 %>% divide_by(8) %>% multiply_by( marker_df %>% distinct(symbol) %>% nrow %>% divide_by(6)) %>% ceiling, 
-	width= 21, 
-	units = "cm", limitsize = FALSE
-)
-
-
-	
-
-
-	
-```
-
-```{r, cache=TRUE}
-
-
-
-
-
-
-
-
-
-```
 

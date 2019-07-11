@@ -52,3 +52,8 @@ Temporary Items
 .Rhistory
 .RData
 data/ref_array.rda
+.Rproj.user
+job_torque*
+*.rds
+docs/*.RData
+docs/*.pdf

@@ -22,8 +22,22 @@ my_theme =
 
 ref = read_csv("docs/ref.csv")
 
-source("https://gist.githubusercontent.com/stemangiola/9d2ba5d599b7ac80404c753cdee04a01/raw/686c0f1c973703b515509e97aa078f49b9653caf/tidy_data_tree.R")
+source("https://gist.githubusercontent.com/stemangiola/9d2ba5d599b7ac80404c753cdee04a01/raw/26e5b48fde0cd4f5b0fd7cbf2fde6081a5f63e7f/tidy_data_tree.R")
 
+# Get level
+args <- commandArgs(TRUE)
+
+reps = args[1] %>% as.integer
+is_full_bayesian = args[2] %>% as.integer %>% as.logical
+
+# reps = 1
+# is_full_bayesian = F
+
+out_dir = Sys.time() %>% format("%a_%b_%d_%X") %>% gsub("[: ]", "_", .) %>% sprintf("docs/feature_selection_%s", .)
+out_dir %>% dir.create()
+
+iterations = 800
+if(is_full_bayesian) iterations = iterations /2
 
 ######################################
 # Variable should be already set
@@ -192,7 +206,7 @@ get_markers_number = function(pass, res, num_markers_previous_level, min_n_sampl
 					ggplot(aes(y=`.value`, x=sample, color=`Cell type category`)) +
 					geom_errorbar(aes(ymin = `.lower`, ymax=`.upper`), width=0) + facet_wrap(~level + pair + real) +
 					theme(strip.text.x = element_text(size = 5)) } %>%
-				ggsave(.,filename = sprintf("pass_%s_test_CI.png", pass), device = "png")
+				ggsave(.,filename = sprintf("%s/pass_%s_test_CI.png", out_dir, pass), device = "png")
 			(.)
 		} %>%
 
@@ -269,7 +283,7 @@ get_markers_number = function(pass, res, num_markers_previous_level, min_n_sampl
 		# summarise(`error mean` = `error mean` %>% mean) %>%
 		{
 			((.) %>% ggplot(aes(x=pair, y=`error mean`)) + geom_boxplot() + geom_jitter() + my_theme) %>%
-				ggsave(filename = sprintf("pass_%s_test_error.png", pass), device = "png", width = 8)
+				ggsave(filename = sprintf("%s/pass_%s_test_error.png", out_dir, pass), device = "png", width = 8)
 			(.)
 		} %>%
 		ungroup() %>%
@@ -287,7 +301,7 @@ get_markers_number = function(pass, res, num_markers_previous_level, min_n_sampl
 		mutate(`n markers` = (`error mean relative mean` * `n markers pass 1` ) %>% ceiling) %>%
 		mutate(`n markers` = ifelse(`n markers` < mean(`n markers pass 1`, !!min_n_samples), mean(`n markers pass 1`, !!min_n_samples) , `n markers`)) %>%
 		{
-			(.) %>% write_csv(sprintf("docs/num_markers_based_on_error_levels_1_2_pass_%s.csv", pass))
+			(.) %>% write_csv(sprintf("%s/num_markers_based_on_error_levels_1_2_pass_%s.csv", out_dir, pass))
 			(.)
 		}
 }
@@ -371,7 +385,7 @@ get_markers_df = function(markers_number, pass){
 
 	# Write table
 	{
-		(.)  %>%	write_csv(sprintf("docs/markers_pass%s.csv", pass))
+		(.)  %>%	write_csv(sprintf("%s/markers_pass%s.csv", out_dir, pass))
 		(.)
 	}
 }
@@ -388,10 +402,6 @@ marker_df =
 	rbind(give_rank_to_ref(ref %>% filter(level ==2), 2, 0.4)) %>%
 	rbind(give_rank_to_ref(ref %>% filter(level ==3), 3, 0.7)) %>%
 	separate(pair, c("ct1", "ct2"), sep=" ", remove = F)
-
-reps = 10
-
-
 
 mix_source =
 	{
@@ -505,8 +515,10 @@ res_0 =
 	n_markers_0 %>%
 	get_markers_df(0) %>%
 	get_input_data(reps = reps, pass = 0) %>%
-	{	ARMET_tc((.)$mix, (.)$reference, iterations = 600) }
+	{	ARMET_tc((.)$mix, (.)$reference, iterations = iterations, full_bayesian = is_full_bayesian) }
 res_0 %$% proportions %>% filter(!converged)
+
+save(list=c(sprintf("res_%s", 0), sprintf("n_markers_%s", 0)), file=sprintf("%s/input_%s.RData", out_dir, 0))
 
 ##################################
 # Pass 1
@@ -517,8 +529,10 @@ res_1 =
 	n_markers_1 %>%
 	get_markers_df(1) %>%
 	get_input_data(reps = reps, pass = 1) %>%
-	{	ARMET_tc((.)$mix, (.)$reference, iterations = 600) }
+	{	ARMET_tc((.)$mix, (.)$reference, iterations = iterations, full_bayesian = is_full_bayesian) }
 res_1 %$% proportions %>% filter(!converged)
+
+save(list=c(sprintf("res_%s", 1), sprintf("n_markers_%s", 1)), file=sprintf("%s/input_%s.RData", out_dir, 1))
 
 ##################################
 # Pass 2
@@ -529,8 +543,10 @@ res_2 =
 	n_markers_2 %>%
 	get_markers_df(2) %>%
 	get_input_data(reps = reps, pass = 2) %>%
-	{	ARMET_tc((.)$mix, (.)$reference, iterations = 600) }
+	{	ARMET_tc((.)$mix, (.)$reference, iterations = iterations, full_bayesian = is_full_bayesian) }
 res_2 %$% proportions %>% filter(!converged)
+
+save(list=c(sprintf("res_%s", 2), sprintf("n_markers_%s", 2)), file=sprintf("%s/input_%s.RData", out_dir, 2))
 
 ##################################
 # Pass 3
@@ -541,8 +557,10 @@ res_3 =
 	n_markers_3 %>%
 	get_markers_df(3) %>%
 	get_input_data(reps = reps, pass = 3) %>%
-	{	ARMET_tc((.)$mix, (.)$reference, iterations = 600) }
+	{	ARMET_tc((.)$mix, (.)$reference, iterations = iterations, full_bayesian = is_full_bayesian) }
 res_3 %$% proportions %>% filter(!converged)
+
+save(list=c(sprintf("res_%s", 3), sprintf("n_markers_%s", 3)), file=sprintf("%s/input_%s.RData", out_dir, 3))
 
 ##################################
 # Pass 4
@@ -553,28 +571,19 @@ res_4 =
 	n_markers_4 %>%
 	get_markers_df(4) %>%
 	get_input_data(reps = reps, pass = 4) %>%
-	{	ARMET_tc((.)$mix, (.)$reference, iterations = 600) }
+	{	ARMET_tc((.)$mix, (.)$reference, iterations = iterations, full_bayesian = is_full_bayesian) }
 res_4 %$% proportions %>% filter(!converged)
 
-save(list=c(sprintf("res_%s", 0:4), sprintf("n_markers_%s", 0:4)), file="output.RData")
+save(list=c(sprintf("res_%s", 4), sprintf("n_markers_%s", 4)), file=sprintf("%s/input_%s.RData", out_dir, 4))
 
 ##################################
-# GBM
+# Create reference data set
 ##################################
 
-x=n_markers_0 %>%
-	get_markers_df(2) %>%
-	get_input_data(reps = reps, pass = 2) %>%
-	{	ARMET_tc(read_csv("docs/GBM.csv") %>% slice(1:10), (.)$reference, full_bayesian = F, iterations = 500) }
-x %$% proportions %>% filter(!converged)
-#
-# ##################################
-# # Melanoma
-# ##################################
-#
-#
-y=n_markers_0 %>%
-	get_markers_df(2) %>%
-	get_input_data(reps = reps, pass = 2) %>%
-	{	ARMET_tc(read_csv("~/unix3XX/third_party_analyses/ismael_RNAseq_CyTOF/mix_counts.csv") %>% mutate_if(is.numeric, as.integer), (.)$reference, full_bayesian = F, iterations = 500) }
-y %$% proportions %>% filter(!converged)
+get_markers_number(5, res_4, n_markers_4) %>%
+	get_markers_df(5) %>%
+	get_input_data(reps = reps, pass = 5) %$%
+	reference %>%
+	write_csv(sprintf("%s/reference.csv", out_dir))
+
+

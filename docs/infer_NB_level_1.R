@@ -23,7 +23,7 @@ options(mc.cores = parallel::detectCores())
 
 # Get level
 args <- commandArgs(TRUE)
-my_level = args[1]
+my_level = args[1] %>% as.integer
 
 # Registering parallel framework
 system("nproc", intern = TRUE) %>%
@@ -60,62 +60,26 @@ my_theme =
 # Tools
 source("https://gist.githubusercontent.com/stemangiola/90a528038b8c52b21f9cfa6bb186d583/raw/dbd92c49fb03fb05ab0b465704b99c0a39e654d5/transcription_tool_kit.R")
 source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/e4ec6a2348efc2f62b88f10b12e70f4c6273a10a/tidy_extensions.R")
+source("https://gist.githubusercontent.com/stemangiola/9d2ba5d599b7ac80404c753cdee04a01/raw/26e5b48fde0cd4f5b0fd7cbf2fde6081a5f63e7f/tidy_data_tree.R")
+
+options(error = quote({dump.frames(to.file=TRUE); q()}))
 
 # Setup table of name conversion
-level_df = foreach( l = list(
-	c("b_cell", "immune_cell", "b_cell"),
-	c("b_memory", "immune_cell", "b_cell", "b_memory"),
-	c("b_naive", "immune_cell", "b_cell", "b_naive"),
-	c("dendritic",  "immune_cell", "dendritic_myeloid"),
-	c("dendritic_plasmacytoid",  "immune_cell", "dendritic_plasmacytoid"),
-	c("dendritic_myeloid",  "immune_cell", "dendritic_myeloid"),
-	c("dendritic_myeloid_immature",  "immune_cell", "dendritic_myeloid", "dendritic_myeloid_immature"),
-	c("dendritic_myeloid_mature",  "immune_cell", "dendritic_myeloid", "dendritic_myeloid_mature"),
-	c("endothelial", "endothelial", "endothelial", "endothelial"),
-	c("eosinophil", "immune_cell", "granulocyte", "eosinophil"),
-	c("epithelial", "epithelial", "epithelial", "epithelial"),
-	c("fibroblast","fibroblast", "fibroblast", "fibroblast"),
-	c("immune_cell", "immune_cell"),
-	c("macrophage", "immune_cell", "mono_derived"),
-	c("macrophage_M1", "immune_cell", "mono_derived", "macrophage_M1"),
-	c("macrophage_M2", "immune_cell", "mono_derived", "macrophage_M2"),
-	c("mast_cell", "immune_cell", "mast_cell", "mast_cell"),
-	c("monocyte","immune_cell", "mono_derived",  "monocyte"),
-	c("myeloid", "immune_cell"),
-	c("natural_killer", "immune_cell", "natural_killer", "natural_killer"),
-	c("neutrophil", "immune_cell", "granulocyte", "neutrophil"),
-	c("t_CD4", "immune_cell","t_cell"),
-	c("t_CD8", "immune_cell","t_cell", "t_CD8"),
-	c("t_CD8_memory_effector", "immune_cell","t_cell", "t_CD8"),
-	c("t_cell", "immune_cell","t_cell"),
-	c("t_gamma_delta", "immune_cell","t_cell", "t_gamma_delta"),
-	c("t_helper", "immune_cell","t_cell", "t_helper"),
-	c("t_memory_central", "immune_cell","t_cell", "t_memory_central"),
-	c("t_memory", "immune_cell","t_cell"),
-	c("t_memory_effector", "immune_cell","t_cell", "t_memory_effector"),
-	c("t_naive", "immune_cell","t_cell", "t_naive"),
-	c("t_reg", "immune_cell","t_cell", "t_reg"),
-	c("t_reg_memory", "immune_cell","t_cell", "t_reg")
-), .combine = bind_rows) %do% {
-	l %>%
-		as.data.frame %>% t %>% as_tibble(.name_repair = "minimal") %>%
-		setNames(c("Cell type formatted", sprintf("level %s",  1:((.)%>%ncol()-1) ) ))
-} %>%
-	mutate(`level 0` = "root")
+tree =
+	yaml:: yaml.load_file("/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/data/tree.yaml") %>%
+	data.tree::as.Node()
 
 ct_to_correlation_threshold =
-	level_df %>%
-	select(-`Cell type formatted`) %>%
-	gather(label, `Cell type category`) %>%
-	separate(label, c("dummy", "level")) %>%
-	mutate(level = level %>% as.integer) %>%
-	filter(level %in% 1:3) %>%
-	group_by(`Cell type category`) %>%
-	arrange(level) %>%
-	slice(1) %>%
+
+	tree %>%
+	data.tree::ToDataFrameTree("name", "level") %>%
+	mutate(level = level -1 ) %>%
+	rename(`Cell type category` =  name) %>%
+	as_tibble %>%
 	left_join(
 		tibble(level=1:6, threshold=c(0.9, 0.95, 0.99, 0.99, 0.99, 0.99))
 	)
+
 
 # if(0){
 # Get data
@@ -133,16 +97,30 @@ counts =
 			mutate_at(vars(one_of('isoform')), as.character)
 	} %>%
 
-	filter(symbol %>% is.na %>% `!`) %>%
+	filter((symbol %>% is.na %>% `!`) & (symbol != "")) %>%
 	filter(`Cell type formatted` %>% is.na %>% `!`) %>%
 
 	# Setup Cell type category names
 	left_join(
-		level_df %>%
-			select(`Cell type formatted`, contains(sprintf("level %s", my_level))) %>%
-			setNames(c((.) %>% colnames  %>% `[` (1), "Cell type category"))
+		tree %>%
+			Clone %>%
+			ToDataFrameTypeColFull("name")  %>%
+
+			# Filter parents that are out of the level (e.g., immune_cells if we are analysisng b_cells)
+			filter(
+				(!!as.name(sprintf("level_%s", my_level+1))) %in%
+				(
+					tree %>%
+					Clone %>%
+					{	Prune(., function(x) x$level <= my_level + 1); .	} %>%
+					{ .$Get("name", filterFun = isLeaf)}
+				)
+			) %>%
+			select(name, contains(sprintf("level_%s", my_level+1))) %>%
+			setNames(c("Cell type formatted", "Cell type category"))
 
 	) %>%
+
 	filter(`Cell type category` %>% is.na %>% `!`) %>%
 	mutate(level = !!my_level) %>%
 
@@ -284,6 +262,26 @@ counts =
 	mutate(symbol = symbol %>% as.factor) %>%
 	mutate(sample = sample %>% as.factor)
 
+
+# study whole dataset
+# counts.plus =
+# 	counts %>%
+# 	mutate(`read count` = `read count` %>% as.integer) %>%
+# 	aggregate_duplicated_gene_symbols(sample_column = "sample", gene_column = "symbol", value_column = "read count") %>%
+# 	eliminate_redundant_clusters_with_correlation(cluster_by_column = "sample", replicates_column = "symbol", value_column = "read count", correlation_threshold = 0.9 ) %>%
+# 	counts.minus.minus %>% add_normalised_counts(sample_column = "sample", gene_column = "symbol", value_column = "read count") %>%
+# 	add_MDS_components(replicates_column = "sample", cluster_by_column = "symbol", value_column = "read count normalised")
+#
+# counts.plus %>%
+# 	select(-contains("Dimension")) %>%
+# 	filter(symbol %in% (read_csv("docs/hk_600.txt", col_names = FALSE) %>% pull(1))) %>%
+# 	inner_join((.) %>% distinct(symbol) %>% head(n=300)) %>%
+# 	add_MDS_components(replicates_column = "symbol", cluster_by_column = "sample", value_column = "read count normalised") %>%
+# 	rotate_MDS_components(rotation_degrees = -50) %>%
+# 	distinct(sample, `Dimension 1`,`Dimension 2`, `Cell type formatted`, `Data base`) %>%
+# 	ggplot(aes(x=`Dimension 1`, y=`Dimension 2`, color=`Data base`, label=`Cell type formatted` )) + geom_point()
+
+
 # MPI
 
 shards = n_cores %>% divide_by(3) %>% floor %>% multiply_by(4)
@@ -414,7 +412,7 @@ counts_stan_MPI %>% distinct(symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>%
 	sprintf("Genes per shard %s", .) %>%
 	print
 
-save(list=c("data_for_stan_MPI", "counts_stan_MPI", "counts", "level_df"), file=sprintf("docs/level_%s_input.RData", my_level))
+save(list=c("data_for_stan_MPI", "counts_stan_MPI", "counts", "tree"), file=sprintf("docs/level_%s_input.RData", my_level))
 
 fileConn<-file("~/.R/Makevars")
 writeLines(c("CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
