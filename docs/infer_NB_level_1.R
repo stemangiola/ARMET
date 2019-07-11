@@ -114,7 +114,7 @@ ct_to_correlation_threshold =
 	arrange(level) %>%
 	slice(1) %>%
 	left_join(
-		tibble(level=1:3, threshold=c(0.9, 0.95, 0.99))
+		tibble(level=1:6, threshold=c(0.9, 0.95, 0.99, 0.99, 0.99, 0.99))
 	)
 
 # if(0){
