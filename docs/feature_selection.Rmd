@@ -159,28 +159,35 @@ library(data.tree)
 ```{r, cache=TRUE}
 
 
-# level = 1
-# load(sprintf("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/fit_MPI_level1_07062019_new_tree.RData", level))
-# load(sprintf("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/level_1_input_07062019_new_tree.RData", level))
-# fit_df_1 = get_fit_df(fit_MPI, data_for_stan_MPI, counts_stan_MPI, level) %>% mutate(level = level)
-# 
-# 
-# level = 2
-# load(sprintf("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/fit_MPI_level2_07062019_new_tree.RData", level))
-# load(sprintf("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/level_2_input_07062019_new_tree.RData", level))
-# fit_df_2 = get_fit_df(fit_MPI, data_for_stan_MPI, counts_stan_MPI, level) %>% mutate(level = level)
-# 
-# level = 3
-# load(sprintf("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/fit_MPI_level3_07062019_new_tree.RData", level))
-# load(sprintf("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/level_3_input_07062019_new_tree.RData", level))
-# fit_df_3 = get_fit_df(fit_MPI, data_for_stan_MPI, counts_stan_MPI, level) %>% mutate(level = level)
-# 
+level = 1
+load(sprintf("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/fit_MPI_level1_07062019_new_tree.RData", level))
+load(sprintf("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/level_1_input_07062019_new_tree.RData", level))
+fit_df_1 = get_fit_df(fit_MPI, data_for_stan_MPI, counts_stan_MPI, level) %>% mutate(level = level)
+
+
+level = 2
+load(sprintf("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/fit_MPI_level2_07062019_new_tree.RData", level))
+load(sprintf("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/level_2_input_07062019_new_tree.RData", level))
+fit_df_2 = get_fit_df(fit_MPI, data_for_stan_MPI, counts_stan_MPI, level) %>% mutate(level = level)
+
+level = 3
+load(sprintf("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/fit_MPI_level3_07062019_new_tree.RData", level))
+load(sprintf("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/level_3_input_07062019_new_tree.RData", level))
+fit_df_3 = get_fit_df(fit_MPI, data_for_stan_MPI, counts_stan_MPI, level) %>% mutate(level = level)
+
+level = 4
+load(sprintf("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/fit_MPI_level4.RData", level))
+load(sprintf("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/docs/level_4_input.RData", level))
+fit_df_4 = get_fit_df(fit_MPI, data_for_stan_MPI, counts_stan_MPI, level) %>% mutate(level = level)
+
 
 #load("fit_df_feature_selection.RData")
 
 fit_df_1 %>% mutate(level = 1) %>%
 	bind_rows(fit_df_2 %>% mutate(level = 2)) %>%
 	bind_rows(fit_df_3 %>% mutate(level = 3)) %>%
+	bind_rows(fit_df_3 %>% mutate(level = 4)) %>%
+
 	distinct(
 		level, sample, symbol, `Cell type formatted`, `Cell type category`, 
 		`read count`, `read count normalised bayes`, 
