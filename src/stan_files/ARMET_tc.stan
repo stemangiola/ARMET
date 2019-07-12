@@ -381,6 +381,9 @@ data {
 	int parents_lv3[PLV3]; // Level one parents
 	int singles_lv3[SLV3]; // Level 1 leafs
 
+	// Non-centered parametrisation
+	real exposure_rate_shift_scale[2];
+
 }
 transformed data {
 
@@ -394,9 +397,9 @@ transformed data {
 }
 parameters {
   // Overall properties of the data
-  real<lower=0> lambda_mu; // So is compatible with logGamma prior
+  real<lower=0> lambda_mu_raw; // So is compatible with logGamma prior
   //real<lower=0> lambda_sigma;
-  vector[S] exposure_rate;
+  vector[S] exposure_rate_raw;
 
   // Gene-wise properties of the data
   vector[G * do_infer] lambda_log_param;
@@ -414,6 +417,10 @@ parameters {
 
 }
 transformed parameters {
+		// Non centered parametrisation
+	real<lower=0> lambda_mu = lambda_mu_raw + lambda_mu_mu;
+	vector[S] exposure_rate = exposure_rate_shift_scale[1] + exposure_rate_raw * exposure_rate_shift_scale[2];
+
   // Sigma
   vector[G] sigma = 1.0 ./ exp(do_infer ? sigma_raw_param : sigma_raw_data ) ;
 	vector[G] lambda_log = do_infer ? lambda_log_param : lambda_log_data;
@@ -447,6 +454,7 @@ transformed parameters {
 	// Sigma correction (if full bayes this is a unique value otherwise is gene-wise)
 	vector<lower=0>[GM] sigma_correction = do_infer == 1 ? rep_vector(sigma_correction_param[1], GM) : sigma_correction_param; // sigma_correction_param[1]
 
+
 }
 
 model {
@@ -469,7 +477,7 @@ model {
 	));
 
   // Overall properties of the data
-  lambda_mu ~ normal(lambda_mu_mu,2);
+  lambda_mu_raw ~ normal(0,2);
 
 	// Proportion prior
 	for(q in 1:Q) prop_1[q] ~ dirichlet(rep_vector(num_elements(prop_1[1]), num_elements(prop_1[1])));
@@ -480,8 +488,8 @@ model {
 	for(q in 1:Q) prop_e[q] ~ dirichlet(rep_vector(num_elements(prop_e[1]), num_elements(prop_e[1])));
 
 	// Exposure prior
-  exposure_rate ~ normal(0,1);
-  if(do_infer) sum(exposure_rate) ~ normal(0, 0.001 * S);
+  exposure_rate_raw ~ normal(0,1);
+  if(do_infer) sum(exposure_rate_raw) ~ normal(0, 0.001 * S);
 
   // Gene-wise properties of the data
   if(do_infer) lambda_log_param ~ exp_gamma_meanSd(lambda_mu,lambda_sigma);
