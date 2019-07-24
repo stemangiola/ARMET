@@ -828,6 +828,34 @@ ARMET_tc = function(
 		pull(sigma_raw)
 
 	########################################
+	# Build better scales
+
+	exposure_rate_shift_scale =
+		df %>%
+		filter(`house keeping`) %>%
+		distinct(symbol, sample, `read count`, query) %>%
+		drop_na %>%
+		inner_join( (.) %>% distinct(sample, symbol) %>% count(symbol) %>% filter(n == max(n)), by="symbol") %>% # Eliminate genes that are missing from samples
+		tidyTranscriptomics::add_normalised_counts() %>%
+		filter(query) %>%
+		mutate(l = multiplier %>% log) %>%
+		summarise(shift = l %>% mean, scale = l %>% sd) %>%
+		as.numeric
+
+
+	intercept_shift_scale =
+		counts_baseline %>%
+		filter(`house keeping`) %>%
+		distinct(symbol, sample, `read count`, query) %>%
+		tidyTranscriptomics::add_normalised_counts() %>%
+		mutate(
+			cc = `read count normalised` %>%
+				`+` (1) %>% log
+		) %>%
+		summarise(shift = cc %>% mean, scale = cc %>% sd) %>%
+		as.numeric
+
+	########################################
 	# MODEL
 	########################################
 
