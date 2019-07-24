@@ -303,7 +303,7 @@ data {
 
 	// Global properies prior model
 	real lambda_mu_mu;
-	real lambda_sigma;
+	//real lambda_sigma;
   real<upper=0> sigma_slope;
   real sigma_intercept;
   real<lower=0>sigma_sigma;
@@ -398,7 +398,8 @@ transformed data {
 parameters {
   // Overall properties of the data
   real<lower=0> lambda_mu_raw; // So is compatible with logGamma prior
-  //real<lower=0> lambda_sigma;
+  real<lower=0> lambda_sigma;
+  real<upper=0> lambda_skew;
   vector[S] exposure_rate_raw;
 
   // Gene-wise properties of the data
@@ -478,6 +479,8 @@ model {
 
   // Overall properties of the data
   lambda_mu_raw ~ normal(0,2);
+	lambda_sigma ~ normal(0,2);
+	lambda_skew ~ normal(0,1);
 
 	// Proportion prior
 	for(q in 1:Q) prop_1[q] ~ dirichlet(rep_vector(num_elements(prop_1[1]), num_elements(prop_1[1])));
@@ -492,8 +495,8 @@ model {
   if(do_infer) sum(exposure_rate_raw) ~ normal(0, 0.001 * S);
 
   // Gene-wise properties of the data
-  if(do_infer) lambda_log_param ~ exp_gamma_meanSd(lambda_mu,lambda_sigma);
-  if(do_infer) sigma_raw_param ~ normal(sigma_slope * lambda_log_param + sigma_intercept,sigma_sigma);
+  if(do_infer) lambda_log_param ~ skew_normal(lambda_mu,lambda_sigma, lambda_skew);
+  //if(do_infer) sigma_raw_param ~ normal(sigma_slope * lambda_log_param + sigma_intercept,sigma_sigma);
 	sigma_correction_param ~ exponential(1); // Lasso prior for correction
 
 }
