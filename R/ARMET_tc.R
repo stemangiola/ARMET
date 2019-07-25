@@ -610,6 +610,20 @@ ARMET_tc = function(
 
 		format_for_MPI(shards)
 
+	##########################################
+	##########################################
+
+	counts_linear = counts_baseline %>% filter(level ==1 & G <= 200) %>% arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>%  pull(`read count`)
+	G_linear = counts_baseline %>% filter(level ==1 & G <= 200) %>% arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>% pull(G)
+	S_linear = counts_baseline %>% filter(level ==1 & G <= 200) %>% arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>% pull(S)
+	CL = length(counts_linear)
+	G = counts_baseline %>% filter(level ==1 & G <= 200) %>% mutate(S = S %>% as.factor %>% as.integer)%>%  distinct(G) %>% nrow
+	S = counts_baseline %>% filter(level ==1 & G <= 200) %>% mutate(S = S %>% as.factor %>% as.integer)%>% distinct(S) %>% nrow
+
+	##########################################
+	##########################################
+
+
 	S = counts_baseline %>% distinct(sample) %>% nrow()
 	N = counts_baseline %>% distinct(idx_MPI, `read count`, `read count MPI row`) %>%  count(idx_MPI) %>% summarise(max(n)) %>% pull(1)
 	M = counts_baseline %>% distinct(start, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
@@ -858,7 +872,7 @@ ARMET_tc = function(
 	########################################
 	# MODEL
 	########################################
-
+browser()
 	fileConn<-file("~/.R/Makevars")
 	writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
 	close(fileConn)
