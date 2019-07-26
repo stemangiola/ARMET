@@ -264,23 +264,23 @@ functions{
 			int_data[length_indexes+1:(length_indexes+dim_data[1])]
 		);
 
-		// Deconvolution
-		lp[2] = sum_reduce(
-			global_parameters ,
-			local_parameters[(dim_param[1]+1):(dim_param[1] + dim_param[2])] ,
-			real_data ,
-			int_data[(length_indexes+dim_data[1]+1):(length_indexes+dim_data[1] + dim_data[2])]
-		);
-		lp[3] = sum_reduce(
-			global_parameters ,
-			local_parameters[(dim_param[1] + dim_param[2] +1): (dim_param[1] + dim_param[2] + dim_param[3])] ,
-			real_data ,
-			int_data[(length_indexes+dim_data[1] + dim_data[2] + 1):(length_indexes+dim_data[1] + dim_data[2] + dim_data[3])]
-		);
+	// 	// Deconvolution
+	// 	lp[2] = sum_reduce(
+	// 		global_parameters ,
+	// 		local_parameters[(dim_param[1]+1):(dim_param[1] + dim_param[2])] ,
+	// 		real_data ,
+	// 		int_data[(length_indexes+dim_data[1]+1):(length_indexes+dim_data[1] + dim_data[2])]
+	// 	);
+	// 	lp[3] = sum_reduce(
+	// 		global_parameters ,
+	// 		local_parameters[(dim_param[1] + dim_param[2] +1): (dim_param[1] + dim_param[2] + dim_param[3])] ,
+	// 		real_data ,
+	// 		int_data[(length_indexes+dim_data[1] + dim_data[2] + 1):(length_indexes+dim_data[1] + dim_data[2] + dim_data[3])]
+	// 	);
+	//
+	//  return [sum(lp)]';
 
-	 return [sum(lp)]';
-
-	 //return [lp[1]]';
+	 return [lp[1]]';
 
 	}
 
@@ -496,7 +496,7 @@ model {
 
   // Gene-wise properties of the data
   if(do_infer) lambda_log_param ~ skew_normal(lambda_mu,lambda_sigma, lambda_skew);
-  //if(do_infer) sigma_raw_param ~ normal(sigma_slope * lambda_log_param + sigma_intercept,sigma_sigma);
+  if(do_infer) sigma_raw_param ~ normal(sigma_slope * lambda_log_param + sigma_intercept,sigma_sigma);
 	sigma_correction_param ~ exponential(1); // Lasso prior for correction
 
 }
