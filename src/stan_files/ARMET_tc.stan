@@ -152,20 +152,20 @@ functions{
 	 	vector[S] exposure_rate = local_parameters[((M+2)+1):rows(local_parameters)];
 
 		// Vectorise lpmf
+		vector[G_per_shard] sigma_MPI = 1.0 ./ exp(sigma_intercept + lambda_MPI * sigma_slope);
 		vector[symbol_end[G_per_shard+1]] lambda_MPI_c;
-		//vector[symbol_end[G_per_shard+1]] sigma_MPI_c;
+		vector[symbol_end[G_per_shard+1]] sigma_MPI_c;
 		for(g in 1:G_per_shard){
 			int how_many = symbol_end[g+1] - (symbol_end[g]);
 			lambda_MPI_c[(symbol_end[g]+1):symbol_end[g+1]] = rep_vector(lambda_MPI[g], how_many);
-
-			//sigma_MPI_c [(symbol_end[g]+1):symbol_end[g+1]] = rep_vector(sigma_MPI[g],  how_many);
+			sigma_MPI_c [(symbol_end[g]+1):symbol_end[g+1]] = rep_vector(sigma_MPI[g],  how_many);
 		}
 
 		// Return
     return (neg_binomial_2_log_lpmf(
     	counts[1:symbol_end[G_per_shard+1]] |
-    	exposure_rate[sample_idx[1:symbol_end[G_per_shard+1]]] + 	lambda_MPI_c,
-    	1.0 ./ exp(sigma_intercept + lambda_MPI_c * sigma_slope)
+    	lambda_MPI_c + exposure_rate[sample_idx[1:symbol_end[G_per_shard+1]]],
+    	sigma_MPI_c
     )); // * normalisation_weight);
 
   }
@@ -496,6 +496,7 @@ model {
 
   // Gene-wise properties of the data
   if(do_infer) lambda_log_param ~ skew_normal(lambda_mu,lambda_sigma, lambda_skew);
+  sigma_intercept ~ student_t(8, 0, 1);
   //if(do_infer) sigma_raw_param ~ normal(sigma_slope * lambda_log_param + sigma_intercept,sigma_sigma);
 	//sigma_correction_param ~ exponential(1); // Lasso prior for correction
 
