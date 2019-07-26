@@ -775,7 +775,7 @@ ARMET_tc = function(
 		# Size parameter datasets
 		cbind(
 			rep(c(
-				(2*M + S),
+				(M + 2 + S), # lambda, sigma slope intercept, exposure
 				(max(y_MPI_G_per_shard_lv1) * 2 + Q + max(y_MPI_symbol_per_shard_lv1) + (Q * ct_in_levels[1])),
 				(max(y_MPI_G_per_shard_lv2) * 2 + Q + max(y_MPI_symbol_per_shard_lv2) + (Q * ct_in_levels[2])),
 				(max(y_MPI_G_per_shard_lv3) * 2 + Q + max(y_MPI_symbol_per_shard_lv3) + (Q * ct_in_levels[3]))
@@ -858,7 +858,7 @@ ARMET_tc = function(
 	########################################
 	# MODEL
 	########################################
-
+browser()
 	fileConn<-file("~/.R/Makevars")
 	writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
 	close(fileConn)

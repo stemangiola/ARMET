@@ -70,13 +70,13 @@ functions{
 	  return log(gamma_rng(a, b));
 	}
 
-	vector[] get_reference_parameters_MPI(int n_shards, int M, int[] G_per_shard, int[,] G_ind, vector lambda_log, vector sigma, vector exposure_rate){
+	vector[] get_reference_parameters_MPI(int n_shards, int M, int[] G_per_shard, int[,] G_ind, vector lambda_log, real sigma_slope, real sigma_intercept, vector exposure_rate){
 
 		vector[2*M + cols(exposure_rate)] lambda_sigma_exposure_MPI[n_shards];
 
 		for( i in 1:n_shards ) {
 
-			int size_buffer = (M*2) - (G_per_shard[i]*2) ;
+			int size_buffer = M - G_per_shard[i] ;
 		  vector[ size_buffer] buffer = rep_vector(0.0,size_buffer);
 
 			lambda_sigma_exposure_MPI[i] =
@@ -84,7 +84,7 @@ functions{
 	  		  append_row(
 		  		    append_row(
 		  		    	lambda_log[G_ind[i, 1:G_per_shard[i]]],
-		      		  sigma[G_ind[i, 1:G_per_shard[i]]]
+		      		  [sigma_slope, sigma_intercept]'
 		      		),
 	      		buffer
 	      	),
@@ -147,26 +147,26 @@ functions{
 
 		// Parameters unpack
 	 	vector[G_per_shard] lambda_MPI = local_parameters[1:G_per_shard];
-	 	vector[G_per_shard] sigma_MPI = local_parameters[(G_per_shard+1):(G_per_shard*2)];
-	 	vector[S] exposure_rate = local_parameters[((M*2)+1):rows(local_parameters)];
+	 	real sigma_slope = local_parameters[(G_per_shard+1)];
+	 	real sigma_intercept = local_parameters[(G_per_shard+1+1)];
+	 	vector[S] exposure_rate = local_parameters[((M+2)+1):rows(local_parameters)];
 
 		// Vectorise lpmf
 		vector[symbol_end[G_per_shard+1]] lambda_MPI_c;
-		vector[symbol_end[G_per_shard+1]] sigma_MPI_c;
+		//vector[symbol_end[G_per_shard+1]] sigma_MPI_c;
 		for(g in 1:G_per_shard){
 			int how_many = symbol_end[g+1] - (symbol_end[g]);
 			lambda_MPI_c[(symbol_end[g]+1):symbol_end[g+1]] = rep_vector(lambda_MPI[g], how_many);
-			sigma_MPI_c [(symbol_end[g]+1):symbol_end[g+1]] = rep_vector(sigma_MPI[g],  how_many);
+
+			//sigma_MPI_c [(symbol_end[g]+1):symbol_end[g+1]] = rep_vector(sigma_MPI[g],  how_many);
 		}
 
-//print("...");
 		// Return
     return (neg_binomial_2_log_lpmf(
     	counts[1:symbol_end[G_per_shard+1]] |
-    	exposure_rate[sample_idx[1:symbol_end[G_per_shard+1]]] +
-    	lambda_MPI_c,
-    	sigma_MPI_c
-    ) * normalisation_weight);
+    	exposure_rate[sample_idx[1:symbol_end[G_per_shard+1]]] + 	lambda_MPI_c,
+    	1.0 ./ exp(sigma_intercept + lambda_MPI_c * sigma_slope)
+    )); // * normalisation_weight);
 
   }
 
@@ -305,7 +305,6 @@ data {
 	real lambda_mu_mu;
 	//real lambda_sigma;
   real<upper=0> sigma_slope;
-  real sigma_intercept;
   real<lower=0>sigma_sigma;
 
   // Deconvolution
@@ -400,12 +399,13 @@ parameters {
   real<lower=0> lambda_mu_raw; // So is compatible with logGamma prior
   real<lower=0> lambda_sigma;
   real<upper=0> lambda_skew;
+  real sigma_intercept;
   vector[S] exposure_rate_raw;
 
   // Gene-wise properties of the data
   vector[G * do_infer] lambda_log_param;
-  vector[G * do_infer] sigma_raw_param;
-  vector<lower=0>[ do_infer == 1 ? 1 : GM] sigma_correction_param;
+  //vector[G * do_infer] sigma_raw_param;
+  vector<lower=0>[ do_infer == 1 ? 0 : GM] sigma_correction_param;
 
   // Proportions
   simplex[ct_in_nodes[1]] prop_1[Q]; // Root
@@ -423,7 +423,7 @@ transformed parameters {
 	vector[S] exposure_rate = exposure_rate_shift_scale[1] + exposure_rate_raw * exposure_rate_shift_scale[2];
 
   // Sigma
-  vector[G] sigma = 1.0 ./ exp(do_infer ? sigma_raw_param : sigma_raw_data ) ;
+  vector[G] sigma = rep_vector(0.0, G) ;
 	vector[G] lambda_log = do_infer ? lambda_log_param : lambda_log_data;
 
 	// proportion of level 2
@@ -453,7 +453,7 @@ transformed parameters {
 	vector[G] lambda = exp(lambda_log);
 
 	// Sigma correction (if full bayes this is a unique value otherwise is gene-wise)
-	vector<lower=0>[GM] sigma_correction = do_infer == 1 ? rep_vector(sigma_correction_param[1], GM) : sigma_correction_param; // sigma_correction_param[1]
+	vector<lower=0>[GM] sigma_correction = do_infer == 1 ? rep_vector(0, GM) : sigma_correction_param; // sigma_correction_param[1]
 
 
 }
@@ -464,7 +464,7 @@ model {
 		lp_reduce ,
 		global_parameters ,
 		append_vector_array(
-			get_reference_parameters_MPI(	n_shards,	M, G_per_shard,	G_ind,	lambda_log,	sigma,	exposure_rate),
+			get_reference_parameters_MPI(	n_shards,	M, G_per_shard,	G_ind,	lambda_log,	sigma_slope, sigma_intercept,	exposure_rate),
 			append_vector_array(
 				get_deconvolution_parameters_MPI(n_shards, y_MPI_G_per_shard_lv1, y_MPI_idx_lv1, lambda, sigma, exposure_rate, Q, prop_1, y_MPI_symbol_per_shard_lv1, y_MPI_idx_symbol_lv1, sigma_correction),
 				append_vector_array(
@@ -496,8 +496,8 @@ model {
 
   // Gene-wise properties of the data
   if(do_infer) lambda_log_param ~ skew_normal(lambda_mu,lambda_sigma, lambda_skew);
-  if(do_infer) sigma_raw_param ~ normal(sigma_slope * lambda_log_param + sigma_intercept,sigma_sigma);
-	sigma_correction_param ~ exponential(1); // Lasso prior for correction
+  //if(do_infer) sigma_raw_param ~ normal(sigma_slope * lambda_log_param + sigma_intercept,sigma_sigma);
+	//sigma_correction_param ~ exponential(1); // Lasso prior for correction
 
 }
 // generated quantities{
