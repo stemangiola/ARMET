@@ -875,6 +875,22 @@ browser()
 		)
 	Sys.time() %>% print
 
+
+	##########################################
+	##########################################
+
+	counts_linear = counts_baseline %>% arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>%  pull(`read count`)
+	G_linear = counts_baseline %>% arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>% pull(G)
+	S_linear = counts_baseline %>%  arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>% pull(S)
+	CL = length(counts_linear)
+	G = counts_baseline %>%  mutate(S = S %>% as.factor %>% as.integer)%>%  distinct(G) %>% nrow
+	S = counts_baseline %>%  mutate(S = S %>% as.factor %>% as.integer)%>% distinct(S) %>% nrow
+
+	##########################################
+	##########################################
+
+
+
 	########################################
 	# Parse results
 	########################################
