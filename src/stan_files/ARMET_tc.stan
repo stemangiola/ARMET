@@ -37,7 +37,7 @@ model {
   lambda_mu ~ normal(0,2);
 	lambda_sigma ~ normal(0,2);
 	lambda_skew ~ normal(0,1);
-	sigma_intercept ~ normal(0,2);
+	sigma_intercept ~ student_t(8, 0, 1);
 
 	exposure_rate ~ normal(0,1);
 	sum(exposure_rate) ~ normal(0, 0.001 * S);

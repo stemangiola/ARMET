@@ -870,8 +870,9 @@ browser()
 		sampling(
 			ARMET_tc_model, #stanmodels$ARMET_tc,
 			chains=3, cores=3,
-			iter=iterations, warmup=iterations-100,   save_warmup = FALSE,
-			pars = c("prop_1", "prop_2", "prop_3", "exposure_rate", "sigma_correction_param") #, "nb_sum") #,"mu_sum", "phi_sum")
+			iter=iterations, warmup=iterations-100
+			#,   save_warmup = FALSE,
+			#pars = c("prop_1", "prop_2", "prop_3", "exposure_rate", "sigma_correction_param") #, "nb_sum") #,"mu_sum", "phi_sum")
 		)
 	Sys.time() %>% print
 
