@@ -776,9 +776,9 @@ ARMET_tc = function(
 		cbind(
 			rep(c(
 				(M + 2 + S), # lambda, sigma slope intercept, exposure
-				(max(y_MPI_G_per_shard_lv1) * 2 + Q + max(y_MPI_symbol_per_shard_lv1) + (Q * ct_in_levels[1])),
-				(max(y_MPI_G_per_shard_lv2) * 2 + Q + max(y_MPI_symbol_per_shard_lv2) + (Q * ct_in_levels[2])),
-				(max(y_MPI_G_per_shard_lv3) * 2 + Q + max(y_MPI_symbol_per_shard_lv3) + (Q * ct_in_levels[3]))
+				(max(y_MPI_G_per_shard_lv1) + 2 + Q + max(y_MPI_symbol_per_shard_lv1) + (Q * ct_in_levels[1])),
+				(max(y_MPI_G_per_shard_lv2) + 2 + Q + max(y_MPI_symbol_per_shard_lv2) + (Q * ct_in_levels[2])),
+				(max(y_MPI_G_per_shard_lv3) + 2 + Q + max(y_MPI_symbol_per_shard_lv3) + (Q * ct_in_levels[3]))
 			), shards) %>%
 			matrix(nrow = shards, byrow = T)
 		) %>%
@@ -870,8 +870,10 @@ browser()
 		sampling(
 			ARMET_tc_model, #stanmodels$ARMET_tc,
 			chains=3, cores=3,
-			iter=iterations, warmup=iterations-100,   save_warmup = FALSE,
-			pars = c("prop_1", "prop_2", "prop_3", "exposure_rate", "sigma_correction_param") #, "nb_sum") #,"mu_sum", "phi_sum")
+			iter=iterations, warmup=iterations-100
+			#,
+			#save_warmup = FALSE,
+			#pars = c("prop_1", "prop_2", "prop_3", "exposure_rate", "sigma_correction_param") #, "nb_sum") #,"mu_sum", "phi_sum")
 		)
 	Sys.time() %>% print
 
