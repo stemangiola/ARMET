@@ -48,10 +48,11 @@ data {
   int<lower=1> ct_in_levels[n_levels];
 
   // Deconvolution
-  int<lower=0> GM;
-  int GM1_linear[GM];
+  int<lower=0> GM1;
+  int GM1_linear[GM1];
   int<lower=0> Y;
 	int y_linear[Y];
+	int y_linear_S[Y];
 
 	// Lv2 tree structure parents singles
 	int<lower=1> SLV2;
@@ -121,12 +122,12 @@ transformed parameters{
 
 model {
 
-	// Calculate dicunvolute
-	vector[Y] lambda_log_deconvoluted =
+	// Calculate convoluted
+	vector[Y] lambda_log_deconvoluted_1 =
 		log(
 			to_vector(
 				vector_array_to_matrix(prop_1) *
-				exp(to_matrix(lambda_log[GM1_linear], ct_in_nodes[1], GM/ct_in_nodes[1])) // [Q,G] dimensions
+				exp(to_matrix(lambda_log[GM1_linear], ct_in_nodes[1], GM1/ct_in_nodes[1])) // [Q,G] dimensions
 			)
 		);
 
@@ -154,8 +155,8 @@ model {
 	for(q in 1:Q) prop_e[q] ~ dirichlet(rep_vector(num_elements(prop_e[1]), num_elements(prop_e[1])));
 
 	y_linear ~ neg_binomial_2_log(
-		lambda_log_deconvoluted,
-		1.0 ./ exp( sigma_slope * lambda_log_deconvoluted + sigma_intercept)
+		lambda_log_deconvoluted_1 + exposure_rate[y_linear_S],
+		1.0 ./ exp( sigma_slope * lambda_log_deconvoluted_1 + sigma_intercept)
 	);
 
 }
