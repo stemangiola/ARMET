@@ -50,9 +50,23 @@ data {
   // Deconvolution
   int<lower=0> GM1;
   int GM1_linear[GM1];
-  int<lower=0> Y;
-	int y_linear[Y];
-	int y_linear_S[Y];
+  int<lower=0> GM2;
+  int GM2_linear[GM2];
+  int<lower=0> GM3;
+  int GM3_linear[GM3];
+
+  // Observed counts
+  int<lower=0> Y_1;
+	int y_linear_1[Y_1];
+	int y_linear_S_1[Y_1];
+
+  int<lower=0> Y_2;
+	int y_linear_2[Y_2];
+	int y_linear_S_2[Y_2];
+
+	int<lower=0> Y_3;
+	int y_linear_3[Y_3];
+	int y_linear_S_3[Y_3];
 
 	// Lv2 tree structure parents singles
 	int<lower=1> SLV2;
@@ -117,17 +131,32 @@ transformed parameters{
 			)
 		);
 
-		matrix[ct_in_nodes[1], GM/ct_in_nodes[1]] mat_GM1 = exp(to_matrix(lambda_log[GM1_linear], ct_in_nodes[1], GM/ct_in_nodes[1])) ;
 }
 
 model {
 
 	// Calculate convoluted
-	vector[Y] lambda_log_deconvoluted_1 =
+	vector[Y_1] lambda_log_deconvoluted_1 =
 		log(
 			to_vector(
 				vector_array_to_matrix(prop_1) *
-				exp(to_matrix(lambda_log[GM1_linear], ct_in_nodes[1], GM1/ct_in_nodes[1])) // [Q,G] dimensions
+				exp(to_matrix(lambda_log[GM1_linear], ct_in_levels[1], GM1/ct_in_levels[1])) // [Q,G] dimensions
+			)
+		);
+
+	vector[Y_2] lambda_log_deconvoluted_2 =
+		log(
+			to_vector(
+				vector_array_to_matrix(prop_2) *
+				exp(to_matrix(lambda_log[GM2_linear], ct_in_levels[2], GM2/ct_in_levels[2])) // [Q,G] dimensions
+			)
+		);
+
+	vector[Y_3] lambda_log_deconvoluted_3 =
+		log(
+			to_vector(
+				vector_array_to_matrix(prop_3) *
+				exp(to_matrix(lambda_log[GM3_linear], ct_in_levels[3], GM3/ct_in_levels[3])) // [Q,G] dimensions
 			)
 		);
 
@@ -154,9 +183,23 @@ model {
 	for(q in 1:Q) prop_d[q] ~ dirichlet(rep_vector(num_elements(prop_d[1]), num_elements(prop_d[1])));
 	for(q in 1:Q) prop_e[q] ~ dirichlet(rep_vector(num_elements(prop_e[1]), num_elements(prop_e[1])));
 
-	y_linear ~ neg_binomial_2_log(
-		lambda_log_deconvoluted_1 + exposure_rate[y_linear_S],
+	y_linear_1 ~ neg_binomial_2_log(
+		lambda_log_deconvoluted_1 + exposure_rate[y_linear_S_1],
 		1.0 ./ exp( sigma_slope * lambda_log_deconvoluted_1 + sigma_intercept)
 	);
 
+	y_linear_2 ~ neg_binomial_2_log(
+		lambda_log_deconvoluted_2 + exposure_rate[y_linear_S_2],
+		1.0 ./ exp( sigma_slope * lambda_log_deconvoluted_2 + sigma_intercept)
+	);
+
+		y_linear_3 ~ neg_binomial_2_log(
+		lambda_log_deconvoluted_3 + exposure_rate[y_linear_S_3],
+		1.0 ./ exp( sigma_slope * lambda_log_deconvoluted_3 + sigma_intercept)
+	);
 }
+
+
+
+
+

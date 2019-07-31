@@ -866,18 +866,34 @@ ARMET_tc = function(
 	G = counts_baseline %>%  mutate(S = S %>% as.factor %>% as.integer)%>%  distinct(G) %>% nrow
 	S = counts_baseline %>%  mutate(S = S %>% as.factor %>% as.integer)%>% distinct(S) %>% nrow
 
+	# Deconvolution
 	GM1_linear = counts_baseline %>% filter(!`house keeping`) %>% filter(level ==1) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
-	GM = GM1_linear %>% length
-	y_linear = y_source %>% filter(level ==1) %>% distinct(GM, Q, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
-	Y = y_linear %>% length
+	GM1 = GM1_linear %>% length
+	GM2_linear = counts_baseline %>% filter(!`house keeping`) %>% filter(level ==2) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
+	GM2 = GM2_linear %>% length
+	GM3_linear = counts_baseline %>% filter(!`house keeping`) %>% filter(level ==3) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
+	GM3 = GM3_linear %>% length
+
+	# Observed mix
+	y_linear_1 = y_source %>% filter(level ==1) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
+	y_linear_S_1 = y_source %>% filter(level ==1) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
+	Y_1 = y_linear_1 %>% length
+
+	y_linear_2 = y_source %>% filter(level ==2) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
+	y_linear_S_2 = y_source %>% filter(level ==2) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
+	Y_2 = y_linear_2 %>% length
+
+	y_linear_3 = y_source %>% filter(level ==3) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
+	y_linear_S_3 = y_source %>% filter(level ==3) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
+	Y_3 = y_linear_3 %>% length
 
 	# Non centered
 	lambda_mu_prior = c(6.2, 1)
 	lambda_sigma_prior =  c( log(3.3) , 1)
 	lambda_skew_prior =  c( -2.7, 1)
 	sigma_intercept_prior = c( 1.9 , 0.1)
-	lambda_log_prior =
-		counts_baseline %>% group_by(G) %>% summarise(m = `read count` %>% median %>% `+` (1) %>% log) %>% arrange(G) %>% pull(m)
+	#lambda_log_prior =
+	#	counts_baseline %>% group_by(G) %>% summarise(m = `read count` %>% median %>% `+` (1) %>% log) %>% arrange(G) %>% pull(m)
 
 	##########################################
 	##########################################
@@ -909,16 +925,16 @@ browser()
 
 
 
-	# The reference fust 2 columns should look like this
-	counts_baseline %>% filter(!`house keeping`) %>% filter(level ==1) %>% distinct(`read count`, G, GM, C) %>% group_by(G, GM, C) %>% summarise(m = `read count` %>% median) %>% ungroup() %>% arrange(GM, C) %>% select(-G) %>% spread(GM, m) %>% select(2:3)
-
-	fit %>% summary() %$% summary %>% as_tibble(rownames="par") %>%
-		separate(par, c(".variable", "C", "GM"), sep="[\\[,\\]]", extra="drop") %>%
-		mutate( C = C %>% as.integer, GM = GM %>% as.integer) %>% filter(grepl("mat_GM1", `.variable`))  %>%
-		left_join(
-			counts_baseline %>% filter(!`house keeping`) %>% filter(level ==1) %>% distinct(`read count`, G, GM, C) %>% group_by(G, GM, C) %>% summarise(m = `read count` %>% median) %>% ungroup() %>% arrange(GM, C)
-		) %>%
-		ggplot(aes(x=m+1, y=mean+1)) + geom_point() +scale_x_log10() + scale_y_log10()
+	# # The reference fust 2 columns should look like this
+	# counts_baseline %>% filter(!`house keeping`) %>% filter(level ==1) %>% distinct(`read count`, G, GM, C) %>% group_by(G, GM, C) %>% summarise(m = `read count` %>% median) %>% ungroup() %>% arrange(GM, C) %>% select(-G) %>% spread(GM, m) %>% select(2:3)
+	#
+	# fit %>% summary() %$% summary %>% as_tibble(rownames="par") %>%
+	# 	separate(par, c(".variable", "C", "GM"), sep="[\\[,\\]]", extra="drop") %>%
+	# 	mutate( C = C %>% as.integer, GM = GM %>% as.integer) %>% filter(grepl("mat_GM1", `.variable`))  %>%
+	# 	left_join(
+	# 		counts_baseline %>% filter(!`house keeping`) %>% filter(level ==1) %>% distinct(`read count`, G, GM, C) %>% group_by(G, GM, C) %>% summarise(m = `read count` %>% median) %>% ungroup() %>% arrange(GM, C)
+	# 	) %>%
+	# 	ggplot(aes(x=m+1, y=mean+1)) + geom_point() +scale_x_log10() + scale_y_log10()
 
 
 	########################################
