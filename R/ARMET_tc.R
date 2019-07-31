@@ -836,7 +836,7 @@ ARMET_tc = function(
 		distinct(symbol, sample, `read count`, query) %>%
 		drop_na %>%
 		inner_join( (.) %>% distinct(sample, symbol) %>% count(symbol) %>% filter(n == max(n)), by="symbol") %>% # Eliminate genes that are missing from samples
-		tidyTranscriptomics::add_normalised_counts() %>%
+		tidyTranscriptomics::add_normalised_counts(gene_column = symbol) %>%
 		filter(query) %>%
 		mutate(l = multiplier %>% log) %>%
 		summarise(shift = l %>% mean, scale = l %>% sd) %>%
@@ -847,13 +847,29 @@ ARMET_tc = function(
 		counts_baseline %>%
 		filter(`house keeping`) %>%
 		distinct(symbol, sample, `read count`, query) %>%
-		tidyTranscriptomics::add_normalised_counts() %>%
+		tidyTranscriptomics::add_normalised_counts(gene_column = symbol) %>%
 		mutate(
 			cc = `read count normalised` %>%
 				`+` (1) %>% log
 		) %>%
 		summarise(shift = cc %>% mean, scale = cc %>% sd) %>%
 		as.numeric
+
+	##########################################
+	##########################################
+
+	counts_linear = counts_baseline %>% arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>%  pull(`read count`)
+	G_linear = counts_baseline %>% arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>% pull(G)
+
+	S_linear = counts_baseline %>%  arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>% pull(S)
+	CL = length(counts_linear)
+	G = counts_baseline %>%  mutate(S = S %>% as.factor %>% as.integer)%>%  distinct(G) %>% nrow
+	S = counts_baseline %>%  mutate(S = S %>% as.factor %>% as.integer)%>% distinct(S) %>% nrow
+
+	GM1_linear = counts_baseline %>% filter(!`house keeping`) %>% filter(level ==1) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
+	GM = GM1_linear %>% length
+	y_linear = y_source %>% filter(level ==1) %>% distinct(GM, Q, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
+	Y = y_linear %>% length
 
 	########################################
 	# MODEL
@@ -873,23 +889,25 @@ browser()
 			iter=iterations, warmup=iterations-100
 			#,   save_warmup = FALSE,
 			#pars = c("prop_1", "prop_2", "prop_3", "exposure_rate", "sigma_correction_param") #, "nb_sum") #,"mu_sum", "phi_sum")
-		)
+		) %>%
+		{
+			(.)  %>% summary() %$% summary %>% as_tibble(rownames="par") %>% arrange(Rhat %>% desc) %>% print
+			(.)
+		}
 	Sys.time() %>% print
 
 
-	##########################################
-	##########################################
 
-	counts_linear = counts_baseline %>% arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>%  pull(`read count`)
-	G_linear = counts_baseline %>% arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>% pull(G)
-	S_linear = counts_baseline %>%  arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>% pull(S)
-	CL = length(counts_linear)
-	G = counts_baseline %>%  mutate(S = S %>% as.factor %>% as.integer)%>%  distinct(G) %>% nrow
-	S = counts_baseline %>%  mutate(S = S %>% as.factor %>% as.integer)%>% distinct(S) %>% nrow
+	# The reference fust 2 columns should look like this
+	counts_baseline %>% filter(!`house keeping`) %>% filter(level ==1) %>% distinct(`read count`, G, GM, C) %>% group_by(G, GM, C) %>% summarise(m = `read count` %>% median) %>% ungroup() %>% arrange(GM, C) %>% select(-G) %>% spread(GM, m) %>% select(2:3)
 
-	##########################################
-	##########################################
-
+	fit %>% summary() %$% summary %>% as_tibble(rownames="par") %>%
+		separate(par, c(".variable", "C", "GM"), sep="[\\[,\\]]", extra="drop") %>%
+		mutate( C = C %>% as.integer, GM = GM %>% as.integer) %>% filter(grepl("mat_GM1", `.variable`))  %>%
+		left_join(
+			counts_baseline %>% filter(!`house keeping`) %>% filter(level ==1) %>% distinct(`read count`, G, GM, C) %>% group_by(G, GM, C) %>% summarise(m = `read count` %>% median) %>% ungroup() %>% arrange(GM, C)
+		) %>%
+		ggplot(aes(x=m+1, y=mean+1)) + geom_point() +scale_x_log10() + scale_y_log10()
 
 
 	########################################
