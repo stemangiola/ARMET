@@ -65,19 +65,23 @@ data {
 	int parents_lv3[PLV3]; // Level one parents
 	int singles_lv3[SLV3]; // Level 1 leafs
 
+	// Non-centered param
+	real lambda_mu_prior[2];
+	real lambda_sigma_prior[2];
+	real lambda_skew_prior[2];
+	real sigma_intercept_prior[2];
 }
 parameters {
 
-  // Gene-wise properties of the data
+	// Global properties
+	real<offset=lambda_mu_prior[1],multiplier=lambda_mu_prior[2]>lambda_mu;
+  real<offset=lambda_sigma_prior[1],multiplier=lambda_sigma_prior[2]> lambda_sigma;
+  real<offset=lambda_skew_prior[1],multiplier=lambda_skew_prior[2]> lambda_skew;
+  real<offset=sigma_intercept_prior[1],multiplier=sigma_intercept_prior[2]> sigma_intercept;
+
+  // Local properties of the data
   vector[G] lambda_log;
-
   vector[S] exposure_rate;
-
-	real<lower=0> lambda_mu;
-  real<lower=0> lambda_sigma;
-  real<upper=0> lambda_skew;
-
-  real sigma_intercept;
 
   // Proportions
   simplex[ct_in_nodes[1]] prop_1[Q]; // Root
@@ -128,16 +132,17 @@ model {
 
 
   // Overall properties of the data
-  lambda_mu ~ normal(0,2);
-	lambda_sigma ~ normal(0,2);
-	lambda_skew ~ normal(0,1);
-	sigma_intercept ~ student_t(8, 0, 1);
+  lambda_mu ~ normal(lambda_mu_prior[1],lambda_mu_prior[2]);
+	lambda_sigma ~ normal(lambda_sigma_prior[1],lambda_sigma_prior[2]);
+	lambda_skew ~ normal(lambda_skew_prior[1],lambda_skew_prior[2]);
+	sigma_intercept ~ normal(sigma_intercept_prior[1], sigma_intercept_prior[2]);
 
 	// Exposure
 	exposure_rate ~ normal(0,1);
 	sum(exposure_rate) ~ normal(0, 0.001 * S);
-	lambda_log ~ skew_normal(lambda_mu, lambda_sigma, lambda_skew);
 
+	// Means reference
+	lambda_log ~ skew_normal(lambda_mu, exp(lambda_sigma), lambda_skew);
 	counts_linear ~ neg_binomial_2_log(lambda_log[G_linear] + exposure_rate[S_linear], 1.0 ./ exp( sigma_slope * lambda_log[G_linear] + sigma_intercept));
 
 	// Deconvolution

@@ -871,6 +871,17 @@ ARMET_tc = function(
 	y_linear = y_source %>% filter(level ==1) %>% distinct(GM, Q, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
 	Y = y_linear %>% length
 
+	# Non centered
+	lambda_mu_prior = c(6.2, 1)
+	lambda_sigma_prior =  c( log(3.3) , 1)
+	lambda_skew_prior =  c( -2.7, 1)
+	sigma_intercept_prior = c( 1.9 , 0.1)
+	lambda_log_prior =
+		counts_baseline %>% group_by(G) %>% summarise(m = `read count` %>% median %>% `+` (1) %>% log) %>% arrange(G) %>% pull(m)
+
+	##########################################
+	##########################################
+
 	########################################
 	# MODEL
 	########################################
