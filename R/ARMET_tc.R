@@ -422,6 +422,7 @@ ARMET_tc = function(
 	seed =                              NULL,
 	cores = 14,
 	iterations = 300,
+	sampling_iterations = 100,
 	levels = 1:3
 ){
 
@@ -443,7 +444,7 @@ ARMET_tc = function(
 	library(rstan)
 
 	input = c(as.list(environment()))
-	shards = cores * 2
+	shards = cores #* 2
 
 	my_theme =
 		theme_bw() +
@@ -836,7 +837,7 @@ ARMET_tc = function(
 		distinct(symbol, sample, `read count`, query) %>%
 		drop_na %>%
 		inner_join( (.) %>% distinct(sample, symbol) %>% count(symbol) %>% filter(n == max(n)), by="symbol") %>% # Eliminate genes that are missing from samples
-		tidyTranscriptomics::add_normalised_counts(gene_column = symbol) %>%
+		tidyTranscriptomics::add_normalised_counts(transcript_column = symbol) %>%
 		filter(query) %>%
 		mutate(l = multiplier %>% log) %>%
 		summarise(shift = l %>% mean, scale = l %>% sd) %>%
@@ -847,7 +848,7 @@ ARMET_tc = function(
 		counts_baseline %>%
 		filter(`house keeping`) %>%
 		distinct(symbol, sample, `read count`, query) %>%
-		tidyTranscriptomics::add_normalised_counts(gene_column = symbol) %>%
+		tidyTranscriptomics::add_normalised_counts(transcript_column = symbol) %>%
 		mutate(
 			cc = `read count normalised` %>%
 				`+` (1) %>% log
@@ -892,8 +893,7 @@ ARMET_tc = function(
 	lambda_sigma_prior =  c( log(3.3) , 1)
 	lambda_skew_prior =  c( -2.7, 1)
 	sigma_intercept_prior = c( 1.9 , 0.1)
-	#lambda_log_prior =
-	#	counts_baseline %>% group_by(G) %>% summarise(m = `read count` %>% median %>% `+` (1) %>% log) %>% arrange(G) %>% pull(m)
+	lambda_log_scale = 	counts_baseline %>% filter(!query) %>% distinct(G, lambda) %>% arrange(G) %>% pull(lambda)
 
 	##########################################
 	##########################################
@@ -901,7 +901,7 @@ ARMET_tc = function(
 	########################################
 	# MODEL
 	########################################
-browser()
+
 	fileConn<-file("~/.R/Makevars")
 	writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
 	close(fileConn)
@@ -912,18 +912,19 @@ browser()
 	fit =
 		sampling(
 			ARMET_tc_model, #stanmodels$ARMET_tc,
-			chains=3, cores=3,
-			iter=iterations, warmup=iterations-100
-			#,   save_warmup = FALSE,
-			#pars = c("prop_1", "prop_2", "prop_3", "exposure_rate", "sigma_correction_param") #, "nb_sum") #,"mu_sum", "phi_sum")
+			chains=6, cores=6,
+			iter=iterations, warmup=iterations-sampling_iterations,
+			include = F, pars=c("prop_a", "prop_b", "prop_c", "prop_d", "prop_e")
+			#,
+			#init = function () list(	lambda_log = runif(G,  lambda_log_scale - 1, lambda_log_scale + 1)	)
+			#save_warmup = FALSE,
+			#pars = c("prop_1", "prop_2", "prop_3", "exposure_rate") #, "nb_sum") #,"mu_sum", "phi_sum"),
 		) %>%
 		{
 			(.)  %>% summary() %$% summary %>% as_tibble(rownames="par") %>% arrange(Rhat %>% desc) %>% print
 			(.)
 		}
 	Sys.time() %>% print
-
-
 
 	# # The reference fust 2 columns should look like this
 	# counts_baseline %>% filter(!`house keeping`) %>% filter(level ==1) %>% distinct(`read count`, G, GM, C) %>% group_by(G, GM, C) %>% summarise(m = `read count` %>% median) %>% ungroup() %>% arrange(GM, C) %>% select(-G) %>% spread(GM, m) %>% select(2:3)
@@ -982,10 +983,6 @@ browser()
 				distinct(Q, sample)
 		)
 
-
-	#plot_counts_inferred_sum( list(fit = fit , data_source = y_source ))
-
-
 	# Return
 	list(
 
@@ -999,7 +996,9 @@ browser()
 		fit = fit,
 
 		# Return data source
-		data_source = y_source
+		data_source = y_source,
+
+		signatures = counts_baseline
 	)
 
 }

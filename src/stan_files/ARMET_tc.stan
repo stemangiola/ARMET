@@ -25,6 +25,96 @@ functions{
 
 		return v3;
 	}
+
+	int get_buffer_size(vector v, real threshold){
+		// This function finds how may fake indexes -1 there are in a vector, added for map_rect needs
+
+		real i = threshold; // Value of the index
+		int n = 0; // Length of the buffer
+		int s = rows(v); // Size of the whole vector
+
+		while(i == threshold){
+			i = v[s-n];
+			if(i==threshold) n += 1;
+		}
+
+		return n;
+	}
+
+	int[] get_elements_per_shard(int lenth_v, int shards){
+
+		// Returned integer(max_size, last_element_size)
+		int tentative_size = lenth_v / shards;
+		int tentative_remaining = lenth_v - (tentative_size * shards);
+		int elements_per_shard = tentative_remaining > 0 ? tentative_size + 1 : tentative_size;
+		int remaining =  (elements_per_shard * shards) - lenth_v;
+
+		int length_obj[shards];
+
+		for(s in 1:shards) {
+			length_obj[s] =
+				s != shards ?
+				elements_per_shard :
+				elements_per_shard - remaining;  // Actual elements in it for last object
+		}
+
+ 		return length_obj;
+
+	}
+
+	int[,] get_int_MPI(int[] v, int shards){
+
+		int elements_per_shard[shards] = get_elements_per_shard(size(v), shards); // Length of the returned object
+		int size_MPI_obj = elements_per_shard[1]; // the first element is always the full size of the object
+		int v_MPI[shards,size_MPI_obj] = rep_array(-1, shards,size_MPI_obj); // Set values to -1 for the ones that are not filled
+
+		int i = 0; // Index sweeping the vector
+
+		for(s in 1:shards){
+			v_MPI[s, 1:elements_per_shard[s]] = v[ (i + 1) : i + elements_per_shard[s] ];
+			i += elements_per_shard[s];
+		}
+
+		return v_MPI;
+	}
+
+	vector[] get_real_MPI(vector v, int shards){
+
+		int elements_per_shard[shards] = get_elements_per_shard(rows(v), shards); // Length of the returned object
+		int size_MPI_obj = elements_per_shard[1]; // the first element is always the full size of the object
+		vector[size_MPI_obj] v_MPI[shards] ; // Set values to -999 for the ones that are not filled
+
+		int i = 0; // Index sweeping the vector
+
+		for(s in 1:shards){
+			v_MPI[s] = rep_vector(-999.0, size_MPI_obj);
+			v_MPI[s, 1:elements_per_shard[s]] = v[ (i + 1) : i + elements_per_shard[s] ];
+			i += elements_per_shard[s];
+		}
+
+		return v_MPI;
+	}
+
+	vector lp_reduce( vector global_parameters , vector local_parameters , real[] real_data , int[] int_data ) {
+
+		real lp;
+		real threshold = -999;
+		int size_buffer = get_buffer_size(local_parameters, threshold);
+		int size_vector = rows(local_parameters)-size_buffer;
+
+		if(min(local_parameters[1:size_vector]) == threshold) print("ERROR! The MPI implmentation is buggy")
+
+		// Reference / exposure rate
+		lp = neg_binomial_2_log_lpmf(
+			int_data[1:size_vector] |
+			local_parameters[1:size_vector],
+			1.0 ./ exp( global_parameters[2] * local_parameters[1:size_vector] + global_parameters[1])
+		);
+
+	 return [lp]';
+
+	}
+
 }
 data {
 
@@ -39,7 +129,7 @@ data {
 	int S_linear[CL] ;
 
 	real<upper=0> sigma_slope;
-  real<lower=0>sigma_sigma;
+	real<lower=0> sigma_sigma;
 
  	int<lower=0> Q;
   int<lower=1> n_nodes;
@@ -85,6 +175,25 @@ data {
 	real lambda_sigma_prior[2];
 	real lambda_skew_prior[2];
 	real sigma_intercept_prior[2];
+
+	// MPI
+	int shards;
+
+}
+transformed data{
+	// MPI
+	int data_integer[CL + Y_1 + Y_2 + Y_3] =
+	append_array(
+		append_array(
+			append_array(	counts_linear,	y_linear_1),
+			y_linear_2
+		),
+		y_linear_3
+	);
+
+	int y_linear[Y_1 + Y_2 + Y_3] =	append_array(append_array(	y_linear_1,	y_linear_2),	y_linear_3);
+
+	real real_data[shards, 0] = rep_array(0.0, shards, 0);
 }
 parameters {
 
@@ -94,8 +203,10 @@ parameters {
   real<offset=lambda_skew_prior[1],multiplier=lambda_skew_prior[2]> lambda_skew;
   real<offset=sigma_intercept_prior[1],multiplier=sigma_intercept_prior[2]> sigma_intercept;
 
+
   // Local properties of the data
   vector[G] lambda_log;
+  vector[G] sigma_inv_log;
   vector[S] exposure_rate;
 
   // Proportions
@@ -160,20 +271,41 @@ model {
 			)
 		);
 
+		vector[Y_1 + Y_2 + Y_3] lambda_log_deconvoluted =
+			append_row(
+				append_row(
+					lambda_log_deconvoluted_1 + exposure_rate[y_linear_S_1],
+					lambda_log_deconvoluted_2 + exposure_rate[y_linear_S_2]
+				),
+				lambda_log_deconvoluted_3 + exposure_rate[y_linear_S_3]
+			);
+
+	// vector[CL + Y_1 + Y_2 + Y_3] local_parameters =
+	// 	append_row(
+	// 		append_row(
+	// 			append_row(
+	// 				lambda_log[G_linear] + exposure_rate[S_linear],
+	// 				lambda_log_deconvoluted_1 + exposure_rate[y_linear_S_1]
+	// 			),
+	// 			lambda_log_deconvoluted_2 + exposure_rate[y_linear_S_2]
+	// 		),
+	// 		lambda_log_deconvoluted_3 + exposure_rate[y_linear_S_3]
+	// 	);
 
   // Overall properties of the data
   lambda_mu ~ normal(lambda_mu_prior[1],lambda_mu_prior[2]);
 	lambda_sigma ~ normal(lambda_sigma_prior[1],lambda_sigma_prior[2]);
 	lambda_skew ~ normal(lambda_skew_prior[1],lambda_skew_prior[2]);
 	sigma_intercept ~ normal(sigma_intercept_prior[1], sigma_intercept_prior[2]);
+	//sigma_sigma ~ normal(0,1);
 
 	// Exposure
 	exposure_rate ~ normal(0,1);
 	sum(exposure_rate) ~ normal(0, 0.001 * S);
 
-	// Means reference
+	// Means overdispersion reference
 	lambda_log ~ skew_normal(lambda_mu, exp(lambda_sigma), lambda_skew);
-	counts_linear ~ neg_binomial_2_log(lambda_log[G_linear] + exposure_rate[S_linear], 1.0 ./ exp( sigma_slope * lambda_log[G_linear] + sigma_intercept));
+	sigma_inv_log ~ normal(sigma_slope * lambda_log + sigma_intercept, sigma_sigma);
 
 	// Deconvolution
 	for(q in 1:Q) prop_1[q] ~ dirichlet(rep_vector(num_elements(prop_1[1]), num_elements(prop_1[1])));
@@ -183,20 +315,26 @@ model {
 	for(q in 1:Q) prop_d[q] ~ dirichlet(rep_vector(num_elements(prop_d[1]), num_elements(prop_d[1])));
 	for(q in 1:Q) prop_e[q] ~ dirichlet(rep_vector(num_elements(prop_e[1]), num_elements(prop_e[1])));
 
-	y_linear_1 ~ neg_binomial_2_log(
-		lambda_log_deconvoluted_1 + exposure_rate[y_linear_S_1],
-		1.0 ./ exp( sigma_slope * lambda_log_deconvoluted_1 + sigma_intercept)
+	// target += sum(map_rect(
+	// 	lp_reduce ,
+	// 	[sigma_intercept, sigma_slope]', // global parameters
+	// 	get_real_MPI(local_parameters, shards),
+	// 	real_data, // real data
+	// 	get_int_MPI(data_integer, shards)
+	// ));
+
+	// Deconvolution
+	y_linear ~ neg_binomial_2_log(
+		lambda_log_deconvoluted,
+		1.0 ./ exp( sigma_slope * lambda_log_deconvoluted + sigma_intercept)
 	);
 
-	y_linear_2 ~ neg_binomial_2_log(
-		lambda_log_deconvoluted_2 + exposure_rate[y_linear_S_2],
-		1.0 ./ exp( sigma_slope * lambda_log_deconvoluted_2 + sigma_intercept)
+	// Reference
+	counts_linear ~ neg_binomial_2_log(
+		lambda_log[G_linear] + exposure_rate[S_linear],
+		1.0 ./ exp( sigma_inv_log[G_linear] )
 	);
 
-		y_linear_3 ~ neg_binomial_2_log(
-		lambda_log_deconvoluted_3 + exposure_rate[y_linear_S_3],
-		1.0 ./ exp( sigma_slope * lambda_log_deconvoluted_3 + sigma_intercept)
-	);
 }
 
 
