@@ -342,7 +342,7 @@ get_idx_level = function(tree, my_level){
 }
 library(data.tree)
 tree =
-	yaml:: yaml.load_file("data/tree.yaml") %>%
+	yaml:: yaml.load_file("~/PhD/deconvolution/ARMET/data/tree.yaml") %>%
 	data.tree::as.Node() %>%
 
 	{
@@ -366,7 +366,7 @@ tree =
 		.$Set("Cell type category" = .$Get("name"))
 
 	}
-
+library(magrittr)
 #' ARMET-tc main
 #'
 #' @description This function calls the stan model.
@@ -906,17 +906,17 @@ ARMET_tc = function(
 	writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
 	close(fileConn)
 	Sys.setenv("STAN_NUM_THREADS" = cores)
-	ARMET_tc_model = stan_model("src/stan_files/ARMET_tc.stan")
-
+	ARMET_tc_model = stan_model("~/PhD/deconvolution/ARMET/src/stan_files/ARMET_tc.stan")
+browser()
 	Sys.time() %>% print
 	fit =
 		sampling(
 			ARMET_tc_model, #stanmodels$ARMET_tc,
 			chains=6, cores=6,
 			iter=iterations, warmup=iterations-sampling_iterations,
-			include = F, pars=c("prop_a", "prop_b", "prop_c", "prop_d", "prop_e")
+			include = F, pars=c("prop_a", "prop_b", "prop_c", "prop_d", "prop_e"),
 			#,
-			#init = function () list(	lambda_log = runif(G,  lambda_log_scale - 1, lambda_log_scale + 1)	)
+			init = function () list(	lambda_log = lambda_log_scale) # runif(G,  lambda_log_scale - 1, lambda_log_scale + 1)	)
 			#save_warmup = FALSE,
 			#pars = c("prop_1", "prop_2", "prop_3", "exposure_rate") #, "nb_sum") #,"mu_sum", "phi_sum"),
 		) %>%

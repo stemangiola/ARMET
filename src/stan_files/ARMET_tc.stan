@@ -130,6 +130,8 @@ data {
 
 	real<upper=0> sigma_slope;
 	real<lower=0> sigma_sigma;
+	real sigma_intercept;
+
 
  	int<lower=0> Q;
   int<lower=1> n_nodes;
@@ -201,8 +203,9 @@ parameters {
 	real<offset=lambda_mu_prior[1],multiplier=lambda_mu_prior[2]>lambda_mu;
   real<offset=lambda_sigma_prior[1],multiplier=lambda_sigma_prior[2]> lambda_sigma;
   real<offset=lambda_skew_prior[1],multiplier=lambda_skew_prior[2]> lambda_skew;
-  real<offset=sigma_intercept_prior[1],multiplier=sigma_intercept_prior[2]> sigma_intercept;
-
+  //real<offset=sigma_intercept_prior[1],multiplier=sigma_intercept_prior[2]> sigma_intercept;
+	real sigma_intercept_dec;
+	//real<upper=0> sigma_slope_dec;
 
   // Local properties of the data
   vector[G] lambda_log;
@@ -296,7 +299,7 @@ model {
   lambda_mu ~ normal(lambda_mu_prior[1],lambda_mu_prior[2]);
 	lambda_sigma ~ normal(lambda_sigma_prior[1],lambda_sigma_prior[2]);
 	lambda_skew ~ normal(lambda_skew_prior[1],lambda_skew_prior[2]);
-	sigma_intercept ~ normal(sigma_intercept_prior[1], sigma_intercept_prior[2]);
+	//sigma_intercept ~ normal(sigma_intercept_prior[1], sigma_intercept_prior[2]);
 	//sigma_sigma ~ normal(0,1);
 
 	// Exposure
@@ -324,9 +327,12 @@ model {
 	// ));
 
 	// Deconvolution
+	sigma_intercept_dec ~ normal(0,1);
+	//sigma_slope_dec ~ normal(0,1);
+
 	y_linear ~ neg_binomial_2_log(
 		lambda_log_deconvoluted,
-		1.0 ./ exp( sigma_slope * lambda_log_deconvoluted + sigma_intercept)
+		1.0 ./ exp( sigma_slope * lambda_log_deconvoluted + sigma_intercept_dec)
 	);
 
 	// Reference
