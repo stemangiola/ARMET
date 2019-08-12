@@ -145,6 +145,12 @@ get_input_data = function(markers, reps, pass){
 		# Get house keeping and markwrs
 		left_join(markers %>% distinct(level, symbol, ct1, ct2, rank, `n markers`) %>% filter(rank < 500)) %>%
 			filter(`house keeping` | rank %>% is.na %>% `!`) %>%
+
+		# Filter out symbol if present both in markers and house keeping (strange but happens)
+		anti_join(
+			(.) %>% filter(`house keeping` & (ct1 %>% is.na %>% `!`)) %>% distinct(symbol)
+		) %>%
+
 			# {
 			# 	bind_rows(
 			# 		(.) %>% inner_join( markers %>% distinct(level, symbol, ct1, ct2)),
@@ -357,7 +363,15 @@ give_rank_to_ref = function(fit_df, level, fit_threshold, lambda_threshold =4){
 		separate(pair, c("Cell type category", "other Cell type category"), sep=" ", remove = F) %>%
 		left_join( fit_df %>% distinct(`Cell type category`, symbol, lambda, `gene error mean`) ) %>%
 		filter(lambda > !!lambda_threshold) %>%
-		filter(`gene error mean` < fit_threshold) %>%
+		# {
+		# 	if( (.) %>% filter(`Cell type category` == "eosinophil") %>% nrow %>% `>` (0)) browser()
+		# 	(.)
+		# } %>%
+
+		# If a marker exists for more cell types (can happen) none of them can be noisy otherwise we screw up the whole gene
+		group_by(symbol) %>% mutate(`too noisy` = `gene error mean` %>% max %>% `>` (fit_threshold)) %>% ungroup %>% filter(!`too noisy`) %>%
+
+		#filter(`gene error mean` < fit_threshold) %>%
 		arrange(delta) %>%
 		mutate(rank = 1:n()) %>%
 		ungroup() %>%
@@ -400,7 +414,7 @@ my_ref = 	ref %>%
 marker_df =
 	give_rank_to_ref(ref %>% filter(level ==1), 1, 0.5) %>%
 	rbind(give_rank_to_ref(ref %>% filter(level ==2), 2, 0.4)) %>%
-	rbind(give_rank_to_ref(ref %>% filter(level ==3), 3, 0.7)) %>%
+	rbind(give_rank_to_ref(ref %>% filter(level ==3), 3, 0.5)) %>%
 	separate(pair, c("ct1", "ct2"), sep=" ", remove = F)
 
 mix_source =
