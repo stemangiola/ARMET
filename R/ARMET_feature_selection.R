@@ -316,7 +316,7 @@ get_markers_number = function(pass, res, num_markers_previous_level, min_n_sampl
 give_rank_to_ref = function(fit_df, level, fit_threshold, lambda_threshold =4){
 
 	fit_df %>%
-		left_join(  tree %>% ToDataFrameTypeColFull("name") %>% as_tibble() %>% rename(`Cell type formatted`= name)) %>%
+		left_join(  Clone(tree) %>% ToDataFrameTypeColFull("name") %>% as_tibble() %>% rename(`Cell type formatted`= name)) %>%
 		filter(`Cell type category` != "house_keeping") %>%
 
 		# Select only branches that have childs
