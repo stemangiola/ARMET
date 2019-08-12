@@ -370,7 +370,12 @@ give_rank_to_ref = function(fit_df, level, fit_threshold, lambda_threshold =4){
 		# } %>%
 
 		# If a marker exists for more cell types (can happen) none of them can be noisy otherwise we screw up the whole gene
-		group_by(symbol) %>% mutate(`too noisy` = `gene error mean` %>% max %>% `>` (fit_threshold)) %>% ungroup %>% filter(!`too noisy`) %>%
+		ungroup() %>%
+		group_by(symbol) %>%
+		mutate(`too noisy` = `gene error mean` %>% max %>% `>` (fit_threshold)) %>%
+		ungroup %>%
+		filter(!`too noisy`) %>%
+		group_by(comparison, pair) %>%
 
 		#filter(`gene error mean` < fit_threshold) %>%
 		arrange(delta) %>%
