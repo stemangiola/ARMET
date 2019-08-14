@@ -1,3 +1,21 @@
+#' This is a generalisation of ifelse that acceots an object and return an objects
+#'
+#' @import dplyr
+#' @import tidyr
+#'
+#' @param input.df A tibble
+#' @param condition A boolean
+#' @return A tibble
+ifelse_pipe = function(.x, .p, .f1, .f2 = NULL) {
+	switch(.p %>% `!` %>% sum(1),
+				 as_mapper(.f1)(.x),
+				 if (.f2 %>% is.null %>% `!`)
+				 	as_mapper(.f2)(.x)
+				 else
+				 	.x)
+
+}
+
 #' format_for_MPI
 #'
 #' @description Format reference data frame for MPI
@@ -942,28 +960,50 @@ browser()
 	# Parse results
 	########################################
 
+	parse_summary = function(fit){
+		fit %>%
+			rstan::summary() %$% summary %>%
+			as_tibble(rownames=".variable") %>%
+			filter(grepl("prop", .variable)) %>%
+			separate(.variable, c(".variable", "Q", "C"), sep="[\\[,\\]]", extra="drop") %>%
+			mutate(C = C %>% as.integer, Q = Q %>% as.integer)
+	}
+
+	parse_summary_check_divergence = function(fit){
+		fit %>%
+			tidybayes::gather_draws(prop_1[Q, C], prop_2[Q, C], prop_3[Q, C]) %>%
+			filter(.variable %in% c("prop_1", "prop_2", "prop_3")) %>%
+
+			# If not converged choose the majority chains
+			mutate(	converged = diptest::dip.test(`.value`) %$%	`p.value` > 0.05) %>%
+
+			ifelse_pipe(
+				(.) %>% distinct(converged) %>% pull(1) %>% `!`,
+				~ .x %>% choose_chains_majority_roule
+			) %>%
+
+			# Anonymous function - add summary fit to converged label
+			# input: tibble
+			# output: tibble
+			{
+				left_join(
+					(.) %>% select(-converged) %>% tidybayes::median_qi(),
+					(.) %>% distinct(converged)
+				)
+			} %>%
+			ungroup()
+	}
+
 	# Produce results
 	prop =
 		fit %>%
-		tidybayes::gather_draws(prop_1[Q, C], prop_2[Q, C], prop_3[Q, C]) %>%
-		filter(.variable %in% c("prop_1", "prop_2", "prop_3")) %>%
 
-		# If not converged choose the majority chains
-		mutate(	converged = diptest::dip.test(`.value`) %$%	`p.value` > 0.05) %>%
-
-		do({
-			if((.) %>% distinct(converged) %>% pull(1)) (.)
-			else (.) %>% choose_chains_majority_roule
-		}) %>%
-
-		# Summarise
-		{
-			left_join(
-				(.) %>% select(-converged) %>% tidybayes::median_qi(),
-				(.) %>% distinct(converged)
-			)
-		} %>%
-		ungroup() %>%
+		# If MCMC is used check divergencies as well
+		ifelse_pipe(
+			full_bayes,
+			~ .x %>% parse_summary_check_divergence(),
+			~ .x %>% parse_summary()
+		) %>%
 
 		# Parse
 		separate(.variable, c(".variable", "level"), convert = T) %>%
