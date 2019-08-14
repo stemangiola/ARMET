@@ -1,5 +1,32 @@
 functions{
 
+ vector horseshoe_get_tp(vector zb, vector[] local, real[] global, real scale_global, real c2) {
+  	    int K = rows(zb);
+  	    vector[K] lambda = local[1] .* sqrt(local[2]);
+  	    vector[K] lambda2 = square(lambda);
+  	    real tau = global[1] * sqrt(global[2]) * scale_global;
+  	    vector[K] lambda_tilde = sqrt(c2 * lambda2 ./ (c2 + tau^2 * lambda2));
+  	    return zb .* lambda_tilde * tau;
+  	  }
+
+  real horseshoe_get_lp(vector zb, vector[] local, real df, real[] global, real df_global, real c2, real df_slab){
+
+    // real<lower=0> hs_df; // == 1  // If divergencies increase this
+	  // real<lower=0> hs_df_global; // == 1
+	  // real<lower=0> hs_df_slab; // == 4 // df of the outliers
+
+  	vector[6] lp;
+
+  	lp[1] = normal_lpdf(zb | 0, 1);
+	  lp[2] = normal_lpdf(local[1] | 0, 1) - 101 * log(0.5);
+	  lp[3] = inv_gamma_lpdf(local[2] | 0.5 * df, 0.5 * df);
+	  lp[4] = normal_lpdf(global[1] | 0, 1)  - 1 * log(0.5);
+	  lp[5] = inv_gamma_lpdf(global[2] | 0.5 * df_global, 0.5 * df_global);
+	  lp[6] = inv_gamma_lpdf(c2 | 0.5 * df_slab, 0.5 * df_slab);
+
+	  return(sum(lp));
+  }
+
 	matrix vector_array_to_matrix(vector[] x) {
 			matrix[size(x), rows(x[1])] y;
 			for (m in 1:size(x))
@@ -121,6 +148,7 @@ data {
 	// Reference matrix inference
 
 	int<lower=0> G;
+	int<lower=0> GM;
 	int<lower=0> S;
 	int CL;
 
@@ -151,14 +179,15 @@ data {
   int<lower=0> Y_1;
 	int y_linear_1[Y_1];
 	int y_linear_S_1[Y_1];
-
+	int y_linear_GM_1[Y_1];
   int<lower=0> Y_2;
 	int y_linear_2[Y_2];
 	int y_linear_S_2[Y_2];
-
+	int y_linear_GM_2[Y_2];
 	int<lower=0> Y_3;
 	int y_linear_3[Y_3];
 	int y_linear_S_3[Y_3];
+	int y_linear_GM_3[Y_3];
 
 	// Lv2 tree structure parents singles
 	int<lower=1> SLV2;
@@ -221,7 +250,7 @@ parameters {
   simplex[ct_in_nodes[6]] prop_e[Q]; // t_cell
 
   // Error between reference and mix, to avoid divergencies
-  //vector<lower=0>[GM] error_ref_mix;
+  vector<lower=0>[GM] error_ref_mix;
 
 }
 transformed parameters{
@@ -286,6 +315,8 @@ model {
 				lambda_log_deconvoluted_3 + exposure_rate[y_linear_S_3]
 			);
 
+	vector[Y_1 + Y_2 + Y_3] sigma_inv_log_deconvoluted = error_ref_mix[append_array(y_linear_GM_1, append_array(y_linear_GM_2, y_linear_GM_3))];
+
 	// vector[CL + Y_1 + Y_2 + Y_3] local_parameters =
 	// 	append_row(
 	// 		append_row(
@@ -322,7 +353,7 @@ model {
 	for(q in 1:Q) prop_e[q] ~ dirichlet(rep_vector(num_elements(prop_e[1]), num_elements(prop_e[1])));
 
 	// Unexplanable difference between reference and mix
-	//error_ref_mix ~ exponential(1);
+	error_ref_mix ~ exponential(1);
 
 	// target += sum(map_rect(
 	// 	lp_reduce ,
@@ -338,7 +369,7 @@ model {
 
 	y_linear ~ neg_binomial_2_log(
 		lambda_log_deconvoluted,
-		1.0 ./ exp(  ( sigma_slope * lambda_log_deconvoluted + sigma_intercept_dec ) )
+		1.0 ./ exp( sigma_inv_log_deconvoluted + ( sigma_slope * lambda_log_deconvoluted + sigma_intercept_dec ) )
 	);
 
 	// Reference

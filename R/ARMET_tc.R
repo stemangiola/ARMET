@@ -934,17 +934,25 @@ ARMET_tc = function(
 	G3_linear = counts_baseline %>% filter(!`house keeping`) %>% filter(level ==3) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
 	G3 = G3_linear %>% length
 
-	# Observed mix
+
+	# Observed mix counts
 	y_linear_1 = y_source %>% filter(level ==1) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
-	y_linear_S_1 = y_source %>% filter(level ==1) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
-	Y_1 = y_linear_1 %>% length
-
 	y_linear_2 = y_source %>% filter(level ==2) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
-	y_linear_S_2 = y_source %>% filter(level ==2) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
-	Y_2 = y_linear_2 %>% length
-
 	y_linear_3 = y_source %>% filter(level ==3) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
+
+	# Observed mix samples indexes
+	y_linear_S_1 = y_source %>% filter(level ==1) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
+	y_linear_S_2 = y_source %>% filter(level ==2) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
 	y_linear_S_3 = y_source %>% filter(level ==3) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
+
+	# Observed mix samples indexes - get GM only for markers of each level. Exclude house keeping
+	y_linear_GM_1 = y_source %>% filter(level ==1) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(GM)
+	y_linear_GM_2 = y_source %>% filter(level ==2) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(GM)
+	y_linear_GM_3 =y_source %>% filter(level ==3) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(GM)
+
+	# Lengths indexes
+	Y_1 = y_linear_1 %>% length
+	Y_2 = y_linear_2 %>% length
 	Y_3 = y_linear_3 %>% length
 
 	# Non centered
