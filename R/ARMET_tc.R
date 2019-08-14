@@ -358,6 +358,46 @@ get_idx_level = function(tree, my_level){
 	) %>%
 		pull(my_C)
 }
+
+parse_summary = function(fit){
+	fit %>%
+		rstan::summary() %$% summary %>%
+		as_tibble(rownames=".variable") %>%
+		filter(grepl("prop", .variable)) %>%
+		separate(.variable, c(".variable", "Q", "C"), sep="[\\[,\\]]", extra="drop") %>%
+		mutate(C = C %>% as.integer, Q = Q %>% as.integer)
+}
+
+parse_summary_check_divergence = function(fit){
+	fit %>%
+		tidybayes::gather_draws(prop_1[Q, C], prop_2[Q, C], prop_3[Q, C]) %>%
+		filter(.variable %in% c("prop_1", "prop_2", "prop_3")) %>%
+
+		# If not converged choose the majority chains
+		mutate(	converged = diptest::dip.test(`.value`) %$%	`p.value` > 0.05) %>%
+
+		# If some proportions have not converged chose the most populated one
+		do(
+			(.) %>%
+				ifelse_pipe(
+					(.) %>% distinct(converged) %>% pull(1) %>% `!`,
+					~ .x %>% choose_chains_majority_roule
+				)
+		) %>%
+
+		# Anonymous function - add summary fit to converged label
+		# input: tibble
+		# output: tibble
+		{
+			left_join(
+				(.) %>% select(-converged) %>% tidybayes::median_qi(),
+				(.) %>% distinct(converged)
+			)
+		} %>%
+		ungroup()
+}
+
+
 library(data.tree)
 tree =
 	yaml:: yaml.load_file("~/PhD/deconvolution/ARMET/data/tree.yaml") %>%
@@ -441,7 +481,8 @@ ARMET_tc = function(
 	cores = 14,
 	iterations = 300,
 	sampling_iterations = 100,
-	levels = 1:3
+	levels = 1:3,
+	full_bayes = T
 ){
 
 	# full_bayesian = 0
@@ -885,13 +926,13 @@ ARMET_tc = function(
 	G = counts_baseline %>%  mutate(S = S %>% as.factor %>% as.integer)%>%  distinct(G) %>% nrow
 	S = counts_baseline %>%  mutate(S = S %>% as.factor %>% as.integer)%>% distinct(S) %>% nrow
 
-	# Deconvolution
-	GM1_linear = counts_baseline %>% filter(!`house keeping`) %>% filter(level ==1) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
-	GM1 = GM1_linear %>% length
-	GM2_linear = counts_baseline %>% filter(!`house keeping`) %>% filter(level ==2) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
-	GM2 = GM2_linear %>% length
-	GM3_linear = counts_baseline %>% filter(!`house keeping`) %>% filter(level ==3) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
-	GM3 = GM3_linear %>% length
+	# Deconvolution, get G only for markers of each level. Exclude house keeping
+	G1_linear = counts_baseline %>% filter(!`house keeping`) %>% filter(level ==1) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
+	G1 = G1_linear %>% length
+	G2_linear = counts_baseline %>% filter(!`house keeping`) %>% filter(level ==2) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
+	G2 = G2_linear %>% length
+	G3_linear = counts_baseline %>% filter(!`house keeping`) %>% filter(level ==3) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
+	G3 = G3_linear %>% length
 
 	# Observed mix
 	y_linear_1 = y_source %>% filter(level ==1) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
@@ -913,19 +954,17 @@ ARMET_tc = function(
 	sigma_intercept_prior = c( 1.9 , 0.1)
 	lambda_log_scale = 	counts_baseline %>% filter(!query) %>% distinct(G, lambda) %>% arrange(G) %>% pull(lambda)
 
-	##########################################
-	##########################################
-
 	########################################
 	# MODEL
-	########################################
+
+	browser()
 
 	fileConn<-file("~/.R/Makevars")
 	writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
 	close(fileConn)
 	Sys.setenv("STAN_NUM_THREADS" = cores)
 	ARMET_tc_model = stan_model("~/PhD/deconvolution/ARMET/src/stan_files/ARMET_tc.stan")
-browser()
+
 	Sys.time() %>% print
 	fit =
 		sampling(
@@ -960,40 +999,6 @@ browser()
 	# Parse results
 	########################################
 
-	parse_summary = function(fit){
-		fit %>%
-			rstan::summary() %$% summary %>%
-			as_tibble(rownames=".variable") %>%
-			filter(grepl("prop", .variable)) %>%
-			separate(.variable, c(".variable", "Q", "C"), sep="[\\[,\\]]", extra="drop") %>%
-			mutate(C = C %>% as.integer, Q = Q %>% as.integer)
-	}
-
-	parse_summary_check_divergence = function(fit){
-		fit %>%
-			tidybayes::gather_draws(prop_1[Q, C], prop_2[Q, C], prop_3[Q, C]) %>%
-			filter(.variable %in% c("prop_1", "prop_2", "prop_3")) %>%
-
-			# If not converged choose the majority chains
-			mutate(	converged = diptest::dip.test(`.value`) %$%	`p.value` > 0.05) %>%
-
-			ifelse_pipe(
-				(.) %>% distinct(converged) %>% pull(1) %>% `!`,
-				~ .x %>% choose_chains_majority_roule
-			) %>%
-
-			# Anonymous function - add summary fit to converged label
-			# input: tibble
-			# output: tibble
-			{
-				left_join(
-					(.) %>% select(-converged) %>% tidybayes::median_qi(),
-					(.) %>% distinct(converged)
-				)
-			} %>%
-			ungroup()
-	}
-
 	# Produce results
 	prop =
 		fit %>%
@@ -1007,6 +1012,8 @@ browser()
 
 		# Parse
 		separate(.variable, c(".variable", "level"), convert = T) %>%
+
+		# Add tree information
 		left_join(
 			tree %>% ToDataFrameTree("name", "C1", "C2", "C3") %>%
 				as_tibble %>%
@@ -1017,6 +1024,8 @@ browser()
 				drop_na %>%
 				mutate(C = C %>% as.integer, level = level %>% as.integer)
 		) %>%
+
+		# Add sample information
 		left_join(
 			df %>%
 				filter(`query`) %>%

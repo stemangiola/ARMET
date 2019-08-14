@@ -140,12 +140,12 @@ data {
   int<lower=1> ct_in_levels[n_levels];
 
   // Deconvolution
-  int<lower=0> GM1;
-  int GM1_linear[GM1];
-  int<lower=0> GM2;
-  int GM2_linear[GM2];
-  int<lower=0> GM3;
-  int GM3_linear[GM3];
+  int<lower=0> G1;
+  int G1_linear[G1];
+  int<lower=0> G2;
+  int G2_linear[G2];
+  int<lower=0> G3;
+  int G3_linear[G3];
 
   // Observed counts
   int<lower=0> Y_1;
@@ -220,6 +220,9 @@ parameters {
   simplex[ct_in_nodes[5]] prop_d[Q]; // mono_derived
   simplex[ct_in_nodes[6]] prop_e[Q]; // t_cell
 
+  // Error between reference and mix, to avoid divergencies
+  //vector<lower=0>[GM] error_ref_mix;
+
 }
 transformed parameters{
 		// proportion of level 2
@@ -254,7 +257,7 @@ model {
 		log(
 			to_vector(
 				vector_array_to_matrix(prop_1) *
-				exp(to_matrix(lambda_log[GM1_linear], ct_in_levels[1], GM1/ct_in_levels[1])) // [Q,G] dimensions
+				exp(to_matrix(lambda_log[G1_linear], ct_in_levels[1], G1/ct_in_levels[1])) // [Q,G] dimensions
 			)
 		);
 
@@ -262,7 +265,7 @@ model {
 		log(
 			to_vector(
 				vector_array_to_matrix(prop_2) *
-				exp(to_matrix(lambda_log[GM2_linear], ct_in_levels[2], GM2/ct_in_levels[2])) // [Q,G] dimensions
+				exp(to_matrix(lambda_log[G2_linear], ct_in_levels[2], G2/ct_in_levels[2])) // [Q,G] dimensions
 			)
 		);
 
@@ -270,7 +273,7 @@ model {
 		log(
 			to_vector(
 				vector_array_to_matrix(prop_3) *
-				exp(to_matrix(lambda_log[GM3_linear], ct_in_levels[3], GM3/ct_in_levels[3])) // [Q,G] dimensions
+				exp(to_matrix(lambda_log[G3_linear], ct_in_levels[3], G3/ct_in_levels[3])) // [Q,G] dimensions
 			)
 		);
 
@@ -318,6 +321,9 @@ model {
 	for(q in 1:Q) prop_d[q] ~ dirichlet(rep_vector(num_elements(prop_d[1]), num_elements(prop_d[1])));
 	for(q in 1:Q) prop_e[q] ~ dirichlet(rep_vector(num_elements(prop_e[1]), num_elements(prop_e[1])));
 
+	// Unexplanable difference between reference and mix
+	//error_ref_mix ~ exponential(1);
+
 	// target += sum(map_rect(
 	// 	lp_reduce ,
 	// 	[sigma_intercept, sigma_slope]', // global parameters
@@ -332,7 +338,7 @@ model {
 
 	y_linear ~ neg_binomial_2_log(
 		lambda_log_deconvoluted,
-		1.0 ./ exp( sigma_slope * lambda_log_deconvoluted + sigma_intercept_dec)
+		1.0 ./ exp(  ( sigma_slope * lambda_log_deconvoluted + sigma_intercept_dec ) )
 	);
 
 	// Reference
