@@ -1,3 +1,21 @@
+#' This is a generalisation of ifelse that acceots an object and return an objects
+#'
+#' @import dplyr
+#' @import tidyr
+#'
+#' @param input.df A tibble
+#' @param condition A boolean
+#' @return A tibble
+ifelse_pipe = function(.x, .p, .f1, .f2 = NULL) {
+	switch(.p %>% `!` %>% sum(1),
+				 as_mapper(.f1)(.x),
+				 if (.f2 %>% is.null %>% `!`)
+				 	as_mapper(.f2)(.x)
+				 else
+				 	.x)
+
+}
+
 #' format_for_MPI
 #'
 #' @description Format reference data frame for MPI
@@ -340,9 +358,49 @@ get_idx_level = function(tree, my_level){
 	) %>%
 		pull(my_C)
 }
+
+parse_summary = function(fit){
+	fit %>%
+		rstan::summary() %$% summary %>%
+		as_tibble(rownames=".variable") %>%
+		filter(grepl("prop", .variable)) %>%
+		separate(.variable, c(".variable", "Q", "C"), sep="[\\[,\\]]", extra="drop") %>%
+		mutate(C = C %>% as.integer, Q = Q %>% as.integer)
+}
+
+parse_summary_check_divergence = function(fit){
+	fit %>%
+		tidybayes::gather_draws(prop_1[Q, C], prop_2[Q, C], prop_3[Q, C]) %>%
+		filter(.variable %in% c("prop_1", "prop_2", "prop_3")) %>%
+
+		# If not converged choose the majority chains
+		mutate(	converged = diptest::dip.test(`.value`) %$%	`p.value` > 0.05) %>%
+
+		# If some proportions have not converged chose the most populated one
+		do(
+			(.) %>%
+				ifelse_pipe(
+					(.) %>% distinct(converged) %>% pull(1) %>% `!`,
+					~ .x %>% choose_chains_majority_roule
+				)
+		) %>%
+
+		# Anonymous function - add summary fit to converged label
+		# input: tibble
+		# output: tibble
+		{
+			left_join(
+				(.) %>% select(-converged) %>% tidybayes::median_qi(),
+				(.) %>% distinct(converged)
+			)
+		} %>%
+		ungroup()
+}
+
+
 library(data.tree)
 tree =
-	yaml:: yaml.load_file("data/tree.yaml") %>%
+	yaml:: yaml.load_file("~/PhD/deconvolution/ARMET/data/tree.yaml") %>%
 	data.tree::as.Node() %>%
 
 	{
@@ -366,7 +424,7 @@ tree =
 		.$Set("Cell type category" = .$Get("name"))
 
 	}
-
+library(magrittr)
 #' ARMET-tc main
 #'
 #' @description This function calls the stan model.
@@ -422,7 +480,9 @@ ARMET_tc = function(
 	seed =                              NULL,
 	cores = 14,
 	iterations = 300,
-	levels = 1:3
+	sampling_iterations = 100,
+	levels = 1:3,
+	full_bayes = T
 ){
 
 	# full_bayesian = 0
@@ -443,7 +503,7 @@ ARMET_tc = function(
 	library(rstan)
 
 	input = c(as.list(environment()))
-	shards = cores * 2
+	shards = cores #* 2
 
 	my_theme =
 		theme_bw() +
@@ -836,7 +896,7 @@ ARMET_tc = function(
 		distinct(symbol, sample, `read count`, query) %>%
 		drop_na %>%
 		inner_join( (.) %>% distinct(sample, symbol) %>% count(symbol) %>% filter(n == max(n)), by="symbol") %>% # Eliminate genes that are missing from samples
-		tidyTranscriptomics::add_normalised_counts() %>%
+		tidyTranscriptomics::add_normalised_counts(transcript_column = symbol) %>%
 		filter(query) %>%
 		mutate(l = multiplier %>% log) %>%
 		summarise(shift = l %>% mean, scale = l %>% sd) %>%
@@ -847,7 +907,7 @@ ARMET_tc = function(
 		counts_baseline %>%
 		filter(`house keeping`) %>%
 		distinct(symbol, sample, `read count`, query) %>%
-		tidyTranscriptomics::add_normalised_counts() %>%
+		tidyTranscriptomics::add_normalised_counts(transcript_column = symbol) %>%
 		mutate(
 			cc = `read count normalised` %>%
 				`+` (1) %>% log
@@ -855,27 +915,103 @@ ARMET_tc = function(
 		summarise(shift = cc %>% mean, scale = cc %>% sd) %>%
 		as.numeric
 
-	########################################
+	##########################################
+	##########################################
+
+	counts_linear = counts_baseline %>% arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>%  pull(`read count`)
+	G_linear = counts_baseline %>% arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>% pull(G)
+
+	S_linear = counts_baseline %>%  arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>% pull(S)
+	CL = length(counts_linear)
+	G = counts_baseline %>%  mutate(S = S %>% as.factor %>% as.integer)%>%  distinct(G) %>% nrow
+	S = counts_baseline %>%  mutate(S = S %>% as.factor %>% as.integer)%>% distinct(S) %>% nrow
+
+	# Deconvolution, get G only for markers of each level. Exclude house keeping
+	G1_linear = counts_baseline %>% filter(!`house keeping`) %>% filter(level ==1) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
+	G1 = G1_linear %>% length
+	G2_linear = counts_baseline %>% filter(!`house keeping`) %>% filter(level ==2) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
+	G2 = G2_linear %>% length
+	G3_linear = counts_baseline %>% filter(!`house keeping`) %>% filter(level ==3) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
+	G3 = G3_linear %>% length
+
+
+	# Observed mix counts
+	y_linear_1 = y_source %>% filter(level ==1) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
+	y_linear_2 = y_source %>% filter(level ==2) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
+	y_linear_3 = y_source %>% filter(level ==3) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
+
+	# Observed mix samples indexes
+	y_linear_S_1 = y_source %>% filter(level ==1) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
+	y_linear_S_2 = y_source %>% filter(level ==2) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
+	y_linear_S_3 = y_source %>% filter(level ==3) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
+
+	# Observed mix samples indexes - get GM only for markers of each level. Exclude house keeping
+	y_linear_GM_1 = y_source %>% filter(level ==1) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(GM)
+	y_linear_GM_2 = y_source %>% filter(level ==2) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(GM)
+	y_linear_GM_3 =y_source %>% filter(level ==3) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(GM)
+
+	# Lengths indexes
+	Y_1 = y_linear_1 %>% length
+	Y_2 = y_linear_2 %>% length
+	Y_3 = y_linear_3 %>% length
+
+	# Non centered
+	lambda_mu_prior = c(6.2, 1)
+	lambda_sigma_prior =  c( log(3.3) , 1)
+	lambda_skew_prior =  c( -2.7, 1)
+	sigma_intercept_prior = c( 1.9 , 0.1)
+	lambda_log_scale = 	counts_baseline %>% filter(!query) %>% distinct(G, lambda) %>% arrange(G) %>% pull(lambda)
+
+	# Horse shoe
+	hs_df = 3             # If divergencies increase this
+	par_ratio = 1/999     # number of expected non-zero divided by number of expected zeros
+	hs_scale_slab = 2     # Expected value of the non-zeros
+	df_global = 3;        # 1 == horseshoe, > 1 more like student-t
+	df_slab = 25;         # stringency of the non-zero distribution. >> 1 if we are sure that non-zeros have exactly hs_scale_slab value, in a sense this increase the bimodality of the distribution
+
 	# MODEL
-	########################################
-browser()
+
+	browser()
+
 	fileConn<-file("~/.R/Makevars")
 	writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
 	close(fileConn)
 	Sys.setenv("STAN_NUM_THREADS" = cores)
-	ARMET_tc_model = stan_model("src/stan_files/ARMET_tc.stan")
+	ARMET_tc_model = stan_model("~/PhD/deconvolution/ARMET/src/stan_files/ARMET_tc.stan")
 
 	Sys.time() %>% print
 	fit =
 		sampling(
 			ARMET_tc_model, #stanmodels$ARMET_tc,
-			chains=3, cores=3,
-			iter=iterations, warmup=iterations-100
+			chains=6, cores=6,
+			iter=iterations, warmup=iterations-sampling_iterations,
+			#include = F, pars=c("prop_a", "prop_b", "prop_c", "prop_d", "prop_e"),
+			pars=c("prop_1", "prop_2", "prop_3", "exposure_rate", "error_ref_mix", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),
 			#,
+			init = function () list(	lambda_log = lambda_log_scale) # runif(G,  lambda_log_scale - 1, lambda_log_scale + 1)	)
 			#save_warmup = FALSE,
-			#pars = c("prop_1", "prop_2", "prop_3", "exposure_rate", "sigma_correction_param") #, "nb_sum") #,"mu_sum", "phi_sum")
-		)
+			#pars = c("prop_1", "prop_2", "prop_3", "exposure_rate") #, "nb_sum") #,"mu_sum", "phi_sum"),
+		) %>%
+		{
+			(.)  %>% summary() %$% summary %>% as_tibble(rownames="par") %>% arrange(Rhat %>% desc) %>% print
+			(.)
+		}
 	Sys.time() %>% print
+
+browser()
+	ff = stan(file = "src/stan_files/horseshoe.stan")
+
+	# # The reference fust 2 columns should look like this
+	# counts_baseline %>% filter(!`house keeping`) %>% filter(level ==1) %>% distinct(`read count`, G, GM, C) %>% group_by(G, GM, C) %>% summarise(m = `read count` %>% median) %>% ungroup() %>% arrange(GM, C) %>% select(-G) %>% spread(GM, m) %>% select(2:3)
+	#
+	# fit %>% summary() %$% summary %>% as_tibble(rownames="par") %>%
+	# 	separate(par, c(".variable", "C", "GM"), sep="[\\[,\\]]", extra="drop") %>%
+	# 	mutate( C = C %>% as.integer, GM = GM %>% as.integer) %>% filter(grepl("mat_GM1", `.variable`))  %>%
+	# 	left_join(
+	# 		counts_baseline %>% filter(!`house keeping`) %>% filter(level ==1) %>% distinct(`read count`, G, GM, C) %>% group_by(G, GM, C) %>% summarise(m = `read count` %>% median) %>% ungroup() %>% arrange(GM, C)
+	# 	) %>%
+	# 	ggplot(aes(x=m+1, y=mean+1)) + geom_point() +scale_x_log10() + scale_y_log10()
+
 
 	########################################
 	# Parse results
@@ -884,28 +1020,18 @@ browser()
 	# Produce results
 	prop =
 		fit %>%
-		tidybayes::gather_draws(prop_1[Q, C], prop_2[Q, C], prop_3[Q, C]) %>%
-		filter(.variable %in% c("prop_1", "prop_2", "prop_3")) %>%
 
-		# If not converged choose the majority chains
-		mutate(	converged = diptest::dip.test(`.value`) %$%	`p.value` > 0.05) %>%
-
-		do({
-			if((.) %>% distinct(converged) %>% pull(1)) (.)
-			else (.) %>% choose_chains_majority_roule
-		}) %>%
-
-		# Summarise
-		{
-			left_join(
-				(.) %>% select(-converged) %>% tidybayes::median_qi(),
-				(.) %>% distinct(converged)
-			)
-		} %>%
-		ungroup() %>%
+		# If MCMC is used check divergencies as well
+		ifelse_pipe(
+			full_bayes,
+			~ .x %>% parse_summary_check_divergence(),
+			~ .x %>% parse_summary()
+		) %>%
 
 		# Parse
 		separate(.variable, c(".variable", "level"), convert = T) %>%
+
+		# Add tree information
 		left_join(
 			tree %>% ToDataFrameTree("name", "C1", "C2", "C3") %>%
 				as_tibble %>%
@@ -916,15 +1042,13 @@ browser()
 				drop_na %>%
 				mutate(C = C %>% as.integer, level = level %>% as.integer)
 		) %>%
+
+		# Add sample information
 		left_join(
 			df %>%
 				filter(`query`) %>%
 				distinct(Q, sample)
 		)
-
-
-	#plot_counts_inferred_sum( list(fit = fit , data_source = y_source ))
-
 
 	# Return
 	list(
@@ -939,7 +1063,9 @@ browser()
 		fit = fit,
 
 		# Return data source
-		data_source = y_source
+		data_source = y_source,
+
+		signatures = counts_baseline
 	)
 
 }
