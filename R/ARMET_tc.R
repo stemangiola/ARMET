@@ -16,6 +16,7 @@ ifelse_pipe = function(.x, .p, .f1, .f2 = NULL) {
 
 }
 
+
 #' format_for_MPI
 #'
 #' @description Format reference data frame for MPI
