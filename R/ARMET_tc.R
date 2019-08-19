@@ -962,7 +962,13 @@ ARMET_tc = function(
 	sigma_intercept_prior = c( 1.9 , 0.1)
 	lambda_log_scale = 	counts_baseline %>% filter(!query) %>% distinct(G, lambda) %>% arrange(G) %>% pull(lambda)
 
-	########################################
+	# Horse shoe
+	hs_df = 3             # If divergencies increase this
+	par_ratio = 1/999     # number of expected non-zero divided by number of expected zeros
+	hs_scale_slab = 2     # Expected value of the non-zeros
+	df_global = 3;        # 1 == horseshoe, > 1 more like student-t
+	df_slab = 25;         # stringency of the non-zero distribution. >> 1 if we are sure that non-zeros have exactly hs_scale_slab value, in a sense this increase the bimodality of the distribution
+
 	# MODEL
 
 	browser()
@@ -979,7 +985,8 @@ ARMET_tc = function(
 			ARMET_tc_model, #stanmodels$ARMET_tc,
 			chains=6, cores=6,
 			iter=iterations, warmup=iterations-sampling_iterations,
-			include = F, pars=c("prop_a", "prop_b", "prop_c", "prop_d", "prop_e"),
+			#include = F, pars=c("prop_a", "prop_b", "prop_c", "prop_d", "prop_e"),
+			pars=c("prop_1", "prop_2", "prop_3", "exposure_rate", "error_ref_mix", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),
 			#,
 			init = function () list(	lambda_log = lambda_log_scale) # runif(G,  lambda_log_scale - 1, lambda_log_scale + 1)	)
 			#save_warmup = FALSE,
@@ -990,6 +997,9 @@ ARMET_tc = function(
 			(.)
 		}
 	Sys.time() %>% print
+
+browser()
+	ff = stan(file = "src/stan_files/horseshoe.stan")
 
 	# # The reference fust 2 columns should look like this
 	# counts_baseline %>% filter(!`house keeping`) %>% filter(level ==1) %>% distinct(`read count`, G, GM, C) %>% group_by(G, GM, C) %>% summarise(m = `read count` %>% median) %>% ungroup() %>% arrange(GM, C) %>% select(-G) %>% spread(GM, m) %>% select(2:3)

@@ -210,6 +210,13 @@ data {
 	// MPI
 	int shards;
 
+	// Horseshoe
+	real<lower=0> hs_df; // == 1  // If divergencies increase this
+	real<lower=0, upper=1> par_ratio; // real<lower=0> hs_scale_global; // Ratio of the expected number of non-zero coefficients     !! KEY PARAMETER
+	real<lower=0> hs_scale_slab; // == 2 // regularisation/scale of outliers                !! KEY PARAMETER
+	real df_global;
+	real df_slab;
+
 }
 transformed data{
 	// MPI
@@ -250,7 +257,12 @@ parameters {
   simplex[ct_in_nodes[6]] prop_e[Q]; // t_cell
 
   // Error between reference and mix, to avoid divergencies
-  vector<lower=0>[GM] error_ref_mix;
+  vector<lower=0>[GM] error_ref_mix_z;
+
+  // Horseshoe
+  vector<lower=0>[GM] hs_local[2]; // local parameters for horseshoe prior
+  real<lower=0> hs_global[2]; // horseshoe shrinkage parameters
+  real<lower=0> hs_c2; // horseshoe shrinkage parameters
 
 }
 transformed parameters{
@@ -276,6 +288,10 @@ transformed parameters{
 				)
 			)
 		);
+
+	// Horseshoe
+  vector[GM] error_ref_mix = horseshoe_get_tp(error_ref_mix_z, hs_local, hs_global, par_ratio / sqrt(GM), hs_scale_slab^2 * hs_c2);
+
 
 }
 
@@ -353,7 +369,10 @@ model {
 	for(q in 1:Q) prop_e[q] ~ dirichlet(rep_vector(num_elements(prop_e[1]), num_elements(prop_e[1])));
 
 	// Unexplanable difference between reference and mix
-	error_ref_mix ~ exponential(1);
+	// error_ref_mix ~ exponential(1);
+	// Horseshoe
+  target += horseshoe_get_lp(error_ref_mix_z, hs_local, hs_df, hs_global, df_global, hs_c2, df_slab);
+
 
 	// target += sum(map_rect(
 	// 	lp_reduce ,
@@ -364,7 +383,7 @@ model {
 	// ));
 
 	// Deconvolution
-	sigma_intercept_dec ~ normal(0,1);
+	sigma_intercept_dec ~ student_t(3, 0, 2);
 	//sigma_slope_dec ~ normal(0,1);
 
 	y_linear ~ neg_binomial_2_log(
