@@ -37,7 +37,7 @@ is_full_bayesian = T
 out_dir = Sys.time() %>% format("%a_%b_%d_%X") %>% gsub("[: ]", "_", .) %>% sprintf("docs/feature_selection_%s", .)
 out_dir %>% dir.create()
 
-iterations = 250
+iterations = 500
 
 ######################################
 # Variable should be already set
@@ -536,23 +536,23 @@ mix_source =
 # 	get_input_data(reps = reps, pass = 0) %>%
 # 	{	ARMET_tc(
 # 		(.) %$% mix,
-# 		(.) %$% reference,
-# 		# (.) %$% reference %>%
-# 		# 	inner_join(
-# 		# 		(.) %>%
-# 		# 			distinct(symbol, ct1, ct2, `house keeping`) %>%
-# 		# 			mutate(n = ifelse(`house keeping`, 30, 5)) %>%
-# 		# 			group_by(ct1, ct2, `house keeping`) %>%
-# 		# 			filter(row_number() <= n) %>%
-# 		# 			ungroup() %>%
-# 		# 			select(-n)
-# 		# 		),
+# 		# (.) %$% reference,
+# 		(.) %$% reference %>%
+# 			inner_join(
+# 				(.) %>%
+# 					distinct(symbol, ct1, ct2, `house keeping`) %>%
+# 					mutate(n = ifelse(`house keeping`, 30, 5)) %>%
+# 					group_by(ct1, ct2, `house keeping`) %>%
+# 					filter(row_number() <= n) %>%
+# 					ungroup() %>%
+# 					select(-n)
+# 				),
 # 		iterations = 250,
 # 		full_bayesian = T,
 # 		cores = 8
 # 	)}
-
-cores = 4
+#
+# cores = 4
 ##################################
 # Pass 0
 ##################################
