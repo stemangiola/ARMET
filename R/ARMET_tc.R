@@ -963,9 +963,6 @@ browser()
 	lambda_log_scale = 	counts_baseline %>% filter(!query) %>% distinct(G, lambda) %>% arrange(G) %>% pull(lambda)
 
 	# MODEL
-
-	browser()
-
 	fileConn<-file("~/.R/Makevars")
 	writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
 	close(fileConn)
@@ -973,26 +970,41 @@ browser()
 	ARMET_tc_model = stan_model("~/PhD/deconvolution/ARMET/src/stan_files/ARMET_tc.stan")
 
 	Sys.time() %>% print
-	fit =
-		sampling(
-			ARMET_tc_model, #stanmodels$ARMET_tc,
-			chains=6, cores=6,
-			iter=iterations, warmup=iterations-sampling_iterations,
-			#include = F, pars=c("prop_a", "prop_b", "prop_c", "prop_d", "prop_e"),
-			pars=c("prop_1", "prop_2", "prop_3", "exposure_rate", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),
-			#,
-			init = function () list(	lambda_log = lambda_log_scale) # runif(G,  lambda_log_scale - 1, lambda_log_scale + 1)	)
-			#save_warmup = FALSE,
-			#pars = c("prop_1", "prop_2", "prop_3", "exposure_rate") #, "nb_sum") #,"mu_sum", "phi_sum"),
-		) %>%
-		{
-			(.)  %>% summary() %$% summary %>% as_tibble(rownames="par") %>% arrange(Rhat %>% desc) %>% print
-			(.)
-		}
-	Sys.time() %>% print
 
-browser()
-	ff = stan(file = "src/stan_files/horseshoe.stan")
+	fit =
+		switch(
+			full_bayes %>% `!` %>5 sum(1),
+
+			# HMC
+			sampling(
+				ARMET_tc_model, #stanmodels$ARMET_tc,
+				chains=6, cores=6,
+				iter=iterations, warmup=iterations-sampling_iterations,
+				#include = F, pars=c("prop_a", "prop_b", "prop_c", "prop_d", "prop_e"),
+				pars=c("prop_1", "prop_2", "prop_3", "exposure_rate", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),
+				#,
+				init = function () list(	lambda_log = lambda_log_scale) # runif(G,  lambda_log_scale - 1, lambda_log_scale + 1)	)
+				#save_warmup = FALSE,
+				#pars = c("prop_1", "prop_2", "prop_3", "exposure_rate") #, "nb_sum") #,"mu_sum", "phi_sum"),
+			) %>%
+				{
+					(.)  %>% summary() %$% summary %>% as_tibble(rownames="par") %>% arrange(Rhat %>% desc) %>% print
+					(.)
+				},
+
+			vb(
+				ARMET_tc_model,
+				output_samples=100,
+				iter = 50000,
+				tol_rel_obj=0.01,
+				pars=c("prop_1", "prop_2", "prop_3", "exposure_rate", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),
+				#,
+				init = function () list(	lambda_log = lambda_log_scale) # runif(G,  lambda_log_scale - 1, lambda_log_scale + 1)	)
+
+			)
+		)
+
+	Sys.time() %>% print
 
 	# # The reference fust 2 columns should look like this
 	# counts_baseline %>% filter(!`house keeping`) %>% filter(level ==1) %>% distinct(`read count`, G, GM, C) %>% group_by(G, GM, C) %>% summarise(m = `read count` %>% median) %>% ungroup() %>% arrange(GM, C) %>% select(-G) %>% spread(GM, m) %>% select(2:3)
