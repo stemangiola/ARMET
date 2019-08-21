@@ -1,32 +1,5 @@
 functions{
 
- vector horseshoe_get_tp(vector zb, vector[] local, real[] global, real scale_global, real c2) {
-  	    int K = rows(zb);
-  	    vector[K] lambda = local[1] .* sqrt(local[2]);
-  	    vector[K] lambda2 = square(lambda);
-  	    real tau = global[1] * sqrt(global[2]) * scale_global;
-  	    vector[K] lambda_tilde = sqrt(c2 * lambda2 ./ (c2 + tau^2 * lambda2));
-  	    return zb .* lambda_tilde * tau;
-  	  }
-
-  real horseshoe_get_lp(vector zb, vector[] local, real df, real[] global, real df_global, real c2, real df_slab){
-
-    // real<lower=0> hs_df; // == 1  // If divergencies increase this
-	  // real<lower=0> hs_df_global; // == 1
-	  // real<lower=0> hs_df_slab; // == 4 // df of the outliers
-
-  	vector[6] lp;
-
-  	lp[1] = normal_lpdf(zb | 0, 1);
-	  lp[2] = normal_lpdf(local[1] | 0, 1) - 101 * log(0.5);
-	  lp[3] = inv_gamma_lpdf(local[2] | 0.5 * df, 0.5 * df);
-	  lp[4] = normal_lpdf(global[1] | 0, 1)  - 1 * log(0.5);
-	  lp[5] = inv_gamma_lpdf(global[2] | 0.5 * df_global, 0.5 * df_global);
-	  lp[6] = inv_gamma_lpdf(c2 | 0.5 * df_slab, 0.5 * df_slab);
-
-	  return(sum(lp));
-  }
-
 	matrix vector_array_to_matrix(vector[] x) {
 			matrix[size(x), rows(x[1])] y;
 			for (m in 1:size(x))
@@ -210,13 +183,6 @@ data {
 	// MPI
 	int shards;
 
-	// Horseshoe
-	real<lower=0> hs_df; // == 1  // If divergencies increase this
-	real<lower=0, upper=1> par_ratio; // real<lower=0> hs_scale_global; // Ratio of the expected number of non-zero coefficients     !! KEY PARAMETER
-	real<lower=0> hs_scale_slab; // == 2 // regularisation/scale of outliers                !! KEY PARAMETER
-	real df_global;
-	real df_slab;
-
 }
 transformed data{
 	// MPI
@@ -257,12 +223,7 @@ parameters {
   simplex[ct_in_nodes[6]] prop_e[Q]; // t_cell
 
   // Error between reference and mix, to avoid divergencies
-  vector<lower=0>[GM] error_ref_mix_z;
-
-  // Horseshoe
-  vector<lower=0>[GM] hs_local[2]; // local parameters for horseshoe prior
-  real<lower=0> hs_global[2]; // horseshoe shrinkage parameters
-  real<lower=0> hs_c2; // horseshoe shrinkage parameters
+  // vector<lower=0>[GM] error_ref_mix_z;
 
 }
 transformed parameters{
@@ -288,10 +249,6 @@ transformed parameters{
 				)
 			)
 		);
-
-	// Horseshoe
-  vector[GM] error_ref_mix = horseshoe_get_tp(error_ref_mix_z, hs_local, hs_global, par_ratio / sqrt(GM), hs_scale_slab^2 * hs_c2);
-
 
 }
 
@@ -331,20 +288,6 @@ model {
 				lambda_log_deconvoluted_3 + exposure_rate[y_linear_S_3]
 			);
 
-	vector[Y_1 + Y_2 + Y_3] sigma_inv_log_deconvoluted = error_ref_mix[append_array(y_linear_GM_1, append_array(y_linear_GM_2, y_linear_GM_3))];
-
-	// vector[CL + Y_1 + Y_2 + Y_3] local_parameters =
-	// 	append_row(
-	// 		append_row(
-	// 			append_row(
-	// 				lambda_log[G_linear] + exposure_rate[S_linear],
-	// 				lambda_log_deconvoluted_1 + exposure_rate[y_linear_S_1]
-	// 			),
-	// 			lambda_log_deconvoluted_2 + exposure_rate[y_linear_S_2]
-	// 		),
-	// 		lambda_log_deconvoluted_3 + exposure_rate[y_linear_S_3]
-	// 	);
-
   // Overall properties of the data
   lambda_mu ~ normal(lambda_mu_prior[1],lambda_mu_prior[2]);
 	lambda_sigma ~ normal(lambda_sigma_prior[1],lambda_sigma_prior[2]);
@@ -368,27 +311,13 @@ model {
 	for(q in 1:Q) prop_d[q] ~ dirichlet(rep_vector(num_elements(prop_d[1]), num_elements(prop_d[1])));
 	for(q in 1:Q) prop_e[q] ~ dirichlet(rep_vector(num_elements(prop_e[1]), num_elements(prop_e[1])));
 
-	// Unexplanable difference between reference and mix
-	// error_ref_mix ~ exponential(1);
-	// Horseshoe
-  target += horseshoe_get_lp(error_ref_mix_z, hs_local, hs_df, hs_global, df_global, hs_c2, df_slab);
-
-
-	// target += sum(map_rect(
-	// 	lp_reduce ,
-	// 	[sigma_intercept, sigma_slope]', // global parameters
-	// 	get_real_MPI(local_parameters, shards),
-	// 	real_data, // real data
-	// 	get_int_MPI(data_integer, shards)
-	// ));
-
 	// Deconvolution
 	sigma_intercept_dec ~ student_t(3, 0, 2);
 	//sigma_slope_dec ~ normal(0,1);
 
 	y_linear ~ neg_binomial_2_log(
 		lambda_log_deconvoluted,
-		1.0 ./ exp( sigma_inv_log_deconvoluted + ( sigma_slope * lambda_log_deconvoluted + sigma_intercept_dec ) )
+		1.0 ./ exp( ( sigma_slope * lambda_log_deconvoluted + sigma_intercept_dec ) )
 	);
 
 	// Reference

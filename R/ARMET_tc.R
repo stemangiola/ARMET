@@ -889,7 +889,7 @@ ARMET_tc = function(
 
 	########################################
 	# Build better scales
-
+browser()
 	exposure_rate_shift_scale =
 		df %>%
 		filter(`house keeping`) %>%
@@ -948,7 +948,7 @@ ARMET_tc = function(
 	# Observed mix samples indexes - get GM only for markers of each level. Exclude house keeping
 	y_linear_GM_1 = y_source %>% filter(level ==1) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(GM)
 	y_linear_GM_2 = y_source %>% filter(level ==2) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(GM)
-	y_linear_GM_3 =y_source %>% filter(level ==3) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(GM)
+	y_linear_GM_3 = y_source %>% filter(level ==3) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(GM)
 
 	# Lengths indexes
 	Y_1 = y_linear_1 %>% length
@@ -961,13 +961,6 @@ ARMET_tc = function(
 	lambda_skew_prior =  c( -2.7, 1)
 	sigma_intercept_prior = c( 1.9 , 0.1)
 	lambda_log_scale = 	counts_baseline %>% filter(!query) %>% distinct(G, lambda) %>% arrange(G) %>% pull(lambda)
-
-	# Horse shoe
-	hs_df = 3             # If divergencies increase this
-	par_ratio = 1/999     # number of expected non-zero divided by number of expected zeros
-	hs_scale_slab = 2     # Expected value of the non-zeros
-	df_global = 3;        # 1 == horseshoe, > 1 more like student-t
-	df_slab = 25;         # stringency of the non-zero distribution. >> 1 if we are sure that non-zeros have exactly hs_scale_slab value, in a sense this increase the bimodality of the distribution
 
 	# MODEL
 
@@ -986,7 +979,7 @@ ARMET_tc = function(
 			chains=6, cores=6,
 			iter=iterations, warmup=iterations-sampling_iterations,
 			#include = F, pars=c("prop_a", "prop_b", "prop_c", "prop_d", "prop_e"),
-			pars=c("prop_1", "prop_2", "prop_3", "exposure_rate", "error_ref_mix", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),
+			pars=c("prop_1", "prop_2", "prop_3", "exposure_rate", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),
 			#,
 			init = function () list(	lambda_log = lambda_log_scale) # runif(G,  lambda_log_scale - 1, lambda_log_scale + 1)	)
 			#save_warmup = FALSE,
