@@ -896,7 +896,7 @@ ARMET_tc = function(
 		distinct(symbol, sample, `read count`, query) %>%
 		drop_na %>%
 		inner_join( (.) %>% distinct(sample, symbol) %>% count(symbol) %>% filter(n == max(n)), by="symbol") %>% # Eliminate genes that are missing from samples
-		tidyTranscriptomics::add_normalised_counts(transcript_column = symbol) %>%
+		tidyTranscriptomics::add_normalised_counts_bulk(sample_column = sample, transcript_column = symbol, counts_column = `read count`) %>%
 		filter(query) %>%
 		mutate(l = multiplier %>% log) %>%
 		summarise(shift = l %>% mean, scale = l %>% sd) %>%
@@ -907,7 +907,7 @@ ARMET_tc = function(
 		counts_baseline %>%
 		filter(`house keeping`) %>%
 		distinct(symbol, sample, `read count`, query) %>%
-		tidyTranscriptomics::add_normalised_counts(transcript_column = symbol) %>%
+		tidyTranscriptomics::add_normalised_counts_bulk(sample_column = sample, transcript_column = symbol, counts_column = `read count`) %>%
 		mutate(
 			cc = `read count normalised` %>%
 				`+` (1) %>% log
