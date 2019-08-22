@@ -472,7 +472,7 @@ library(magrittr)
 ARMET_tc = function(
 	mix,
 	reference,
-	full_bayesian = 0,
+	#full_bayesian = 0,
 	ct_to_omit =                        c("t_CD4_naive", "adipocyte"),
 	verbose =                           F,
 	omit_regression =                   F,
@@ -485,6 +485,7 @@ ARMET_tc = function(
 	full_bayes = T
 ){
 
+	full_bayesian = T
 	# full_bayesian = 0
 	# ct_to_omit =                        c("t_CD4_naive", "adipocyte")
 	# verbose =                           F
@@ -889,7 +890,7 @@ ARMET_tc = function(
 
 	########################################
 	# Build better scales
-browser()
+
 	exposure_rate_shift_scale =
 		df %>%
 		filter(`house keeping`) %>%
@@ -973,7 +974,7 @@ browser()
 
 	fit =
 		switch(
-			full_bayes %>% `!` %>5 sum(1),
+			full_bayes %>% `!` %>% sum(1),
 
 			# HMC
 			sampling(
