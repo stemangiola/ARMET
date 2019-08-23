@@ -42,13 +42,15 @@ source("https://gist.githubusercontent.com/stemangiola/90a528038b8c52b21f9cfa6bb
 
 get_fit_df = function(fit_MPI, data_for_stan_MPI, counts_stan_MPI, level){
 library(data.tree)
-	fit_MPI %>%
-	summary() %$% summary %>%
-	as_tibble(rownames="par") %>%
-	filter(grepl("lambda|sigma", par)) %>%
-	separate(par, c("par", "G"), sep="\\[|\\]") %>%
-	filter(par %in% c("lambda", "sigma_raw")) %>%
-	select(par, G, "50%") %>% spread(par, "50%") %>%
+fit_MPI %>%
+  summary() %$% summary %>%
+  as_tibble(rownames="par") %>%
+  filter(grepl("lambda|sigma", par)) %>%
+  separate(par, c("par", "G"), sep="\\[|\\]") %>%
+  filter(par %in% c("lambda", "sigma_raw")) %>%
+  select(par, G, mean, sd) %>%
+  pivot_wider(names_from = par, values_from = c(mean, sd), names_sep = " ") %>%
+	rename(lambda = `mean lambda`, sigma_raw = `mean sigma_raw`) %>%
 	mutate(G = G %>% as.integer) %>%
 	left_join(
 		data_for_stan_MPI$symbols %>%
@@ -61,10 +63,10 @@ library(data.tree)
 	filter(
 		`Cell type category` %in%
 			(
-				yaml:: yaml.load_file("/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/data/tree.yaml") %>%
+				yaml:: yaml.load_file("data/tree.yaml") %>%
 			  data.tree::as.Node() %>%
 			  {	data.tree::Prune(., function(x) x$level <= level + 1); . } %>%
-			  { .$Get("name", filterFun = isLeaf) } %>% c("house_keeping") 	
+			  { .$Get("name", filterFun = data.tree::isLeaf) } %>% c("house_keeping") 	
 			)
 	) %>%
 
@@ -186,12 +188,12 @@ fit_df_4 = get_fit_df(fit_MPI, data_for_stan_MPI, counts_stan_MPI, level) %>% mu
 fit_df_1 %>% mutate(level = 1) %>%
 	bind_rows(fit_df_2 %>% mutate(level = 2)) %>%
 	bind_rows(fit_df_3 %>% mutate(level = 3)) %>%
-	bind_rows(fit_df_3 %>% mutate(level = 4)) %>%
+	bind_rows(fit_df_4 %>% mutate(level = 4)) %>%
 
 	distinct(
 		level, sample, symbol, `Cell type formatted`, `Cell type category`, 
 		`read count`, `read count normalised bayes`, 
-		`Data base`, lambda, sigma_raw, CI_low, CI_high, `gene error mean`
+		`Data base`, lambda, sigma_raw, `sd lambda`, `sd sigma_raw`, CI_low, CI_high, `gene error mean`
 	) %>%
 	
 	# Replace the category house_keeping
@@ -218,7 +220,7 @@ fit_df_1 %>% mutate(level = 1) %>%
 		distinct(symbol)
 	) %>%
 
-	write_csv("docs/ref.csv")
+	write_csv("docs/ref_1_2_3_4.csv")
 
 
 ```
