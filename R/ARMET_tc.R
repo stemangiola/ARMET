@@ -370,8 +370,8 @@ parse_summary = function(fit){
 
 parse_summary_check_divergence = function(fit){
 	fit %>%
-		tidybayes::gather_draws(prop_1[Q, C], prop_2[Q, C], prop_3[Q, C]) %>%
-		filter(.variable %in% c("prop_1", "prop_2", "prop_3")) %>%
+		tidybayes::gather_draws(prop_1[Q, C], prop_2[Q, C], prop_3[Q, C], prop_4[Q, C]) %>%
+		filter(.variable %in% c("prop_1", "prop_2", "prop_3", "prop_4")) %>%
 
 		# If not converged choose the majority chains
 		mutate(	converged = diptest::dip.test(`.value`) %$%	`p.value` > 0.05) %>%
@@ -418,6 +418,7 @@ tree =
 		.$Set(	C1 = get_idx_level(.,1)	)
 		.$Set(	C2 = get_idx_level(.,2)	)
 		.$Set(	C3 = get_idx_level(.,3)	)
+		.$Set(	C4 = get_idx_level(.,4)	)
 		#		if(max(levels)>1) for(l in 2:max(levels)) { my_c = sprintf("C%s", l); .$Set(	my_c = get_idx_level(.,2)	); . }
 
 		# Set Cell type category label
@@ -481,7 +482,7 @@ ARMET_tc = function(
 	cores = 14,
 	iterations = 300,
 	sampling_iterations = 100,
-	levels = 1:3,
+	levels = 1:4,
 	full_bayes = T
 ){
 
@@ -563,6 +564,12 @@ ARMET_tc = function(
 	SLV3 = length(singles_lv3)
 	parents_lv3 = tree$Get("C2", filterFun = isNotLeaf) %>% na.omit %>% as.array
 	PLV3 = length(parents_lv3)
+
+	singles_lv4 = tree$Get("C3", filterFun = isLeaf) %>% na.omit %>% as.array
+	SLV4 = length(singles_lv4)
+	parents_lv4 = tree$Get("C3", filterFun = isNotLeaf) %>% na.omit %>% as.array
+	PLV4 = length(parents_lv4)
+
 
 	# Print overlap descriptive stats
 	#get_overlap_descriptive_stats(mix %>% slice(1) %>% gather(`symbol`, `read count`, -sample), reference)
@@ -775,6 +782,22 @@ ARMET_tc = function(
 	y_MPI_N_per_shard_lv3 = y_MPI_lv3 %$% y_MPI_N_per_shard
 	y_MPI_count_lv3 = y_MPI_lv3 %$% y_MPI_count
 
+	# Data MPI for deconvolution level 4
+	y_MPI_lv4 = y_source %>% get_MPI_deconv(shards, 4, tree)
+	idx_4_source = y_source %>% filter(level == 4) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
+	idx_4 = idx_4_source %>% pull(G)
+	I4 = idx_4 %>% length
+	I4_dim = c(idx_4_source %>% distinct(symbol) %>% nrow, idx_4_source %>% distinct(`Cell type category`) %>% nrow)
+	y_MPI_source_lv4 = y_MPI_lv4 %$% y_MPI_source
+	y_MPI_symbol_per_shard_lv4 = y_MPI_lv4 %$% y_MPI_symbol_per_shard
+	y_MPI_idx_symbol_lv4 = y_MPI_lv4 %$% y_MPI_idx_symbol
+	y_MPI_G_per_shard_lv4 = y_MPI_lv4 %$% y_MPI_G_per_shard
+	GM_lv4 = df %>% filter(!`house keeping`) %>% filter(level==4) %>% distinct(symbol) %>% nrow()
+	y_idx_lv4 =  y_MPI_lv4 %$% y_idx
+	y_MPI_idx_lv4 = y_MPI_lv4 %$% y_MPI_idx
+	y_MPI_N_per_shard_lv4 = y_MPI_lv4 %$% y_MPI_N_per_shard
+	y_MPI_count_lv4 = y_MPI_lv4 %$% y_MPI_count
+
 	Q = df %>% filter(`query`) %>% distinct(Q) %>% nrow
 
 	#######################################
@@ -821,6 +844,16 @@ ARMET_tc = function(
 		cbind(y_MPI_N_per_shard_lv3) %>%
 		cbind(y_MPI_count_lv3)
 
+	# level 4
+	lev4_package =
+		# Dimensions data sets
+		rep(c(ct_in_levels[4], Q, S), shards) %>%
+		matrix(nrow = shards, byrow = T) %>%
+		cbind(y_MPI_symbol_per_shard_lv4) %>%
+		cbind(y_MPI_G_per_shard_lv4) %>%
+		cbind(y_MPI_N_per_shard_lv4) %>%
+		cbind(y_MPI_count_lv4)
+
 	# Integrate everything
 	data_package =
 
@@ -829,7 +862,8 @@ ARMET_tc = function(
 			ncol(counts_package),
 			ncol(lev1_package),
 			ncol(lev2_package),
-			ncol(lev3_package)
+			ncol(lev3_package),
+			ncol(lev4_package)
 		), shards) %>%
 		matrix(nrow = shards, byrow = T) %>%
 
@@ -839,7 +873,9 @@ ARMET_tc = function(
 				(M + 2 + S), # lambda, sigma slope intercept, exposure
 				(max(y_MPI_G_per_shard_lv1) + 2 + Q + max(y_MPI_symbol_per_shard_lv1) + (Q * ct_in_levels[1])),
 				(max(y_MPI_G_per_shard_lv2) + 2 + Q + max(y_MPI_symbol_per_shard_lv2) + (Q * ct_in_levels[2])),
-				(max(y_MPI_G_per_shard_lv3) + 2 + Q + max(y_MPI_symbol_per_shard_lv3) + (Q * ct_in_levels[3]))
+				(max(y_MPI_G_per_shard_lv3) + 2 + Q + max(y_MPI_symbol_per_shard_lv3) + (Q * ct_in_levels[3])),
+				(max(y_MPI_G_per_shard_lv4) + 2 + Q + max(y_MPI_symbol_per_shard_lv4) + (Q * ct_in_levels[4]))
+
 			), shards) %>%
 			matrix(nrow = shards, byrow = T)
 		) %>%
@@ -848,7 +884,8 @@ ARMET_tc = function(
 		cbind(counts_package) %>%
 		cbind(lev1_package) %>%
 		cbind(lev2_package) %>%
-		cbind(lev3_package)
+		cbind(lev3_package) %>%
+		cbind(lev4_package)
 
 	########################################
 	########################################
@@ -903,7 +940,6 @@ ARMET_tc = function(
 		summarise(shift = l %>% mean, scale = l %>% sd) %>%
 		as.numeric
 
-
 	intercept_shift_scale =
 		counts_baseline %>%
 		filter(`house keeping`) %>%
@@ -934,27 +970,32 @@ ARMET_tc = function(
 	G2 = G2_linear %>% length
 	G3_linear = counts_baseline %>% filter(!`house keeping`) %>% filter(level ==3) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
 	G3 = G3_linear %>% length
-
+	G4_linear = counts_baseline %>% filter(!`house keeping`) %>% filter(level ==4) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
+	G4 = G4_linear %>% length
 
 	# Observed mix counts
 	y_linear_1 = y_source %>% filter(level ==1) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
 	y_linear_2 = y_source %>% filter(level ==2) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
 	y_linear_3 = y_source %>% filter(level ==3) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
+	y_linear_4 = y_source %>% filter(level ==4) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
 
 	# Observed mix samples indexes
 	y_linear_S_1 = y_source %>% filter(level ==1) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
 	y_linear_S_2 = y_source %>% filter(level ==2) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
 	y_linear_S_3 = y_source %>% filter(level ==3) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
+	y_linear_S_4 = y_source %>% filter(level ==4) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
 
 	# Observed mix samples indexes - get GM only for markers of each level. Exclude house keeping
 	y_linear_GM_1 = y_source %>% filter(level ==1) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(GM)
 	y_linear_GM_2 = y_source %>% filter(level ==2) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(GM)
 	y_linear_GM_3 = y_source %>% filter(level ==3) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(GM)
+	y_linear_GM_4 = y_source %>% filter(level ==4) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(GM)
 
 	# Lengths indexes
 	Y_1 = y_linear_1 %>% length
 	Y_2 = y_linear_2 %>% length
 	Y_3 = y_linear_3 %>% length
+	Y_4 = y_linear_4 %>% length
 
 	# Non centered
 	lambda_mu_prior = c(6.2, 1)
@@ -962,6 +1003,8 @@ ARMET_tc = function(
 	lambda_skew_prior =  c( -2.7, 1)
 	sigma_intercept_prior = c( 1.9 , 0.1)
 	lambda_log_scale = 	counts_baseline %>% filter(!query) %>% distinct(G, lambda) %>% arrange(G) %>% pull(lambda)
+
+	browser()
 
 	# MODEL
 	fileConn<-file("~/.R/Makevars")

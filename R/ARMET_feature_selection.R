@@ -20,7 +20,7 @@ my_theme =
 		axis.title.y  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10))
 	)
 
-ref = read_csv("docs/ref_1_2_3.csv")
+ref = read_csv("docs/ref_1_2_3_4.csv")
 
 source("https://gist.githubusercontent.com/stemangiola/9d2ba5d599b7ac80404c753cdee04a01/raw/26e5b48fde0cd4f5b0fd7cbf2fde6081a5f63e7f/tidy_data_tree.R")
 
@@ -188,7 +188,7 @@ get_markers_number = function(pass, res, num_markers_previous_level, min_n_sampl
 
 	if(pass == 0 | (num_markers_previous_level %>% is.null))
 
-		marker_df %>% distinct(pair, ct1, ct2, level) %>% left_join( tibble(level=c(1,2, 3), `n markers` = c( (min_n_samples * 2.5) %>% ceiling, min_n_samples, min_n_samples)) )
+		marker_df %>% distinct(pair, ct1, ct2, level) %>% left_join( tibble(level=c(1,2, 3, 4), `n markers` = c( (min_n_samples * 2.5) %>% ceiling, min_n_samples, min_n_samples, min_n_samples)) )
 
 	else
 
@@ -422,6 +422,7 @@ marker_df =
 	give_rank_to_ref(ref %>% filter(level ==1), 1, 0.5) %>%
 	rbind(give_rank_to_ref(ref %>% filter(level ==2), 2, 0.4)) %>%
 	rbind(give_rank_to_ref(ref %>% filter(level ==3), 3, 0.5)) %>%
+	rbind(give_rank_to_ref(ref %>% filter(level ==4), 4, 0.5)) %>%
 	separate(pair, c("ct1", "ct2"), sep=" ", remove = F)
 
 mix_source =
@@ -529,30 +530,30 @@ mix_source =
 ##################################
 # TEST
 ##################################
-# source("R/ARMET_tc.R")
-# test =
-# 	get_markers_number(0, NULL, NULL) %>%
-# 	get_markers_df(0) %>%
-# 	get_input_data(reps = reps, pass = 0) %>%
-# 	{	ARMET_tc(
-# 		(.) %$% mix,
-# 		# (.) %$% reference,
-# 		(.) %$% reference %>%
-# 			inner_join(
-# 				(.) %>%
-# 					distinct(symbol, ct1, ct2, `house keeping`) %>%
-# 					mutate(n = ifelse(`house keeping`, 30, 5)) %>%
-# 					group_by(ct1, ct2, `house keeping`) %>%
-# 					filter(row_number() <= n) %>%
-# 					ungroup() %>%
-# 					select(-n)
-# 				),
-# 		iterations = 250,
-# 		full_bayesian = T,
-# 		cores = 8
-# 	)}
-#
-# cores = 4
+source("R/ARMET_tc.R")
+test =
+	get_markers_number(0, NULL, NULL) %>%
+	get_markers_df(0) %>%
+	get_input_data(reps = reps, pass = 0) %>%
+	{	ARMET_tc(
+		(.) %$% mix,
+		# (.) %$% reference,
+		(.) %$% reference %>%
+			inner_join(
+				(.) %>%
+					distinct(symbol, ct1, ct2, `house keeping`) %>%
+					mutate(n = ifelse(`house keeping`, 30, 5)) %>%
+					group_by(ct1, ct2, `house keeping`) %>%
+					filter(row_number() <= n) %>%
+					ungroup() %>%
+					select(-n)
+				),
+		iterations = 250,
+		full_bayes = T,
+		cores = 8
+	)}
+
+cores = 4
 ##################################
 # Pass 0
 ##################################

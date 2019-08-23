@@ -147,6 +147,8 @@ data {
   int G2_linear[G2];
   int<lower=0> G3;
   int G3_linear[G3];
+  int<lower=0> G4;
+  int G4_linear[G4];
 
   // Observed counts
   int<lower=0> Y_1;
@@ -161,6 +163,10 @@ data {
 	int y_linear_3[Y_3];
 	int y_linear_S_3[Y_3];
 	int y_linear_GM_3[Y_3];
+	int<lower=0> Y_4;
+	int y_linear_4[Y_4];
+	int y_linear_S_4[Y_4];
+	int y_linear_GM_4[Y_4];
 
 	// Lv2 tree structure parents singles
 	int<lower=1> SLV2;
@@ -174,6 +180,12 @@ data {
 	int parents_lv3[PLV3]; // Level one parents
 	int singles_lv3[SLV3]; // Level 1 leafs
 
+	// Lv4 tree structure parents singles
+	int<lower=1> SLV4;
+	int<lower=1> PLV4;
+	int parents_lv4[PLV4]; // Level one parents
+	int singles_lv4[SLV4]; // Level 1 leafs
+
 	// Non-centered param
 	real lambda_mu_prior[2];
 	real lambda_sigma_prior[2];
@@ -186,16 +198,19 @@ data {
 }
 transformed data{
 	// MPI
-	int data_integer[CL + Y_1 + Y_2 + Y_3] =
+	int data_integer[CL + Y_1 + Y_2 + Y_3 + Y_4] =
 	append_array(
 		append_array(
-			append_array(	counts_linear,	y_linear_1),
-			y_linear_2
+			append_array(
+				append_array(	counts_linear,	y_linear_1),
+				y_linear_2
+			),
+			y_linear_3
 		),
-		y_linear_3
+		y_linear_4
 	);
 
-	int y_linear[Y_1 + Y_2 + Y_3] =	append_array(append_array(	y_linear_1,	y_linear_2),	y_linear_3);
+	int y_linear[Y_1 + Y_2 + Y_3 + Y_4] =	append_array(append_array(append_array(	y_linear_1,	y_linear_2),	y_linear_3), y_linear_4);
 
 	real real_data[shards, 0] = rep_array(0.0, shards, 0);
 }
@@ -215,26 +230,35 @@ parameters {
   vector[S] exposure_rate;
 
   // Proportions
-  simplex[ct_in_nodes[1]] prop_1[Q]; // Root
-  simplex[ct_in_nodes[2]] prop_a[Q]; // Immune cells
-  simplex[ct_in_nodes[3]] prop_b[Q]; // b cells
-  simplex[ct_in_nodes[4]] prop_c[Q]; // granulocyte
-  simplex[ct_in_nodes[5]] prop_d[Q]; // mono_derived
-  simplex[ct_in_nodes[6]] prop_e[Q]; // t_cell
+  simplex[ct_in_nodes[1]]  prop_1[Q]; // Root
+  simplex[ct_in_nodes[2]]  prop_a[Q]; // Immune cells
+
+  // lv2
+  simplex[ct_in_nodes[3]]  prop_b[Q]; // b cells
+  simplex[ct_in_nodes[4]]  prop_c[Q]; // granulocyte
+  simplex[ct_in_nodes[5]]  prop_d[Q]; // mono_derived
+  simplex[ct_in_nodes[6]]  prop_e[Q]; // t_cell
+
+	// lv3
+  simplex[ct_in_nodes[7]]  prop_f[Q]; // dendritic myeloid
+  simplex[ct_in_nodes[8]]  prop_g[Q]; // macrophage
+  simplex[ct_in_nodes[9]]  prop_h[Q]; // CD4
+  simplex[ct_in_nodes[10]] prop_i[Q]; // CD8
 
   // Error between reference and mix, to avoid divergencies
   // vector<lower=0>[GM] error_ref_mix_z;
 
 }
 transformed parameters{
-		// proportion of level 2
+
+	// proportion of level 2
 	vector[ct_in_levels[2]] prop_2[Q] =
 		append_vector_array(
 			prop_1[,singles_lv2],
 			multiply_by_column(prop_a, prop_1[,parents_lv2[1]])
 		);
 
-			// proportion of level 3
+	// proportion of level 3
 	vector[ct_in_levels[3]] prop_3[Q] =
 		append_vector_array(
 			prop_2[,singles_lv3],
@@ -245,6 +269,22 @@ transformed parameters{
 					append_vector_array(
 						multiply_by_column(prop_d, prop_2[,parents_lv3[3]]),
 						multiply_by_column(prop_e, prop_2[,parents_lv3[4]])
+					)
+				)
+			)
+		);
+
+	// proportion of level 4
+	vector[ct_in_levels[4]] prop_4[Q] =
+		append_vector_array(
+			prop_3[,singles_lv4],
+			append_vector_array(
+				multiply_by_column(prop_f, prop_3[,parents_lv4[1]]),
+				append_vector_array(
+					multiply_by_column(prop_g, prop_3[,parents_lv4[2]]),
+					append_vector_array(
+						multiply_by_column(prop_h, prop_3[,parents_lv4[3]]),
+						multiply_by_column(prop_i, prop_3[,parents_lv4[4]])
 					)
 				)
 			)
@@ -279,13 +319,24 @@ model {
 			)
 		);
 
-		vector[Y_1 + Y_2 + Y_3] lambda_log_deconvoluted =
+	vector[Y_4] lambda_log_deconvoluted_4 =
+		log(
+			to_vector(
+				vector_array_to_matrix(prop_4) *
+				exp(to_matrix(lambda_log[G4_linear], ct_in_levels[4], G4/ct_in_levels[4])) // [Q,G] dimensions
+			)
+		);
+
+		vector[Y_1 + Y_2 + Y_3 + Y_4] lambda_log_deconvoluted =
 			append_row(
 				append_row(
-					lambda_log_deconvoluted_1 + exposure_rate[y_linear_S_1],
-					lambda_log_deconvoluted_2 + exposure_rate[y_linear_S_2]
+					append_row(
+						lambda_log_deconvoluted_1 + exposure_rate[y_linear_S_1],
+						lambda_log_deconvoluted_2 + exposure_rate[y_linear_S_2]
+					),
+					lambda_log_deconvoluted_3 + exposure_rate[y_linear_S_3]
 				),
-				lambda_log_deconvoluted_3 + exposure_rate[y_linear_S_3]
+				lambda_log_deconvoluted_4 + exposure_rate[y_linear_S_4]
 			);
 
   // Overall properties of the data
@@ -310,6 +361,10 @@ model {
 	for(q in 1:Q) prop_c[q] ~ dirichlet(rep_vector(num_elements(prop_c[1]), num_elements(prop_c[1])));
 	for(q in 1:Q) prop_d[q] ~ dirichlet(rep_vector(num_elements(prop_d[1]), num_elements(prop_d[1])));
 	for(q in 1:Q) prop_e[q] ~ dirichlet(rep_vector(num_elements(prop_e[1]), num_elements(prop_e[1])));
+	for(q in 1:Q) prop_f[q] ~ dirichlet(rep_vector(num_elements(prop_f[1]), num_elements(prop_f[1])));
+	for(q in 1:Q) prop_g[q] ~ dirichlet(rep_vector(num_elements(prop_g[1]), num_elements(prop_g[1])));
+	for(q in 1:Q) prop_h[q] ~ dirichlet(rep_vector(num_elements(prop_h[1]), num_elements(prop_h[1])));
+	for(q in 1:Q) prop_i[q] ~ dirichlet(rep_vector(num_elements(prop_i[1]), num_elements(prop_i[1])));
 
 	// Deconvolution
 	sigma_intercept_dec ~ student_t(3, 0, 2);
