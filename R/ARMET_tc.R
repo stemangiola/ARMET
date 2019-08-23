@@ -425,6 +425,59 @@ tree =
 		.$Set("Cell type category" = .$Get("name"))
 
 	}
+
+as_matrix = function(tbl, rownames = NULL){
+
+	tbl %>%
+
+		# Check if data frame is not numerical beside the rownames column (if present)
+		{
+			if(
+				!tbl %>%
+				{ if(!is.null(rownames)) (.) %>% dplyr::select(- contains(rownames)) else (.) } %>%
+				dplyr::summarise_all(class) %>%
+				tidyr::gather(variable, class) %>%
+				pull(class) %>% unique %>% identical("numeric")
+			) warning("to_matrix says: there are NON-numerical columns, the matrix will NOT be numerical")
+
+			(.)
+
+		} %>%
+		as.data.frame() %>%
+
+		# Deal with rownames column if present
+		{
+			if(!is.null(rownames))
+				(.) %>%
+				magrittr::set_rownames(tbl %>% pull(!!rownames)) %>%
+				dplyr::select(- !!rownames)
+			else (.)
+		} %>%
+
+		# Convert to matrix
+		as.matrix()
+}
+
+ToDataFrameTypeColFull = function(tree, ...){
+	tree %>%
+		Clone() %>%
+		{
+			t = (.)
+			foreach(l=1:(t %$% Get("level") %>% max), .combine = bind_rows) %do% {
+				data.tree::Clone(t) %>%
+					{ data.tree::Prune(., function(x) x$level <= l + 1); . } %>%
+					data.tree::ToDataFrameTypeCol(...) %>%
+					as_tibble
+			}
+		} %>%
+		distinct() %>%
+		{ if("level_3" %in% ((.) %>% colnames)) (.) %>% mutate(level_3 = ifelse(level_3 %>% is.na, level_2, level_3)) else (.) } %>%
+		{ if("level_4" %in% ((.) %>% colnames)) (.) %>% mutate(level_4 = ifelse(level_4 %>% is.na, level_3, level_4)) else (.) } %>%
+		{ if("level_5" %in% ((.) %>% colnames)) (.) %>% mutate(level_5 = ifelse(level_5 %>% is.na, level_4, level_5)) else (.) } %>%
+		{ if("level_6" %in% ((.) %>% colnames)) (.) %>% mutate(level_6 = ifelse(level_6 %>% is.na, level_5, level_6)) else (.) } %>%
+		select(..., everything())
+}
+
 library(magrittr)
 #' ARMET-tc main
 #'
@@ -496,13 +549,12 @@ ARMET_tc = function(
 	# cores = 14
 	#levels = 1:2
 
-	source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/e4ec6a2348efc2f62b88f10b12e70f4c6273a10a/tidy_extensions.R")
-	source("https://gist.githubusercontent.com/stemangiola/90a528038b8c52b21f9cfa6bb186d583/raw/4a5798857362d946bd3029188b1cc9eb9b625456/transcription_tool_kit.R")
-	source("https://gist.githubusercontent.com/stemangiola/9d2ba5d599b7ac80404c753cdee04a01/raw/ad571ea2bbc3f13441a7d845b5ae8ed67a45d8ec/tidy_data_tree.R")
+	#source("https://gist.githubusercontent.com/stemangiola/9d2ba5d599b7ac80404c753cdee04a01/raw/ad571ea2bbc3f13441a7d845b5ae8ed67a45d8ec/tidy_data_tree.R")
 
 	library(tidyverse)
 	library(foreach)
 	library(rstan)
+	library(tidyTranscriptomics)
 
 	input = c(as.list(environment()))
 	shards = cores #* 2
