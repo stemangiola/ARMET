@@ -1004,8 +1004,6 @@ ARMET_tc = function(
 	sigma_intercept_prior = c( 1.9 , 0.1)
 	lambda_log_scale = 	counts_baseline %>% filter(!query) %>% distinct(G, lambda) %>% arrange(G) %>% pull(lambda)
 
-	browser()
-
 	# MODEL
 	fileConn<-file("~/.R/Makevars")
 	writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
@@ -1025,7 +1023,7 @@ ARMET_tc = function(
 				chains=6, cores=6,
 				iter=iterations, warmup=iterations-sampling_iterations,
 				#include = F, pars=c("prop_a", "prop_b", "prop_c", "prop_d", "prop_e"),
-				pars=c("prop_1", "prop_2", "prop_3", "exposure_rate", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),
+				pars=c("prop_1", "prop_2", "prop_3", "prop_4", "exposure_rate", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),
 				#,
 				init = function () list(	lambda_log = lambda_log_scale) # runif(G,  lambda_log_scale - 1, lambda_log_scale + 1)	)
 				#save_warmup = FALSE,
@@ -1041,7 +1039,7 @@ ARMET_tc = function(
 				output_samples=100,
 				iter = 50000,
 				tol_rel_obj=0.01,
-				pars=c("prop_1", "prop_2", "prop_3", "exposure_rate", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),
+				pars=c("prop_1", "prop_2", "prop_3","prop_4", "exposure_rate", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),
 				#,
 				init = function () list(	lambda_log = lambda_log_scale) # runif(G,  lambda_log_scale - 1, lambda_log_scale + 1)	)
 
@@ -1082,7 +1080,7 @@ ARMET_tc = function(
 
 		# Add tree information
 		left_join(
-			tree %>% ToDataFrameTree("name", "C1", "C2", "C3") %>%
+			tree %>% ToDataFrameTree("name", "C1", "C2", "C3", "C4") %>%
 				as_tibble %>%
 				select(-1) %>%
 				rename(`Cell type category` = name) %>%
