@@ -7,19 +7,14 @@ functions{
 			return y;
 	}
 
-	vector vector_array_to_vector(vector[] x) {
-				// This operation is column major
-			  vector[rows(x[1]) * size(x)] y;
-			  for (m in 1:rows(x[1]))
-			    y[(m-1)*size(x)+1:(m*size(x))] = to_vector(x[,m]);
-			  return y;
-	}
+	vector[] multiply_by_column(vector[] v, real[] r){
+		int n_rows = num_elements(v[,1]);
+		int n_cols = num_elements(v[1]);
 
-	matrix vector_array_to_transposed_matrix(vector[] x) {
-	  matrix[rows(x[1]), size(x)] y;
-	  for (m in 1:size(x))
-	    y[,m] = x[m];
-	  return y;
+		vector[n_cols] v_mult [n_rows];
+		for(i in 1:n_cols) v_mult[,i] = to_array_1d(to_row_vector(v[,i]) .* to_row_vector(r));
+
+		return v_mult;
 	}
 
 	vector[] append_vector_array(vector[] v1, vector[] v2){
@@ -31,256 +26,92 @@ functions{
 		return v3;
 	}
 
-	vector[] multiply_by_column(vector[] v, real[] r){
-		int n_rows = num_elements(v[,1]);
-		int n_cols = num_elements(v[1]);
+	int get_buffer_size(vector v, real threshold){
+		// This function finds how may fake indexes -1 there are in a vector, added for map_rect needs
 
-		vector[n_cols] v_mult [n_rows];
-		for(i in 1:n_cols) v_mult[,i] = to_array_1d(to_row_vector(v[,i]) .* to_row_vector(r));
+		real i = threshold; // Value of the index
+		int n = 0; // Length of the buffer
+		int s = rows(v); // Size of the whole vector
 
-		return v_mult;
-	}
-
-	real exp_gamma_meanSd_lpdf(vector x_log, real m_log, real s){
-
-    // This function is the  probability of the log gamma function
-    // in case you have data that is aleady in log form
-
-    real m = exp(m_log);
-    real v = m + square(m) * s;
-    real a = square(m) / v;
-    real b = m / v;
-
-		vector[rows(x_log)] jacob = x_log; //jacobian
-		real norm_constant = a * log(b) -lgamma(a);
-		real a_minus_1 = a-1;
-		return sum( jacob ) + norm_constant * rows(x_log) + sum(  x_log * a_minus_1 - exp(x_log) * b ) ;
-
-	}
-
-	real exp_gamma_meanSd_rng(real m_log, real s){
-	  // This function takes care of the two prior choice
-	  // without complicating too much the model itself
-
-    real m = exp(m_log);
-    real v = m + square(m) * s;
-    real a = square(m) / v;
-    real b = m / v;
-
-	  return log(gamma_rng(a, b));
-	}
-
-	vector[] get_reference_parameters_MPI(int n_shards, int M, int[] G_per_shard, int[,] G_ind, vector lambda_log, vector sigma, vector exposure_rate){
-
-		vector[2*M + cols(exposure_rate)] lambda_sigma_exposure_MPI[n_shards];
-
-		for( i in 1:n_shards ) {
-
-			int size_buffer = (M*2) - (G_per_shard[i]*2) ;
-		  vector[ size_buffer] buffer = rep_vector(0.0,size_buffer);
-
-			lambda_sigma_exposure_MPI[i] =
-	  		append_row(
-	  		  append_row(
-		  		    append_row(
-		  		    	lambda_log[G_ind[i, 1:G_per_shard[i]]],
-		      		  sigma[G_ind[i, 1:G_per_shard[i]]]
-		      		),
-	      		buffer
-	      	),
-	      	exposure_rate
-	      );
+		while(i == threshold){
+			i = v[s-n];
+			if(i==threshold) n += 1;
 		}
 
-		return(lambda_sigma_exposure_MPI);
+		return n;
 	}
 
-	vector[] get_deconvolution_parameters_MPI(
-		int n_shards, int[] y_MPI_G_per_shard, int[,] y_MPI_idx, vector lambda,
-		vector sigma, vector exposure_rate, int Q, vector[] prop,
-		int[] y_MPI_symbol_per_shard, int[,] y_MPI_idx_symbol, vector sigma_correction
-	){
+	int[] get_elements_per_shard(int lenth_v, int shards){
 
+		// Returned integer(max_size, last_element_size)
+		int tentative_size = lenth_v / shards;
+		int tentative_remaining = lenth_v - (tentative_size * shards);
+		int elements_per_shard = tentative_remaining > 0 ? tentative_size + 1 : tentative_size;
+		int remaining =  (elements_per_shard * shards) - lenth_v;
 
+		int length_obj[shards];
 
-		vector[max(y_MPI_G_per_shard) * 2 + Q + (Q * cols(prop[1]))] lambda_sigma_exposure_prop_MPI[n_shards];
-
-		for( i in 1:n_shards ) {
-
-			int size_buffer = ( ( max(y_MPI_G_per_shard) - y_MPI_G_per_shard[i] ) * 2 ) + (max(y_MPI_symbol_per_shard) - y_MPI_symbol_per_shard[i]) ;
-
-			lambda_sigma_exposure_prop_MPI[i] =
-				append_row(
-					append_row(
-					  	append_row(
-					  		append_row(
-							    append_row(
-							    	lambda[y_MPI_idx[i, 1:y_MPI_G_per_shard[i]]],
-					    		  sigma[y_MPI_idx[i, 1:y_MPI_G_per_shard[i]]]
-					    		),
-					    		sigma_correction[y_MPI_idx_symbol[i, 1:y_MPI_symbol_per_shard[i]]]
-							),
-							exposure_rate[1:Q]
-						),
-					  vector_array_to_vector(prop)
-					),
-					rep_vector(0.0, size_buffer)
-				);
-	}
-
-	return(lambda_sigma_exposure_prop_MPI);
-
-}
-	real reference_reduce( vector global_parameters , vector local_parameters , real[] real_data , int[] int_data ) {
-
-		// Real data unpack
-		real normalisation_weight = real_data[1];
-
-		// Integer data unpack
-	 	int M = int_data[1];
-	 	int N = int_data[2];
-	 	int S = int_data[3];
-	 	int G_per_shard = int_data[4];
-	 	int symbol_end[M+1] = int_data[(4+1):(4+1+M)];
-	 	int sample_idx[N] = int_data[(4+1+M+1):(4+1+M+1+N-1)];
-	 	int counts[N] = int_data[(4+1+M+1+N-1+1):size(int_data)];
-
-		// Parameters unpack
-	 	vector[G_per_shard] lambda_MPI = local_parameters[1:G_per_shard];
-	 	vector[G_per_shard] sigma_MPI = local_parameters[(G_per_shard+1):(G_per_shard*2)];
-	 	vector[S] exposure_rate = local_parameters[((M*2)+1):rows(local_parameters)];
-
-		// Vectorise lpmf
-		vector[symbol_end[G_per_shard+1]] lambda_MPI_c;
-		vector[symbol_end[G_per_shard+1]] sigma_MPI_c;
-		for(g in 1:G_per_shard){
-			int how_many = symbol_end[g+1] - (symbol_end[g]);
-			lambda_MPI_c[(symbol_end[g]+1):symbol_end[g+1]] = rep_vector(lambda_MPI[g], how_many);
-			sigma_MPI_c [(symbol_end[g]+1):symbol_end[g+1]] = rep_vector(sigma_MPI[g],  how_many);
+		for(s in 1:shards) {
+			length_obj[s] =
+				s != shards ?
+				elements_per_shard :
+				elements_per_shard - remaining;  // Actual elements in it for last object
 		}
 
-//print("...");
-		// Return
-    return (neg_binomial_2_log_lpmf(
-    	counts[1:symbol_end[G_per_shard+1]] |
-    	exposure_rate[sample_idx[1:symbol_end[G_per_shard+1]]] +
-    	lambda_MPI_c,
-    	sigma_MPI_c
-    ) * normalisation_weight);
+ 		return length_obj;
 
-  }
-
-	vector[] sum_NB_MPI(matrix lambda_mat, matrix sigma_mat, matrix prop_mat){
-
-		// Matrix operation for sum
-		matrix[rows(prop_mat), cols(lambda_mat)] lambda_sum = prop_mat * lambda_mat; //Q rows, G columns
-		matrix[rows(prop_mat), cols(sigma_mat)] sigma_sum =                          //Q rows, G columns
-			square(lambda_sum) ./
-			(
-				square(prop_mat) *
-				(
-					square(lambda_mat) ./
-					sigma_mat
-				)
-			) ;
-
-		vector[rows(prop_mat) * cols(sigma_mat)] sum_obj[2];
-		sum_obj[1] = to_vector(lambda_sum);
-		sum_obj[2] = to_vector(sigma_sum);
-
-		// The vectorisation is G1-Q1, G1-Q2, G1-Q3 etc..
-		return(sum_obj);
 	}
 
-	matrix[] sum_NB_MPI_mat(matrix lambda_mat, matrix sigma_mat, matrix prop_mat){
+	int[,] get_int_MPI(int[] v, int shards){
 
-		// Matrix operation for sum
-		matrix[rows(prop_mat), cols(lambda_mat)] lambda_sum = prop_mat * lambda_mat; //Q rows, G columns
-		matrix[rows(prop_mat), cols(sigma_mat)] sigma_sum =                          //Q rows, G columns
-			square(lambda_sum) ./
-			(
-				square(prop_mat) *
-				(
-					square(lambda_mat) ./
-					sigma_mat
-				)
-			) ;
+		int elements_per_shard[shards] = get_elements_per_shard(size(v), shards); // Length of the returned object
+		int size_MPI_obj = elements_per_shard[1]; // the first element is always the full size of the object
+		int v_MPI[shards,size_MPI_obj] = rep_array(-1, shards,size_MPI_obj); // Set values to -1 for the ones that are not filled
 
-		matrix[rows(prop_mat), cols(lambda_mat)] sum_obj[2];
-		sum_obj[1] = lambda_sum;
-		sum_obj[2] = sigma_sum;
+		int i = 0; // Index sweeping the vector
 
-		// The vectorisation is G1-Q1, G1-Q2, G1-Q3 etc..
-		return(sum_obj);
+		for(s in 1:shards){
+			v_MPI[s, 1:elements_per_shard[s]] = v[ (i + 1) : i + elements_per_shard[s] ];
+			i += elements_per_shard[s];
+		}
+
+		return v_MPI;
 	}
 
-  real sum_reduce( vector global_parameters , vector local_parameters , real[] real_data , int[] int_data ) {
+	vector[] get_real_MPI(vector v, int shards){
 
-		// Data unpack
-		int ct_in_nodes = int_data[1];
-		int Q = int_data[2];
-		int S = int_data[3];
-		int y_MPI_symbol_per_shard = int_data[4];
-		int y_MPI_G_per_shard = int_data[5];
-		int y_MPI_N_per_shard = int_data[6];
-	 	int counts[y_MPI_N_per_shard] = int_data[6+1: 6+y_MPI_N_per_shard];
+		int elements_per_shard[shards] = get_elements_per_shard(rows(v), shards); // Length of the returned object
+		int size_MPI_obj = elements_per_shard[1]; // the first element is always the full size of the object
+		vector[size_MPI_obj] v_MPI[shards] ; // Set values to -999 for the ones that are not filled
 
-		// Parameters unpack
-	 	vector[y_MPI_G_per_shard] lambda_MPI = local_parameters[1:y_MPI_G_per_shard];
-	 	vector[y_MPI_G_per_shard] sigma_MPI = local_parameters[(y_MPI_G_per_shard+1):(y_MPI_G_per_shard+y_MPI_G_per_shard)];
-	 	vector[y_MPI_symbol_per_shard] sigma_correction = local_parameters[(y_MPI_G_per_shard+y_MPI_G_per_shard+1):(y_MPI_G_per_shard+y_MPI_G_per_shard + y_MPI_symbol_per_shard)];
-	 	vector[Q] exposure_rate = local_parameters[(y_MPI_G_per_shard+y_MPI_G_per_shard + y_MPI_symbol_per_shard+1):(y_MPI_G_per_shard+y_MPI_G_per_shard + y_MPI_symbol_per_shard + Q)];
-	 	vector[Q * ct_in_nodes] prop = local_parameters[(y_MPI_G_per_shard+y_MPI_G_per_shard + y_MPI_symbol_per_shard + Q +1)	:	(y_MPI_G_per_shard+y_MPI_G_per_shard + y_MPI_symbol_per_shard + Q + (Q * ct_in_nodes))];
+		int i = 0; // Index sweeping the vector
 
-		matrix[Q, y_MPI_symbol_per_shard] my_sum_mat[2] = sum_NB_MPI_mat(
-			to_matrix( lambda_MPI, ct_in_nodes, y_MPI_symbol_per_shard), // ct rows, G columns
-			to_matrix( sigma_MPI,  ct_in_nodes, y_MPI_symbol_per_shard), // ct rows, G columns
-			to_matrix( prop, Q, ct_in_nodes)
-		);
+		for(s in 1:shards){
+			v_MPI[s] = rep_vector(-999.0, size_MPI_obj);
+			v_MPI[s, 1:elements_per_shard[s]] = v[ (i + 1) : i + elements_per_shard[s] ];
+			i += elements_per_shard[s];
+		}
 
-		// Vecotrised sampling, all vectors should be G1-Q1, G1-Q2, G1-Q3
-		return (neg_binomial_2_lpmf(
-				counts |
-				to_vector(my_sum_mat[1] .* rep_matrix((exp(exposure_rate)), y_MPI_symbol_per_shard)),
-				to_vector(my_sum_mat[2] ./ rep_matrix((exp(to_row_vector(sigma_correction))), Q))
-			));
-
-}
+		return v_MPI;
+	}
 
 	vector lp_reduce( vector global_parameters , vector local_parameters , real[] real_data , int[] int_data ) {
 
-		int levels = 3; // TEMPORARY TO BE MODIFIED
-		int length_indexes = (levels + 1) + (levels + 1);
-		int dim_data[levels + 1] = int_data[1:(levels + 1)];
-		int dim_param[levels + 1] = int_data[((levels + 1) + 1):length_indexes];
+		real lp;
+		real threshold = -999;
+		int size_buffer = get_buffer_size(local_parameters, threshold);
+		int size_vector = rows(local_parameters)-size_buffer;
 
-		vector[3] lp;
+		if(min(local_parameters[1:size_vector]) == threshold) print("ERROR! The MPI implmentation is buggy")
 
 		// Reference / exposure rate
-		lp[1] = reference_reduce(
-			global_parameters ,
-			local_parameters[1:dim_param[1]] ,
-			real_data ,
-			int_data[length_indexes+1:(length_indexes+dim_data[1])]
+		lp = neg_binomial_2_log_lpmf(
+			int_data[1:size_vector] |
+			local_parameters[1:size_vector],
+			1.0 ./ exp( global_parameters[2] * local_parameters[1:size_vector] + global_parameters[1])
 		);
 
-		// Deconvolution
-		lp[2] = sum_reduce(
-			global_parameters ,
-			local_parameters[(dim_param[1]+1):(dim_param[1] + dim_param[2])] ,
-			real_data ,
-			int_data[(length_indexes+dim_data[1]+1):(length_indexes+dim_data[1] + dim_data[2])]
-		);
-		lp[3] = sum_reduce(
-			global_parameters ,
-			local_parameters[(dim_param[1] + dim_param[2] +1): (dim_param[1] + dim_param[2] + dim_param[3])] ,
-			real_data ,
-			int_data[(length_indexes+dim_data[1] + dim_data[2] + 1):(length_indexes+dim_data[1] + dim_data[2] + dim_data[3])]
-		);
-
-	 return [sum(lp)]';
-
-	 //return [lp[1]]';
+	 return [lp]';
 
 	}
 
@@ -288,86 +119,54 @@ functions{
 data {
 
 	// Reference matrix inference
-  int<lower=0> N;
-  int<lower=0> M;
-	int<lower=0> G;
-	int<lower=0> GM; // Marker symbols
-	int<lower=0> S;
-  int n_shards;
-	int<lower=0> counts[n_shards, N];
-	int<lower=0> symbol_end[n_shards, M+1];
-	int<lower=0> G_ind[n_shards, M];
-	int<lower=0> sample_idx[n_shards, N];
-	int<lower=0> G_per_shard[n_shards];
-	int<lower=0> G_per_shard_idx[n_shards + 1];
 
-	// Global properies prior model
-	real lambda_mu_mu;
-	real lambda_sigma;
-  real<upper=0> sigma_slope;
-  real sigma_intercept;
-  real<lower=0>sigma_sigma;
+	int<lower=0> G;
+	int<lower=0> GM;
+	int<lower=0> S;
+	int CL;
+
+ 	int counts_linear[CL] ;
+	int G_linear[CL] ;
+	int S_linear[CL] ;
+
+	real<upper=0> sigma_slope;
+	real<lower=0> sigma_sigma;
+	real sigma_intercept;
+
+
+ 	int<lower=0> Q;
+  int<lower=1> n_nodes;
+  int<lower=1> ct_in_nodes[n_nodes];
+	int<lower=1> n_levels;
+  int<lower=1> ct_in_levels[n_levels];
 
   // Deconvolution
-  //int<lower=1> C;
-  int<lower=0> Q;
-  int<lower=0> I;
-  int<lower=1> n_nodes;
-	int<lower=1> n_levels;
-  int<lower=1> ct_in_nodes[n_nodes];
-  int<lower=1> ct_in_levels[n_levels];
-  int y[I,2]; // `read count`  S Q mapping_with_ct
+  int<lower=0> G1;
+  int G1_linear[G1];
+  int<lower=0> G2;
+  int G2_linear[G2];
+  int<lower=0> G3;
+  int G3_linear[G3];
+  int<lower=0> G4;
+  int G4_linear[G4];
 
-  // Skip lambda imputaton
- 	int<lower=0, upper=1> do_infer;
- 	vector[G] lambda_log_data;
-  vector[G] sigma_raw_data;
-
-  int<lower=0> counts_package[n_shards, 4+(M+1)+N+N];
-
-	// Level 1 MPI
-	int I1;
-  int I1_dim[2];
-  int idx_1[I1];
-	int y_MPI_symbol_per_shard_lv1[n_shards];
-	int y_MPI_idx_symbol_lv1[n_shards,max(y_MPI_symbol_per_shard_lv1)];
-	int y_MPI_G_per_shard_lv1[n_shards];
-	int y_MPI_idx_lv1[n_shards,max(y_MPI_G_per_shard_lv1)];
-	int<lower=0> GM_lv1; // Marker symbols
-	int y_idx_lv1[GM_lv1 * ct_in_levels[1]];
-	int y_MPI_N_per_shard_lv1[n_shards];
-	int y_MPI_count_lv1[n_shards, max(y_MPI_N_per_shard_lv1)];
-	int<lower=0> lev1_package[n_shards, 6 + max(y_MPI_N_per_shard_lv1)];
-
-	// Level 2 MPI
-	int I2;
-  int I2_dim[2];
-	int idx_2[I2];
-	int y_MPI_symbol_per_shard_lv2[n_shards];
-	int y_MPI_idx_symbol_lv2[n_shards,max(y_MPI_symbol_per_shard_lv2)];
-	int y_MPI_G_per_shard_lv2[n_shards];
-	int y_MPI_idx_lv2[n_shards,max(y_MPI_G_per_shard_lv2)];
-	int<lower=0> GM_lv2; // Marker symbols
-	int y_idx_lv2[GM_lv2 * ct_in_levels[2]];
-	int y_MPI_N_per_shard_lv2[n_shards];
-	int y_MPI_count_lv2[n_shards, max(y_MPI_N_per_shard_lv2)];
-	int<lower=0> lev2_package[n_shards, 6 + max(y_MPI_N_per_shard_lv2)];
-
-	// Level 3 MPI
-	int I3;
-  int I3_dim[2];
-	int idx_3[I3];
-	int y_MPI_symbol_per_shard_lv3[n_shards];
-	int y_MPI_idx_symbol_lv3[n_shards,max(y_MPI_symbol_per_shard_lv3)];
-	int y_MPI_G_per_shard_lv3[n_shards];
-	int y_MPI_idx_lv3[n_shards,max(y_MPI_G_per_shard_lv3)];
-	int<lower=0> GM_lv3; // Marker symbols
-	int y_idx_lv3[GM_lv3 * ct_in_levels[3]];
-	int y_MPI_N_per_shard_lv3[n_shards];
-	int y_MPI_count_lv3[n_shards, max(y_MPI_N_per_shard_lv3)];
-	int<lower=0> lev3_package[n_shards, 6 + max(y_MPI_N_per_shard_lv3)];
-
-	int data_package[n_shards, (n_levels + 1) + (n_levels + 1) + (4+(M+1)+N+N) + (6 + max(y_MPI_N_per_shard_lv1)) + (6 + max(y_MPI_N_per_shard_lv2)) + (6 + max(y_MPI_N_per_shard_lv3))]; // All integer data
+  // Observed counts
+  int<lower=0> Y_1;
+	int y_linear_1[Y_1];
+	int y_linear_S_1[Y_1];
+	int y_linear_GM_1[Y_1];
+  int<lower=0> Y_2;
+	int y_linear_2[Y_2];
+	int y_linear_S_2[Y_2];
+	int y_linear_GM_2[Y_2];
+	int<lower=0> Y_3;
+	int y_linear_3[Y_3];
+	int y_linear_S_3[Y_3];
+	int y_linear_GM_3[Y_3];
+	int<lower=0> Y_4;
+	int y_linear_4[Y_4];
+	int y_linear_S_4[Y_4];
+	int y_linear_GM_4[Y_4];
 
 	// Lv2 tree structure parents singles
 	int<lower=1> SLV2;
@@ -381,42 +180,76 @@ data {
 	int parents_lv3[PLV3]; // Level one parents
 	int singles_lv3[SLV3]; // Level 1 leafs
 
+	// Lv4 tree structure parents singles
+	int<lower=1> SLV4;
+	int<lower=1> PLV4;
+	int parents_lv4[PLV4]; // Level one parents
+	int singles_lv4[SLV4]; // Level 1 leafs
+
+	// Non-centered param
+	real lambda_mu_prior[2];
+	real lambda_sigma_prior[2];
+	real lambda_skew_prior[2];
+	real sigma_intercept_prior[2];
+
+	// MPI
+	int shards;
+
 }
-transformed data {
+transformed data{
+	// MPI
+	int data_integer[CL + Y_1 + Y_2 + Y_3 + Y_4] =
+	append_array(
+		append_array(
+			append_array(
+				append_array(	counts_linear,	y_linear_1),
+				y_linear_2
+			),
+			y_linear_3
+		),
+		y_linear_4
+	);
 
-	real normalisation_weight = do_infer == 1 ? 1 : 10;
-	// int y_1_rows = I1_dim[1] * Q;
-	// int y_2_rows = I2_dim[1] * Q;
+	int y_linear[Y_1 + Y_2 + Y_3 + Y_4] =	append_array(append_array(append_array(	y_linear_1,	y_linear_2),	y_linear_3), y_linear_4);
 
-  vector[0] global_parameters;
-  real real_data[n_shards, 1] = rep_array(normalisation_weight, n_shards, 1);
-
+	real real_data[shards, 0] = rep_array(0.0, shards, 0);
 }
 parameters {
-  // Overall properties of the data
-  real<lower=0> lambda_mu; // So is compatible with logGamma prior
-  //real<lower=0> lambda_sigma;
+
+	// Global properties
+	real<offset=lambda_mu_prior[1],multiplier=lambda_mu_prior[2]>lambda_mu;
+  real<offset=lambda_sigma_prior[1],multiplier=lambda_sigma_prior[2]> lambda_sigma;
+  real<offset=lambda_skew_prior[1],multiplier=lambda_skew_prior[2]> lambda_skew;
+  //real<offset=sigma_intercept_prior[1],multiplier=sigma_intercept_prior[2]> sigma_intercept;
+	real sigma_intercept_dec;
+	//real<upper=0> sigma_slope_dec;
+
+  // Local properties of the data
+  vector[G] lambda_log;
+  vector[G] sigma_inv_log;
   vector[S] exposure_rate;
 
-  // Gene-wise properties of the data
-  vector[G * do_infer] lambda_log_param;
-  vector[G * do_infer] sigma_raw_param;
-  vector<lower=0>[ do_infer == 1 ? 1 : GM] sigma_correction_param;
-
   // Proportions
-  simplex[ct_in_nodes[1]] prop_1[Q]; // Root
-  simplex[ct_in_nodes[2]] prop_a[Q]; // Immune cells
-  simplex[ct_in_nodes[3]] prop_b[Q]; // b cells
-  simplex[ct_in_nodes[4]] prop_c[Q]; // granulocyte
-  simplex[ct_in_nodes[5]] prop_d[Q]; // mono_derived
-  simplex[ct_in_nodes[6]] prop_e[Q]; // t_cell
+  simplex[ct_in_nodes[1]]  prop_1[Q]; // Root
+  simplex[ct_in_nodes[2]]  prop_a[Q]; // Immune cells
 
+  // lv2
+  simplex[ct_in_nodes[3]]  prop_b[Q]; // b cells
+  simplex[ct_in_nodes[4]]  prop_c[Q]; // granulocyte
+  simplex[ct_in_nodes[5]]  prop_d[Q]; // mono_derived
+  simplex[ct_in_nodes[6]]  prop_e[Q]; // t_cell
+
+	// lv3
+  simplex[ct_in_nodes[7]]  prop_f[Q]; // dendritic myeloid
+  simplex[ct_in_nodes[8]]  prop_g[Q]; // macrophage
+  simplex[ct_in_nodes[9]]  prop_h[Q]; // CD4
+  simplex[ct_in_nodes[10]] prop_i[Q]; // CD8
+
+  // Error between reference and mix, to avoid divergencies
+  // vector<lower=0>[GM] error_ref_mix_z;
 
 }
-transformed parameters {
-  // Sigma
-  vector[G] sigma = 1.0 ./ exp(do_infer ? sigma_raw_param : sigma_raw_data ) ;
-	vector[G] lambda_log = do_infer ? lambda_log_param : lambda_log_data;
+transformed parameters{
 
 	// proportion of level 2
 	vector[ct_in_levels[2]] prop_2[Q] =
@@ -441,80 +274,111 @@ transformed parameters {
 			)
 		);
 
-	// Deconvolution
-	vector[G] lambda = exp(lambda_log);
-
-	// Sigma correction (if full bayes this is a unique value otherwise is gene-wise)
-	vector<lower=0>[GM] sigma_correction = do_infer == 1 ? rep_vector(sigma_correction_param[1], GM) : sigma_correction_param; // sigma_correction_param[1]
+	// proportion of level 4
+	vector[ct_in_levels[4]] prop_4[Q] =
+		append_vector_array(
+			prop_3[,singles_lv4],
+			append_vector_array(
+				multiply_by_column(prop_f, prop_3[,parents_lv4[1]]),
+				append_vector_array(
+					multiply_by_column(prop_g, prop_3[,parents_lv4[2]]),
+					append_vector_array(
+						multiply_by_column(prop_h, prop_3[,parents_lv4[3]]),
+						multiply_by_column(prop_i, prop_3[,parents_lv4[4]])
+					)
+				)
+			)
+		);
 
 }
 
 model {
 
-	target += sum(map_rect(
-		lp_reduce ,
-		global_parameters ,
-		append_vector_array(
-			get_reference_parameters_MPI(	n_shards,	M, G_per_shard,	G_ind,	lambda_log,	sigma,	exposure_rate),
-			append_vector_array(
-				get_deconvolution_parameters_MPI(n_shards, y_MPI_G_per_shard_lv1, y_MPI_idx_lv1, lambda, sigma, exposure_rate, Q, prop_1, y_MPI_symbol_per_shard_lv1, y_MPI_idx_symbol_lv1, sigma_correction),
-				append_vector_array(
-					get_deconvolution_parameters_MPI(n_shards, y_MPI_G_per_shard_lv2, y_MPI_idx_lv2, lambda, sigma, exposure_rate, Q, prop_2, y_MPI_symbol_per_shard_lv2, y_MPI_idx_symbol_lv2, sigma_correction),
-					get_deconvolution_parameters_MPI(n_shards, y_MPI_G_per_shard_lv3, y_MPI_idx_lv3, lambda, sigma, exposure_rate, Q, prop_3, y_MPI_symbol_per_shard_lv3, y_MPI_idx_symbol_lv3, sigma_correction)
-				)
+	// Calculate convoluted
+	vector[Y_1] lambda_log_deconvoluted_1 =
+		log(
+			to_vector(
+				vector_array_to_matrix(prop_1) *
+				exp(to_matrix(lambda_log[G1_linear], ct_in_levels[1], G1/ct_in_levels[1])) // [Q,G] dimensions
 			)
-		),
-		real_data,
-		data_package
-	));
+		);
+
+	vector[Y_2] lambda_log_deconvoluted_2 =
+		log(
+			to_vector(
+				vector_array_to_matrix(prop_2) *
+				exp(to_matrix(lambda_log[G2_linear], ct_in_levels[2], G2/ct_in_levels[2])) // [Q,G] dimensions
+			)
+		);
+
+	vector[Y_3] lambda_log_deconvoluted_3 =
+		log(
+			to_vector(
+				vector_array_to_matrix(prop_3) *
+				exp(to_matrix(lambda_log[G3_linear], ct_in_levels[3], G3/ct_in_levels[3])) // [Q,G] dimensions
+			)
+		);
+
+	vector[Y_4] lambda_log_deconvoluted_4 =
+		log(
+			to_vector(
+				vector_array_to_matrix(prop_4) *
+				exp(to_matrix(lambda_log[G4_linear], ct_in_levels[4], G4/ct_in_levels[4])) // [Q,G] dimensions
+			)
+		);
+
+		vector[Y_1 + Y_2 + Y_3 + Y_4] lambda_log_deconvoluted =
+			append_row(
+				append_row(
+					append_row(
+						lambda_log_deconvoluted_1 + exposure_rate[y_linear_S_1],
+						lambda_log_deconvoluted_2 + exposure_rate[y_linear_S_2]
+					),
+					lambda_log_deconvoluted_3 + exposure_rate[y_linear_S_3]
+				),
+				lambda_log_deconvoluted_4 + exposure_rate[y_linear_S_4]
+			);
 
   // Overall properties of the data
-  lambda_mu ~ normal(lambda_mu_mu,2);
+  lambda_mu ~ normal(lambda_mu_prior[1],lambda_mu_prior[2]);
+	lambda_sigma ~ normal(lambda_sigma_prior[1],lambda_sigma_prior[2]);
+	lambda_skew ~ normal(lambda_skew_prior[1],lambda_skew_prior[2]);
+	//sigma_intercept ~ normal(sigma_intercept_prior[1], sigma_intercept_prior[2]);
+	//sigma_sigma ~ normal(0,1);
 
-	// Proportion prior
+	// Exposure
+	exposure_rate ~ normal(0,1);
+	sum(exposure_rate) ~ normal(0, 0.001 * S);
+
+	// Means overdispersion reference
+	lambda_log ~ skew_normal(lambda_mu, exp(lambda_sigma), lambda_skew);
+	sigma_inv_log ~ normal(sigma_slope * lambda_log + sigma_intercept, sigma_sigma);
+
+	// Deconvolution
 	for(q in 1:Q) prop_1[q] ~ dirichlet(rep_vector(num_elements(prop_1[1]), num_elements(prop_1[1])));
 	for(q in 1:Q) prop_a[q] ~ dirichlet(rep_vector(num_elements(prop_a[1]), num_elements(prop_a[1])));
 	for(q in 1:Q) prop_b[q] ~ dirichlet(rep_vector(num_elements(prop_b[1]), num_elements(prop_b[1])));
 	for(q in 1:Q) prop_c[q] ~ dirichlet(rep_vector(num_elements(prop_c[1]), num_elements(prop_c[1])));
 	for(q in 1:Q) prop_d[q] ~ dirichlet(rep_vector(num_elements(prop_d[1]), num_elements(prop_d[1])));
 	for(q in 1:Q) prop_e[q] ~ dirichlet(rep_vector(num_elements(prop_e[1]), num_elements(prop_e[1])));
+	for(q in 1:Q) prop_f[q] ~ dirichlet(rep_vector(num_elements(prop_f[1]), num_elements(prop_f[1])));
+	for(q in 1:Q) prop_g[q] ~ dirichlet(rep_vector(num_elements(prop_g[1]), num_elements(prop_g[1])));
+	for(q in 1:Q) prop_h[q] ~ dirichlet(rep_vector(num_elements(prop_h[1]), num_elements(prop_h[1])));
+	for(q in 1:Q) prop_i[q] ~ dirichlet(rep_vector(num_elements(prop_i[1]), num_elements(prop_i[1])));
 
-	// Exposure prior
-  exposure_rate ~ normal(0,1);
-  if(do_infer) sum(exposure_rate) ~ normal(0, 0.001 * S);
+	// Deconvolution
+	sigma_intercept_dec ~ student_t(3, 0, 2);
+	//sigma_slope_dec ~ normal(0,1);
 
-  // Gene-wise properties of the data
-  if(do_infer) lambda_log_param ~ exp_gamma_meanSd(lambda_mu,lambda_sigma);
-  if(do_infer) sigma_raw_param ~ normal(sigma_slope * lambda_log_param + sigma_intercept,sigma_sigma);
-	sigma_correction_param ~ exponential(1); // Lasso prior for correction
+	y_linear ~ neg_binomial_2_log(
+		lambda_log_deconvoluted,
+		1.0 ./ exp( ( sigma_slope * lambda_log_deconvoluted + sigma_intercept_dec ) )
+	);
+
+	// Reference
+	counts_linear ~ neg_binomial_2_log(
+		lambda_log[G_linear] + exposure_rate[S_linear],
+		1.0 ./ exp( sigma_inv_log[G_linear] )
+	);
 
 }
-// generated quantities{
-//
-//
-// 		matrix[Q, GM_lv1] my_sum_mat_lv1[2] = sum_NB_MPI_mat(
-// 			to_matrix( lambda[y_idx_lv1], ct_in_levels[1], GM_lv1), // ct rows, G columns
-// 			to_matrix( sigma[y_idx_lv1],  ct_in_levels[1], GM_lv1), // ct rows,	G columns
-// 			vector_array_to_matrix( prop_1 )
-// 		);
-//
-// 		matrix[Q, GM_lv2] my_sum_mat_lv2[2] = sum_NB_MPI_mat(
-// 			to_matrix( lambda[y_idx_lv2], ct_in_levels[2], GM_lv2), // ct rows, G columns
-// 			to_matrix( sigma[y_idx_lv2],  ct_in_levels[2], GM_lv2), // ct rows,	G columns
-// 			vector_array_to_matrix( prop_2 )
-// 		);
-//
-// 		matrix[Q, GM] mu_sum = append_col(
-// 			my_sum_mat_lv1[1] .* rep_matrix(exp(exposure_rate[1:Q]), GM_lv1),
-// 			my_sum_mat_lv2[1] .* rep_matrix(exp(exposure_rate[1:Q]), GM_lv2)
-// 		);
-//
-// 		matrix[Q, GM] sigma_sum = append_col(
-// 			my_sum_mat_lv1[2] ./ rep_matrix(exp(to_row_vector(sigma_correction[1:GM_lv1])), Q),
-// 			my_sum_mat_lv2[2] ./ rep_matrix(exp(to_row_vector(sigma_correction[GM_lv1+1:GM_lv1+GM_lv2])), Q)
-// 		);
-//
-// 		matrix[Q, GM] nb_sum;
-// 		for(q in 1:Q) for(g in 1:GM) nb_sum[q,g] = neg_binomial_2_rng(mu_sum[q,g], sigma_sum[q,g]);
-//
-// }

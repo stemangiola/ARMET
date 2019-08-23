@@ -20,24 +20,24 @@ my_theme =
 		axis.title.y  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10))
 	)
 
-ref = read_csv("docs/ref.csv")
+ref = read_csv("docs/ref_1_2_3_4.csv")
 
 source("https://gist.githubusercontent.com/stemangiola/9d2ba5d599b7ac80404c753cdee04a01/raw/26e5b48fde0cd4f5b0fd7cbf2fde6081a5f63e7f/tidy_data_tree.R")
+
+# reps = 10
+# out_dir = "temp"
 
 # Get level
 args <- commandArgs(TRUE)
 
 reps = args[1] %>% as.integer
 is_full_bayesian = args[2] %>% as.integer %>% as.logical
-
-# reps = 1
-# is_full_bayesian = F
+is_full_bayesian = T
 
 out_dir = Sys.time() %>% format("%a_%b_%d_%X") %>% gsub("[: ]", "_", .) %>% sprintf("docs/feature_selection_%s", .)
 out_dir %>% dir.create()
 
-iterations = 800
-if(is_full_bayesian) iterations = iterations /2
+iterations = 500
 
 ######################################
 # Variable should be already set
@@ -145,6 +145,12 @@ get_input_data = function(markers, reps, pass){
 		# Get house keeping and markwrs
 		left_join(markers %>% distinct(level, symbol, ct1, ct2, rank, `n markers`) %>% filter(rank < 500)) %>%
 			filter(`house keeping` | rank %>% is.na %>% `!`) %>%
+
+		# Filter out symbol if present both in markers and house keeping (strange but happens)
+		anti_join(
+			(.) %>% filter(`house keeping` & (ct1 %>% is.na %>% `!`)) %>% distinct(symbol)
+		) %>%
+
 			# {
 			# 	bind_rows(
 			# 		(.) %>% inner_join( markers %>% distinct(level, symbol, ct1, ct2)),
@@ -182,7 +188,7 @@ get_markers_number = function(pass, res, num_markers_previous_level, min_n_sampl
 
 	if(pass == 0 | (num_markers_previous_level %>% is.null))
 
-		marker_df %>% distinct(pair, ct1, ct2, level) %>% left_join( tibble(level=c(1,2, 3), `n markers` = c( (min_n_samples * 2.5) %>% ceiling, min_n_samples, min_n_samples)) )
+		marker_df %>% distinct(pair, ct1, ct2, level) %>% left_join( tibble(level=c(1,2, 3, 4), `n markers` = c( (min_n_samples * 2.5) %>% ceiling, min_n_samples, min_n_samples, min_n_samples)) )
 
 	else
 
@@ -282,6 +288,7 @@ get_markers_number = function(pass, res, num_markers_previous_level, min_n_sampl
 		# group_by(pair, level) %>%
 		# summarise(`error mean` = `error mean` %>% mean) %>%
 		{
+			#browser()
 			((.) %>% ggplot(aes(x=pair, y=`error mean`)) + geom_boxplot() + geom_jitter() + my_theme) %>%
 				ggsave(filename = sprintf("%s/pass_%s_test_error.png", out_dir, pass), device = "png", width = 8)
 			(.)
@@ -306,10 +313,10 @@ get_markers_number = function(pass, res, num_markers_previous_level, min_n_sampl
 		}
 }
 
-give_rank_to_ref = function(fit_df, level, fit_threshold, lambda_threshold =4){
+give_rank_to_ref = function(fit_df, level, fit_threshold, lambda_threshold =5){
 
 	fit_df %>%
-		left_join(  tree %>% ToDataFrameTypeColFull("name") %>% as_tibble() %>% rename(`Cell type formatted`= name)) %>%
+		left_join(  Clone(tree) %>% ToDataFrameTypeColFull("name") %>% as_tibble() %>% rename(`Cell type formatted`= name)) %>%
 		filter(`Cell type category` != "house_keeping") %>%
 
 		# Select only branches that have childs
@@ -357,7 +364,20 @@ give_rank_to_ref = function(fit_df, level, fit_threshold, lambda_threshold =4){
 		separate(pair, c("Cell type category", "other Cell type category"), sep=" ", remove = F) %>%
 		left_join( fit_df %>% distinct(`Cell type category`, symbol, lambda, `gene error mean`) ) %>%
 		filter(lambda > !!lambda_threshold) %>%
-		filter(`gene error mean` < fit_threshold) %>%
+		# {
+		# 	if( (.) %>% filter(`Cell type category` == "eosinophil") %>% nrow %>% `>` (0)) browser()
+		# 	(.)
+		# } %>%
+
+		# If a marker exists for more cell types (can happen) none of them can be noisy otherwise we screw up the whole gene
+		ungroup() %>%
+		group_by(symbol) %>%
+		mutate(`too noisy` = `gene error mean` %>% max %>% `>` (fit_threshold)) %>%
+		ungroup %>%
+		filter(!`too noisy`) %>%
+		group_by(comparison, pair) %>%
+
+		#filter(`gene error mean` < fit_threshold) %>%
 		arrange(delta) %>%
 		mutate(rank = 1:n()) %>%
 		ungroup() %>%
@@ -390,6 +410,7 @@ get_markers_df = function(markers_number, pass){
 	}
 }
 
+source("R/ARMET_tc.R")
 set.seed(123)
 
 my_ref = 	ref %>%
@@ -400,7 +421,8 @@ my_ref = 	ref %>%
 marker_df =
 	give_rank_to_ref(ref %>% filter(level ==1), 1, 0.5) %>%
 	rbind(give_rank_to_ref(ref %>% filter(level ==2), 2, 0.4)) %>%
-	rbind(give_rank_to_ref(ref %>% filter(level ==3), 3, 0.7)) %>%
+	rbind(give_rank_to_ref(ref %>% filter(level ==3), 3, 0.5)) %>%
+	rbind(give_rank_to_ref(ref %>% filter(level ==4), 4, 0.5)) %>%
 	separate(pair, c("ct1", "ct2"), sep=" ", remove = F)
 
 mix_source =
@@ -505,7 +527,33 @@ mix_source =
 # 		GGally::ggpairs(columns = 1:6, ggplot2::aes(colour=`Data base`, label=`Cell type formatted`))
 # 	) %>% plotly::ggplotly()
 
+##################################
+# TEST
+##################################
+source("R/ARMET_tc.R")
+test =
+	get_markers_number(0, NULL, NULL) %>%
+	get_markers_df(0) %>%
+	get_input_data(reps = reps, pass = 0) %>%
+	{	ARMET_tc(
+		(.) %$% mix,
+		# (.) %$% reference,
+		(.) %$% reference %>%
+			inner_join(
+				(.) %>%
+					distinct(symbol, ct1, ct2, `house keeping`) %>%
+					mutate(n = ifelse(`house keeping`, 30, 5)) %>%
+					group_by(ct1, ct2, `house keeping`) %>%
+					filter(row_number() <= n) %>%
+					ungroup() %>%
+					select(-n)
+				),
+		iterations = 250,
+		full_bayes = T,
+		cores = 8
+	)}
 
+cores = 4
 ##################################
 # Pass 0
 ##################################
@@ -515,10 +563,10 @@ res_0 =
 	n_markers_0 %>%
 	get_markers_df(0) %>%
 	get_input_data(reps = reps, pass = 0) %>%
-	{	ARMET_tc((.)$mix, (.)$reference, iterations = iterations, full_bayesian = is_full_bayesian) }
+	{	ARMET_tc((.)$mix, (.)$reference, iterations = iterations, full_bayesian = is_full_bayesian, cores = cores) }
 res_0 %$% proportions %>% filter(!converged)
 
-save(list=c(sprintf("res_%s", 0), sprintf("n_markers_%s", 0)), file=sprintf("%s/input_%s.RData", out_dir, 0))
+save(list=c(sprintf("res_%s", 0), sprintf("n_markers_%s", 0)), file=sprintf("%s/data_%s.RData", out_dir, 0))
 
 ##################################
 # Pass 1
@@ -529,10 +577,10 @@ res_1 =
 	n_markers_1 %>%
 	get_markers_df(1) %>%
 	get_input_data(reps = reps, pass = 1) %>%
-	{	ARMET_tc((.)$mix, (.)$reference, iterations = iterations, full_bayesian = is_full_bayesian) }
+	{	ARMET_tc((.)$mix, (.)$reference, iterations = iterations, full_bayesian = is_full_bayesian, cores = cores ) }
 res_1 %$% proportions %>% filter(!converged)
 
-save(list=c(sprintf("res_%s", 1), sprintf("n_markers_%s", 1)), file=sprintf("%s/input_%s.RData", out_dir, 1))
+save(list=c(sprintf("res_%s", 1), sprintf("n_markers_%s", 1)), file=sprintf("%s/data_%s.RData", out_dir, 1))
 
 ##################################
 # Pass 2
@@ -543,10 +591,10 @@ res_2 =
 	n_markers_2 %>%
 	get_markers_df(2) %>%
 	get_input_data(reps = reps, pass = 2) %>%
-	{	ARMET_tc((.)$mix, (.)$reference, iterations = iterations, full_bayesian = is_full_bayesian) }
+	{	ARMET_tc((.)$mix, (.)$reference, iterations = iterations, full_bayesian = is_full_bayesian, cores = cores) }
 res_2 %$% proportions %>% filter(!converged)
 
-save(list=c(sprintf("res_%s", 2), sprintf("n_markers_%s", 2)), file=sprintf("%s/input_%s.RData", out_dir, 2))
+save(list=c(sprintf("res_%s", 2), sprintf("n_markers_%s", 2)), file=sprintf("%s/data_%s.RData", out_dir, 2))
 
 ##################################
 # Pass 3
@@ -557,10 +605,10 @@ res_3 =
 	n_markers_3 %>%
 	get_markers_df(3) %>%
 	get_input_data(reps = reps, pass = 3) %>%
-	{	ARMET_tc((.)$mix, (.)$reference, iterations = iterations, full_bayesian = is_full_bayesian) }
+	{	ARMET_tc((.)$mix, (.)$reference, iterations = iterations, full_bayesian = is_full_bayesian, cores = cores) }
 res_3 %$% proportions %>% filter(!converged)
 
-save(list=c(sprintf("res_%s", 3), sprintf("n_markers_%s", 3)), file=sprintf("%s/input_%s.RData", out_dir, 3))
+save(list=c(sprintf("res_%s", 3), sprintf("n_markers_%s", 3)), file=sprintf("%s/data_%s.RData", out_dir, 3))
 
 ##################################
 # Pass 4
@@ -571,10 +619,10 @@ res_4 =
 	n_markers_4 %>%
 	get_markers_df(4) %>%
 	get_input_data(reps = reps, pass = 4) %>%
-	{	ARMET_tc((.)$mix, (.)$reference, iterations = iterations, full_bayesian = is_full_bayesian) }
+	{	ARMET_tc((.)$mix, (.)$reference, iterations = iterations, full_bayesian = is_full_bayesian, cores = cores) }
 res_4 %$% proportions %>% filter(!converged)
 
-save(list=c(sprintf("res_%s", 4), sprintf("n_markers_%s", 4)), file=sprintf("%s/input_%s.RData", out_dir, 4))
+save(list=c(sprintf("res_%s", 4), sprintf("n_markers_%s", 4)), file=sprintf("%s/data_%s.RData", out_dir, 4))
 
 ##################################
 # Create reference data set
@@ -586,4 +634,30 @@ get_markers_number(5, res_4, n_markers_4) %>%
 	reference %>%
 	write_csv(sprintf("%s/reference.csv", out_dir))
 
+# Statistics
 
+(
+	list(
+		n_markers_0 %>% mutate(pass = 0),
+		n_markers_1 %>% mutate(pass = 1),
+		n_markers_2 %>% mutate(pass = 2),
+		n_markers_3 %>% mutate(pass = 3),
+		n_markers_4 %>% mutate(pass = 4)
+	) %>%
+		bind_rows() %>%
+		ggplot(aes(x=pass, y=`n markers`, color=pair)) + geom_point() + geom_line() + theme(legend.title = element_blank())
+) %>%
+	plotly::ggplotly()
+
+(
+	list(
+		n_markers_0 %>% mutate(pass = 0),
+		n_markers_1 %>% mutate(pass = 1),
+		n_markers_2 %>% mutate(pass = 2),
+		n_markers_3 %>% mutate(pass = 3),
+		n_markers_4 %>% mutate(pass = 4)
+	) %>%
+		bind_rows() %>%
+		ggplot(aes(x=pass, y=`error mean relative mean`, color=pair)) + geom_point() + geom_line() + theme(legend.title = element_blank())
+) %>%
+	plotly::ggplotly()

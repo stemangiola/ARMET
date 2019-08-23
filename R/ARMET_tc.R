@@ -1,3 +1,21 @@
+#' This is a generalisation of ifelse that acceots an object and return an objects
+#'
+#' @import dplyr
+#' @import tidyr
+#'
+#' @param input.df A tibble
+#' @param condition A boolean
+#' @return A tibble
+ifelse_pipe = function(.x, .p, .f1, .f2 = NULL) {
+	switch(.p %>% `!` %>% sum(1),
+				 as_mapper(.f1)(.x),
+				 if (.f2 %>% is.null %>% `!`)
+				 	as_mapper(.f2)(.x)
+				 else
+				 	.x)
+
+}
+
 #' format_for_MPI
 #'
 #' @description Format reference data frame for MPI
@@ -340,9 +358,49 @@ get_idx_level = function(tree, my_level){
 	) %>%
 		pull(my_C)
 }
+
+parse_summary = function(fit){
+	fit %>%
+		rstan::summary() %$% summary %>%
+		as_tibble(rownames=".variable") %>%
+		filter(grepl("prop", .variable)) %>%
+		separate(.variable, c(".variable", "Q", "C"), sep="[\\[,\\]]", extra="drop") %>%
+		mutate(C = C %>% as.integer, Q = Q %>% as.integer)
+}
+
+parse_summary_check_divergence = function(fit){
+	fit %>%
+		tidybayes::gather_draws(prop_1[Q, C], prop_2[Q, C], prop_3[Q, C], prop_4[Q, C]) %>%
+		filter(.variable %in% c("prop_1", "prop_2", "prop_3", "prop_4")) %>%
+
+		# If not converged choose the majority chains
+		mutate(	converged = diptest::dip.test(`.value`) %$%	`p.value` > 0.05) %>%
+
+		# If some proportions have not converged chose the most populated one
+		do(
+			(.) %>%
+				ifelse_pipe(
+					(.) %>% distinct(converged) %>% pull(1) %>% `!`,
+					~ .x %>% choose_chains_majority_roule
+				)
+		) %>%
+
+		# Anonymous function - add summary fit to converged label
+		# input: tibble
+		# output: tibble
+		{
+			left_join(
+				(.) %>% select(-converged) %>% tidybayes::median_qi(),
+				(.) %>% distinct(converged)
+			)
+		} %>%
+		ungroup()
+}
+
+
 library(data.tree)
 tree =
-	yaml:: yaml.load_file("data/tree.yaml") %>%
+	yaml:: yaml.load_file("~/PhD/deconvolution/ARMET/data/tree.yaml") %>%
 	data.tree::as.Node() %>%
 
 	{
@@ -360,13 +418,14 @@ tree =
 		.$Set(	C1 = get_idx_level(.,1)	)
 		.$Set(	C2 = get_idx_level(.,2)	)
 		.$Set(	C3 = get_idx_level(.,3)	)
+		.$Set(	C4 = get_idx_level(.,4)	)
 		#		if(max(levels)>1) for(l in 2:max(levels)) { my_c = sprintf("C%s", l); .$Set(	my_c = get_idx_level(.,2)	); . }
 
 		# Set Cell type category label
 		.$Set("Cell type category" = .$Get("name"))
 
 	}
-
+library(magrittr)
 #' ARMET-tc main
 #'
 #' @description This function calls the stan model.
@@ -414,7 +473,7 @@ tree =
 ARMET_tc = function(
 	mix,
 	reference,
-	full_bayesian = 0,
+	#full_bayesian = 0,
 	ct_to_omit =                        c("t_CD4_naive", "adipocyte"),
 	verbose =                           F,
 	omit_regression =                   F,
@@ -422,9 +481,12 @@ ARMET_tc = function(
 	seed =                              NULL,
 	cores = 14,
 	iterations = 300,
-	levels = 1:3
+	sampling_iterations = 100,
+	levels = 1:4,
+	full_bayes = T
 ){
 
+	full_bayesian = T
 	# full_bayesian = 0
 	# ct_to_omit =                        c("t_CD4_naive", "adipocyte")
 	# verbose =                           F
@@ -443,7 +505,7 @@ ARMET_tc = function(
 	library(rstan)
 
 	input = c(as.list(environment()))
-	shards = cores * 2
+	shards = cores #* 2
 
 	my_theme =
 		theme_bw() +
@@ -502,6 +564,12 @@ ARMET_tc = function(
 	SLV3 = length(singles_lv3)
 	parents_lv3 = tree$Get("C2", filterFun = isNotLeaf) %>% na.omit %>% as.array
 	PLV3 = length(parents_lv3)
+
+	singles_lv4 = tree$Get("C3", filterFun = isLeaf) %>% na.omit %>% as.array
+	SLV4 = length(singles_lv4)
+	parents_lv4 = tree$Get("C3", filterFun = isNotLeaf) %>% na.omit %>% as.array
+	PLV4 = length(parents_lv4)
+
 
 	# Print overlap descriptive stats
 	#get_overlap_descriptive_stats(mix %>% slice(1) %>% gather(`symbol`, `read count`, -sample), reference)
@@ -714,6 +782,22 @@ ARMET_tc = function(
 	y_MPI_N_per_shard_lv3 = y_MPI_lv3 %$% y_MPI_N_per_shard
 	y_MPI_count_lv3 = y_MPI_lv3 %$% y_MPI_count
 
+	# Data MPI for deconvolution level 4
+	y_MPI_lv4 = y_source %>% get_MPI_deconv(shards, 4, tree)
+	idx_4_source = y_source %>% filter(level == 4) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
+	idx_4 = idx_4_source %>% pull(G)
+	I4 = idx_4 %>% length
+	I4_dim = c(idx_4_source %>% distinct(symbol) %>% nrow, idx_4_source %>% distinct(`Cell type category`) %>% nrow)
+	y_MPI_source_lv4 = y_MPI_lv4 %$% y_MPI_source
+	y_MPI_symbol_per_shard_lv4 = y_MPI_lv4 %$% y_MPI_symbol_per_shard
+	y_MPI_idx_symbol_lv4 = y_MPI_lv4 %$% y_MPI_idx_symbol
+	y_MPI_G_per_shard_lv4 = y_MPI_lv4 %$% y_MPI_G_per_shard
+	GM_lv4 = df %>% filter(!`house keeping`) %>% filter(level==4) %>% distinct(symbol) %>% nrow()
+	y_idx_lv4 =  y_MPI_lv4 %$% y_idx
+	y_MPI_idx_lv4 = y_MPI_lv4 %$% y_MPI_idx
+	y_MPI_N_per_shard_lv4 = y_MPI_lv4 %$% y_MPI_N_per_shard
+	y_MPI_count_lv4 = y_MPI_lv4 %$% y_MPI_count
+
 	Q = df %>% filter(`query`) %>% distinct(Q) %>% nrow
 
 	#######################################
@@ -760,6 +844,16 @@ ARMET_tc = function(
 		cbind(y_MPI_N_per_shard_lv3) %>%
 		cbind(y_MPI_count_lv3)
 
+	# level 4
+	lev4_package =
+		# Dimensions data sets
+		rep(c(ct_in_levels[4], Q, S), shards) %>%
+		matrix(nrow = shards, byrow = T) %>%
+		cbind(y_MPI_symbol_per_shard_lv4) %>%
+		cbind(y_MPI_G_per_shard_lv4) %>%
+		cbind(y_MPI_N_per_shard_lv4) %>%
+		cbind(y_MPI_count_lv4)
+
 	# Integrate everything
 	data_package =
 
@@ -768,17 +862,20 @@ ARMET_tc = function(
 			ncol(counts_package),
 			ncol(lev1_package),
 			ncol(lev2_package),
-			ncol(lev3_package)
+			ncol(lev3_package),
+			ncol(lev4_package)
 		), shards) %>%
 		matrix(nrow = shards, byrow = T) %>%
 
 		# Size parameter datasets
 		cbind(
 			rep(c(
-				(2*M + S),
-				(max(y_MPI_G_per_shard_lv1) * 2 + Q + max(y_MPI_symbol_per_shard_lv1) + (Q * ct_in_levels[1])),
-				(max(y_MPI_G_per_shard_lv2) * 2 + Q + max(y_MPI_symbol_per_shard_lv2) + (Q * ct_in_levels[2])),
-				(max(y_MPI_G_per_shard_lv3) * 2 + Q + max(y_MPI_symbol_per_shard_lv3) + (Q * ct_in_levels[3]))
+				(M + 2 + S), # lambda, sigma slope intercept, exposure
+				(max(y_MPI_G_per_shard_lv1) + 2 + Q + max(y_MPI_symbol_per_shard_lv1) + (Q * ct_in_levels[1])),
+				(max(y_MPI_G_per_shard_lv2) + 2 + Q + max(y_MPI_symbol_per_shard_lv2) + (Q * ct_in_levels[2])),
+				(max(y_MPI_G_per_shard_lv3) + 2 + Q + max(y_MPI_symbol_per_shard_lv3) + (Q * ct_in_levels[3])),
+				(max(y_MPI_G_per_shard_lv4) + 2 + Q + max(y_MPI_symbol_per_shard_lv4) + (Q * ct_in_levels[4]))
+
 			), shards) %>%
 			matrix(nrow = shards, byrow = T)
 		) %>%
@@ -787,7 +884,8 @@ ARMET_tc = function(
 		cbind(counts_package) %>%
 		cbind(lev1_package) %>%
 		cbind(lev2_package) %>%
-		cbind(lev3_package)
+		cbind(lev3_package) %>%
+		cbind(lev4_package)
 
 	########################################
 	########################################
@@ -828,24 +926,139 @@ ARMET_tc = function(
 		pull(sigma_raw)
 
 	########################################
-	# MODEL
-	########################################
+	# Build better scales
 
+	exposure_rate_shift_scale =
+		df %>%
+		filter(`house keeping`) %>%
+		distinct(symbol, sample, `read count`, query) %>%
+		drop_na %>%
+		inner_join( (.) %>% distinct(sample, symbol) %>% count(symbol) %>% filter(n == max(n)), by="symbol") %>% # Eliminate genes that are missing from samples
+		tidyTranscriptomics::add_normalised_counts_bulk(sample_column = sample, transcript_column = symbol, counts_column = `read count`) %>%
+		filter(query) %>%
+		mutate(l = multiplier %>% log) %>%
+		summarise(shift = l %>% mean, scale = l %>% sd) %>%
+		as.numeric
+
+	intercept_shift_scale =
+		counts_baseline %>%
+		filter(`house keeping`) %>%
+		distinct(symbol, sample, `read count`, query) %>%
+		tidyTranscriptomics::add_normalised_counts_bulk(sample_column = sample, transcript_column = symbol, counts_column = `read count`) %>%
+		mutate(
+			cc = `read count normalised` %>%
+				`+` (1) %>% log
+		) %>%
+		summarise(shift = cc %>% mean, scale = cc %>% sd) %>%
+		as.numeric
+
+	##########################################
+	##########################################
+
+	counts_linear = counts_baseline %>% arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>%  pull(`read count`)
+	G_linear = counts_baseline %>% arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>% pull(G)
+
+	S_linear = counts_baseline %>%  arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>% pull(S)
+	CL = length(counts_linear)
+	G = counts_baseline %>%  mutate(S = S %>% as.factor %>% as.integer)%>%  distinct(G) %>% nrow
+	S = counts_baseline %>%  mutate(S = S %>% as.factor %>% as.integer)%>% distinct(S) %>% nrow
+
+	# Deconvolution, get G only for markers of each level. Exclude house keeping
+	G1_linear = counts_baseline %>% filter(!`house keeping`) %>% filter(level ==1) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
+	G1 = G1_linear %>% length
+	G2_linear = counts_baseline %>% filter(!`house keeping`) %>% filter(level ==2) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
+	G2 = G2_linear %>% length
+	G3_linear = counts_baseline %>% filter(!`house keeping`) %>% filter(level ==3) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
+	G3 = G3_linear %>% length
+	G4_linear = counts_baseline %>% filter(!`house keeping`) %>% filter(level ==4) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
+	G4 = G4_linear %>% length
+
+	# Observed mix counts
+	y_linear_1 = y_source %>% filter(level ==1) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
+	y_linear_2 = y_source %>% filter(level ==2) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
+	y_linear_3 = y_source %>% filter(level ==3) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
+	y_linear_4 = y_source %>% filter(level ==4) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
+
+	# Observed mix samples indexes
+	y_linear_S_1 = y_source %>% filter(level ==1) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
+	y_linear_S_2 = y_source %>% filter(level ==2) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
+	y_linear_S_3 = y_source %>% filter(level ==3) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
+	y_linear_S_4 = y_source %>% filter(level ==4) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
+
+	# Observed mix samples indexes - get GM only for markers of each level. Exclude house keeping
+	y_linear_GM_1 = y_source %>% filter(level ==1) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(GM)
+	y_linear_GM_2 = y_source %>% filter(level ==2) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(GM)
+	y_linear_GM_3 = y_source %>% filter(level ==3) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(GM)
+	y_linear_GM_4 = y_source %>% filter(level ==4) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(GM)
+
+	# Lengths indexes
+	Y_1 = y_linear_1 %>% length
+	Y_2 = y_linear_2 %>% length
+	Y_3 = y_linear_3 %>% length
+	Y_4 = y_linear_4 %>% length
+
+	# Non centered
+	lambda_mu_prior = c(6.2, 1)
+	lambda_sigma_prior =  c( log(3.3) , 1)
+	lambda_skew_prior =  c( -2.7, 1)
+	sigma_intercept_prior = c( 1.9 , 0.1)
+	lambda_log_scale = 	counts_baseline %>% filter(!query) %>% distinct(G, lambda) %>% arrange(G) %>% pull(lambda)
+
+	# MODEL
 	fileConn<-file("~/.R/Makevars")
 	writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
 	close(fileConn)
 	Sys.setenv("STAN_NUM_THREADS" = cores)
-	ARMET_tc_model = stan_model("src/stan_files/ARMET_tc.stan")
+	ARMET_tc_model = stan_model("~/PhD/deconvolution/ARMET/src/stan_files/ARMET_tc.stan")
 
 	Sys.time() %>% print
+
 	fit =
-		sampling(
-			ARMET_tc_model, #stanmodels$ARMET_tc,
-			chains=3, cores=3,
-			iter=iterations, warmup=iterations-100,   save_warmup = FALSE,
-			pars = c("prop_1", "prop_2", "prop_3", "exposure_rate", "sigma_correction_param") #, "nb_sum") #,"mu_sum", "phi_sum")
+		switch(
+			full_bayes %>% `!` %>% sum(1),
+
+			# HMC
+			sampling(
+				ARMET_tc_model, #stanmodels$ARMET_tc,
+				chains=6, cores=6,
+				iter=iterations, warmup=iterations-sampling_iterations,
+				#include = F, pars=c("prop_a", "prop_b", "prop_c", "prop_d", "prop_e"),
+				pars=c("prop_1", "prop_2", "prop_3", "prop_4", "exposure_rate", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),
+				#,
+				init = function () list(	lambda_log = lambda_log_scale) # runif(G,  lambda_log_scale - 1, lambda_log_scale + 1)	)
+				#save_warmup = FALSE,
+				#pars = c("prop_1", "prop_2", "prop_3", "exposure_rate") #, "nb_sum") #,"mu_sum", "phi_sum"),
+			) %>%
+				{
+					(.)  %>% summary() %$% summary %>% as_tibble(rownames="par") %>% arrange(Rhat %>% desc) %>% print
+					(.)
+				},
+
+			vb(
+				ARMET_tc_model,
+				output_samples=100,
+				iter = 50000,
+				tol_rel_obj=0.01,
+				pars=c("prop_1", "prop_2", "prop_3","prop_4", "exposure_rate", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),
+				#,
+				init = function () list(	lambda_log = lambda_log_scale) # runif(G,  lambda_log_scale - 1, lambda_log_scale + 1)	)
+
+			)
 		)
+
 	Sys.time() %>% print
+
+	# # The reference fust 2 columns should look like this
+	# counts_baseline %>% filter(!`house keeping`) %>% filter(level ==1) %>% distinct(`read count`, G, GM, C) %>% group_by(G, GM, C) %>% summarise(m = `read count` %>% median) %>% ungroup() %>% arrange(GM, C) %>% select(-G) %>% spread(GM, m) %>% select(2:3)
+	#
+	# fit %>% summary() %$% summary %>% as_tibble(rownames="par") %>%
+	# 	separate(par, c(".variable", "C", "GM"), sep="[\\[,\\]]", extra="drop") %>%
+	# 	mutate( C = C %>% as.integer, GM = GM %>% as.integer) %>% filter(grepl("mat_GM1", `.variable`))  %>%
+	# 	left_join(
+	# 		counts_baseline %>% filter(!`house keeping`) %>% filter(level ==1) %>% distinct(`read count`, G, GM, C) %>% group_by(G, GM, C) %>% summarise(m = `read count` %>% median) %>% ungroup() %>% arrange(GM, C)
+	# 	) %>%
+	# 	ggplot(aes(x=m+1, y=mean+1)) + geom_point() +scale_x_log10() + scale_y_log10()
+
 
 	########################################
 	# Parse results
@@ -854,30 +1067,20 @@ ARMET_tc = function(
 	# Produce results
 	prop =
 		fit %>%
-		tidybayes::gather_draws(prop_1[Q, C], prop_2[Q, C], prop_3[Q, C]) %>%
-		filter(.variable %in% c("prop_1", "prop_2", "prop_3")) %>%
 
-		# If not converged choose the majority chains
-		mutate(	converged = diptest::dip.test(`.value`) %$%	`p.value` > 0.05) %>%
-
-		do({
-			if((.) %>% distinct(converged) %>% pull(1)) (.)
-			else (.) %>% choose_chains_majority_roule
-		}) %>%
-
-		# Summarise
-		{
-			left_join(
-				(.) %>% select(-converged) %>% tidybayes::median_qi(),
-				(.) %>% distinct(converged)
-			)
-		} %>%
-		ungroup() %>%
+		# If MCMC is used check divergencies as well
+		ifelse_pipe(
+			full_bayes,
+			~ .x %>% parse_summary_check_divergence(),
+			~ .x %>% parse_summary()
+		) %>%
 
 		# Parse
 		separate(.variable, c(".variable", "level"), convert = T) %>%
+
+		# Add tree information
 		left_join(
-			tree %>% ToDataFrameTree("name", "C1", "C2", "C3") %>%
+			tree %>% ToDataFrameTree("name", "C1", "C2", "C3", "C4") %>%
 				as_tibble %>%
 				select(-1) %>%
 				rename(`Cell type category` = name) %>%
@@ -886,15 +1089,13 @@ ARMET_tc = function(
 				drop_na %>%
 				mutate(C = C %>% as.integer, level = level %>% as.integer)
 		) %>%
+
+		# Add sample information
 		left_join(
 			df %>%
 				filter(`query`) %>%
 				distinct(Q, sample)
 		)
-
-
-	#plot_counts_inferred_sum( list(fit = fit , data_source = y_source ))
-
 
 	# Return
 	list(
@@ -909,7 +1110,9 @@ ARMET_tc = function(
 		fit = fit,
 
 		# Return data source
-		data_source = y_source
+		data_source = y_source,
+
+		signatures = counts_baseline
 	)
 
 }
