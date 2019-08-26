@@ -2,6 +2,9 @@
 library(tidyverse)
 library(foreach)
 library(magrittr)
+library(foreach)
+library(doParallel)
+registerDoParallel()
 source("R/ARMET_tc.R")
 
 my_theme =
@@ -39,9 +42,8 @@ out_dir %>% dir.create()
 
 iterations = 500
 
-######################################
 # Variable should be already set
-######################################
+
 
 sample_blacklist = c("666CRI", "972UYG", "344KCP", "555QVG", "370KKZ", "511TST", "13816.11933", "13819.11936", "13817.11934", "13818.11935", "096DQV", "711SNV")
 
@@ -527,137 +529,92 @@ mix_source =
 # 		GGally::ggpairs(columns = 1:6, ggplot2::aes(colour=`Data base`, label=`Cell type formatted`))
 # 	) %>% plotly::ggplotly()
 
-##################################
+
 # TEST
-##################################
-source("R/ARMET_tc.R")
-test =
-	get_markers_number(0, NULL, NULL) %>%
-	get_markers_df(0) %>%
-	get_input_data(reps = reps, pass = 0) %>%
-	{	ARMET_tc(
-		(.) %$% mix,
-		# (.) %$% reference,
-		(.) %$% reference %>%
-			inner_join(
-				(.) %>%
-					distinct(symbol, ct1, ct2, `house keeping`) %>%
-					mutate(n = ifelse(`house keeping`, 30, 5)) %>%
-					group_by(ct1, ct2, `house keeping`) %>%
-					filter(row_number() <= n) %>%
-					ungroup() %>%
-					select(-n)
-				),
-		iterations = 250,
-		full_bayes = T,
-		cores = 8
-	)}
 
-cores = 4
-##################################
+# source("R/ARMET_tc.R")
+# test =
+# 	get_markers_number(0, NULL, NULL) %>%
+# 	get_markers_df(0) %>%
+# 	get_input_data(reps = reps, pass = 0) %>%
+# 	{	ARMET_tc(
+# 		(.) %$% mix,
+# 		# (.) %$% reference,
+# 		(.) %$% reference %>%
+# 			inner_join(
+# 				(.) %>%
+# 					distinct(symbol, ct1, ct2, `house keeping`) %>%
+# 					mutate(n = ifelse(`house keeping`, 30, 5)) %>%
+# 					group_by(ct1, ct2, `house keeping`) %>%
+# 					filter(row_number() <= n) %>%
+# 					ungroup() %>%
+# 					select(-n)
+# 				),
+# 		iterations = 250,
+# 		full_bayes = F,
+# 		cores = 8
+# 	)}
+#
+
 # Pass 0
-##################################
 
-n_markers_0 = get_markers_number(0, NULL, NULL)
-res_0 =
-	n_markers_0 %>%
-	get_markers_df(0) %>%
-	get_input_data(reps = reps, pass = 0) %>%
-	{	ARMET_tc((.)$mix, (.)$reference, iterations = iterations, full_bayesian = is_full_bayesian, cores = cores) }
-res_0 %$% proportions %>% filter(!converged)
 
-save(list=c(sprintf("res_%s", 0), sprintf("n_markers_%s", 0)), file=sprintf("%s/data_%s.RData", out_dir, 0))
+foreach(n_markers = 1:3) %dopar% {
 
-##################################
-# Pass 1
-##################################
+	file_name = sprintf("%s/markers_%s.RData", out_dir, n_markers)
 
-n_markers_1 = get_markers_number(1, res_0, n_markers_0)
-res_1 =
-	n_markers_1 %>%
-	get_markers_df(1) %>%
-	get_input_data(reps = reps, pass = 1) %>%
-	{	ARMET_tc((.)$mix, (.)$reference, iterations = iterations, full_bayesian = is_full_bayesian, cores = cores ) }
-res_1 %$% proportions %>% filter(!converged)
+	if(file.exists(file_name) %>% `!`) {
+		try(
+			get_markers_number(0, NULL, NULL) %>%
+				mutate(`n markers` = n_markers) %>%
+				get_markers_df(0) %>%
+				get_input_data(reps = reps, pass = 0) %>%
+				{	ARMET_tc(
+					(.)$mix,
+					(.)$reference,
+					iterations = 250,
+					full_bayes = F,
+					cores = 8
+				)} %>%
+				saveRDS(file=file_name)
+		)
+	}
+}
 
-save(list=c(sprintf("res_%s", 1), sprintf("n_markers_%s", 1)), file=sprintf("%s/data_%s.RData", out_dir, 1))
 
-##################################
-# Pass 2
-##################################
-
-n_markers_2 = get_markers_number(2, res_1, n_markers_1)
-res_2 =
-	n_markers_2 %>%
-	get_markers_df(2) %>%
-	get_input_data(reps = reps, pass = 2) %>%
-	{	ARMET_tc((.)$mix, (.)$reference, iterations = iterations, full_bayesian = is_full_bayesian, cores = cores) }
-res_2 %$% proportions %>% filter(!converged)
-
-save(list=c(sprintf("res_%s", 2), sprintf("n_markers_%s", 2)), file=sprintf("%s/data_%s.RData", out_dir, 2))
-
-##################################
-# Pass 3
-##################################
-
-n_markers_3 = get_markers_number(3, res_2, n_markers_2)
-res_3 =
-	n_markers_3 %>%
-	get_markers_df(3) %>%
-	get_input_data(reps = reps, pass = 3) %>%
-	{	ARMET_tc((.)$mix, (.)$reference, iterations = iterations, full_bayesian = is_full_bayesian, cores = cores) }
-res_3 %$% proportions %>% filter(!converged)
-
-save(list=c(sprintf("res_%s", 3), sprintf("n_markers_%s", 3)), file=sprintf("%s/data_%s.RData", out_dir, 3))
-
-##################################
-# Pass 4
-##################################
-
-n_markers_4 = get_markers_number(4, res_3, n_markers_3)
-res_4 =
-	n_markers_4 %>%
-	get_markers_df(4) %>%
-	get_input_data(reps = reps, pass = 4) %>%
-	{	ARMET_tc((.)$mix, (.)$reference, iterations = iterations, full_bayesian = is_full_bayesian, cores = cores) }
-res_4 %$% proportions %>% filter(!converged)
-
-save(list=c(sprintf("res_%s", 4), sprintf("n_markers_%s", 4)), file=sprintf("%s/data_%s.RData", out_dir, 4))
-
-##################################
 # Create reference data set
-##################################
 
-get_markers_number(5, res_4, n_markers_4) %>%
-	get_markers_df(5) %>%
-	get_input_data(reps = reps, pass = 5) %$%
-	reference %>%
-	write_csv(sprintf("%s/reference.csv", out_dir))
 
-# Statistics
-
-(
-	list(
-		n_markers_0 %>% mutate(pass = 0),
-		n_markers_1 %>% mutate(pass = 1),
-		n_markers_2 %>% mutate(pass = 2),
-		n_markers_3 %>% mutate(pass = 3),
-		n_markers_4 %>% mutate(pass = 4)
-	) %>%
-		bind_rows() %>%
-		ggplot(aes(x=pass, y=`n markers`, color=pair)) + geom_point() + geom_line() + theme(legend.title = element_blank())
-) %>%
-	plotly::ggplotly()
-
-(
-	list(
-		n_markers_0 %>% mutate(pass = 0),
-		n_markers_1 %>% mutate(pass = 1),
-		n_markers_2 %>% mutate(pass = 2),
-		n_markers_3 %>% mutate(pass = 3),
-		n_markers_4 %>% mutate(pass = 4)
-	) %>%
-		bind_rows() %>%
-		ggplot(aes(x=pass, y=`error mean relative mean`, color=pair)) + geom_point() + geom_line() + theme(legend.title = element_blank())
-) %>%
-	plotly::ggplotly()
+# get_markers_number(5, res_4, n_markers_4) %>%
+# 	get_markers_df(5) %>%
+# 	get_input_data(reps = reps, pass = 5) %$%
+# 	reference %>%
+# 	write_csv(sprintf("%s/reference.csv", out_dir))
+#
+# # Statistics
+#
+# (
+# 	list(
+# 		n_markers_0 %>% mutate(pass = 0),
+# 		n_markers_1 %>% mutate(pass = 1),
+# 		n_markers_2 %>% mutate(pass = 2),
+# 		n_markers_3 %>% mutate(pass = 3),
+# 		n_markers_4 %>% mutate(pass = 4)
+# 	) %>%
+# 		bind_rows() %>%
+# 		ggplot(aes(x=pass, y=`n markers`, color=pair)) + geom_point() + geom_line() + theme(legend.title = element_blank())
+# ) %>%
+# 	plotly::ggplotly()
+#
+# (
+# 	list(
+# 		n_markers_0 %>% mutate(pass = 0),
+# 		n_markers_1 %>% mutate(pass = 1),
+# 		n_markers_2 %>% mutate(pass = 2),
+# 		n_markers_3 %>% mutate(pass = 3),
+# 		n_markers_4 %>% mutate(pass = 4)
+# 	) %>%
+# 		bind_rows() %>%
+# 		ggplot(aes(x=pass, y=`error mean relative mean`, color=pair)) + geom_point() + geom_line() + theme(legend.title = element_blank())
+# ) %>%
+# 	plotly::ggplotly()
