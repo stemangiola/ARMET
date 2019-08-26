@@ -1,3 +1,10 @@
+
+library(magrittr)
+library(tidyverse)
+library(foreach)
+library(rstan)
+library(tidyTranscriptomics)
+
 #' This is a generalisation of ifelse that acceots an object and return an objects
 #'
 #' @import dplyr
@@ -165,6 +172,9 @@ get_MPI_deconv = function(y_source, shards, my_level, tree){
 	)
 }
 
+#' Plot differences between inferred and observed transcription abundances
+#'
+#' @description  Plot differences between inferred and observed transcription abundances
 plot_differences_in_lambda = function(){
 
 	# Plot differences in lambda
@@ -197,6 +207,9 @@ plot_differences_in_lambda = function(){
 
 }
 
+#' Print which reference genes are in the mix
+#'
+#' @description Print which reference genes are in the mix
 get_overlap_descriptive_stats = function(mix_tbl, ref_tbl){
 
 	writeLines(
@@ -221,6 +234,9 @@ get_overlap_descriptive_stats = function(mix_tbl, ref_tbl){
 
 }
 
+#' plot_counts_inferred_sum
+#'
+#' @description Get data format for MPI deconvolution part
 plot_counts_inferred_sum = function(fit_obj, samples = NULL){
 
 	fit_obj %$% fit %>%
@@ -250,6 +266,9 @@ plot_counts_inferred_sum = function(fit_obj, samples = NULL){
 
 }
 
+#' choose_chains_majority_roule
+#'
+#' @description Get which chain cluster is more opulated in case I have divergence
 choose_chains_majority_roule = function(fit_parsed){
 
 	fit_parsed %>%
@@ -287,6 +306,9 @@ choose_chains_majority_roule = function(fit_parsed){
 		)
 }
 
+#' filter_reference
+#'
+#' @description Filter the reference
 filter_reference = function(reference, mix){
 	reference %>%
 		inner_join(mix %>% slice(1) %>%	gather(`symbol`, `read count`, -sample) %>% distinct(symbol)) %>%
@@ -334,6 +356,8 @@ filter_reference = function(reference, mix){
 		select(-ct1, -ct2, -rank, -`n markers`) %>%	distinct
 }
 
+#' get_idx_level
+#'
 get_idx_level = function(tree, my_level){
 	left_join(
 		tree %>% ToDataFrameTree("name") %>% as_tibble,
@@ -359,6 +383,9 @@ get_idx_level = function(tree, my_level){
 		pull(my_C)
 }
 
+#' parse_summary
+#'
+#' @description Parse the stan fit object
 parse_summary = function(fit){
 	fit %>%
 		rstan::summary() %$% summary %>%
@@ -368,6 +395,9 @@ parse_summary = function(fit){
 		mutate(C = C %>% as.integer, Q = Q %>% as.integer)
 }
 
+#' parse_summary_check_divergence
+#'
+#' @description Parse the stan fit object and check for divergencies
 parse_summary_check_divergence = function(fit){
 	fit %>%
 		tidybayes::gather_draws(prop_1[Q, C], prop_2[Q, C], prop_3[Q, C], prop_4[Q, C]) %>%
@@ -397,35 +427,41 @@ parse_summary_check_divergence = function(fit){
 		ungroup()
 }
 
+#' create_tree_object
+#'
+#' @description create tree object that is in data directory
+create_tree_object = function(){
+	#yaml:: yaml.load_file("~/PhD/deconvolution/ARMET/data/tree.yaml") %>%
+	yaml::yaml.load_file("data/tree.yaml") %>%
+		data.tree::as.Node() %>%
 
-library(data.tree)
-tree =
-	yaml:: yaml.load_file("~/PhD/deconvolution/ARMET/data/tree.yaml") %>%
-	data.tree::as.Node() %>%
+		{
 
-	{
+			# Sort tree by name
+			Sort(., "name")
 
-		# Sort tree by name
-		Sort(., "name")
+			# Add C indexes
+			.$Set(
+				C =
+					tibble( name = .$Get('name'), level = .$Get('level')) %>%
+					left_join( (.) %>% arrange(level, name) %>%	 	mutate(C = 0:(n()-1))  )	%>%
+					pull(C)
+			)
+			.$Set(	C1 = get_idx_level(.,1)	)
+			.$Set(	C2 = get_idx_level(.,2)	)
+			.$Set(	C3 = get_idx_level(.,3)	)
+			.$Set(	C4 = get_idx_level(.,4)	)
+			#		if(max(levels)>1) for(l in 2:max(levels)) { my_c = sprintf("C%s", l); .$Set(	my_c = get_idx_level(.,2)	); . }
 
-		# Add C indexes
-		.$Set(
-			C =
-				tibble( name = .$Get('name'), level = .$Get('level')) %>%
-				left_join( (.) %>% arrange(level, name) %>%	 	mutate(C = 0:(n()-1))  )	%>%
-				pull(C)
-		)
-		.$Set(	C1 = get_idx_level(.,1)	)
-		.$Set(	C2 = get_idx_level(.,2)	)
-		.$Set(	C3 = get_idx_level(.,3)	)
-		.$Set(	C4 = get_idx_level(.,4)	)
-		#		if(max(levels)>1) for(l in 2:max(levels)) { my_c = sprintf("C%s", l); .$Set(	my_c = get_idx_level(.,2)	); . }
+			# Set Cell type category label
+			.$Set("Cell type category" = .$Get("name"))
 
-		# Set Cell type category label
-		.$Set("Cell type category" = .$Get("name"))
+		}
+}
 
-	}
-
+#' as_matrix
+#'
+#' @description Convert tibble to matrix
 as_matrix = function(tbl, rownames = NULL){
 
 	tbl %>%
@@ -458,6 +494,9 @@ as_matrix = function(tbl, rownames = NULL){
 		as.matrix()
 }
 
+#' ToDataFrameTypeColFull
+#'
+#' @description Extension of data.tree package. It converts the tree into data frame
 ToDataFrameTypeColFull = function(tree, ...){
 	tree %>%
 		Clone() %>%
@@ -478,7 +517,51 @@ ToDataFrameTypeColFull = function(tree, ...){
 		select(..., everything())
 }
 
-library(magrittr)
+#' vb_iterative
+#'
+#' @description Runs iteratively variational bayes until it suceeds
+#'
+#' @importFrom rstan vb
+#'
+#' @param model A Stan model
+#' @param output_samples An integer of how many samples from posteriors
+#' @param iter An integer of how many max iterations
+#' @param tol_rel_obj A real
+#'
+#' @return A Stan fit object
+#'
+vb_iterative = function(model,
+												output_samples,
+												iter,
+												tol_rel_obj,
+												...) {
+	res = NULL
+	i = 0
+	while (res %>% is.null | i > 5) {
+		res = tryCatch({
+			my_res = vb(
+				model,
+				output_samples = output_samples,
+				iter = iter,
+				tol_rel_obj = tol_rel_obj,
+				...
+				#, pars=c("counts_rng", "exposure_rate", additional_parameters_to_save)
+			)
+			boolFalse <- T
+			return(my_res)
+		},
+		error = function(e) {
+			i = i + 1
+			writeLines(sprintf("Further attempt with Variational Bayes: %s", e))
+			return(NULL)
+		},
+		finally = {
+		})
+	}
+
+	return(res)
+}
+
 #' ARMET-tc main
 #'
 #' @description This function calls the stan model.
@@ -536,26 +619,11 @@ ARMET_tc = function(
 	iterations = 300,
 	sampling_iterations = 100,
 	levels = 1:4,
-	full_bayes = T
+	full_bayes = T,
+	n_markers
 ){
 
 	full_bayesian = T
-	# full_bayesian = 0
-	# ct_to_omit =                        c("t_CD4_naive", "adipocyte")
-	# verbose =                           F
-	# omit_regression =                   F
-	# save_fit =                          F
-	# seed =                              NULL
-	# cores = 14
-	#levels = 1:2
-
-	#source("https://gist.githubusercontent.com/stemangiola/9d2ba5d599b7ac80404c753cdee04a01/raw/ad571ea2bbc3f13441a7d845b5ae8ed67a45d8ec/tidy_data_tree.R")
-
-	library(tidyverse)
-	library(foreach)
-	library(rstan)
-	library(tidyTranscriptomics)
-
 	input = c(as.list(environment()))
 	shards = cores #* 2
 
@@ -634,7 +702,9 @@ ARMET_tc = function(
 	#########################################
 
 	reference_filtered =
-		filter_reference(reference, mix) %>%
+		ARMET::ARMET_ref %>%
+		left_join(n_markers, by=c("ct1", "ct2")) %>%
+		filter_reference(mix) %>%
 
 		# Select cell types in hierarchy
 		inner_join(
@@ -1057,11 +1127,11 @@ ARMET_tc = function(
 	lambda_log_scale = 	counts_baseline %>% filter(!query) %>% distinct(G, lambda) %>% arrange(G) %>% pull(lambda)
 
 	# MODEL
-	fileConn<-file("~/.R/Makevars")
-	writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
-	close(fileConn)
-	Sys.setenv("STAN_NUM_THREADS" = cores)
-	ARMET_tc_model = stan_model("~/PhD/deconvolution/ARMET/src/stan_files/ARMET_tc.stan")
+	# fileConn<-file("~/.R/Makevars")
+	# writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
+	# close(fileConn)
+	# Sys.setenv("STAN_NUM_THREADS" = cores)
+	# ARMET_tc_model = stan_model("~/PhD/deconvolution/ARMET/src/stan_files/ARMET_tc.stan")
 
 	Sys.time() %>% print
 
@@ -1071,7 +1141,7 @@ ARMET_tc = function(
 
 			# HMC
 			sampling(
-				ARMET_tc_model, #stanmodels$ARMET_tc,
+				stanmodels$ARMET_tc, #ARMET_tc_model, #,
 				chains=6, cores=6,
 				iter=iterations, warmup=iterations-sampling_iterations,
 				#include = F, pars=c("prop_a", "prop_b", "prop_c", "prop_d", "prop_e"),
@@ -1086,8 +1156,8 @@ ARMET_tc = function(
 					(.)
 				},
 
-			vb(
-				ARMET_tc_model,
+			vb_iterative(
+				stanmodels$ARMET_tc, #ARMET_tc_model,
 				output_samples=100,
 				iter = 50000,
 				tol_rel_obj=0.01,
@@ -1099,17 +1169,6 @@ ARMET_tc = function(
 		)
 
 	Sys.time() %>% print
-
-	# # The reference fust 2 columns should look like this
-	# counts_baseline %>% filter(!`house keeping`) %>% filter(level ==1) %>% distinct(`read count`, G, GM, C) %>% group_by(G, GM, C) %>% summarise(m = `read count` %>% median) %>% ungroup() %>% arrange(GM, C) %>% select(-G) %>% spread(GM, m) %>% select(2:3)
-	#
-	# fit %>% summary() %$% summary %>% as_tibble(rownames="par") %>%
-	# 	separate(par, c(".variable", "C", "GM"), sep="[\\[,\\]]", extra="drop") %>%
-	# 	mutate( C = C %>% as.integer, GM = GM %>% as.integer) %>% filter(grepl("mat_GM1", `.variable`))  %>%
-	# 	left_join(
-	# 		counts_baseline %>% filter(!`house keeping`) %>% filter(level ==1) %>% distinct(`read count`, G, GM, C) %>% group_by(G, GM, C) %>% summarise(m = `read count` %>% median) %>% ungroup() %>% arrange(GM, C)
-	# 	) %>%
-	# 	ggplot(aes(x=m+1, y=mean+1)) + geom_point() +scale_x_log10() + scale_y_log10()
 
 
 	########################################
