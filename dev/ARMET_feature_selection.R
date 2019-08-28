@@ -5,7 +5,9 @@ library(magrittr)
 library(foreach)
 library(doParallel)
 registerDoParallel()
-source("R/ARMET_tc.R")
+library(ARMET)
+
+options(error = quote({dump.frames(to.file=TRUE); q()}), show.error.locations = TRUE)
 
 my_theme =
 	theme_bw() +
@@ -23,19 +25,18 @@ my_theme =
 		axis.title.y  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10))
 	)
 
-# source("https://gist.githubusercontent.com/stemangiola/9d2ba5d599b7ac80404c753cdee04a01/raw/26e5b48fde0cd4f5b0fd7cbf2fde6081a5f63e7f/tidy_data_tree.R")
 
-# reps = 10
 # out_dir = "temp"
 
 # Get level
 args <- commandArgs(TRUE)
 
 reps = args[1] %>% as.integer
+ reps = 10
 is_full_bayesian = args[2] %>% as.integer %>% as.logical
 is_full_bayesian = T
 
-out_dir = Sys.time() %>% format("%a_%b_%d_%X") %>% gsub("[: ]", "_", .) %>% sprintf("docs/feature_selection_%s", .)
+out_dir = Sys.time() %>% format("%a_%b_%d_%X") %>% gsub("[: ]", "_", .) %>% sprintf("dev/feature_selection_%s", .)
 out_dir %>% dir.create()
 
 iterations = 500
@@ -225,7 +226,7 @@ get_markers_number = function(pass, res, num_markers_previous_level, min_n_sampl
 give_rank_to_ref = function(fit_df, level, fit_threshold, lambda_threshold =5){
 
 	fit_df %>%
-		left_join(  Clone(tree) %>% ToDataFrameTypeColFull("name") %>% as_tibble() %>% rename(`Cell type formatted`= name)) %>%
+		left_join(  Clone(ARMET::tree) %>% ToDataFrameTypeColFull("name") %>% as_tibble() %>% rename(`Cell type formatted`= name)) %>%
 		filter(`Cell type category` != "house_keeping") %>%
 
 		# Select only branches that have childs
@@ -256,15 +257,12 @@ give_rank_to_ref = function(fit_df, level, fit_threshold, lambda_threshold =5){
 			fit_df %>% distinct(symbol, `Cell type category`, CI_low, CI_high)
 		) %>%
 
-		##########################
 		# Temporary for cell nameserror
-		##########################
 
 		filter(symbol %>% is.na %>% `!`) %>%
 		anti_join(
 			(.) %>% distinct(pair, `Cell type category`, symbol) %>% count(pair, symbol) %>% arrange(n) %>% filter(n==1) %>% ungroup %>% distinct(pair)
 		) %>%
-		##########################
 
 		mutate(relevant_CI = ifelse(which == "V1", CI_low, CI_high)) %>%
 		group_by(comparison, pair, symbol) %>%
@@ -322,6 +320,7 @@ get_markers_df = function(markers_number, pass){
 create_ref = function(markers, reps, pass){
 
 	sample_blacklist = c("666CRI", "972UYG", "344KCP", "555QVG", "370KKZ", "511TST", "13816.11933", "13819.11936", "13817.11934", "13818.11935", "096DQV", "711SNV")
+
 
 	ref %>%
 		inner_join(
@@ -429,7 +428,7 @@ get_input_data = function(markers, reps, pass){
 	) %>%
 		{
 			input =	(.)
-			save(input, file=sprintf("docs/input_test_pass_%s.RData", pass))
+			save(input, file=sprintf("dev/input_test_pass_%s.RData", pass))
 			(.)
 		}
 
@@ -437,13 +436,14 @@ get_input_data = function(markers, reps, pass){
 }
 
 
-source("R/ARMET_tc.R")
+#source("R/ARMET_tc.R")
 set.seed(123)
 
-# my_ref = 	ref %>%
-# 	distinct(sample, `Cell type category`) %>%
+my_ref = 	ARMET::ARMET_ref %>%
+	distinct(sample, `Cell type category`)
+# %>%
 # 	filter( ! grepl(sample_blacklist %>% paste(collapse="|"), sample))
-#
+
 #
 # marker_df =
 # 	give_rank_to_ref(ref %>% filter(level ==1), 1, 0.5) %>%
@@ -481,7 +481,7 @@ mix_source =
 			}
 		}
 
-		gn(tree)
+		gn(ARMET::tree)
 	} %>%
 	mutate(`#` = 1:n()) %>%
 
@@ -516,7 +516,7 @@ mix_source =
 	ungroup() %>%
 
 	# Again solving the problem with house keeping genes
-	left_join(ref %>% distinct(`symbol`, `read count normalised bayes`, `Cell type category`, sample, level, `house keeping`))  %>%
+	left_join(ARMET::ARMET_ref  %>% distinct(`symbol`, `read count normalised bayes`, `Cell type category`, sample, level, `house keeping`))  %>%
 
 	# Add mix_sample
 	left_join(
@@ -584,7 +584,7 @@ mix_source =
 # Pass 0
 
 
-foreach(n_markers = 1:3) %dopar% {
+foreach(n_markers = c(1:10, seq(15, 50, 5), seq(50, 100, 10))) %dopar% {
 
 	file_name = sprintf("%s/markers_%s.RData", out_dir, n_markers)
 
@@ -600,10 +600,10 @@ foreach(n_markers = 1:3) %dopar% {
 							gather(sample_mix, `read count mix`, -symbol) %>%
 							spread(`symbol`, `read count mix`) %>%
 							rename(sample = sample_mix),
-					(.)$reference,
 					iterations = 250,
+					n_markers = ARMET::ARMET_ref %>% distinct(ct1, ct2) %>% mutate(`n markers` = n_markers),
 					full_bayes = F,
-					cores = 8
+					cores = 8,
 				) %>%
 				saveRDS(file=file_name)
 		)

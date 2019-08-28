@@ -93,6 +93,16 @@ add_partition = function(df.input, partition_by, n_partitions){
 #'
 #' @description Get data format for MPI deconvolution part
 get_MPI_deconv = function(y_source, shards, my_level, tree){
+
+	# This function is needed in case
+	# I have too many shards and not enough data
+	add_empty_shards = function(df){
+		tibble(partition = 1:shards, n=0 %>% as.integer) %>%
+			anti_join(df, by="partition") %>%
+			bind_rows(df) %>%
+			arrange(partition)
+	}
+
 	y_MPI_source =
 		y_source %>%
 		distinct(level, Q, S, symbol, G, GM, `Cell type category`, `read count`) %>%
@@ -109,6 +119,7 @@ get_MPI_deconv = function(y_source, shards, my_level, tree){
 		# Arrange very important for consistency
 		arrange(Q, symbol, ct_rank) %>%
 		add_partition("symbol", shards) %>%
+		mutate(partition = partition %>% as.integer) %>%
 		group_by(partition) %>%
 		left_join( (.) %>% distinct(symbol) %>% mutate(MPI_row = 1:n())) %>%
 		ungroup()
@@ -120,6 +131,7 @@ get_MPI_deconv = function(y_source, shards, my_level, tree){
 			y_MPI_source %>%
 			distinct(symbol, partition) %>%
 			count(partition) %>%
+			add_empty_shards %>%
 			spread(partition, n) %>%
 			as_vector %>% array,
 
@@ -136,6 +148,7 @@ get_MPI_deconv = function(y_source, shards, my_level, tree){
 			y_MPI_source %>%
 			distinct(symbol, `Cell type category`, partition) %>%
 			count(partition) %>%
+			add_empty_shards %>%
 			spread(partition, n) %>%
 			as_vector %>% array,
 
@@ -157,6 +170,7 @@ get_MPI_deconv = function(y_source, shards, my_level, tree){
 			y_MPI_source %>%
 			distinct(MPI_row, `read count`, partition, Q) %>%
 			count(partition) %>%
+			add_empty_shards %>%
 			spread(partition, n) %>%
 			as_vector %>% array,
 
@@ -585,6 +599,8 @@ vb_iterative = function(model,
 #' @importFrom foreach foreach
 #' @importFrom foreach %do%
 #'
+#' @import data.tree
+#'
 #' @param mix A matrix
 #' @param my_design A matrix
 #' @param cov_to_test A character string
@@ -625,7 +641,7 @@ ARMET_tc = function(
 
 	full_bayesian = T
 	input = c(as.list(environment()))
-	shards = cores #* 2
+
 
 	my_theme =
 		theme_bw() +
@@ -656,20 +672,22 @@ ARMET_tc = function(
 
 	tree = 	tree %>%	{
 		# Filter selected levels
-			Prune(., function(x) x$level <= max(levels) + 1)
-			.
-		}
+		data.tree::Prune(., function(x) x$level <= max(levels) + 1)
+		.
+	}
 
-	ct_in_nodes = tree %>% ToDataFrameTree("name", "level", "C", "count", "isLeaf") %>% as_tibble %>% arrange(level, C) %>% filter(!isLeaf) %>% pull(count)
+	ct_in_nodes = tree %>% data.tree::ToDataFrameTree("name", "level", "C", "count", "isLeaf") %>% as_tibble %>% arrange(level, C) %>% filter(!isLeaf) %>% pull(count)
+
+	# Get the number of leafs for every level
 	ct_in_levels = foreach(l=levels+1, .combine = c) %do% {
 
-	Clone(tree) %>%
-		{ Prune(., function(x) x$level <= l);	. 	} %>%
-		ToDataFrameTree("name", "level", "C", "count", "isLeaf") %>%
-		as_tibble %>%
-		arrange(level, C) %>%
-		filter(isLeaf) %>%
-		nrow
+		data.tree::Clone(tree) %>%
+			ifelse_pipe(
+				(.) %>% data.tree::ToDataFrameTree("level") %>% pull(2) %>% max %>% `>` (l),
+				~ {.x;  data.tree::Prune(.x, function(x) x$level <= l);	.x 	}
+			)  %>%
+			data.tree::Traverse(., filterFun = isLeaf) %>%
+			length()
 	}
 
 	n_nodes = ct_in_nodes %>% length
@@ -709,7 +727,7 @@ ARMET_tc = function(
 		# Select cell types in hierarchy
 		inner_join(
 			tree %>%
-				ToDataFrameTree("Cell type category", "C") %>%
+				data.tree::ToDataFrameTree("Cell type category", "C") %>%
 				as_tibble %>%
 				select(-1)
 
@@ -786,6 +804,8 @@ ARMET_tc = function(
 	# For  reference MPI inference
 	#########################################
 
+	shards = cores #* 2
+
 	counts_baseline =
 		df %>%
 
@@ -856,69 +876,69 @@ ARMET_tc = function(
 		arrange(C, Q, symbol) %>%
 		mutate(`Cell type category` = factor(`Cell type category`, unique(`Cell type category`)))
 
-	# Data MPI for deconvolution level 1
-	y_MPI_lv1 = y_source %>% get_MPI_deconv(shards, 1, tree)
-	idx_1_source = y_source %>% filter(level == 1) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
-	idx_1 = idx_1_source %>% pull(G)
-	I1 = idx_1 %>% length
-	I1_dim = c(idx_1_source %>% distinct(symbol) %>% nrow, idx_1_source %>% distinct(`Cell type category`) %>% nrow)
-	y_MPI_source_lv1 = y_MPI_lv1 %$% y_MPI_source
-	y_MPI_symbol_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_symbol_per_shard
-	y_MPI_idx_symbol_lv1 = y_MPI_lv1 %$% y_MPI_idx_symbol
-	y_MPI_G_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_G_per_shard
-	GM_lv1 = df %>% filter(!`house keeping`) %>% filter(level==1) %>% distinct(symbol) %>% nrow()
-	y_idx_lv1 =  y_MPI_lv1 %$% y_idx
-	y_MPI_idx_lv1 = y_MPI_lv1 %$% y_MPI_idx
-	y_MPI_N_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_N_per_shard
-	y_MPI_count_lv1 = y_MPI_lv1 %$% y_MPI_count
-
-	# Data MPI for deconvolution level 2
-	y_MPI_lv2 = y_source %>% get_MPI_deconv(shards, 2, tree)
-	idx_2_source = y_source %>% filter(level == 2) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
-	idx_2 = idx_2_source %>% pull(G)
-	I2 = idx_2 %>% length
-	I2_dim = c(idx_2_source %>% distinct(symbol) %>% nrow, idx_2_source %>% distinct(`Cell type category`) %>% nrow)
-	y_MPI_source_lv2 = y_MPI_lv2 %$% y_MPI_source
-	y_MPI_symbol_per_shard_lv2 = y_MPI_lv2 %$% y_MPI_symbol_per_shard
-	y_MPI_idx_symbol_lv2 = y_MPI_lv2 %$% y_MPI_idx_symbol
-	y_MPI_G_per_shard_lv2 = y_MPI_lv2 %$% y_MPI_G_per_shard
-	GM_lv2 = df %>% filter(!`house keeping`) %>% filter(level==2) %>% distinct(symbol) %>% nrow()
-	y_idx_lv2 =  y_MPI_lv2 %$% y_idx
-	y_MPI_idx_lv2 = y_MPI_lv2 %$% y_MPI_idx
-	y_MPI_N_per_shard_lv2 = y_MPI_lv2 %$% y_MPI_N_per_shard
-	y_MPI_count_lv2 = y_MPI_lv2 %$% y_MPI_count
-
-	# Data MPI for deconvolution level 3
-	y_MPI_lv3 = y_source %>% get_MPI_deconv(shards, 3, tree)
-	idx_3_source = y_source %>% filter(level == 3) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
-	idx_3 = idx_3_source %>% pull(G)
-	I3 = idx_3 %>% length
-	I3_dim = c(idx_3_source %>% distinct(symbol) %>% nrow, idx_3_source %>% distinct(`Cell type category`) %>% nrow)
-	y_MPI_source_lv3 = y_MPI_lv3 %$% y_MPI_source
-	y_MPI_symbol_per_shard_lv3 = y_MPI_lv3 %$% y_MPI_symbol_per_shard
-	y_MPI_idx_symbol_lv3 = y_MPI_lv3 %$% y_MPI_idx_symbol
-	y_MPI_G_per_shard_lv3 = y_MPI_lv3 %$% y_MPI_G_per_shard
-	GM_lv3 = df %>% filter(!`house keeping`) %>% filter(level==3) %>% distinct(symbol) %>% nrow()
-	y_idx_lv3 =  y_MPI_lv3 %$% y_idx
-	y_MPI_idx_lv3 = y_MPI_lv3 %$% y_MPI_idx
-	y_MPI_N_per_shard_lv3 = y_MPI_lv3 %$% y_MPI_N_per_shard
-	y_MPI_count_lv3 = y_MPI_lv3 %$% y_MPI_count
-
-	# Data MPI for deconvolution level 4
-	y_MPI_lv4 = y_source %>% get_MPI_deconv(shards, 4, tree)
-	idx_4_source = y_source %>% filter(level == 4) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
-	idx_4 = idx_4_source %>% pull(G)
-	I4 = idx_4 %>% length
-	I4_dim = c(idx_4_source %>% distinct(symbol) %>% nrow, idx_4_source %>% distinct(`Cell type category`) %>% nrow)
-	y_MPI_source_lv4 = y_MPI_lv4 %$% y_MPI_source
-	y_MPI_symbol_per_shard_lv4 = y_MPI_lv4 %$% y_MPI_symbol_per_shard
-	y_MPI_idx_symbol_lv4 = y_MPI_lv4 %$% y_MPI_idx_symbol
-	y_MPI_G_per_shard_lv4 = y_MPI_lv4 %$% y_MPI_G_per_shard
-	GM_lv4 = df %>% filter(!`house keeping`) %>% filter(level==4) %>% distinct(symbol) %>% nrow()
-	y_idx_lv4 =  y_MPI_lv4 %$% y_idx
-	y_MPI_idx_lv4 = y_MPI_lv4 %$% y_MPI_idx
-	y_MPI_N_per_shard_lv4 = y_MPI_lv4 %$% y_MPI_N_per_shard
-	y_MPI_count_lv4 = y_MPI_lv4 %$% y_MPI_count
+	# # Data MPI for deconvolution level 1
+	# y_MPI_lv1 = y_source %>% get_MPI_deconv(shards, 1, tree)
+	# idx_1_source = y_source %>% filter(level == 1) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
+	# idx_1 = idx_1_source %>% pull(G)
+	# I1 = idx_1 %>% length
+	# I1_dim = c(idx_1_source %>% distinct(symbol) %>% nrow, idx_1_source %>% distinct(`Cell type category`) %>% nrow)
+	# y_MPI_source_lv1 = y_MPI_lv1 %$% y_MPI_source
+	# y_MPI_symbol_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_symbol_per_shard
+	# y_MPI_idx_symbol_lv1 = y_MPI_lv1 %$% y_MPI_idx_symbol
+	# y_MPI_G_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_G_per_shard
+	# GM_lv1 = df %>% filter(!`house keeping`) %>% filter(level==1) %>% distinct(symbol) %>% nrow()
+	# y_idx_lv1 =  y_MPI_lv1 %$% y_idx
+	# y_MPI_idx_lv1 = y_MPI_lv1 %$% y_MPI_idx
+	# y_MPI_N_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_N_per_shard
+	# y_MPI_count_lv1 = y_MPI_lv1 %$% y_MPI_count
+	#
+	# # Data MPI for deconvolution level 2
+	# y_MPI_lv2 = y_source %>% get_MPI_deconv(shards, 2, tree)
+	# idx_2_source = y_source %>% filter(level == 2) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
+	# idx_2 = idx_2_source %>% pull(G)
+	# I2 = idx_2 %>% length
+	# I2_dim = c(idx_2_source %>% distinct(symbol) %>% nrow, idx_2_source %>% distinct(`Cell type category`) %>% nrow)
+	# y_MPI_source_lv2 = y_MPI_lv2 %$% y_MPI_source
+	# y_MPI_symbol_per_shard_lv2 = y_MPI_lv2 %$% y_MPI_symbol_per_shard
+	# y_MPI_idx_symbol_lv2 = y_MPI_lv2 %$% y_MPI_idx_symbol
+	# y_MPI_G_per_shard_lv2 = y_MPI_lv2 %$% y_MPI_G_per_shard
+	# GM_lv2 = df %>% filter(!`house keeping`) %>% filter(level==2) %>% distinct(symbol) %>% nrow()
+	# y_idx_lv2 =  y_MPI_lv2 %$% y_idx
+	# y_MPI_idx_lv2 = y_MPI_lv2 %$% y_MPI_idx
+	# y_MPI_N_per_shard_lv2 = y_MPI_lv2 %$% y_MPI_N_per_shard
+	# y_MPI_count_lv2 = y_MPI_lv2 %$% y_MPI_count
+	#
+	# # Data MPI for deconvolution level 3
+	# y_MPI_lv3 = y_source %>% get_MPI_deconv(shards, 3, tree)
+	# idx_3_source = y_source %>% filter(level == 3) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
+	# idx_3 = idx_3_source %>% pull(G)
+	# I3 = idx_3 %>% length
+	# I3_dim = c(idx_3_source %>% distinct(symbol) %>% nrow, idx_3_source %>% distinct(`Cell type category`) %>% nrow)
+	# y_MPI_source_lv3 = y_MPI_lv3 %$% y_MPI_source
+	# y_MPI_symbol_per_shard_lv3 = y_MPI_lv3 %$% y_MPI_symbol_per_shard
+	# y_MPI_idx_symbol_lv3 = y_MPI_lv3 %$% y_MPI_idx_symbol
+	# y_MPI_G_per_shard_lv3 = y_MPI_lv3 %$% y_MPI_G_per_shard
+	# GM_lv3 = df %>% filter(!`house keeping`) %>% filter(level==3) %>% distinct(symbol) %>% nrow()
+	# y_idx_lv3 =  y_MPI_lv3 %$% y_idx
+	# y_MPI_idx_lv3 = y_MPI_lv3 %$% y_MPI_idx
+	# y_MPI_N_per_shard_lv3 = y_MPI_lv3 %$% y_MPI_N_per_shard
+	# y_MPI_count_lv3 = y_MPI_lv3 %$% y_MPI_count
+	#
+	# # Data MPI for deconvolution level 4
+	# y_MPI_lv4 = y_source %>% get_MPI_deconv(shards, 4, tree)
+	# idx_4_source = y_source %>% filter(level == 4) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
+	# idx_4 = idx_4_source %>% pull(G)
+	# I4 = idx_4 %>% length
+	# I4_dim = c(idx_4_source %>% distinct(symbol) %>% nrow, idx_4_source %>% distinct(`Cell type category`) %>% nrow)
+	# y_MPI_source_lv4 = y_MPI_lv4 %$% y_MPI_source
+	# y_MPI_symbol_per_shard_lv4 = y_MPI_lv4 %$% y_MPI_symbol_per_shard
+	# y_MPI_idx_symbol_lv4 = y_MPI_lv4 %$% y_MPI_idx_symbol
+	# y_MPI_G_per_shard_lv4 = y_MPI_lv4 %$% y_MPI_G_per_shard
+	# GM_lv4 = df %>% filter(!`house keeping`) %>% filter(level==4) %>% distinct(symbol) %>% nrow()
+	# y_idx_lv4 =  y_MPI_lv4 %$% y_idx
+	# y_MPI_idx_lv4 = y_MPI_lv4 %$% y_MPI_idx
+	# y_MPI_N_per_shard_lv4 = y_MPI_lv4 %$% y_MPI_N_per_shard
+	# y_MPI_count_lv4 = y_MPI_lv4 %$% y_MPI_count
 
 	Q = df %>% filter(`query`) %>% distinct(Q) %>% nrow
 
@@ -926,88 +946,88 @@ ARMET_tc = function(
 	# Merge all MPI
 	#######################################
 
-	# Reference
-	counts_package =
-		# Dimensions data sets
-		rep(c(M, N, S), shards) %>%
-		matrix(nrow = shards, byrow = T) %>%
-		cbind(G_per_shard) %>%
-		cbind(symbol_end) %>%
-		cbind(sample_idx) %>%
-		cbind(counts)
-
-	# level 1
-	lev1_package =
-		# Dimensions data sets
-		rep(c(ct_in_levels[1], Q, S), shards) %>%
-		matrix(nrow = shards, byrow = T) %>%
-		cbind(y_MPI_symbol_per_shard_lv1) %>%
-		cbind(y_MPI_G_per_shard_lv1) %>%
-		cbind(y_MPI_N_per_shard_lv1) %>%
-		cbind(y_MPI_count_lv1)
-
-	# level 2
-	lev2_package =
-		# Dimensions data sets
-		rep(c(ct_in_levels[2], Q, S), shards) %>%
-		matrix(nrow = shards, byrow = T) %>%
-		cbind(y_MPI_symbol_per_shard_lv2) %>%
-		cbind(y_MPI_G_per_shard_lv2) %>%
-		cbind(y_MPI_N_per_shard_lv2) %>%
-		cbind(y_MPI_count_lv2)
-
-	# level 3
-	lev3_package =
-		# Dimensions data sets
-		rep(c(ct_in_levels[3], Q, S), shards) %>%
-		matrix(nrow = shards, byrow = T) %>%
-		cbind(y_MPI_symbol_per_shard_lv3) %>%
-		cbind(y_MPI_G_per_shard_lv3) %>%
-		cbind(y_MPI_N_per_shard_lv3) %>%
-		cbind(y_MPI_count_lv3)
-
-	# level 4
-	lev4_package =
-		# Dimensions data sets
-		rep(c(ct_in_levels[4], Q, S), shards) %>%
-		matrix(nrow = shards, byrow = T) %>%
-		cbind(y_MPI_symbol_per_shard_lv4) %>%
-		cbind(y_MPI_G_per_shard_lv4) %>%
-		cbind(y_MPI_N_per_shard_lv4) %>%
-		cbind(y_MPI_count_lv4)
+	# # Reference
+	# counts_package =
+	# 	# Dimensions data sets
+	# 	rep(c(M, N, S), shards) %>%
+	# 	matrix(nrow = shards, byrow = T) %>%
+	# 	cbind(G_per_shard) %>%
+	# 	cbind(symbol_end) %>%
+	# 	cbind(sample_idx) %>%
+	# 	cbind(counts)
+	#
+	# # level 1
+	# lev1_package =
+	# 	# Dimensions data sets
+	# 	rep(c(ct_in_levels[1], Q, S), shards) %>%
+	# 	matrix(nrow = shards, byrow = T) %>%
+	# 	cbind(y_MPI_symbol_per_shard_lv1) %>%
+	# 	cbind(y_MPI_G_per_shard_lv1) %>%
+	# 	cbind(y_MPI_N_per_shard_lv1) %>%
+	# 	cbind(y_MPI_count_lv1)
+	#
+	# # level 2
+	# lev2_package =
+	# 	# Dimensions data sets
+	# 	rep(c(ct_in_levels[2], Q, S), shards) %>%
+	# 	matrix(nrow = shards, byrow = T) %>%
+	# 	cbind(y_MPI_symbol_per_shard_lv2) %>%
+	# 	cbind(y_MPI_G_per_shard_lv2) %>%
+	# 	cbind(y_MPI_N_per_shard_lv2) %>%
+	# 	cbind(y_MPI_count_lv2)
+	#
+	# # level 3
+	# lev3_package =
+	# 	# Dimensions data sets
+	# 	rep(c(ct_in_levels[3], Q, S), shards) %>%
+	# 	matrix(nrow = shards, byrow = T) %>%
+	# 	cbind(y_MPI_symbol_per_shard_lv3) %>%
+	# 	cbind(y_MPI_G_per_shard_lv3) %>%
+	# 	cbind(y_MPI_N_per_shard_lv3) %>%
+	# 	cbind(y_MPI_count_lv3)
+	#
+	# # level 4
+	# lev4_package =
+	# 	# Dimensions data sets
+	# 	rep(c(ct_in_levels[4], Q, S), shards) %>%
+	# 	matrix(nrow = shards, byrow = T) %>%
+	# 	cbind(y_MPI_symbol_per_shard_lv4) %>%
+	# 	cbind(y_MPI_G_per_shard_lv4) %>%
+	# 	cbind(y_MPI_N_per_shard_lv4) %>%
+	# 	cbind(y_MPI_count_lv4)
 
 	# Integrate everything
-	data_package =
-
-		# Size 3 data data sets
-		rep(c(
-			ncol(counts_package),
-			ncol(lev1_package),
-			ncol(lev2_package),
-			ncol(lev3_package),
-			ncol(lev4_package)
-		), shards) %>%
-		matrix(nrow = shards, byrow = T) %>%
-
-		# Size parameter datasets
-		cbind(
-			rep(c(
-				(M + 2 + S), # lambda, sigma slope intercept, exposure
-				(max(y_MPI_G_per_shard_lv1) + 2 + Q + max(y_MPI_symbol_per_shard_lv1) + (Q * ct_in_levels[1])),
-				(max(y_MPI_G_per_shard_lv2) + 2 + Q + max(y_MPI_symbol_per_shard_lv2) + (Q * ct_in_levels[2])),
-				(max(y_MPI_G_per_shard_lv3) + 2 + Q + max(y_MPI_symbol_per_shard_lv3) + (Q * ct_in_levels[3])),
-				(max(y_MPI_G_per_shard_lv4) + 2 + Q + max(y_MPI_symbol_per_shard_lv4) + (Q * ct_in_levels[4]))
-
-			), shards) %>%
-			matrix(nrow = shards, byrow = T)
-		) %>%
-
-		# Data sets
-		cbind(counts_package) %>%
-		cbind(lev1_package) %>%
-		cbind(lev2_package) %>%
-		cbind(lev3_package) %>%
-		cbind(lev4_package)
+	# data_package =
+	#
+	# 	# Size 3 data data sets
+	# 	rep(c(
+	# 		ncol(counts_package),
+	# 		ncol(lev1_package),
+	# 		ncol(lev2_package),
+	# 		ncol(lev3_package),
+	# 		ncol(lev4_package)
+	# 	), shards) %>%
+	# 	matrix(nrow = shards, byrow = T) %>%
+	#
+	# 	# Size parameter datasets
+	# 	cbind(
+	# 		rep(c(
+	# 			(M + 2 + S), # lambda, sigma slope intercept, exposure
+	# 			(max(y_MPI_G_per_shard_lv1) + 2 + Q + max(y_MPI_symbol_per_shard_lv1) + (Q * ct_in_levels[1])),
+	# 			(max(y_MPI_G_per_shard_lv2) + 2 + Q + max(y_MPI_symbol_per_shard_lv2) + (Q * ct_in_levels[2])),
+	# 			(max(y_MPI_G_per_shard_lv3) + 2 + Q + max(y_MPI_symbol_per_shard_lv3) + (Q * ct_in_levels[3])),
+	# 			(max(y_MPI_G_per_shard_lv4) + 2 + Q + max(y_MPI_symbol_per_shard_lv4) + (Q * ct_in_levels[4]))
+	#
+	# 		), shards) %>%
+	# 			matrix(nrow = shards, byrow = T)
+	# 	) %>%
+	#
+	# 	# Data sets
+	# 	cbind(counts_package) %>%
+	# 	cbind(lev1_package) %>%
+	# 	cbind(lev2_package) %>%
+	# 	cbind(lev3_package) %>%
+	# 	cbind(lev4_package)
 
 	########################################
 	########################################
@@ -1191,7 +1211,7 @@ ARMET_tc = function(
 
 		# Add tree information
 		left_join(
-			tree %>% ToDataFrameTree("name", "C1", "C2", "C3", "C4") %>%
+			tree %>% data.tree::ToDataFrameTree("name", "C1", "C2", "C3", "C4") %>%
 				as_tibble %>%
 				select(-1) %>%
 				rename(`Cell type category` = name) %>%
