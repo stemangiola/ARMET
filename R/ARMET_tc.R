@@ -670,7 +670,7 @@ ARMET_tc = function(
 	# Set up tree structure
 	#########################################
 
-	tree = 	tree %>%	{
+	tree = 	data.tree::Clone(tree) %>%	{
 		# Filter selected levels
 		data.tree::Prune(., function(x) x$level <= max(levels) + 1)
 		.
