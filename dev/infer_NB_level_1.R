@@ -14,6 +14,7 @@ library(foreach)
 library(parallel)
 library(doParallel)
 library(multidplyr)
+library(data.tree)
 
 # library(future)
 # plan(multiprocess)
@@ -58,11 +59,10 @@ my_theme =
 	)
 
 # Tools
-source("https://gist.githubusercontent.com/stemangiola/90a528038b8c52b21f9cfa6bb186d583/raw/dbd92c49fb03fb05ab0b465704b99c0a39e654d5/transcription_tool_kit.R")
 source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/e4ec6a2348efc2f62b88f10b12e70f4c6273a10a/tidy_extensions.R")
 source("https://gist.githubusercontent.com/stemangiola/9d2ba5d599b7ac80404c753cdee04a01/raw/26e5b48fde0cd4f5b0fd7cbf2fde6081a5f63e7f/tidy_data_tree.R")
 
-options(error = quote({dump.frames(to.file=TRUE); q()}))
+#options(error = quote({dump.frames(to.file=TRUE); q()}))
 
 # Setup table of name conversion
 tree =

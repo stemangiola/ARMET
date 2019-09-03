@@ -6,8 +6,9 @@ library(foreach)
 library(doParallel)
 registerDoParallel()
 library(ARMET)
+library(data.tree)
 
-options(error = quote({dump.frames(to.file=TRUE); q()}), show.error.locations = TRUE)
+#options(error = quote({dump.frames(to.file=TRUE); q()}), show.error.locations = TRUE)
 
 my_theme =
 	theme_bw() +
@@ -437,10 +438,12 @@ get_input_data = function(markers, reps, pass){
 
 
 #source("R/ARMET_tc.R")
+
+mix_base = readRDS("dev/mix_base.RDS")
+my_ref = 	mix_base %>% distinct(sample, `Cell type category`, level)
+
 set.seed(123)
 
-my_ref = 	ARMET::ARMET_ref %>%
-	distinct(sample, `Cell type category`)
 # %>%
 # 	filter( ! grepl(sample_blacklist %>% paste(collapse="|"), sample))
 
@@ -481,7 +484,7 @@ mix_source =
 			}
 		}
 
-		gn(ARMET::tree)
+		gn(Clone(ARMET::tree))
 	} %>%
 	mutate(`#` = 1:n()) %>%
 
@@ -501,11 +504,11 @@ mix_source =
 
 		bind_rows(
 			my_ref %>%
-				filter(`Cell type category` == (cc %>% pull(V1))) %>%
+				filter(`Cell type category` == (cc %>% pull(V1)) & level == (cc %>% pull(level))) %>%
 				sample_n(1) %>%
 				distinct(sample, `Cell type category`),
 			my_ref %>%
-				filter(`Cell type category` == (cc %>% pull(V2))) %>%
+				filter(`Cell type category` == (cc %>% pull(V2))  & level == (cc %>% pull(level))) %>%
 				sample_n(1) %>%
 				distinct(sample, `Cell type category`)
 		) %>%
@@ -516,7 +519,7 @@ mix_source =
 	ungroup() %>%
 
 	# Again solving the problem with house keeping genes
-	left_join(ARMET::ARMET_ref  %>% distinct(`symbol`, `read count normalised bayes`, `Cell type category`, sample, level, `house keeping`))  %>%
+	left_join(mix_base  %>% distinct(`symbol`, `read count normalised bayes`, `Cell type category`, sample, level, `house keeping`))  %>%
 
 	# Add mix_sample
 	left_join(
