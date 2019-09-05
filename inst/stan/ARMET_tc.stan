@@ -119,21 +119,33 @@ functions{
 data {
 
 	// Reference matrix inference
-
 	int<lower=0> G;
 	int<lower=0> GM;
 	int<lower=0> S;
-	int CL;
+	int CL; // counts linear size
 
- 	int counts_linear[CL] ;
-	int G_linear[CL] ;
+	// reference counts
+ 	int<lower=0> counts_linear[CL] ;
+	int G_to_counts_linear[CL] ;
 	int S_linear[CL] ;
 
+	// Reference counts per level
+	int<lower=0> CL_1;
+	int<lower=0> counts_idx_lv_1[CL_1];
+	int<lower=0> CL_2;
+	int<lower=0> counts_idx_lv_2[CL_2];
+	int<lower=0> CL_3;
+	int<lower=0> counts_idx_lv_3[CL_3];
+	int<lower=0> CL_4;
+	int<lower=0> counts_idx_lv_4[CL_4];
+
+
+	// Priors
 	real<upper=0> sigma_slope;
 	real<lower=0> sigma_sigma;
 	real sigma_intercept;
 
-
+	// Cell types
  	int<lower=0> Q;
   int<lower=1> n_nodes;
   int<lower=1> ct_in_nodes[n_nodes];
@@ -230,16 +242,19 @@ parameters {
   vector[S] exposure_rate;
 
   // Proportions
+  // lv1
   simplex[ct_in_nodes[1]]  prop_1[Q]; // Root
-  simplex[ct_in_nodes[2]]  prop_a[Q]; // Immune cells
 
   // lv2
+  simplex[ct_in_nodes[2]]  prop_a[Q]; // Immune cells
+
+  // lv3
   simplex[ct_in_nodes[3]]  prop_b[Q]; // b cells
   simplex[ct_in_nodes[4]]  prop_c[Q]; // granulocyte
   simplex[ct_in_nodes[5]]  prop_d[Q]; // mono_derived
   simplex[ct_in_nodes[6]]  prop_e[Q]; // t_cell
 
-	// lv3
+	// lv4
   simplex[ct_in_nodes[7]]  prop_f[Q]; // dendritic myeloid
   simplex[ct_in_nodes[8]]  prop_g[Q]; // macrophage
   simplex[ct_in_nodes[9]]  prop_h[Q]; // CD4
@@ -327,17 +342,17 @@ model {
 			)
 		);
 
-		vector[Y_1 + Y_2 + Y_3 + Y_4] lambda_log_deconvoluted =
-			append_row(
-				append_row(
-					append_row(
-						lambda_log_deconvoluted_1 + exposure_rate[y_linear_S_1],
-						lambda_log_deconvoluted_2 + exposure_rate[y_linear_S_2]
-					),
-					lambda_log_deconvoluted_3 + exposure_rate[y_linear_S_3]
-				),
-				lambda_log_deconvoluted_4 + exposure_rate[y_linear_S_4]
-			);
+		// vector[Y_1 + Y_2 + Y_3 + Y_4] lambda_log_deconvoluted =
+		// 	append_row(
+		// 		append_row(
+		// 			append_row(
+		// 				lambda_log_deconvoluted_1 + exposure_rate[y_linear_S_1],
+		// 				lambda_log_deconvoluted_2 + exposure_rate[y_linear_S_2]
+		// 			),
+		// 			lambda_log_deconvoluted_3 + exposure_rate[y_linear_S_3]
+		// 		),
+		// 		lambda_log_deconvoluted_4 + exposure_rate[y_linear_S_4]
+		// 	);
 
   // Overall properties of the data
   lambda_mu ~ normal(lambda_mu_prior[1],lambda_mu_prior[2]);
@@ -355,30 +370,78 @@ model {
 	sigma_inv_log ~ normal(sigma_slope * lambda_log + sigma_intercept, sigma_sigma);
 
 	// Deconvolution
-	for(q in 1:Q) prop_1[q] ~ dirichlet(rep_vector(num_elements(prop_1[1]), num_elements(prop_1[1])));
-	for(q in 1:Q) prop_a[q] ~ dirichlet(rep_vector(num_elements(prop_a[1]), num_elements(prop_a[1])));
-	for(q in 1:Q) prop_b[q] ~ dirichlet(rep_vector(num_elements(prop_b[1]), num_elements(prop_b[1])));
-	for(q in 1:Q) prop_c[q] ~ dirichlet(rep_vector(num_elements(prop_c[1]), num_elements(prop_c[1])));
-	for(q in 1:Q) prop_d[q] ~ dirichlet(rep_vector(num_elements(prop_d[1]), num_elements(prop_d[1])));
-	for(q in 1:Q) prop_e[q] ~ dirichlet(rep_vector(num_elements(prop_e[1]), num_elements(prop_e[1])));
-	for(q in 1:Q) prop_f[q] ~ dirichlet(rep_vector(num_elements(prop_f[1]), num_elements(prop_f[1])));
-	for(q in 1:Q) prop_g[q] ~ dirichlet(rep_vector(num_elements(prop_g[1]), num_elements(prop_g[1])));
-	for(q in 1:Q) prop_h[q] ~ dirichlet(rep_vector(num_elements(prop_h[1]), num_elements(prop_h[1])));
-	for(q in 1:Q) prop_i[q] ~ dirichlet(rep_vector(num_elements(prop_i[1]), num_elements(prop_i[1])));
-
-	// Deconvolution
 	sigma_intercept_dec ~ student_t(3, 0, 2);
-	//sigma_slope_dec ~ normal(0,1);
 
-	y_linear ~ neg_binomial_2_log(
-		lambda_log_deconvoluted,
-		1.0 ./ exp( ( sigma_slope * lambda_log_deconvoluted + sigma_intercept_dec ) )
-	);
+	// Level 1 ////////////////////////////////////////
 
 	// Reference
-	counts_linear ~ neg_binomial_2_log(
-		lambda_log[G_linear] + exposure_rate[S_linear],
-		1.0 ./ exp( sigma_inv_log[G_linear] )
+	target += neg_binomial_2_log_lpmf( counts_linear[counts_idx_lv_1] |
+		lambda_log[G_to_counts_linear[counts_idx_lv_1]] + exposure_rate[S_linear[counts_idx_lv_1]],
+		1.0 ./ exp( sigma_inv_log[G_to_counts_linear[counts_idx_lv_1]] )
 	);
+
+	// deconvolution
+	target += neg_binomial_2_log_lpmf(y_linear_1 |
+		lambda_log_deconvoluted_1 + exposure_rate[y_linear_S_1],
+		1.0 ./ exp( ( sigma_slope * lambda_log_deconvoluted_1 + sigma_intercept_dec ) )
+	);
+	for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | rep_vector(num_elements(prop_1[1]), num_elements(prop_1[1])));
+
+// Level 2 ////////////////////////////////////////
+
+	// Reference
+	target += neg_binomial_2_log_lpmf(counts_linear[counts_idx_lv_2] |
+		lambda_log[G_to_counts_linear[counts_idx_lv_2]] + exposure_rate[S_linear[counts_idx_lv_2]],
+		1.0 ./ exp( sigma_inv_log[G_to_counts_linear[counts_idx_lv_2]] )
+	);
+
+	// deconvolution
+	target += neg_binomial_2_log_lpmf(y_linear_2 |
+		lambda_log_deconvoluted_2 + exposure_rate[y_linear_S_2],
+		1.0 ./ exp( ( sigma_slope * lambda_log_deconvoluted_2 + sigma_intercept_dec ) )
+	);
+	for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | rep_vector(num_elements(prop_a[1]), num_elements(prop_a[1])));
+
+// Level 3 ////////////////////////////////////////
+
+	// Reference
+	target += neg_binomial_2_log_lpmf(counts_linear[counts_idx_lv_3] |
+		lambda_log[G_to_counts_linear[counts_idx_lv_3]] + exposure_rate[S_linear[counts_idx_lv_3]],
+		1.0 ./ exp( sigma_inv_log[G_to_counts_linear[counts_idx_lv_3]] )
+	);
+
+	// deconvolution
+	target += neg_binomial_2_log_lpmf(y_linear_3 |
+		lambda_log_deconvoluted_3 + exposure_rate[y_linear_S_3],
+		1.0 ./ exp( ( sigma_slope * lambda_log_deconvoluted_3 + sigma_intercept_dec ) )
+	);
+	for(q in 1:Q) target += dirichlet_lpdf(prop_b[q] | rep_vector(num_elements(prop_b[1]), num_elements(prop_b[1])));
+	for(q in 1:Q) target += dirichlet_lpdf(prop_c[q] | rep_vector(num_elements(prop_c[1]), num_elements(prop_c[1])));
+	for(q in 1:Q) target += dirichlet_lpdf(prop_d[q] | rep_vector(num_elements(prop_d[1]), num_elements(prop_d[1])));
+	for(q in 1:Q) target += dirichlet_lpdf(prop_e[q] | rep_vector(num_elements(prop_e[1]), num_elements(prop_e[1])));
+
+// Level 4 ////////////////////////////////////////
+
+	// Reference
+	target += neg_binomial_2_log_lpmf( counts_linear[counts_idx_lv_4] |
+		lambda_log[G_to_counts_linear[counts_idx_lv_4]] + exposure_rate[S_linear[counts_idx_lv_4]],
+		1.0 ./ exp( sigma_inv_log[G_to_counts_linear[counts_idx_lv_4]] )
+	);
+
+	// deconvolution
+	target += neg_binomial_2_log_lpmf(y_linear_4 |
+		lambda_log_deconvoluted_4 + exposure_rate[y_linear_S_4],
+		1.0 ./ exp( ( sigma_slope * lambda_log_deconvoluted_4 + sigma_intercept_dec ) )
+	);
+	for(q in 1:Q) target += dirichlet_lpdf(prop_f[q] | rep_vector(num_elements(prop_f[1]), num_elements(prop_f[1])));
+	for(q in 1:Q) target += dirichlet_lpdf(prop_g[q] | rep_vector(num_elements(prop_g[1]), num_elements(prop_g[1])));
+	for(q in 1:Q) target += dirichlet_lpdf(prop_h[q] | rep_vector(num_elements(prop_h[1]), num_elements(prop_h[1])));
+	for(q in 1:Q) target += dirichlet_lpdf(prop_i[q] | rep_vector(num_elements(prop_i[1]), num_elements(prop_i[1])));
+
+	// Reference
+	// counts_linear ~ neg_binomial_2_log(
+	// 	lambda_log[G_to_counts_linear] + exposure_rate[S_linear],
+	// 	1.0 ./ exp( sigma_inv_log[G_to_counts_linear] )
+	// );
 
 }

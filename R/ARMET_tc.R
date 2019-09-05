@@ -1098,12 +1098,22 @@ ARMET_tc = function(
 	##########################################
 
 	counts_linear = counts_baseline %>% arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>%  pull(`read count`)
-	G_linear = counts_baseline %>% arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>% pull(G)
-
+	G_to_counts_linear = counts_baseline %>% arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>% pull(G)
 	S_linear = counts_baseline %>%  arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>% pull(S)
+
 	CL = length(counts_linear)
 	G = counts_baseline %>%  mutate(S = S %>% as.factor %>% as.integer)%>%  distinct(G) %>% nrow
 	S = counts_baseline %>%  mutate(S = S %>% as.factor %>% as.integer)%>% distinct(S) %>% nrow
+
+	# Counts idx for each level for each level
+	counts_idx_lv_1 = counts_baseline %>% arrange(G, S) %>% mutate(counts_idx = 1:n()) %>% filter(level==1) %>% pull(counts_idx)
+	CL_1 = counts_idx_lv_1 %>% length
+	counts_idx_lv_2 = counts_baseline %>% arrange(G, S) %>% mutate(counts_idx = 1:n()) %>% filter(level==2) %>% pull(counts_idx)
+	CL_2 = counts_idx_lv_2 %>% length
+	counts_idx_lv_3 = counts_baseline %>% arrange(G, S) %>% mutate(counts_idx = 1:n()) %>% filter(level==3) %>% pull(counts_idx)
+	CL_3 = counts_idx_lv_3 %>% length
+	counts_idx_lv_4 = counts_baseline %>% arrange(G, S) %>% mutate(counts_idx = 1:n()) %>% filter(level==4) %>% pull(counts_idx)
+	CL_4 = counts_idx_lv_4 %>% length
 
 	# Deconvolution, get G only for markers of each level. Exclude house keeping
 	G1_linear = counts_baseline %>% filter(!`house keeping`) %>% filter(level ==1) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
