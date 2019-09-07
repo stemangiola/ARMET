@@ -254,7 +254,7 @@ get_overlap_descriptive_stats = function(mix_tbl, ref_tbl){
 plot_counts_inferred_sum = function(fit_obj, samples = NULL){
 
 	fit_obj %$% fit %>%
-		summary(par=c("nb_sum")) %$% summary %>%
+		rstan::summary(par=c("nb_sum")) %$% summary %>%
 		as_tibble(rownames="par") %>% select(par, `2.5%`, `50%`, `97.5%`) %>%
 		separate(par, c(".variable", "Q", "GM"), sep="\\[|,|\\]") %>%
 		mutate(Q = Q %>% as.integer, GM = GM %>% as.integer) %>%
@@ -511,6 +511,8 @@ as_matrix = function(tbl, rownames = NULL){
 #' ToDataFrameTypeColFull
 #'
 #' @description Extension of data.tree package. It converts the tree into data frame
+#'
+#' @export
 ToDataFrameTypeColFull = function(tree, ...){
 	tree %>%
 		Clone() %>%
@@ -1182,7 +1184,7 @@ ARMET_tc = function(
 				#pars = c("prop_1", "prop_2", "prop_3", "exposure_rate") #, "nb_sum") #,"mu_sum", "phi_sum"),
 			) %>%
 				{
-					(.)  %>% summary() %$% summary %>% as_tibble(rownames="par") %>% arrange(Rhat %>% desc) %>% print
+					(.)  %>% rstan::summary() %$% summary %>% as_tibble(rownames="par") %>% arrange(Rhat %>% desc) %>% print
 					(.)
 				},
 
