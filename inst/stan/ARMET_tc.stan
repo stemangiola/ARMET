@@ -130,6 +130,8 @@ data {
 	int S_linear[CL] ;
 
 	// Reference counts per level
+	int<lower=0> CL_NA;
+	int<lower=0> counts_idx_lv_NA[CL_NA];
 	int<lower=0> CL_1;
 	int<lower=0> counts_idx_lv_1[CL_1];
 	int<lower=0> CL_2;
@@ -342,18 +344,6 @@ model {
 			)
 		);
 
-		// vector[Y_1 + Y_2 + Y_3 + Y_4] lambda_log_deconvoluted =
-		// 	append_row(
-		// 		append_row(
-		// 			append_row(
-		// 				lambda_log_deconvoluted_1 + exposure_rate[y_linear_S_1],
-		// 				lambda_log_deconvoluted_2 + exposure_rate[y_linear_S_2]
-		// 			),
-		// 			lambda_log_deconvoluted_3 + exposure_rate[y_linear_S_3]
-		// 		),
-		// 		lambda_log_deconvoluted_4 + exposure_rate[y_linear_S_4]
-		// 	);
-
   // Overall properties of the data
   lambda_mu ~ normal(lambda_mu_prior[1],lambda_mu_prior[2]);
 	lambda_sigma ~ normal(lambda_sigma_prior[1],lambda_sigma_prior[2]);
@@ -371,6 +361,14 @@ model {
 
 	// Deconvolution
 	sigma_intercept_dec ~ student_t(3, 0, 2);
+
+	// Level NA - Mix house keeing /////////////////////
+
+	// Reference
+	target += neg_binomial_2_log_lpmf( counts_linear[counts_idx_lv_NA] |
+		lambda_log[G_to_counts_linear[counts_idx_lv_NA]] + exposure_rate[S_linear[counts_idx_lv_NA]],
+		1.0 ./ exp( sigma_inv_log[G_to_counts_linear[counts_idx_lv_NA]] )
+	);
 
 	// Level 1 ////////////////////////////////////////
 
@@ -437,11 +435,5 @@ model {
 	for(q in 1:Q) target += dirichlet_lpdf(prop_g[q] | rep_vector(num_elements(prop_g[1]), num_elements(prop_g[1])));
 	for(q in 1:Q) target += dirichlet_lpdf(prop_h[q] | rep_vector(num_elements(prop_h[1]), num_elements(prop_h[1])));
 	for(q in 1:Q) target += dirichlet_lpdf(prop_i[q] | rep_vector(num_elements(prop_i[1]), num_elements(prop_i[1])));
-
-	// Reference
-	// counts_linear ~ neg_binomial_2_log(
-	// 	lambda_log[G_to_counts_linear] + exposure_rate[S_linear],
-	// 	1.0 ./ exp( sigma_inv_log[G_to_counts_linear] )
-	// );
 
 }
