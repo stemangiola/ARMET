@@ -1,0 +1,351 @@
+library(tidyverse)
+library(purrr)
+library(furrr)
+source(
+	"https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/a7479898357de6e109419be49fe264be7775e9a9/tidy_extensions.R"
+)
+options(future.globals.maxSize = 50000 * 1024 ^ 2)
+
+give_rank_to_ref = function(fit_df, level, lambda_threshold = 5) {
+	ToDataFrameTypeColFull = function(tree, ...) {
+		tree %>%
+			Clone() %>%
+			{
+				t = (.)
+				foreach(l = 1:(t %$% Get("level") %>% max), .combine = bind_rows) %do% {
+					data.tree::Clone(t) %>%
+						{
+							data.tree::Prune(., function(x)
+								x$level <= l + 1)
+							.
+						} %>%
+						data.tree::ToDataFrameTypeCol(...) %>%
+						as_tibble
+				}
+			} %>%
+			distinct() %>%
+			{
+				if ("level_3" %in% ((.) %>% colnames))
+					(.) %>% mutate(level_3 = ifelse(level_3 %>% is.na, level_2, level_3))
+				else
+					(.)
+			} %>%
+			{
+				if ("level_4" %in% ((.) %>% colnames))
+					(.) %>% mutate(level_4 = ifelse(level_4 %>% is.na, level_3, level_4))
+				else
+					(.)
+			} %>%
+			{
+				if ("level_5" %in% ((.) %>% colnames))
+					(.) %>% mutate(level_5 = ifelse(level_5 %>% is.na, level_4, level_5))
+				else
+					(.)
+			} %>%
+			{
+				if ("level_6" %in% ((.) %>% colnames))
+					(.) %>% mutate(level_6 = ifelse(level_6 %>% is.na, level_5, level_6))
+				else
+					(.)
+			} %>%
+			select(..., everything())
+	}
+
+
+	fit_df %>%
+		left_join(
+			Clone(ARMET::tree) %>% ToDataFrameTypeColFull("name") %>% as_tibble() %>% rename(`Cell type formatted` = name)
+		) %>%
+		filter(`Cell type category` != "house_keeping") %>%
+
+		# Select only branches that have childs
+		inner_join(
+			(.) %>%
+				select(
+					!!sprintf("level_%s", level),
+					!!sprintf("level_%s", level + 1)
+				) %>%
+				distinct %>%
+				group_by_at(1) %>%
+				summarise(n = n()) %>%
+				filter(n > 1)
+		) %>%
+
+		# For each category
+		group_by(!!sym(sprintf("level_%s", level))) %>%
+		do(
+			gtools::permutations(
+				n = (.) %>% select(!!sprintf("level_%s", level + 1)) %>% distinct %>% drop_na %>% nrow,
+				r = 2,
+				v = (.) %>% select(!!sprintf("level_%s", level + 1)) %>% distinct %>% drop_na %>% pull(1),
+				repeats.allowed = F
+			) %>%
+				as_tibble
+		) %>%
+		mutate(comparison = 1:n()) %>%
+		unite(pair, c("V1", "V2"), remove = F, sep = " ") %>%
+		gather(which,
+					 `Cell type category`,
+					 -!!sprintf("level_%s", level),
+					 -comparison,
+					 -pair) %>%
+		left_join(fit_df %>% distinct(symbol, `Cell type category`, CI_low, CI_high)) %>%
+
+		# Temporary for cell nameserror
+
+		filter(symbol %>% is.na %>% `!`) %>%
+		anti_join(
+			(.) %>% distinct(pair, `Cell type category`, symbol) %>% count(pair, symbol) %>% arrange(n) %>% filter(n ==
+																																																						 	1) %>% ungroup %>% distinct(pair)
+		) %>%
+
+		mutate(relevant_CI = ifelse(which == "V1", CI_low, CI_high)) %>%
+		group_by(comparison, pair, symbol) %>%
+		arrange(which) %>%
+		summarise(delta = diff(relevant_CI)) %>%
+		separate(
+			pair,
+			c("Cell type category", "other Cell type category"),
+			sep = " ",
+			remove = F
+		) %>%
+		left_join(
+			fit_df %>% distinct(
+				`Cell type category`,
+				symbol,
+				lambda,
+				sigma_raw,
+				`gene error mean`,
+				regression,
+				bimodality
+			)
+		) %>%
+		filter(lambda > !!lambda_threshold) %>%
+		# {
+		# 	if( (.) %>% filter(`Cell type category` == "eosinophil") %>% nrow %>% `>` (0)) browser()
+		# 	(.)
+		# } %>%
+
+		# If a marker exists for more cell types (can happen) none of them can be noisy otherwise we screw up the whole gene
+		ungroup() %>%
+		mutate(`too noisy` = (regression >= 0.2 & sigma_raw >= 0.5) | (bimodality >= 0.8)) %>%
+		group_by(symbol) %>%
+		mutate(`too noisy` = `too noisy` %>% any()) %>%
+		ungroup %>%
+		filter(!`too noisy`) %>%
+		group_by(comparison, pair) %>%
+
+		#filter(`gene error mean` < fit_threshold) %>%
+		arrange(delta) %>%
+		mutate(rank = 1:n()) %>%
+		ungroup() %>%
+		mutate(level = !!level)
+}
+
+create_ref = function(ref, markers) {
+	ref %>%
+
+		# Get house keeping and markwrs
+		left_join(markers %>% distinct(level, symbol, ct1, ct2, rank) %>% filter(rank < 500)) %>%
+		filter(`house keeping` | rank %>% is.na %>% `!`) %>%
+
+		# Filter out symbol if present both in markers and house keeping (strange but happens)
+		anti_join((.) %>% filter(`house keeping` &
+														 	(ct1 %>% is.na %>% `!`)) %>% distinct(symbol)) %>%
+
+		select(-contains("idx")) %>%
+		mutate(`read count` = `read count` %>% as.integer)
+}
+
+get_NB_qq_values = function(input.df) {
+	input.df = input.df %>% arrange(`read count normalised bayes`)
+
+	predicted_NB =
+		qnbinom(
+			# If 1 sample, just use median
+			switch(
+				input.df %>% nrow %>% `>` (1) %>% `!` %>% sum(1),
+				ppoints(input.df$`read count normalised bayes`),
+				0.5
+			),
+			size = input.df$sigma_raw %>% unique %>% exp %>% `^` (-1),
+			mu = input.df$lambda %>% unique %>% exp
+		)
+
+	input.df %>%	mutate(predicted_NB = predicted_NB)
+}
+
+plot_trends = function(input.df, symbols) {
+	input.df %>%
+		filter(symbol %in% symbols) %>%
+		filter(level == 1) %>%
+		#filter(`Cell type category` == "endothelial") %>%
+		ggplot(
+			aes(
+				x = `predicted_NB` + 1,
+				y = `read count normalised bayes` + 1,
+				label = symbol,
+				color = `regression`
+			)
+		) +
+		geom_abline(intercept = 0,
+								slope = 1,
+								color = "grey") +
+		geom_jitter() +
+		geom_smooth(method = "lm", formula = y ~ x + I(x ^ 2)) +
+		facet_wrap( ~ symbol + `Cell type category`, scales = "free")  +
+		expand_limits(y = 1, x = 1) +
+		scale_y_log10() +
+		scale_x_log10()
+
+}
+
+plot_boxplot = function(input.df, symbols) {
+	input.df %>%
+		filter(symbol %in% symbols) %>%
+		filter(level == 1) %>%
+		#filter(`Cell type category` == "endothelial")  %>%
+		ggplot(
+			aes(
+				x = `Cell type category`,
+				y = `read count normalised bayes` + 1,
+				label = symbol,
+				color = `regression`
+			)
+		) +
+		geom_jitter() +
+		geom_boxplot() +
+		facet_wrap( ~ symbol + `Cell type category`, scales = "free")  +
+		expand_limits(y = 1, x = 1) +
+		scale_y_log10()
+}
+
+
+sample_blacklist = c(
+	"666CRI",
+	"972UYG",
+	"344KCP",
+	"555QVG",
+	"370KKZ",
+	"511TST",
+	"13816.11933",
+	"13819.11936",
+	"13817.11934",
+	"13818.11935",
+	"096DQV",
+	"711SNV",
+	"counts.Ciliary%20Epithelial%20Cells%2c%20donor3.CNhs12009.11399-118D4"   ,
+	"counts.Iris%20Pigment%20Epithelial%20Cells%2c%20donor1.CNhs12596.11530-119I9",
+	"ENCFF890DJO"
+)
+
+ref =
+	read_csv("dev/ref_1_2_3_4.csv") %>%
+	inner_join((.) %>%
+						 	distinct(sample) %>%
+						 	filter(!grepl(
+						 		sample_blacklist %>% paste(collapse = "|"), sample
+						 	)))
+
+# ref_2 =
+# 	ref %>%
+# 	#inner_join( (.) %>% distinct(symbol) %>% slice(1:20000)) %>%
+# 	do_parallel_start(
+# 		.f = ~ {
+# 			.x %>%
+# 				get_NB_qq_values %>%
+# 				mutate(
+# 					a = `read count normalised bayes` %>% `+` (1) %>% log,
+# 					b = predicted_NB %>% `+` (1) %>% log
+# 				) %>%
+# 				mutate(regression = lm(a ~  b + I(b^2), data = (.))$coefficients[3])
+# 	} ,
+# 	`Cell type category`,symbol, level
+# )
+
+
+ref_2 =
+	ref %>%
+	group_by(`Cell type category`, symbol, level) %>%
+	do({
+		mdf = (.) %>%
+			get_NB_qq_values %>%
+			mutate(a = `read count normalised bayes` %>% `+` (1) %>% log,
+						 b = predicted_NB %>% `+` (1) %>% log)
+
+		mdf %>%
+			mutate(regression = lm(a ~  b + I(b ^ 2), data = (.))$coefficients[3])
+	}) %>%
+
+	# Calculate bimodality
+	mutate(bimodality = modes::bimodality_coefficient(`read count normalised bayes` )) %>%
+	ungroup()
+
+# Some plots
+# ref_2 %>%
+# 	distinct(
+# 		level,
+# 		symbol,
+# 		`Cell type category`,
+# 		regression,
+# 		`gene error mean`,
+# 		lambda,
+# 		sigma_raw,
+# 		sample
+# 	) %>%
+# 	count(level,
+# 				symbol,
+# 				`Cell type category`,
+# 				regression,
+# 				`gene error mean`,
+# 				lambda,
+# 				sigma_raw) %>%
+# 	unite(symbol_ct, c("symbol", "Cell type category"), remove = F) %>%
+# 	arrange(`regression` %>% desc) %>%
+# 	mutate(symbol_ct = factor(symbol_ct, unique(symbol_ct))) %>%
+#
+# 	mutate(quarantine = regression >= 0.2 & sigma_raw >= 0.5) %>%
+#
+# 	sample_frac(0.01) %>%
+# 	filter(level == 1) %>%
+# 	{
+# 		ggplot((.),
+# 					 aes(
+# 					 	x = `sigma_raw`,
+# 					 	y = `regression` ,
+# 					 	color = `quarantine`,
+# 					 	size = n,
+# 					 	label = symbol
+# 					 )) +
+# 			geom_point(alpha = 0.4, width = 25) +
+# 			facet_wrap( ~ `Cell type category`) +
+# 			theme(
+# 				axis.title.x = element_blank(),
+# 				axis.text.x = element_blank(),
+# 				axis.ticks.x = element_blank()
+# 			)
+# 	} %>%
+# 	plotly::ggplotly()
+#
+#
+# ref_2 %>% plot_trends("MAP6")
+# ref_2 %>% plot_boxplot("MAP6")
+
+ref_3 =
+	create_ref(
+		ref_2,
+		give_rank_to_ref(ref_2 %>% filter(level == 1), 1) %>%
+			rbind(give_rank_to_ref(ref_2 %>% filter(level == 2), 2)) %>%
+			rbind(give_rank_to_ref(ref_2 %>% filter(level == 3), 3)) %>%
+			rbind(give_rank_to_ref(ref_2 %>% filter(level == 4), 4)) %>%
+			separate(pair, c("ct1", "ct2"), sep = " ", remove = F)
+	)
+
+# (ref_3 %>% filter(ct1 == "epithelial" & ct2 == "endothelial" & level ==1) %>%
+# 		arrange(rank) %>% inner_join( (.) %>% distinct(symbol) %>% slice(1:50)) %>%
+# 		ggplot(aes(x=`Cell type category`, y=`read count normalised bayes`+1, color=bimodality)) +
+# 		geom_jitter() + facet_wrap(~symbol ) + scale_y_log10() +scale_color_gradientn(colours = rainbow(5))) %>% plotly::ggplotly()
+
+ARMET_ref = ref_3 %>% mutate_if(is.character, as.factor) %>% mutate(`read count normalised bayes` = `read count normalised bayes` %>% as.integer)
+
+save(ARMET_ref, file="data/ARMET_ref.RData", compress = "xz")

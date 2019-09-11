@@ -325,7 +325,7 @@ choose_chains_majority_roule = function(fit_parsed){
 #' @description Filter the reference
 filter_reference = function(reference, mix){
 	reference %>%
-		inner_join(mix %>% slice(1) %>%	gather(`symbol`, `read count`, -sample) %>% distinct(symbol)) %>%
+		filter(symbol %in% (mix %>% colnames %>% `[` (-1))) %>%
 		{
 			bind_rows(
 
@@ -578,6 +578,31 @@ vb_iterative = function(model,
 	return(res)
 }
 
+
+get_NB_qq_values = function(input.df, transcript_column){
+
+	transcript_column = enquo(transcript_column)
+
+	input.df %>%
+		group_by(!!transcript_column)%>%
+		do({
+			(.) %>%
+				mutate(
+					predicted_NB =
+
+						qnbinom(
+
+							# If 1 sample, just use median
+							switch(	((.) %>% nrow>1) %>% `!` %>% `+` (1), ppoints(`read count normalised bayes`), 0.5	),
+							size=.$sigma_raw %>% unique %>% exp %>% `^` (-1),
+							mu=.$lambda %>% unique %>% exp
+						)
+
+				)
+		}) %>%
+		ungroup
+}
+
 #' ARMET-tc main
 #'
 #' @description This function calls the stan model.
@@ -608,7 +633,6 @@ vb_iterative = function(model,
 #' @param cov_to_test A character string
 #' @param fully_bayesian A boolean
 #' @param is_mix_microarray A boolean
-#' @param ct_to_omit A character string
 #' @param verbose A boolean
 #' @param save_report A boolean
 #' @param custom_ref A matrix
@@ -626,9 +650,8 @@ vb_iterative = function(model,
 #'
 ARMET_tc = function(
 	mix,
-	reference,
+	reference = NULL,
 	#full_bayesian = 0,
-	ct_to_omit =                        c("t_CD4_naive", "adipocyte"),
 	verbose =                           F,
 	omit_regression =                   F,
 	save_fit =                          F,
@@ -1101,6 +1124,7 @@ ARMET_tc = function(
 
 	counts_linear = counts_baseline %>% arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>%  pull(`read count`)
 	G_to_counts_linear = counts_baseline %>% arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>% pull(G)
+	G_linear = G_to_counts_linear
 	S_linear = counts_baseline %>%  arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>% pull(S)
 
 	CL = length(counts_linear)
@@ -1108,6 +1132,8 @@ ARMET_tc = function(
 	S = counts_baseline %>%  mutate(S = S %>% as.factor %>% as.integer)%>% distinct(S) %>% nrow
 
 	# Counts idx for each level for each level
+	counts_idx_lv_NA = counts_baseline %>% arrange(G, S) %>% mutate(counts_idx = 1:n()) %>% filter(level %>% is.na) %>% pull(counts_idx)
+	CL_NA = counts_idx_lv_NA %>% length
 	counts_idx_lv_1 = counts_baseline %>% arrange(G, S) %>% mutate(counts_idx = 1:n()) %>% filter(level==1) %>% pull(counts_idx)
 	CL_1 = counts_idx_lv_1 %>% length
 	counts_idx_lv_2 = counts_baseline %>% arrange(G, S) %>% mutate(counts_idx = 1:n()) %>% filter(level==2) %>% pull(counts_idx)
@@ -1163,10 +1189,10 @@ ARMET_tc = function(
 	# writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
 	# close(fileConn)
 	# Sys.setenv("STAN_NUM_THREADS" = cores)
-	# ARMET_tc_model = stan_model("~/PhD/deconvolution/ARMET/src/stan_files/ARMET_tc.stan")
+	# ARMET_tc_model = stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc.stan")
 
 	Sys.time() %>% print
-
+browser()
 	fit =
 		switch(
 			full_bayes %>% `!` %>% sum(1),

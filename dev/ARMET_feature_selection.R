@@ -226,6 +226,27 @@ get_markers_number = function(pass, res, num_markers_previous_level, min_n_sampl
 
 give_rank_to_ref = function(fit_df, level, fit_threshold, lambda_threshold =5){
 
+	ToDataFrameTypeColFull = function(tree, ...){
+		tree %>%
+			Clone() %>%
+			{
+				t = (.)
+				foreach(l=1:(t %$% Get("level") %>% max), .combine = bind_rows) %do% {
+					data.tree::Clone(t) %>%
+						{ data.tree::Prune(., function(x) x$level <= l + 1); . } %>%
+						data.tree::ToDataFrameTypeCol(...) %>%
+						as_tibble
+				}
+			} %>%
+			distinct() %>%
+			{ if("level_3" %in% ((.) %>% colnames)) (.) %>% mutate(level_3 = ifelse(level_3 %>% is.na, level_2, level_3)) else (.) } %>%
+			{ if("level_4" %in% ((.) %>% colnames)) (.) %>% mutate(level_4 = ifelse(level_4 %>% is.na, level_3, level_4)) else (.) } %>%
+			{ if("level_5" %in% ((.) %>% colnames)) (.) %>% mutate(level_5 = ifelse(level_5 %>% is.na, level_4, level_5)) else (.) } %>%
+			{ if("level_6" %in% ((.) %>% colnames)) (.) %>% mutate(level_6 = ifelse(level_6 %>% is.na, level_5, level_6)) else (.) } %>%
+			select(..., everything())
+	}
+
+
 	fit_df %>%
 		left_join(  Clone(ARMET::tree) %>% ToDataFrameTypeColFull("name") %>% as_tibble() %>% rename(`Cell type formatted`= name)) %>%
 		filter(`Cell type category` != "house_keeping") %>%
@@ -318,7 +339,7 @@ get_markers_df = function(markers_number, pass){
 	}
 }
 
-create_ref = function(markers, reps, pass){
+create_ref = function(ref, markers){
 
 	sample_blacklist = c("666CRI", "972UYG", "344KCP", "555QVG", "370KKZ", "511TST", "13816.11933", "13819.11936", "13817.11934", "13818.11935", "096DQV", "711SNV")
 
@@ -331,7 +352,7 @@ create_ref = function(markers, reps, pass){
 		) %>%
 
 	# Get house keeping and markwrs
-	left_join(markers %>% distinct(level, symbol, ct1, ct2, rank, `n markers`) %>% filter(rank < 500)) %>%
+	left_join(markers %>% distinct(level, symbol, ct1, ct2, rank) %>% filter(rank < 500)) %>%
 		filter(`house keeping` | rank %>% is.na %>% `!`) %>%
 
 		# Filter out symbol if present both in markers and house keeping (strange but happens)
@@ -439,7 +460,7 @@ get_input_data = function(markers, reps, pass){
 
 #source("R/ARMET_tc.R")
 
-mix_base = readRDS("dev/mix_base.RDS")
+mix_base = readRDS("~/PhD/deconvolution/ARMET/dev/mix_base.RDS")
 my_ref = 	mix_base %>% distinct(sample, `Cell type category`, level)
 
 set.seed(123)
@@ -448,14 +469,14 @@ set.seed(123)
 # 	filter( ! grepl(sample_blacklist %>% paste(collapse="|"), sample))
 
 #
-# marker_df =
-# 	give_rank_to_ref(ref %>% filter(level ==1), 1, 0.5) %>%
-# 	rbind(give_rank_to_ref(ref %>% filter(level ==2), 2, 0.4)) %>%
-# 	rbind(give_rank_to_ref(ref %>% filter(level ==3), 3, 0.5)) %>%
-# 	rbind(give_rank_to_ref(ref %>% filter(level ==4), 4, 0.5)) %>%
-# 	separate(pair, c("ct1", "ct2"), sep=" ", remove = F)
+marker_df =
+	give_rank_to_ref(ref %>% filter(level ==1), 1, 0.5) %>%
+	rbind(give_rank_to_ref(ref %>% filter(level ==2), 2, 0.4)) %>%
+	rbind(give_rank_to_ref(ref %>% filter(level ==3), 3, 0.5)) %>%
+	rbind(give_rank_to_ref(ref %>% filter(level ==4), 4, 0.5)) %>%
+	separate(pair, c("ct1", "ct2"), sep=" ", remove = F)
 
-mix_source =
+get_mix_source = function(){
 	{
 
 		# This function goes thought nodes and grubs names of the cluster
@@ -486,64 +507,68 @@ mix_source =
 
 		gn(Clone(ARMET::tree))
 	} %>%
-	mutate(`#` = 1:n()) %>%
+		mutate(`#` = 1:n()) %>%
 
-	# Make more runs
-	right_join(
-		tibble(`#` = (1: ((.) %>% nrow)) %>% rep(reps))  %>%
-			mutate(run = 1:n())
-	) %>%
-	select(-`#`) %>%
-
-	#multidplyr::partition(run) %>%
-	group_by(run) %>%
-	do({
-		`%>%` = magrittr::`%>%`
-
-		cc = (.)
-
-		bind_rows(
-			my_ref %>%
-				filter(`Cell type category` == (cc %>% pull(V1)) & level == (cc %>% pull(level))) %>%
-				sample_n(1) %>%
-				distinct(sample, `Cell type category`),
-			my_ref %>%
-				filter(`Cell type category` == (cc %>% pull(V2))  & level == (cc %>% pull(level))) %>%
-				sample_n(1) %>%
-				distinct(sample, `Cell type category`)
+		# Make more runs
+		right_join(
+			tibble(`#` = (1: ((.) %>% nrow)) %>% rep(reps))  %>%
+				mutate(run = 1:n())
 		) %>%
-			mutate(run = cc %>% distinct(run) %>% pull(1)) %>%
-			mutate(level = cc %>% distinct(level) %>% pull(1))
-	}) %>%
-	#multidplyr::collect() %>%
-	ungroup() %>%
+		select(-`#`) %>%
 
-	# Again solving the problem with house keeping genes
-	left_join(mix_base  %>% distinct(`symbol`, `read count normalised bayes`, `Cell type category`, sample, level, `house keeping`))  %>%
+		#multidplyr::partition(run) %>%
+		group_by(run) %>%
+		do({
+			`%>%` = magrittr::`%>%`
 
-	# Add mix_sample
-	left_join(
-		(.) %>%
-			group_by(run) %>%
-			do(
-				(.) %>%
-					distinct(`symbol`, `read count normalised bayes`, `Cell type category`, run, level) %>%
-					spread(`Cell type category`, `read count normalised bayes`) %>%
-					drop_na %>%
-					mutate(pair = names((.))[4:5] %>% paste(collapse=" ")) %>%
-					setNames(c("symbol", "run", "level", "1", "2", "pair")) %>%
-					mutate( `read count mix` = ( (`1` + `2`) / 2 ) %>% as.integer ) %>%
-					unite(sample_mix, c("run", "pair"), remove = F)
+			cc = (.)
+
+			bind_rows(
+				my_ref %>%
+					filter(`Cell type category` == (cc %>% pull(V1)) & level == (cc %>% pull(level))) %>%
+					sample_n(1) %>%
+					distinct(sample, `Cell type category`),
+				my_ref %>%
+					filter(`Cell type category` == (cc %>% pull(V2))  & level == (cc %>% pull(level))) %>%
+					sample_n(1) %>%
+					distinct(sample, `Cell type category`)
 			) %>%
-			ungroup() %>%
-			distinct(symbol, run, level, pair, sample_mix,  `read count mix`)
-	) %>%
+				mutate(run = cc %>% distinct(run) %>% pull(1)) %>%
+				mutate(level = cc %>% distinct(level) %>% pull(1))
+		}) %>%
+		#multidplyr::collect() %>%
+		ungroup() %>%
 
-	# Eliminate duplicated of difference levels for example house keepng genes
-	group_by(run, symbol, sample) %>%
-	arrange(level) %>%
-	slice(1) %>%
-	ungroup
+		# Again solving the problem with house keeping genes
+		left_join(mix_base  %>% distinct(`symbol`, `read count normalised bayes`, `Cell type category`, sample, level, `house keeping`))  %>%
+
+		# Add mix_sample
+		left_join(
+			(.) %>%
+				group_by(run) %>%
+				do(
+					(.) %>%
+						distinct(`symbol`, `read count normalised bayes`, `Cell type category`, run, level) %>%
+						spread(`Cell type category`, `read count normalised bayes`) %>%
+						drop_na %>%
+						mutate(pair = names((.))[4:5] %>% paste(collapse=" ")) %>%
+						setNames(c("symbol", "run", "level", "1", "2", "pair")) %>%
+						mutate( `read count mix` = ( (`1` + `2`) / 2 ) %>% as.integer ) %>%
+						unite(sample_mix, c("run", "pair"), remove = F)
+				) %>%
+				ungroup() %>%
+				distinct(symbol, run, level, pair, sample_mix,  `read count mix`)
+		) %>%
+
+		# Eliminate duplicated of difference levels for example house keepng genes
+		group_by(run, symbol, sample) %>%
+		arrange(level) %>%
+		slice(1) %>%
+		ungroup
+}
+
+mix_source = get_mix_source()
+
 
 
 # (xx %>%
@@ -587,7 +612,7 @@ mix_source =
 # Pass 0
 
 
-foreach(n_markers = c(1:10, seq(15, 50, 5), seq(50, 100, 10))) %dopar% {
+foreach(n_markers = c(1:10, seq(15, 50, 5), seq(50, 100, 10))) %do% {
 
 	file_name = sprintf("%s/markers_%s.RData", out_dir, n_markers)
 
@@ -605,8 +630,8 @@ foreach(n_markers = c(1:10, seq(15, 50, 5), seq(50, 100, 10))) %dopar% {
 							rename(sample = sample_mix),
 					iterations = 250,
 					n_markers = ARMET::ARMET_ref %>% distinct(ct1, ct2) %>% mutate(`n markers` = n_markers),
-					full_bayes = F,
-					cores = 8,
+					full_bayes = T,
+					cores = 10,
 				) %>%
 				saveRDS(file=file_name)
 		)
