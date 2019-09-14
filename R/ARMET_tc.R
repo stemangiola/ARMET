@@ -70,6 +70,63 @@ format_for_MPI = function(df, shards){
 
 }
 
+format_for_MPI_from_linear = function(df, shards){
+	df %>%
+
+		left_join(
+			(.) %>%
+				distinct(GM) %>%
+				arrange(GM) %>%
+				mutate( idx_MPI = head( rep(1:shards, (.) %>% nrow %>% `/` (shards) %>% ceiling ), n=(.) %>% nrow) )
+		) %>%
+		arrange(idx_MPI, GM, G) %>%
+
+		# Add counts MPI rows indexes
+		group_by(idx_MPI) %>%
+		arrange(GM, G) %>%
+		mutate(`read count MPI row` = 1:n()) %>%
+		ungroup
+
+}
+
+format_for_MPI_from_linear_GM = function(df, shards){
+	df %>%
+
+		left_join(
+			(.) %>%
+				distinct(GM) %>%
+				arrange(GM) %>%
+				mutate( idx_MPI = head( rep(1:shards, (.) %>% nrow %>% `/` (shards) %>% ceiling ), n=(.) %>% nrow) )
+		) %>%
+		arrange(idx_MPI, GM) %>%
+
+		# Add counts MPI rows indexes
+		group_by(idx_MPI) %>%
+		arrange(GM) %>%
+		mutate(`read count MPI row` = 1:n()) %>%
+		ungroup
+
+}
+
+format_for_MPI_from_linear_dec = function(df, shards){
+	df %>%
+
+		left_join(
+			(.) %>%
+				distinct(GM) %>%
+				arrange(GM) %>%
+				mutate( idx_MPI = head( rep(1:shards, (.) %>% nrow %>% `/` (shards) %>% ceiling ), n=(.) %>% nrow) )
+		) %>%
+		arrange(idx_MPI, GM, C) %>%
+
+		# Add counts MPI rows indexes
+		group_by(idx_MPI) %>%
+		arrange(GM, C) %>%
+		mutate(`read count MPI row` = 1:n()) %>%
+		ungroup
+
+}
+
 #' add_partition
 #'
 #' @description Add partition column dto data frame
@@ -691,9 +748,7 @@ ARMET_tc = function(
 	lambda_mu_mu = 5.612671
 	lambda_sigma = 7.131593
 
-	#########################################
 	# Set up tree structure
-	#########################################
 
 	tree = 	data.tree::Clone(tree) %>%	{
 		# Filter selected levels
@@ -737,12 +792,11 @@ ARMET_tc = function(
 	# Print overlap descriptive stats
 	#get_overlap_descriptive_stats(mix %>% slice(1) %>% gather(`symbol`, `read count`, -sample), reference)
 
-	#########################################
 	# Prepare data frames -
 	# For Q query first
 	# For G house keeing first
 	# For GM level 1 first
-	#########################################
+
 
 	reference_filtered =
 		ARMET::ARMET_ref %>%
@@ -802,6 +856,9 @@ ARMET_tc = function(
 				ungroup()
 		) %>%
 
+		# If house keeping delete level infomation
+		mutate(level = ifelse(`house keeping`, NA, level)) %>%
+
 		# Create unique symbol ID
 		unite(ct_symbol, c("Cell type category", "symbol"), remove = F) %>%
 
@@ -825,9 +882,8 @@ ARMET_tc = function(
 	G = df %>% filter(!`query`) %>% distinct(G) %>% nrow()
 	GM = df %>% filter(!`house keeping`) %>% distinct(symbol) %>% nrow()
 
-	#########################################
+
 	# For  reference MPI inference
-	#########################################
 
 	shards = cores #* 2
 
@@ -887,10 +943,7 @@ ARMET_tc = function(
 		replace(is.na(.), 0 %>% as.integer) %>%
 		as_matrix() %>% t
 
-	#######################################
 	# For deconvolution
-	#######################################
-
 	n_house_keeping = df %>% filter(!`query` & `house keeping`) %>% distinct(G, `house keeping`) %>% nrow
 
 	y_source =
@@ -902,20 +955,20 @@ ARMET_tc = function(
 		mutate(`Cell type category` = factor(`Cell type category`, unique(`Cell type category`)))
 
 	# # Data MPI for deconvolution level 1
-	# y_MPI_lv1 = y_source %>% get_MPI_deconv(shards, 1, tree)
-	# idx_1_source = y_source %>% filter(level == 1) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
-	# idx_1 = idx_1_source %>% pull(G)
-	# I1 = idx_1 %>% length
-	# I1_dim = c(idx_1_source %>% distinct(symbol) %>% nrow, idx_1_source %>% distinct(`Cell type category`) %>% nrow)
-	# y_MPI_source_lv1 = y_MPI_lv1 %$% y_MPI_source
-	# y_MPI_symbol_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_symbol_per_shard
-	# y_MPI_idx_symbol_lv1 = y_MPI_lv1 %$% y_MPI_idx_symbol
-	# y_MPI_G_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_G_per_shard
-	# GM_lv1 = df %>% filter(!`house keeping`) %>% filter(level==1) %>% distinct(symbol) %>% nrow()
-	# y_idx_lv1 =  y_MPI_lv1 %$% y_idx
-	# y_MPI_idx_lv1 = y_MPI_lv1 %$% y_MPI_idx
-	# y_MPI_N_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_N_per_shard
-	# y_MPI_count_lv1 = y_MPI_lv1 %$% y_MPI_count
+	y_MPI_lv1 = y_source %>% get_MPI_deconv(shards, 1, tree)
+	idx_1_source = y_source %>% filter(level == 1) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
+	idx_1 = idx_1_source %>% pull(G)
+	I1 = idx_1 %>% length
+	I1_dim = c(idx_1_source %>% distinct(symbol) %>% nrow, idx_1_source %>% distinct(`Cell type category`) %>% nrow)
+	y_MPI_source_lv1 = y_MPI_lv1 %$% y_MPI_source
+	y_MPI_symbol_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_symbol_per_shard
+	y_MPI_idx_symbol_lv1 = y_MPI_lv1 %$% y_MPI_idx_symbol
+	y_MPI_G_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_G_per_shard
+	GM_lv1 = df %>% filter(!`house keeping`) %>% filter(level==1) %>% distinct(symbol) %>% nrow()
+	y_idx_lv1 =  y_MPI_lv1 %$% y_idx
+	y_MPI_idx_lv1 = y_MPI_lv1 %$% y_MPI_idx
+	y_MPI_N_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_N_per_shard
+	y_MPI_count_lv1 = y_MPI_lv1 %$% y_MPI_count
 	#
 	# # Data MPI for deconvolution level 2
 	# y_MPI_lv2 = y_source %>% get_MPI_deconv(shards, 2, tree)
@@ -1122,35 +1175,36 @@ ARMET_tc = function(
 	##########################################
 	##########################################
 
-	counts_linear = counts_baseline %>% arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>%  pull(`read count`)
-	G_to_counts_linear = counts_baseline %>% arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>% pull(G)
+	counts_baseline_to_linear = counts_baseline %>% arrange(G, S) %>% mutate(counts_idx = 1:n()) %>% mutate(S = S %>% as.factor %>% as.integer)
+	counts_linear = counts_baseline_to_linear %>%  pull(`read count`)
+	G_to_counts_linear = counts_baseline_to_linear %>% pull(G)
 	G_linear = G_to_counts_linear
-	S_linear = counts_baseline %>%  arrange(G, S) %>% mutate(S = S %>% as.factor %>% as.integer) %>% pull(S)
+	S_linear = counts_baseline_to_linear %>% pull(S)
 
 	CL = length(counts_linear)
-	G = counts_baseline %>%  mutate(S = S %>% as.factor %>% as.integer)%>%  distinct(G) %>% nrow
-	S = counts_baseline %>%  mutate(S = S %>% as.factor %>% as.integer)%>% distinct(S) %>% nrow
+	G = counts_baseline_to_linear %>%  distinct(G) %>% nrow
+	S = counts_baseline_to_linear %>% distinct(S) %>% nrow
 
 	# Counts idx for each level for each level
-	counts_idx_lv_NA = counts_baseline %>% arrange(G, S) %>% mutate(counts_idx = 1:n()) %>% filter(level %>% is.na) %>% pull(counts_idx)
+	counts_idx_lv_NA = counts_baseline_to_linear %>% filter(level %>% is.na) %>% pull(counts_idx)
 	CL_NA = counts_idx_lv_NA %>% length
-	counts_idx_lv_1 = counts_baseline %>% arrange(G, S) %>% mutate(counts_idx = 1:n()) %>% filter(level==1) %>% pull(counts_idx)
+	counts_idx_lv_1 = counts_baseline_to_linear %>% filter(level==1) %>% pull(counts_idx)
 	CL_1 = counts_idx_lv_1 %>% length
-	counts_idx_lv_2 = counts_baseline %>% arrange(G, S) %>% mutate(counts_idx = 1:n()) %>% filter(level==2) %>% pull(counts_idx)
+	counts_idx_lv_2 = counts_baseline_to_linear %>% filter(level==2) %>% pull(counts_idx)
 	CL_2 = counts_idx_lv_2 %>% length
-	counts_idx_lv_3 = counts_baseline %>% arrange(G, S) %>% mutate(counts_idx = 1:n()) %>% filter(level==3) %>% pull(counts_idx)
+	counts_idx_lv_3 = counts_baseline_to_linear %>% filter(level==3) %>% pull(counts_idx)
 	CL_3 = counts_idx_lv_3 %>% length
-	counts_idx_lv_4 = counts_baseline %>% arrange(G, S) %>% mutate(counts_idx = 1:n()) %>% filter(level==4) %>% pull(counts_idx)
+	counts_idx_lv_4 = counts_baseline_to_linear %>% filter(level==4) %>% pull(counts_idx)
 	CL_4 = counts_idx_lv_4 %>% length
 
 	# Deconvolution, get G only for markers of each level. Exclude house keeping
-	G1_linear = counts_baseline %>% filter(!`house keeping`) %>% filter(level ==1) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
+	G1_linear = counts_baseline %>% filter(level ==1) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
 	G1 = G1_linear %>% length
-	G2_linear = counts_baseline %>% filter(!`house keeping`) %>% filter(level ==2) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
+	G2_linear = counts_baseline %>% filter(level ==2) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
 	G2 = G2_linear %>% length
-	G3_linear = counts_baseline %>% filter(!`house keeping`) %>% filter(level ==3) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
+	G3_linear = counts_baseline %>% filter(level ==3) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
 	G3 = G3_linear %>% length
-	G4_linear = counts_baseline %>% filter(!`house keeping`) %>% filter(level ==4) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
+	G4_linear = counts_baseline %>% filter(level ==4) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
 	G4 = G4_linear %>% length
 
 	# Observed mix counts
@@ -1165,12 +1219,6 @@ ARMET_tc = function(
 	y_linear_S_3 = y_source %>% filter(level ==3) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
 	y_linear_S_4 = y_source %>% filter(level ==4) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
 
-	# Observed mix samples indexes - get GM only for markers of each level. Exclude house keeping
-	y_linear_GM_1 = y_source %>% filter(level ==1) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(GM)
-	y_linear_GM_2 = y_source %>% filter(level ==2) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(GM)
-	y_linear_GM_3 = y_source %>% filter(level ==3) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(GM)
-	y_linear_GM_4 = y_source %>% filter(level ==4) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(GM)
-
 	# Lengths indexes
 	Y_1 = y_linear_1 %>% length
 	Y_2 = y_linear_2 %>% length
@@ -1184,12 +1232,138 @@ ARMET_tc = function(
 	sigma_intercept_prior = c( 1.9 , 0.1)
 	lambda_log_scale = 	counts_baseline %>% filter(!query) %>% distinct(G, lambda) %>% arrange(G) %>% pull(lambda)
 
+	# Linear parallelised
+	shards = cores = 8
+
+	# Count indexes
+	counts_idx_lv_1_MPI =
+		counts_baseline_to_linear %>%
+		filter(level==1) %>%
+		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
+		format_for_MPI_from_linear(8) %>%
+		distinct(idx_MPI, counts_idx, `read count MPI row`)  %>%
+		spread(idx_MPI,  counts_idx) %>%
+		select(-`read count MPI row`) %>%
+		replace(is.na(.), -999 %>% as.integer) %>%
+		as_matrix() %>% t
+
+	size_counts_idx_lv_1_MPI =
+		counts_baseline_to_linear %>%
+		filter(level==1) %>%
+		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
+		format_for_MPI_from_linear(8) %>%
+		distinct(idx_MPI, counts_idx, `read count MPI row`)  %>%
+		count(idx_MPI) %>%
+		pull(n)
+
+	# Count indexes
+	counts_G_lv_1_MPI =
+		counts_baseline_to_linear %>%
+		filter(level==1) %>%
+		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
+		format_for_MPI_from_linear(8) %>%
+		distinct(idx_MPI, G, `read count MPI row`)  %>%
+		spread(idx_MPI,  G) %>%
+		select(-`read count MPI row`) %>%
+		replace(is.na(.), -999 %>% as.integer) %>%
+		as_matrix() %>% t
+
+	size_counts_G_lv_1_MPI =
+		counts_baseline_to_linear %>%
+		filter(level==1) %>%
+		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
+		format_for_MPI_from_linear(8) %>%
+		distinct(idx_MPI, G, `read count MPI row`)  %>%
+		count(idx_MPI) %>%
+		pull(n)
+
+	# Count indexes
+	counts_S_lv_1_MPI =
+		counts_baseline_to_linear %>%
+		filter(level==1) %>%
+		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
+		format_for_MPI_from_linear(8) %>%
+		distinct(idx_MPI, S, `read count MPI row`)  %>%
+		spread(idx_MPI,  S) %>%
+		select(-`read count MPI row`) %>%
+		replace(is.na(.), -999 %>% as.integer) %>%
+		as_matrix() %>% t
+
+	size_counts_S_lv_1_MPI =
+		counts_baseline_to_linear %>%
+		filter(level==1) %>%
+		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
+		format_for_MPI_from_linear(8) %>%
+		distinct(idx_MPI, S, `read count MPI row`)   %>%
+		count(idx_MPI) %>%
+		pull(n)
+
+	# mix Counts
+	y_linear_1_MPI =
+		y_source %>%
+		filter(level ==1) %>%
+		distinct(GM, Q, S, `read count`) %>%
+		format_for_MPI_from_linear_GM(8) %>%
+		distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
+		spread(idx_MPI,  `read count`) %>%
+		select(-`read count MPI row`) %>%
+		replace(is.na(.), -999 %>% as.integer) %>%
+		as_matrix() %>% t
+
+	size_y_linear_1_MPI =
+		y_source %>%
+		filter(level ==1) %>%
+		distinct(GM, Q, S, `read count`) %>%
+		format_for_MPI_from_linear_GM(8) %>%
+		distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
+		count(idx_MPI) %>%
+		pull(n)
+
+	y_linear_S_1_MPI =
+		y_source %>%
+		filter(level ==1) %>%
+		distinct(GM, Q, S, `read count`) %>%
+		format_for_MPI_from_linear_GM(8) %>%
+		distinct(idx_MPI, S, `read count MPI row`)  %>%
+		spread(idx_MPI,  S) %>%
+		select(-`read count MPI row`) %>%
+		replace(is.na(.), -999 %>% as.integer) %>%
+		as_matrix() %>% t
+
+	size_y_linear_S_1_MPI =
+		y_source %>%
+		filter(level ==1) %>%
+		distinct(GM, Q, S, `read count`) %>%
+		format_for_MPI_from_linear_GM(8) %>%
+		distinct(idx_MPI, S, `read count MPI row`)  %>%
+		count(idx_MPI) %>%
+		pull(n)
+
+	G1_linear_MPI =
+		counts_baseline %>% filter(level ==1) %>%
+		distinct(G, GM, C) %>%
+		format_for_MPI_from_linear_dec(8) %>%
+		distinct(idx_MPI, G, `read count MPI row`) %>%
+		spread(idx_MPI,  G) %>%
+		select(-`read count MPI row`) %>%
+		replace(is.na(.), -999 %>% as.integer) %>%
+		as_matrix() %>% t
+
+	size_G1_linear_MPI =
+		counts_baseline %>% filter(level ==1) %>%
+		distinct(G, GM, C) %>%
+		format_for_MPI_from_linear_dec(8) %>%
+		distinct(idx_MPI, G, `read count MPI row`)   %>%
+		count(idx_MPI) %>%
+		pull(n)
+
 	# MODEL
-	# fileConn<-file("~/.R/Makevars")
-	# writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
-	# close(fileConn)
-	# Sys.setenv("STAN_NUM_THREADS" = cores)
-	# ARMET_tc_model = stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc.stan")
+	library(rstan)
+	fileConn<-file("~/.R/Makevars")
+	writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
+	close(fileConn)
+	Sys.setenv("STAN_NUM_THREADS" = cores)
+	ARMET_tc_model = stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc.stan")
 
 	Sys.time() %>% print
 browser()
