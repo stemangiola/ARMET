@@ -444,63 +444,63 @@ data {
 	int y_linear_S_4[Y_4];
 
 	// MPI
-	int shards_in_levels[4];
+	int<lower=1> shards_in_levels[4];
 
 	// MPI lv1
-	int<lower=0> size_counts_idx_lv_1_MPI[shards];
-	int counts_idx_lv_1_MPI[shards, max(size_counts_idx_lv_1_MPI)];
-	int size_counts_G_lv_1_MPI[shards];
-	int size_counts_S_lv_1_MPI[shards];
-	int size_y_linear_S_1_MPI[shards];
-	int size_y_linear_1_MPI[shards];
-	int y_linear_1_MPI[shards,max(size_y_linear_1_MPI)];
-	int y_linear_S_1_MPI[shards,max(size_y_linear_1_MPI)];
-	int counts_G_lv_1_MPI[shards,max(size_counts_G_lv_1_MPI)];
-	int counts_S_lv_1_MPI[shards,max(size_counts_S_lv_1_MPI)];
-	int size_G1_linear_MPI[shards];
-	int G1_linear_MPI[shards,max(size_G1_linear_MPI)];
+	int<lower=0> size_counts_idx_lv_1_MPI[shards_in_levels[1]];
+	int counts_idx_lv_1_MPI[shards_in_levels[1], max(size_counts_idx_lv_1_MPI)];
+	int size_counts_G_lv_1_MPI[shards_in_levels[1]];
+	int size_counts_S_lv_1_MPI[shards_in_levels[1]];
+	int size_y_linear_S_1_MPI[shards_in_levels[1]];
+	int size_y_linear_1_MPI[shards_in_levels[1]];
+	int y_linear_1_MPI[shards_in_levels[1],max(size_y_linear_1_MPI)];
+	int y_linear_S_1_MPI[shards_in_levels[1],max(size_y_linear_1_MPI)];
+	int counts_G_lv_1_MPI[shards_in_levels[1],max(size_counts_G_lv_1_MPI)];
+	int counts_S_lv_1_MPI[shards_in_levels[1],max(size_counts_S_lv_1_MPI)];
+	int size_G1_linear_MPI[shards_in_levels[1]];
+	int G1_linear_MPI[shards_in_levels[1],max(size_G1_linear_MPI)];
 
 	// MPI lv2
-	int<lower=0> size_counts_idx_lv_2_MPI[shards];
-	int counts_idx_lv_2_MPI[shards, max(size_counts_idx_lv_2_MPI)];
-	int size_counts_G_lv_2_MPI[shards];
-	int size_counts_S_lv_2_MPI[shards];
-	int size_y_linear_S_2_MPI[shards];
-	int size_y_linear_2_MPI[shards];
-	int y_linear_2_MPI[shards,max(size_y_linear_2_MPI)];
-	int y_linear_S_2_MPI[shards,max(size_y_linear_2_MPI)];
-	int counts_G_lv_2_MPI[shards,max(size_counts_G_lv_2_MPI)];
-	int counts_S_lv_2_MPI[shards,max(size_counts_S_lv_2_MPI)];
-	int size_G2_linear_MPI[shards];
-	int G2_linear_MPI[shards,max(size_G2_linear_MPI)];
+	int<lower=0> size_counts_idx_lv_2_MPI[shards_in_levels[2]];
+	int counts_idx_lv_2_MPI[shards_in_levels[2], max(size_counts_idx_lv_2_MPI)];
+	int size_counts_G_lv_2_MPI[shards_in_levels[2]];
+	int size_counts_S_lv_2_MPI[shards_in_levels[2]];
+	int size_y_linear_S_2_MPI[shards_in_levels[2]];
+	int size_y_linear_2_MPI[shards_in_levels[2]];
+	int y_linear_2_MPI[shards_in_levels[2],max(size_y_linear_2_MPI)];
+	int y_linear_S_2_MPI[shards_in_levels[2],max(size_y_linear_2_MPI)];
+	int counts_G_lv_2_MPI[shards_in_levels[2],max(size_counts_G_lv_2_MPI)];
+	int counts_S_lv_2_MPI[shards_in_levels[2],max(size_counts_S_lv_2_MPI)];
+	int size_G2_linear_MPI[shards_in_levels[2]];
+	int G2_linear_MPI[shards_in_levels[2],max(size_G2_linear_MPI)];
 
 	// MPI lv3
-	int<lower=0> size_counts_idx_lv_3_MPI[shards];
-	int counts_idx_lv_3_MPI[shards, max(size_counts_idx_lv_3_MPI)];
-	int size_counts_G_lv_3_MPI[shards];
-	int size_counts_S_lv_3_MPI[shards];
-	int size_y_linear_S_3_MPI[shards];
-	int size_y_linear_3_MPI[shards];
-	int y_linear_3_MPI[shards,max(size_y_linear_3_MPI)];
-	int y_linear_S_3_MPI[shards,max(size_y_linear_3_MPI)];
-	int counts_G_lv_3_MPI[shards,max(size_counts_G_lv_3_MPI)];
-	int counts_S_lv_3_MPI[shards,max(size_counts_S_lv_3_MPI)];
-	int size_G3_linear_MPI[shards];
-	int G3_linear_MPI[shards,max(size_G3_linear_MPI)];
+	int<lower=0> size_counts_idx_lv_3_MPI[shards_in_levels[3]];
+	int counts_idx_lv_3_MPI[shards_in_levels[3], max(size_counts_idx_lv_3_MPI)];
+	int size_counts_G_lv_3_MPI[shards_in_levels[3]];
+	int size_counts_S_lv_3_MPI[shards_in_levels[3]];
+	int size_y_linear_S_3_MPI[shards_in_levels[3]];
+	int size_y_linear_3_MPI[shards_in_levels[3]];
+	int y_linear_3_MPI[shards_in_levels[3],max(size_y_linear_3_MPI)];
+	int y_linear_S_3_MPI[shards_in_levels[3],max(size_y_linear_3_MPI)];
+	int counts_G_lv_3_MPI[shards_in_levels[3],max(size_counts_G_lv_3_MPI)];
+	int counts_S_lv_3_MPI[shards_in_levels[3],max(size_counts_S_lv_3_MPI)];
+	int size_G3_linear_MPI[shards_in_levels[3]];
+	int G3_linear_MPI[shards_in_levels[3],max(size_G3_linear_MPI)];
 
 	// MPI lv4
-	int<lower=0> size_counts_idx_lv_4_MPI[shards];
-	int counts_idx_lv_4_MPI[shards, max(size_counts_idx_lv_4_MPI)];
-	int size_counts_G_lv_4_MPI[shards];
-	int size_counts_S_lv_4_MPI[shards];
-	int size_y_linear_S_4_MPI[shards];
-	int size_y_linear_4_MPI[shards];
-	int y_linear_4_MPI[shards,max(size_y_linear_4_MPI)];
-	int y_linear_S_4_MPI[shards,max(size_y_linear_4_MPI)];
-	int counts_G_lv_4_MPI[shards,max(size_counts_G_lv_4_MPI)];
-	int counts_S_lv_4_MPI[shards,max(size_counts_S_lv_4_MPI)];
-	int size_G4_linear_MPI[shards];
-	int G4_linear_MPI[shards,max(size_G4_linear_MPI)];
+	int<lower=0> size_counts_idx_lv_4_MPI[shards_in_levels[4]];
+	int counts_idx_lv_4_MPI[shards_in_levels[4], max(size_counts_idx_lv_4_MPI)];
+	int size_counts_G_lv_4_MPI[shards_in_levels[4]];
+	int size_counts_S_lv_4_MPI[shards_in_levels[4]];
+	int size_y_linear_S_4_MPI[shards_in_levels[4]];
+	int size_y_linear_4_MPI[shards_in_levels[4]];
+	int y_linear_4_MPI[shards_in_levels[4],max(size_y_linear_4_MPI)];
+	int y_linear_S_4_MPI[shards_in_levels[4],max(size_y_linear_4_MPI)];
+	int counts_G_lv_4_MPI[shards_in_levels[4],max(size_counts_G_lv_4_MPI)];
+	int counts_S_lv_4_MPI[shards_in_levels[4],max(size_counts_S_lv_4_MPI)];
+	int size_G4_linear_MPI[shards_in_levels[4]];
+	int G4_linear_MPI[shards_in_levels[4],max(size_G4_linear_MPI)];
 
 	// Lv2 tree structure parents singles
 	int<lower=1> SLV2;
