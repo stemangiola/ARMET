@@ -125,6 +125,18 @@ functions{
 		return v[1:(num_elements(v) - get_int_buffer_size(v, buffer_value))];
 	}
 
+	vector rep_vector_by_array(vector v, int[] reps){
+		vector[sum(reps)] v_rep;
+		int i = 0;
+
+		for(n in 1:num_elements(reps)){
+			v_rep[i+1:i+reps[n]] = rep_vector(v[n], reps[n]);
+			i += reps[n];
+		}
+
+		return(v_rep);
+	}
+
 	int[,] package_int(
 		int C,
 		int GM,
@@ -134,24 +146,27 @@ functions{
 
 		int[] size_counts_idx_lv_1_MPI,
 		int[] size_counts_G_lv_1_MPI,
+		int[] size_counts_G_lv_1_MPI_non_redundant,
 		int[] size_counts_S_lv_1_MPI,
 		int[] size_G1_linear_MPI,
 		int[] size_y_linear_S_1_MPI,
 		int[] size_y_linear_1_MPI,
 		int[,] counts_idx_lv_1_MPI,
+		int[,] counts_G_lv_1_MPI_non_redundant_reps,
+
 		int[,]	y_linear_1_MPI
 
 	){
 		int threshold = -999;
-		int dim_indices = 9;
+		int dim_indices = 10;
 
-		int max_col = dim_indices + max(size_counts_idx_lv_1_MPI) + max(size_y_linear_1_MPI);
+		int max_col = dim_indices + max(size_counts_idx_lv_1_MPI)+ max(size_counts_G_lv_1_MPI_non_redundant) + max(size_y_linear_1_MPI) ;
 
 		int int_pack[shards,max_col];
 
 		for(i in 1:shards){
 
-			int real_col = dim_indices + size_counts_idx_lv_1_MPI[i] + size_y_linear_1_MPI[i];
+			int real_col = dim_indices + size_counts_idx_lv_1_MPI[i]+  size_counts_G_lv_1_MPI_non_redundant[i] + size_y_linear_1_MPI[i] ;
 
 			int_pack[i] =
 				concatenate_int_array({
@@ -161,6 +176,7 @@ functions{
 					{Q},
 					{size_counts_idx_lv_1_MPI[i]},
 	 				{size_counts_G_lv_1_MPI[i]},
+	 				{size_counts_G_lv_1_MPI_non_redundant[i]},
 		 			{size_counts_S_lv_1_MPI[i]},
 		 			{size_G1_linear_MPI[i]},
 		 			{size_y_linear_S_1_MPI[i]},
@@ -168,7 +184,13 @@ functions{
 
 					// data
 					counts[counts_idx_lv_1_MPI[i, 1:size_counts_idx_lv_1_MPI[i]]],
+
+					// Indexed for optimised MPI
+					counts_G_lv_1_MPI_non_redundant_reps[i, 1:size_counts_G_lv_1_MPI_non_redundant[i]],
+
+					// counts mix
 					y_linear_1_MPI[i, 1:size_y_linear_1_MPI[i]],
+
 
 					// Buffer
 					rep_int(threshold, max_col-real_col)
@@ -186,12 +208,15 @@ functions{
 		int shards,
 
 		int[] size_counts_G_lv_1_MPI,
+		int[] size_counts_G_lv_1_MPI_non_redundant,
 		int[] size_counts_S_lv_1_MPI,
 		int[] size_G1_linear_MPI,
 		int[] size_y_linear_S_1_MPI,
 
 		int[,] counts_G_lv_1_MPI,
+		int[,] counts_G_lv_1_MPI_non_redundant,
 		int[,] counts_S_lv_1_MPI,
+
 		int[,] G1_linear_MPI,
 		int[,] y_linear_S_1_MPI,
 
@@ -203,8 +228,9 @@ functions{
 		real threshold = -999;
 
 		int max_col =
-			max(size_counts_G_lv_1_MPI) +
-			max(size_counts_G_lv_1_MPI) +
+			max(size_counts_G_lv_1_MPI_non_redundant) +
+			max(size_counts_S_lv_1_MPI) +
+			max(size_counts_G_lv_1_MPI_non_redundant) +
 			(Q*C) +
 			max(size_G1_linear_MPI) +
 			max(size_y_linear_S_1_MPI);
@@ -214,8 +240,9 @@ functions{
 		for(i in 1:shards){
 
 			int real_col =
-				size_counts_G_lv_1_MPI[i] +
-				size_counts_G_lv_1_MPI[i] +
+				size_counts_G_lv_1_MPI_non_redundant[i] +
+				size_counts_S_lv_1_MPI[i] +
+				size_counts_G_lv_1_MPI_non_redundant[i] +
 				(Q*C) +
 				size_G1_linear_MPI[i] +
 				size_y_linear_S_1_MPI[i];
@@ -224,11 +251,13 @@ functions{
 				concatenate_vector_array({
 
 					// The gene sample specific redundant estimates of the counts for the reference
-					lambda_log[counts_G_lv_1_MPI[i, 1:size_counts_G_lv_1_MPI[i]]] +
+					lambda_log[counts_G_lv_1_MPI_non_redundant[i, 1:size_counts_G_lv_1_MPI_non_redundant[i]]],
+
+					// The exposure rate of all samples
 					exposure_rate[counts_S_lv_1_MPI[i,1:size_counts_S_lv_1_MPI[i]]],
 
 					// The gene sample specific redundant overdispersions of the counts for the reference
-					sigma_inv_log[counts_G_lv_1_MPI[i, 1:size_counts_G_lv_1_MPI[i]]],
+					sigma_inv_log[counts_G_lv_1_MPI_non_redundant[i, 1:size_counts_G_lv_1_MPI_non_redundant[i]]],
 
 					// Proportion vector
 					to_vector(vector_array_to_matrix(prop_1)),
@@ -250,71 +279,6 @@ functions{
 		return real_pack;
 	}
 
-	vector lp_reduce( vector global_parameters , vector local_parameters , real[] real_data , int[] int_data ) {
-
-		real lp;
-		real threshold = -999;
-
-		// Dimensions
-
-		int C = int_data[1];
-		int GM = int_data[2];
-		int Q = int_data[3];
-		int size_counts_idx_lv_1_MPI= int_data[4];
-	 	int size_counts_G_lv_1_MPI= int_data[5];
-		int size_counts_S_lv_1_MPI= int_data[6];
-		int size_G1_linear_MPI= int_data[7];
-		int size_y_linear_S_1_MPI= int_data[8];
-		int size_y_linear_1_MPI= int_data[9];
-		int dim_indices = 9;
-
-		// Ref variables
-		int ref_counts[size_counts_idx_lv_1_MPI] = int_data[dim_indices+1 : dim_indices+size_counts_idx_lv_1_MPI];
-		vector[size_counts_G_lv_1_MPI] ref_lambda_log_redundant_normalised = local_parameters[1 : size_counts_G_lv_1_MPI];
-		vector[size_counts_G_lv_1_MPI] ref_sigma_inv_log_redundant = local_parameters[size_counts_G_lv_1_MPI+1 : size_counts_G_lv_1_MPI+size_counts_G_lv_1_MPI];
-
-		//print(size_ref_counts , "..", size_ref_counts, "..",(C*Q), "..",(GM*C));
-
-		// Mix
-		int mix_counts[size_y_linear_1_MPI] = int_data[dim_indices+size_counts_idx_lv_1_MPI +1 : dim_indices+size_counts_idx_lv_1_MPI+ size_y_linear_1_MPI];
-		vector[C*Q] prop_1 = local_parameters[size_counts_G_lv_1_MPI+size_counts_G_lv_1_MPI+1 : size_counts_G_lv_1_MPI+size_counts_G_lv_1_MPI+(C*Q)];
-		vector[size_G1_linear_MPI] ref_lambda_log = local_parameters[size_counts_G_lv_1_MPI+size_counts_G_lv_1_MPI+(C*Q)+1 : size_counts_G_lv_1_MPI+size_counts_G_lv_1_MPI+(C*Q)+size_G1_linear_MPI];
-		vector[size_y_linear_S_1_MPI] mix_exposure_rate = local_parameters[size_counts_G_lv_1_MPI+size_counts_G_lv_1_MPI+(C*Q)+size_G1_linear_MPI+1 : size_counts_G_lv_1_MPI+size_counts_G_lv_1_MPI+(C*Q)+size_G1_linear_MPI+size_y_linear_S_1_MPI];
-
-		// global parameters
-		real sigma_slope = global_parameters[2];
-		real sigma_intercept_dec = global_parameters[1];
-
-		// Deconvoluted means
-		vector[size_G1_linear_MPI/C*Q] lambda_log_deconvoluted_1;
-
-		// Reference
-		lp = neg_binomial_2_log_lpmf( ref_counts |	ref_lambda_log_redundant_normalised, 1.0 ./ exp( ref_sigma_inv_log_redundant )		);
-
-		//print(to_matrix(prop_1, Q, C) );
-		//print(size_G1_linear_MPI/C);
-
-		// Calculate convoluted
-		lambda_log_deconvoluted_1 =
-			log(
-				to_vector(
-					to_matrix(prop_1, Q, C) *
-					exp(to_matrix(ref_lambda_log, C, size_G1_linear_MPI/C)) // [Q,G] dimensions
-				)
-			);
-
-		//if(sum(to_matrix(prop_1, S, C)[1,]) !=1.0 ) stop("Mpi fucked");
-
-		// deconvolution
-		lp += neg_binomial_2_log_lpmf(mix_counts |
-			lambda_log_deconvoluted_1 + mix_exposure_rate,
-			1.0 ./ exp( ( sigma_slope * lambda_log_deconvoluted_1 + sigma_intercept_dec ) )
-		);
-
-
-	 return [lp]';
-
-	}
 
 	int[,] append_int_MPI_arrays(int[,] lv1, int[,] lv2, int[,] lv3, int[,] lv4){
 		int dim_1[2] = dims(lv1);
@@ -375,6 +339,81 @@ functions{
 		return(merged);
 
 	}
+
+	vector lp_reduce( vector global_parameters , vector local_parameters , real[] real_data , int[] int_data ) {
+
+		real lp;
+		real threshold = -999;
+
+		// int unpacking
+
+		int C = int_data[1];
+		int GM = int_data[2];
+		int Q = int_data[3];
+		int size_counts_idx_lv_1_MPI= int_data[4];
+	 	int size_counts_G_lv_1_MPI= int_data[5];
+	 	int size_counts_G_lv_1_MPI_non_redundant = int_data[6];
+		int size_counts_S_lv_1_MPI= int_data[7];
+		int size_G1_linear_MPI= int_data[8];
+		int size_y_linear_S_1_MPI= int_data[9];
+		int size_y_linear_1_MPI= int_data[10];
+		int dim_indices = 10;
+
+		int ref_counts[size_counts_idx_lv_1_MPI] = int_data[dim_indices+1 : dim_indices+size_counts_idx_lv_1_MPI];
+		int counts_G_lv_1_MPI_non_redundant_reps[size_counts_G_lv_1_MPI_non_redundant] = int_data[dim_indices+size_counts_idx_lv_1_MPI + 1 : dim_indices + size_counts_idx_lv_1_MPI + size_counts_G_lv_1_MPI_non_redundant];
+		int mix_counts[size_y_linear_1_MPI] = int_data[dim_indices+size_counts_idx_lv_1_MPI+size_counts_G_lv_1_MPI_non_redundant +1 : dim_indices+size_counts_idx_lv_1_MPI+size_counts_G_lv_1_MPI_non_redundant+ size_y_linear_1_MPI];
+
+		// real unpacking
+		vector[size_counts_G_lv_1_MPI_non_redundant] ref_lambda_log_for_counts = local_parameters[1 : size_counts_G_lv_1_MPI_non_redundant];
+		vector[size_counts_S_lv_1_MPI] ref_exposure_rate = local_parameters[size_counts_G_lv_1_MPI_non_redundant+1 : size_counts_G_lv_1_MPI_non_redundant+size_counts_S_lv_1_MPI];
+		vector[size_counts_G_lv_1_MPI_non_redundant] ref_sigma_inv_log =  local_parameters[  size_counts_G_lv_1_MPI_non_redundant+size_counts_S_lv_1_MPI+1 :  size_counts_G_lv_1_MPI_non_redundant+size_counts_S_lv_1_MPI+size_counts_G_lv_1_MPI_non_redundant];
+		vector[C*Q] prop_1 = local_parameters[size_counts_G_lv_1_MPI_non_redundant+size_counts_S_lv_1_MPI+size_counts_G_lv_1_MPI_non_redundant+1 : size_counts_G_lv_1_MPI_non_redundant+size_counts_S_lv_1_MPI+size_counts_G_lv_1_MPI_non_redundant+(C*Q)];
+		vector[size_G1_linear_MPI] ref_lambda_log = local_parameters[size_counts_G_lv_1_MPI_non_redundant+size_counts_S_lv_1_MPI+size_counts_G_lv_1_MPI_non_redundant+(C*Q)+1 :size_counts_G_lv_1_MPI_non_redundant+size_counts_S_lv_1_MPI+size_counts_G_lv_1_MPI_non_redundant+(C*Q)+size_G1_linear_MPI];
+		vector[size_y_linear_S_1_MPI] mix_exposure_rate = local_parameters[size_counts_G_lv_1_MPI_non_redundant+size_counts_S_lv_1_MPI+size_counts_G_lv_1_MPI_non_redundant+(C*Q)+size_G1_linear_MPI+1 : size_counts_G_lv_1_MPI_non_redundant+size_counts_S_lv_1_MPI+size_counts_G_lv_1_MPI_non_redundant+(C*Q)+size_G1_linear_MPI+size_y_linear_S_1_MPI];
+
+		// Ref variables
+		vector[size_counts_G_lv_1_MPI] ref_lambda_log_redundant_normalised = rep_vector_by_array(ref_lambda_log_for_counts, counts_G_lv_1_MPI_non_redundant_reps) + ref_exposure_rate;
+		vector[size_counts_G_lv_1_MPI] ref_sigma_inv_log_redundant =  rep_vector_by_array(ref_sigma_inv_log, counts_G_lv_1_MPI_non_redundant_reps);
+
+		//print(size_ref_counts , "..", size_ref_counts, "..",(C*Q), "..",(GM*C));
+
+		// Mix
+
+		// global parameters
+		real sigma_slope = global_parameters[2];
+		real sigma_intercept_dec = global_parameters[1];
+
+		// Deconvoluted means
+		vector[size_G1_linear_MPI/C*Q] lambda_log_deconvoluted_1;
+
+		// Reference
+		lp = neg_binomial_2_log_lpmf( ref_counts |	ref_lambda_log_redundant_normalised, 1.0 ./ exp( ref_sigma_inv_log_redundant )		);
+
+		//print(to_matrix(prop_1, Q, C) );
+		//print(size_G1_linear_MPI/C);
+
+		// Calculate convoluted
+		lambda_log_deconvoluted_1 =
+			log(
+				to_vector(
+					to_matrix(prop_1, Q, C) *
+					exp(to_matrix(ref_lambda_log, C, size_G1_linear_MPI/C)) // [Q,G] dimensions
+				)
+			);
+
+		//if(sum(to_matrix(prop_1, S, C)[1,]) !=1.0 ) stop("Mpi fucked");
+
+		// deconvolution
+		lp += neg_binomial_2_log_lpmf(mix_counts |
+			lambda_log_deconvoluted_1 + mix_exposure_rate,
+			1.0 ./ exp( ( sigma_slope * lambda_log_deconvoluted_1 + sigma_intercept_dec ) )
+		);
+
+
+	 return [lp]';
+
+	}
+
 
 }
 data {
@@ -459,6 +498,9 @@ data {
 	int counts_S_lv_1_MPI[shards_in_levels[1],max(size_counts_S_lv_1_MPI)];
 	int size_G1_linear_MPI[shards_in_levels[1]];
 	int G1_linear_MPI[shards_in_levels[1],max(size_G1_linear_MPI)];
+	int size_counts_G_lv_1_MPI_non_redundant[shards_in_levels[1]];
+	int counts_G_lv_1_MPI_non_redundant[shards_in_levels[1], max(size_counts_G_lv_1_MPI_non_redundant)];
+	int counts_G_lv_1_MPI_non_redundant_reps[shards_in_levels[1], max(size_counts_G_lv_1_MPI_non_redundant)];
 
 	// MPI lv2
 	int<lower=0> size_counts_idx_lv_2_MPI[shards_in_levels[2]];
@@ -473,6 +515,9 @@ data {
 	int counts_S_lv_2_MPI[shards_in_levels[2],max(size_counts_S_lv_2_MPI)];
 	int size_G2_linear_MPI[shards_in_levels[2]];
 	int G2_linear_MPI[shards_in_levels[2],max(size_G2_linear_MPI)];
+	int size_counts_G_lv_2_MPI_non_redundant[shards_in_levels[2]];
+	int counts_G_lv_2_MPI_non_redundant[shards_in_levels[2], max(size_counts_G_lv_2_MPI_non_redundant)];
+	int counts_G_lv_2_MPI_non_redundant_reps[shards_in_levels[2], max(size_counts_G_lv_2_MPI_non_redundant)];
 
 	// MPI lv3
 	int<lower=0> size_counts_idx_lv_3_MPI[shards_in_levels[3]];
@@ -487,6 +532,9 @@ data {
 	int counts_S_lv_3_MPI[shards_in_levels[3],max(size_counts_S_lv_3_MPI)];
 	int size_G3_linear_MPI[shards_in_levels[3]];
 	int G3_linear_MPI[shards_in_levels[3],max(size_G3_linear_MPI)];
+	int size_counts_G_lv_3_MPI_non_redundant[shards_in_levels[3]];
+	int counts_G_lv_3_MPI_non_redundant[shards_in_levels[3], max(size_counts_G_lv_3_MPI_non_redundant)];
+	int counts_G_lv_3_MPI_non_redundant_reps[shards_in_levels[3], max(size_counts_G_lv_3_MPI_non_redundant)];
 
 	// MPI lv4
 	int<lower=0> size_counts_idx_lv_4_MPI[shards_in_levels[4]];
@@ -501,6 +549,10 @@ data {
 	int counts_S_lv_4_MPI[shards_in_levels[4],max(size_counts_S_lv_4_MPI)];
 	int size_G4_linear_MPI[shards_in_levels[4]];
 	int G4_linear_MPI[shards_in_levels[4],max(size_G4_linear_MPI)];
+	int size_counts_G_lv_4_MPI_non_redundant[shards_in_levels[4]];
+	int counts_G_lv_4_MPI_non_redundant[shards_in_levels[4], max(size_counts_G_lv_4_MPI_non_redundant)];
+	int counts_G_lv_4_MPI_non_redundant_reps[shards_in_levels[4], max(size_counts_G_lv_4_MPI_non_redundant)];
+
 
 	// Lv2 tree structure parents singles
 	int<lower=1> SLV2;
@@ -533,19 +585,19 @@ transformed data{
 	real real_data[shards, 0];
 	real real_data2[sum(shards_in_levels), 0];
 
-	int dim_indices = 9;
+	int dim_indices = 10;
 
 	// Here I am building the whole int package to not have to calculate it every time
 	int int_package[sum(shards_in_levels), dim_indices +	max({
-			max(size_counts_idx_lv_1_MPI) + max(size_y_linear_1_MPI),
-			max(size_counts_idx_lv_2_MPI) + max(size_y_linear_2_MPI),
-			max(size_counts_idx_lv_3_MPI) + max(size_y_linear_3_MPI),
-			max(size_counts_idx_lv_4_MPI) + max(size_y_linear_4_MPI)
+			max(size_counts_idx_lv_1_MPI) + max(size_counts_G_lv_1_MPI_non_redundant) + max(size_y_linear_1_MPI),
+			max(size_counts_idx_lv_2_MPI) + max(size_counts_G_lv_2_MPI_non_redundant) + max(size_y_linear_2_MPI),
+			max(size_counts_idx_lv_3_MPI) + max(size_counts_G_lv_3_MPI_non_redundant) + max(size_y_linear_3_MPI),
+			max(size_counts_idx_lv_4_MPI) + max(size_counts_G_lv_4_MPI_non_redundant) + max(size_y_linear_4_MPI)
 		})] = append_int_MPI_arrays(
-			package_int(			ct_in_levels[1],			G1/ct_in_levels[1],			Q,			shards_in_levels[1],			counts_linear,			size_counts_idx_lv_1_MPI,			size_counts_G_lv_1_MPI,			size_counts_S_lv_1_MPI,			size_G1_linear_MPI,			size_y_linear_S_1_MPI,			size_y_linear_1_MPI,			counts_idx_lv_1_MPI,			y_linear_1_MPI		),
-			package_int(			ct_in_levels[2],			G2/ct_in_levels[2],			Q,			shards_in_levels[2],			counts_linear,			size_counts_idx_lv_2_MPI,			size_counts_G_lv_2_MPI,			size_counts_S_lv_2_MPI,			size_G2_linear_MPI,			size_y_linear_S_2_MPI,			size_y_linear_2_MPI,			counts_idx_lv_2_MPI,			y_linear_2_MPI		),
-			package_int(			ct_in_levels[3],			G3/ct_in_levels[3],			Q,			shards_in_levels[3],			counts_linear,			size_counts_idx_lv_3_MPI,			size_counts_G_lv_3_MPI,			size_counts_S_lv_3_MPI,			size_G3_linear_MPI,			size_y_linear_S_3_MPI,			size_y_linear_3_MPI,			counts_idx_lv_3_MPI,			y_linear_3_MPI		),
-			package_int(			ct_in_levels[4],			G4/ct_in_levels[4],			Q,			shards_in_levels[4],			counts_linear,			size_counts_idx_lv_4_MPI,			size_counts_G_lv_4_MPI,			size_counts_S_lv_4_MPI,			size_G4_linear_MPI,			size_y_linear_S_4_MPI,			size_y_linear_4_MPI,			counts_idx_lv_4_MPI,			y_linear_4_MPI		)
+			package_int(			ct_in_levels[1],			G1/ct_in_levels[1],			Q,			shards_in_levels[1],			counts_linear,			size_counts_idx_lv_1_MPI,			size_counts_G_lv_1_MPI,	size_counts_G_lv_1_MPI_non_redundant,			size_counts_S_lv_1_MPI,			size_G1_linear_MPI,			size_y_linear_S_1_MPI,			size_y_linear_1_MPI,			counts_idx_lv_1_MPI,	counts_G_lv_1_MPI_non_redundant_reps,		y_linear_1_MPI		),
+			package_int(			ct_in_levels[2],			G2/ct_in_levels[2],			Q,			shards_in_levels[2],			counts_linear,			size_counts_idx_lv_2_MPI,			size_counts_G_lv_2_MPI,	size_counts_G_lv_2_MPI_non_redundant,			size_counts_S_lv_2_MPI,			size_G2_linear_MPI,			size_y_linear_S_2_MPI,			size_y_linear_2_MPI,			counts_idx_lv_2_MPI,	counts_G_lv_2_MPI_non_redundant_reps,				y_linear_2_MPI		),
+			package_int(			ct_in_levels[3],			G3/ct_in_levels[3],			Q,			shards_in_levels[3],			counts_linear,			size_counts_idx_lv_3_MPI,			size_counts_G_lv_3_MPI,	size_counts_G_lv_3_MPI_non_redundant,			size_counts_S_lv_3_MPI,			size_G3_linear_MPI,			size_y_linear_S_3_MPI,			size_y_linear_3_MPI,			counts_idx_lv_3_MPI,	counts_G_lv_3_MPI_non_redundant_reps,				y_linear_3_MPI		),
+			package_int(			ct_in_levels[4],			G4/ct_in_levels[4],			Q,			shards_in_levels[4],			counts_linear,			size_counts_idx_lv_4_MPI,			size_counts_G_lv_4_MPI,	size_counts_G_lv_4_MPI_non_redundant,			size_counts_S_lv_4_MPI,			size_G4_linear_MPI,			size_y_linear_S_4_MPI,			size_y_linear_4_MPI,			counts_idx_lv_4_MPI,	counts_G_lv_4_MPI_non_redundant_reps,				y_linear_4_MPI		)
 
 	);
 
@@ -636,8 +688,9 @@ model {
 	// vector[Y_2] lambda_log_deconvoluted_2;
 	// vector[Y_3] lambda_log_deconvoluted_3;
 	// vector[Y_4] lambda_log_deconvoluted_4;
-	real lp;
-	real lp_MPI;
+
+	real lp = 0;
+	real lp_MPI = 0;
 
   // Overall properties of the data
   lambda_mu ~ normal(lambda_mu_prior[1],lambda_mu_prior[2]);
@@ -666,8 +719,8 @@ model {
 	// Level 1 ////////////////////////////////////////
 
 
-	// Reference
-	// lp = neg_binomial_2_log_lpmf( counts_linear[counts_idx_lv_1] |
+	// // Reference
+	// lp += neg_binomial_2_log_lpmf( counts_linear[counts_idx_lv_1] |
 	// 	lambda_log[G_to_counts_linear[counts_idx_lv_1]] + exposure_rate[S_linear[counts_idx_lv_1]],
 	// 	1.0 ./ exp( sigma_inv_log[G_to_counts_linear[counts_idx_lv_1]] )
 	// );
@@ -686,8 +739,7 @@ model {
 	// 	lambda_log_deconvoluted_1 + exposure_rate[y_linear_S_1],
 	// 	1.0 ./ exp( ( sigma_slope * lambda_log_deconvoluted_1 + sigma_intercept_dec ) )
 	// );
-	//
-	// target += lp;
+
 
 	//Gene-wise properties of the data
 	// target += sum(map_rect(
@@ -741,7 +793,7 @@ model {
 // Level 2 ////////////////////////////////////////
 
 	// // Reference
-	// target += neg_binomial_2_log_lpmf(counts_linear[counts_idx_lv_2] |
+	// lp += neg_binomial_2_log_lpmf(counts_linear[counts_idx_lv_2] |
 	// 	lambda_log[G_to_counts_linear[counts_idx_lv_2]] + exposure_rate[S_linear[counts_idx_lv_2]],
 	// 	1.0 ./ exp( sigma_inv_log[G_to_counts_linear[counts_idx_lv_2]] )
 	// );
@@ -756,7 +808,7 @@ model {
 	// 	);
 	//
 	// // deconvolution
-	// target += neg_binomial_2_log_lpmf(y_linear_2 |
+	// lp += neg_binomial_2_log_lpmf(y_linear_2 |
 	// 	lambda_log_deconvoluted_2 + exposure_rate[y_linear_S_2],
 	// 	1.0 ./ exp( ( sigma_slope * lambda_log_deconvoluted_2 + sigma_intercept_dec ) )
 	// );
@@ -811,7 +863,7 @@ model {
 // Level 3 ////////////////////////////////////////
 
 	// // Reference
-	// target += neg_binomial_2_log_lpmf(counts_linear[counts_idx_lv_3] |
+	// lp += neg_binomial_2_log_lpmf(counts_linear[counts_idx_lv_3] |
 	// 	lambda_log[G_to_counts_linear[counts_idx_lv_3]] + exposure_rate[S_linear[counts_idx_lv_3]],
 	// 	1.0 ./ exp( sigma_inv_log[G_to_counts_linear[counts_idx_lv_3]] )
 	// );
@@ -826,7 +878,7 @@ model {
 	// 	);
 	//
 	// // deconvolution
-	// target += neg_binomial_2_log_lpmf(y_linear_3 |
+	// lp += neg_binomial_2_log_lpmf(y_linear_3 |
 	// 	lambda_log_deconvoluted_3 + exposure_rate[y_linear_S_3],
 	// 	1.0 ./ exp( ( sigma_slope * lambda_log_deconvoluted_3 + sigma_intercept_dec ) )
 	// );
@@ -884,7 +936,7 @@ model {
 // Level 4 ////////////////////////////////////////
 
 	// // Reference
-	// target += neg_binomial_2_log_lpmf( counts_linear[counts_idx_lv_4] |
+	// lp += neg_binomial_2_log_lpmf( counts_linear[counts_idx_lv_4] |
 	// 	lambda_log[G_to_counts_linear[counts_idx_lv_4]] + exposure_rate[S_linear[counts_idx_lv_4]],
 	// 	1.0 ./ exp( sigma_inv_log[G_to_counts_linear[counts_idx_lv_4]] )
 	// );
@@ -899,7 +951,7 @@ model {
 	// 	);
 	//
 	// // deconvolution
-	// target += neg_binomial_2_log_lpmf(y_linear_4 |
+	// lp += neg_binomial_2_log_lpmf(y_linear_4 |
 	// 	lambda_log_deconvoluted_4 + exposure_rate[y_linear_S_4],
 	// 	1.0 ./ exp( ( sigma_slope * lambda_log_deconvoluted_4 + sigma_intercept_dec ) )
 	// );
@@ -959,10 +1011,10 @@ model {
 		lp_reduce ,
 		[sigma_intercept_dec, sigma_slope]' ,
 		append_real_MPI_arrays(
-					package_real(	ct_in_levels[1],	Q,	shards_in_levels[1],	size_counts_G_lv_1_MPI,	size_counts_S_lv_1_MPI,	size_G1_linear_MPI,	size_y_linear_S_1_MPI, counts_G_lv_1_MPI, counts_S_lv_1_MPI,		G1_linear_MPI,			y_linear_S_1_MPI,			lambda_log,			exposure_rate,			sigma_inv_log,			prop_1		),
-					package_real(	ct_in_levels[2],	Q,	shards_in_levels[2],	size_counts_G_lv_2_MPI,	size_counts_S_lv_2_MPI,	size_G2_linear_MPI,	size_y_linear_S_2_MPI, counts_G_lv_2_MPI, counts_S_lv_2_MPI,		G2_linear_MPI,			y_linear_S_2_MPI,			lambda_log,			exposure_rate,			sigma_inv_log,			prop_2		),
-					package_real(	ct_in_levels[3],	Q,	shards_in_levels[3],	size_counts_G_lv_3_MPI,	size_counts_S_lv_3_MPI,	size_G3_linear_MPI,	size_y_linear_S_3_MPI, counts_G_lv_3_MPI, counts_S_lv_3_MPI,		G3_linear_MPI,			y_linear_S_3_MPI,			lambda_log,			exposure_rate,			sigma_inv_log,			prop_3		),
-					package_real(	ct_in_levels[4],	Q,	shards_in_levels[4],	size_counts_G_lv_4_MPI,	size_counts_S_lv_4_MPI,	size_G4_linear_MPI,	size_y_linear_S_4_MPI, counts_G_lv_4_MPI, counts_S_lv_4_MPI,		G4_linear_MPI,			y_linear_S_4_MPI,			lambda_log,			exposure_rate,			sigma_inv_log,			prop_4		)
+					package_real(	ct_in_levels[1],	Q,	shards_in_levels[1],	size_counts_G_lv_1_MPI, size_counts_G_lv_1_MPI_non_redundant,	size_counts_S_lv_1_MPI,	size_G1_linear_MPI,	size_y_linear_S_1_MPI, counts_G_lv_1_MPI, counts_G_lv_1_MPI_non_redundant, counts_S_lv_1_MPI,		G1_linear_MPI,			y_linear_S_1_MPI,			lambda_log,			exposure_rate,			sigma_inv_log,			prop_1		),
+					package_real(	ct_in_levels[2],	Q,	shards_in_levels[2],	size_counts_G_lv_2_MPI,	size_counts_G_lv_2_MPI_non_redundant,	size_counts_S_lv_2_MPI,	size_G2_linear_MPI,	size_y_linear_S_2_MPI, counts_G_lv_2_MPI, counts_G_lv_2_MPI_non_redundant, counts_S_lv_2_MPI,		G2_linear_MPI,			y_linear_S_2_MPI,			lambda_log,			exposure_rate,			sigma_inv_log,			prop_2		),
+					package_real(	ct_in_levels[3],	Q,	shards_in_levels[3],	size_counts_G_lv_3_MPI,	size_counts_G_lv_3_MPI_non_redundant,	size_counts_S_lv_3_MPI,	size_G3_linear_MPI,	size_y_linear_S_3_MPI, counts_G_lv_3_MPI, counts_G_lv_3_MPI_non_redundant ,counts_S_lv_3_MPI,		G3_linear_MPI,			y_linear_S_3_MPI,			lambda_log,			exposure_rate,			sigma_inv_log,			prop_3		),
+					package_real(	ct_in_levels[4],	Q,	shards_in_levels[4],	size_counts_G_lv_4_MPI,	size_counts_G_lv_4_MPI_non_redundant,	size_counts_S_lv_4_MPI,	size_G4_linear_MPI,	size_y_linear_S_4_MPI, counts_G_lv_4_MPI, counts_G_lv_4_MPI_non_redundant, counts_S_lv_4_MPI,		G4_linear_MPI,			y_linear_S_4_MPI,			lambda_log,			exposure_rate,			sigma_inv_log,			prop_4		)
 		),
 		real_data2,
 		int_package
