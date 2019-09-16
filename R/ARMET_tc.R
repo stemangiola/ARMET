@@ -1234,13 +1234,15 @@ ARMET_tc = function(
 
 	# Linear parallelised
 	shards = cores = 8
+	shards_in_levels = rep(shards, 4)
 
 	# Count indexes
+	# lv 1
 	counts_idx_lv_1_MPI =
 		counts_baseline_to_linear %>%
 		filter(level==1) %>%
 		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-		format_for_MPI_from_linear(8) %>%
+		format_for_MPI_from_linear(shards) %>%
 		distinct(idx_MPI, counts_idx, `read count MPI row`)  %>%
 		spread(idx_MPI,  counts_idx) %>%
 		select(-`read count MPI row`) %>%
@@ -1251,7 +1253,7 @@ ARMET_tc = function(
 		counts_baseline_to_linear %>%
 		filter(level==1) %>%
 		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-		format_for_MPI_from_linear(8) %>%
+		format_for_MPI_from_linear(shards) %>%
 		distinct(idx_MPI, counts_idx, `read count MPI row`)  %>%
 		count(idx_MPI) %>%
 		pull(n)
@@ -1261,7 +1263,7 @@ ARMET_tc = function(
 		counts_baseline_to_linear %>%
 		filter(level==1) %>%
 		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-		format_for_MPI_from_linear(8) %>%
+		format_for_MPI_from_linear(shards) %>%
 		distinct(idx_MPI, G, `read count MPI row`)  %>%
 		spread(idx_MPI,  G) %>%
 		select(-`read count MPI row`) %>%
@@ -1272,7 +1274,7 @@ ARMET_tc = function(
 		counts_baseline_to_linear %>%
 		filter(level==1) %>%
 		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-		format_for_MPI_from_linear(8) %>%
+		format_for_MPI_from_linear(shards) %>%
 		distinct(idx_MPI, G, `read count MPI row`)  %>%
 		count(idx_MPI) %>%
 		pull(n)
@@ -1282,7 +1284,7 @@ ARMET_tc = function(
 		counts_baseline_to_linear %>%
 		filter(level==1) %>%
 		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-		format_for_MPI_from_linear(8) %>%
+		format_for_MPI_from_linear(shards) %>%
 		distinct(idx_MPI, S, `read count MPI row`)  %>%
 		spread(idx_MPI,  S) %>%
 		select(-`read count MPI row`) %>%
@@ -1293,7 +1295,7 @@ ARMET_tc = function(
 		counts_baseline_to_linear %>%
 		filter(level==1) %>%
 		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-		format_for_MPI_from_linear(8) %>%
+		format_for_MPI_from_linear(shards) %>%
 		distinct(idx_MPI, S, `read count MPI row`)   %>%
 		count(idx_MPI) %>%
 		pull(n)
@@ -1303,7 +1305,7 @@ ARMET_tc = function(
 		y_source %>%
 		filter(level ==1) %>%
 		distinct(GM, Q, S, `read count`) %>%
-		format_for_MPI_from_linear_GM(8) %>%
+		format_for_MPI_from_linear_GM(shards) %>%
 		distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
 		spread(idx_MPI,  `read count`) %>%
 		select(-`read count MPI row`) %>%
@@ -1314,7 +1316,7 @@ ARMET_tc = function(
 		y_source %>%
 		filter(level ==1) %>%
 		distinct(GM, Q, S, `read count`) %>%
-		format_for_MPI_from_linear_GM(8) %>%
+		format_for_MPI_from_linear_GM(shards) %>%
 		distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
 		count(idx_MPI) %>%
 		pull(n)
@@ -1323,7 +1325,7 @@ ARMET_tc = function(
 		y_source %>%
 		filter(level ==1) %>%
 		distinct(GM, Q, S, `read count`) %>%
-		format_for_MPI_from_linear_GM(8) %>%
+		format_for_MPI_from_linear_GM(shards) %>%
 		distinct(idx_MPI, S, `read count MPI row`)  %>%
 		spread(idx_MPI,  S) %>%
 		select(-`read count MPI row`) %>%
@@ -1334,7 +1336,7 @@ ARMET_tc = function(
 		y_source %>%
 		filter(level ==1) %>%
 		distinct(GM, Q, S, `read count`) %>%
-		format_for_MPI_from_linear_GM(8) %>%
+		format_for_MPI_from_linear_GM(shards) %>%
 		distinct(idx_MPI, S, `read count MPI row`)  %>%
 		count(idx_MPI) %>%
 		pull(n)
@@ -1342,7 +1344,7 @@ ARMET_tc = function(
 	G1_linear_MPI =
 		counts_baseline %>% filter(level ==1) %>%
 		distinct(G, GM, C) %>%
-		format_for_MPI_from_linear_dec(8) %>%
+		format_for_MPI_from_linear_dec(shards) %>%
 		distinct(idx_MPI, G, `read count MPI row`) %>%
 		spread(idx_MPI,  G) %>%
 		select(-`read count MPI row`) %>%
@@ -1352,7 +1354,373 @@ ARMET_tc = function(
 	size_G1_linear_MPI =
 		counts_baseline %>% filter(level ==1) %>%
 		distinct(G, GM, C) %>%
-		format_for_MPI_from_linear_dec(8) %>%
+		format_for_MPI_from_linear_dec(shards) %>%
+		distinct(idx_MPI, G, `read count MPI row`)   %>%
+		count(idx_MPI) %>%
+		pull(n)
+
+	# lv 2
+	counts_idx_lv_2_MPI =
+		counts_baseline_to_linear %>%
+		filter(level==2) %>%
+		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
+		format_for_MPI_from_linear(shards) %>%
+		distinct(idx_MPI, counts_idx, `read count MPI row`)  %>%
+		spread(idx_MPI,  counts_idx) %>%
+		select(-`read count MPI row`) %>%
+		replace(is.na(.), -999 %>% as.integer) %>%
+		as_matrix() %>% t
+
+	size_counts_idx_lv_2_MPI =
+		counts_baseline_to_linear %>%
+		filter(level==2) %>%
+		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
+		format_for_MPI_from_linear(shards) %>%
+		distinct(idx_MPI, counts_idx, `read count MPI row`)  %>%
+		count(idx_MPI) %>%
+		pull(n)
+
+	# Count indexes
+	counts_G_lv_2_MPI =
+		counts_baseline_to_linear %>%
+		filter(level==2) %>%
+		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
+		format_for_MPI_from_linear(shards) %>%
+		distinct(idx_MPI, G, `read count MPI row`)  %>%
+		spread(idx_MPI,  G) %>%
+		select(-`read count MPI row`) %>%
+		replace(is.na(.), -999 %>% as.integer) %>%
+		as_matrix() %>% t
+
+	size_counts_G_lv_2_MPI =
+		counts_baseline_to_linear %>%
+		filter(level==2) %>%
+		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
+		format_for_MPI_from_linear(shards) %>%
+		distinct(idx_MPI, G, `read count MPI row`)  %>%
+		count(idx_MPI) %>%
+		pull(n)
+
+	# Count indexes
+	counts_S_lv_2_MPI =
+		counts_baseline_to_linear %>%
+		filter(level==2) %>%
+		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
+		format_for_MPI_from_linear(shards) %>%
+		distinct(idx_MPI, S, `read count MPI row`)  %>%
+		spread(idx_MPI,  S) %>%
+		select(-`read count MPI row`) %>%
+		replace(is.na(.), -999 %>% as.integer) %>%
+		as_matrix() %>% t
+
+	size_counts_S_lv_2_MPI =
+		counts_baseline_to_linear %>%
+		filter(level==2) %>%
+		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
+		format_for_MPI_from_linear(shards) %>%
+		distinct(idx_MPI, S, `read count MPI row`)   %>%
+		count(idx_MPI) %>%
+		pull(n)
+
+	# mix Counts
+	y_linear_2_MPI =
+		y_source %>%
+		filter(level ==2) %>%
+		distinct(GM, Q, S, `read count`) %>%
+		format_for_MPI_from_linear_GM(shards) %>%
+		distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
+		spread(idx_MPI,  `read count`) %>%
+		select(-`read count MPI row`) %>%
+		replace(is.na(.), -999 %>% as.integer) %>%
+		as_matrix() %>% t
+
+	size_y_linear_2_MPI =
+		y_source %>%
+		filter(level ==2) %>%
+		distinct(GM, Q, S, `read count`) %>%
+		format_for_MPI_from_linear_GM(shards) %>%
+		distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
+		count(idx_MPI) %>%
+		pull(n)
+
+	y_linear_S_2_MPI =
+		y_source %>%
+		filter(level ==2) %>%
+		distinct(GM, Q, S, `read count`) %>%
+		format_for_MPI_from_linear_GM(shards) %>%
+		distinct(idx_MPI, S, `read count MPI row`)  %>%
+		spread(idx_MPI,  S) %>%
+		select(-`read count MPI row`) %>%
+		replace(is.na(.), -999 %>% as.integer) %>%
+		as_matrix() %>% t
+
+	size_y_linear_S_2_MPI =
+		y_source %>%
+		filter(level ==2) %>%
+		distinct(GM, Q, S, `read count`) %>%
+		format_for_MPI_from_linear_GM(shards) %>%
+		distinct(idx_MPI, S, `read count MPI row`)  %>%
+		count(idx_MPI) %>%
+		pull(n)
+
+	G2_linear_MPI =
+		counts_baseline %>% filter(level ==2) %>%
+		distinct(G, GM, C) %>%
+		format_for_MPI_from_linear_dec(shards) %>%
+		distinct(idx_MPI, G, `read count MPI row`) %>%
+		spread(idx_MPI,  G) %>%
+		select(-`read count MPI row`) %>%
+		replace(is.na(.), -999 %>% as.integer) %>%
+		as_matrix() %>% t
+
+	size_G2_linear_MPI =
+		counts_baseline %>% filter(level ==2) %>%
+		distinct(G, GM, C) %>%
+		format_for_MPI_from_linear_dec(shards) %>%
+		distinct(idx_MPI, G, `read count MPI row`)   %>%
+		count(idx_MPI) %>%
+		pull(n)
+
+	# lv 3
+	counts_idx_lv_3_MPI =
+		counts_baseline_to_linear %>%
+		filter(level==3) %>%
+		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
+		format_for_MPI_from_linear(shards) %>%
+		distinct(idx_MPI, counts_idx, `read count MPI row`)  %>%
+		spread(idx_MPI,  counts_idx) %>%
+		select(-`read count MPI row`) %>%
+		replace(is.na(.), -999 %>% as.integer) %>%
+		as_matrix() %>% t
+
+	size_counts_idx_lv_3_MPI =
+		counts_baseline_to_linear %>%
+		filter(level==3) %>%
+		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
+		format_for_MPI_from_linear(shards) %>%
+		distinct(idx_MPI, counts_idx, `read count MPI row`)  %>%
+		count(idx_MPI) %>%
+		pull(n)
+
+	# Count indexes
+	counts_G_lv_3_MPI =
+		counts_baseline_to_linear %>%
+		filter(level==3) %>%
+		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
+		format_for_MPI_from_linear(shards) %>%
+		distinct(idx_MPI, G, `read count MPI row`)  %>%
+		spread(idx_MPI,  G) %>%
+		select(-`read count MPI row`) %>%
+		replace(is.na(.), -999 %>% as.integer) %>%
+		as_matrix() %>% t
+
+	size_counts_G_lv_3_MPI =
+		counts_baseline_to_linear %>%
+		filter(level==3) %>%
+		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
+		format_for_MPI_from_linear(shards) %>%
+		distinct(idx_MPI, G, `read count MPI row`)  %>%
+		count(idx_MPI) %>%
+		pull(n)
+
+	# Count indexes
+	counts_S_lv_3_MPI =
+		counts_baseline_to_linear %>%
+		filter(level==3) %>%
+		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
+		format_for_MPI_from_linear(shards) %>%
+		distinct(idx_MPI, S, `read count MPI row`)  %>%
+		spread(idx_MPI,  S) %>%
+		select(-`read count MPI row`) %>%
+		replace(is.na(.), -999 %>% as.integer) %>%
+		as_matrix() %>% t
+
+	size_counts_S_lv_3_MPI =
+		counts_baseline_to_linear %>%
+		filter(level==3) %>%
+		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
+		format_for_MPI_from_linear(shards) %>%
+		distinct(idx_MPI, S, `read count MPI row`)   %>%
+		count(idx_MPI) %>%
+		pull(n)
+
+	# mix Counts
+	y_linear_3_MPI =
+		y_source %>%
+		filter(level ==3) %>%
+		distinct(GM, Q, S, `read count`) %>%
+		format_for_MPI_from_linear_GM(shards) %>%
+		distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
+		spread(idx_MPI,  `read count`) %>%
+		select(-`read count MPI row`) %>%
+		replace(is.na(.), -999 %>% as.integer) %>%
+		as_matrix() %>% t
+
+	size_y_linear_3_MPI =
+		y_source %>%
+		filter(level ==3) %>%
+		distinct(GM, Q, S, `read count`) %>%
+		format_for_MPI_from_linear_GM(shards) %>%
+		distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
+		count(idx_MPI) %>%
+		pull(n)
+
+	y_linear_S_3_MPI =
+		y_source %>%
+		filter(level ==3) %>%
+		distinct(GM, Q, S, `read count`) %>%
+		format_for_MPI_from_linear_GM(shards) %>%
+		distinct(idx_MPI, S, `read count MPI row`)  %>%
+		spread(idx_MPI,  S) %>%
+		select(-`read count MPI row`) %>%
+		replace(is.na(.), -999 %>% as.integer) %>%
+		as_matrix() %>% t
+
+	size_y_linear_S_3_MPI =
+		y_source %>%
+		filter(level ==3) %>%
+		distinct(GM, Q, S, `read count`) %>%
+		format_for_MPI_from_linear_GM(shards) %>%
+		distinct(idx_MPI, S, `read count MPI row`)  %>%
+		count(idx_MPI) %>%
+		pull(n)
+
+	G3_linear_MPI =
+		counts_baseline %>% filter(level ==3) %>%
+		distinct(G, GM, C) %>%
+		format_for_MPI_from_linear_dec(shards) %>%
+		distinct(idx_MPI, G, `read count MPI row`) %>%
+		spread(idx_MPI,  G) %>%
+		select(-`read count MPI row`) %>%
+		replace(is.na(.), -999 %>% as.integer) %>%
+		as_matrix() %>% t
+
+	size_G3_linear_MPI =
+		counts_baseline %>% filter(level ==3) %>%
+		distinct(G, GM, C) %>%
+		format_for_MPI_from_linear_dec(shards) %>%
+		distinct(idx_MPI, G, `read count MPI row`)   %>%
+		count(idx_MPI) %>%
+		pull(n)
+
+	# lv 4
+	counts_idx_lv_4_MPI =
+		counts_baseline_to_linear %>%
+		filter(level==4) %>%
+		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
+		format_for_MPI_from_linear(shards) %>%
+		distinct(idx_MPI, counts_idx, `read count MPI row`)  %>%
+		spread(idx_MPI,  counts_idx) %>%
+		select(-`read count MPI row`) %>%
+		replace(is.na(.), -999 %>% as.integer) %>%
+		as_matrix() %>% t
+
+	size_counts_idx_lv_4_MPI =
+		counts_baseline_to_linear %>%
+		filter(level==4) %>%
+		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
+		format_for_MPI_from_linear(shards) %>%
+		distinct(idx_MPI, counts_idx, `read count MPI row`)  %>%
+		count(idx_MPI) %>%
+		pull(n)
+
+	# Count indexes
+	counts_G_lv_4_MPI =
+		counts_baseline_to_linear %>%
+		filter(level==4) %>%
+		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
+		format_for_MPI_from_linear(shards) %>%
+		distinct(idx_MPI, G, `read count MPI row`)  %>%
+		spread(idx_MPI,  G) %>%
+		select(-`read count MPI row`) %>%
+		replace(is.na(.), -999 %>% as.integer) %>%
+		as_matrix() %>% t
+
+	size_counts_G_lv_4_MPI =
+		counts_baseline_to_linear %>%
+		filter(level==4) %>%
+		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
+		format_for_MPI_from_linear(shards) %>%
+		distinct(idx_MPI, G, `read count MPI row`)  %>%
+		count(idx_MPI) %>%
+		pull(n)
+
+	# Count indexes
+	counts_S_lv_4_MPI =
+		counts_baseline_to_linear %>%
+		filter(level==4) %>%
+		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
+		format_for_MPI_from_linear(shards) %>%
+		distinct(idx_MPI, S, `read count MPI row`)  %>%
+		spread(idx_MPI,  S) %>%
+		select(-`read count MPI row`) %>%
+		replace(is.na(.), -999 %>% as.integer) %>%
+		as_matrix() %>% t
+
+	size_counts_S_lv_4_MPI =
+		counts_baseline_to_linear %>%
+		filter(level==4) %>%
+		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
+		format_for_MPI_from_linear(shards) %>%
+		distinct(idx_MPI, S, `read count MPI row`)   %>%
+		count(idx_MPI) %>%
+		pull(n)
+
+	# mix Counts
+	y_linear_4_MPI =
+		y_source %>%
+		filter(level ==4) %>%
+		distinct(GM, Q, S, `read count`) %>%
+		format_for_MPI_from_linear_GM(shards) %>%
+		distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
+		spread(idx_MPI,  `read count`) %>%
+		select(-`read count MPI row`) %>%
+		replace(is.na(.), -999 %>% as.integer) %>%
+		as_matrix() %>% t
+
+	size_y_linear_4_MPI =
+		y_source %>%
+		filter(level ==4) %>%
+		distinct(GM, Q, S, `read count`) %>%
+		format_for_MPI_from_linear_GM(shards) %>%
+		distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
+		count(idx_MPI) %>%
+		pull(n)
+
+	y_linear_S_4_MPI =
+		y_source %>%
+		filter(level ==4) %>%
+		distinct(GM, Q, S, `read count`) %>%
+		format_for_MPI_from_linear_GM(shards) %>%
+		distinct(idx_MPI, S, `read count MPI row`)  %>%
+		spread(idx_MPI,  S) %>%
+		select(-`read count MPI row`) %>%
+		replace(is.na(.), -999 %>% as.integer) %>%
+		as_matrix() %>% t
+
+	size_y_linear_S_4_MPI =
+		y_source %>%
+		filter(level ==4) %>%
+		distinct(GM, Q, S, `read count`) %>%
+		format_for_MPI_from_linear_GM(shards) %>%
+		distinct(idx_MPI, S, `read count MPI row`)  %>%
+		count(idx_MPI) %>%
+		pull(n)
+
+	G4_linear_MPI =
+		counts_baseline %>% filter(level ==4) %>%
+		distinct(G, GM, C) %>%
+		format_for_MPI_from_linear_dec(shards) %>%
+		distinct(idx_MPI, G, `read count MPI row`) %>%
+		spread(idx_MPI,  G) %>%
+		select(-`read count MPI row`) %>%
+		replace(is.na(.), -999 %>% as.integer) %>%
+		as_matrix() %>% t
+
+	size_G4_linear_MPI =
+		counts_baseline %>% filter(level ==4) %>%
+		distinct(G, GM, C) %>%
+		format_for_MPI_from_linear_dec(shards) %>%
 		distinct(idx_MPI, G, `read count MPI row`)   %>%
 		count(idx_MPI) %>%
 		pull(n)

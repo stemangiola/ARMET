@@ -143,13 +143,15 @@ functions{
 
 	){
 		int threshold = -999;
-		int max_col = 4 + max(size_counts_idx_lv_1_MPI) + max(size_y_linear_1_MPI);
+		int dim_indices = 9;
+
+		int max_col = dim_indices + max(size_counts_idx_lv_1_MPI) + max(size_y_linear_1_MPI);
 
 		int int_pack[shards,max_col];
 
 		for(i in 1:shards){
 
-			int real_col = 4 + size_counts_idx_lv_1_MPI[i] + size_y_linear_1_MPI[i];
+			int real_col = dim_indices + size_counts_idx_lv_1_MPI[i] + size_y_linear_1_MPI[i];
 
 			int_pack[i] =
 				concatenate_int_array({
@@ -314,6 +316,66 @@ functions{
 
 	}
 
+	int[,] append_int_MPI_arrays(int[,] lv1, int[,] lv2, int[,] lv3, int[,] lv4){
+		int dim_1[2] = dims(lv1);
+		int dim_2[2] = dims(lv2);
+		int dim_3[2] = dims(lv3);
+		int dim_4[2] = dims(lv4);
+
+		int max_cols = max({dim_1[2], dim_2[2],dim_3[2],dim_4[2]});
+		int tot_rows = dim_1[1] + dim_2[1] + dim_3[1] + dim_4[1];
+
+
+		int merged[tot_rows, max_cols];
+
+		int i = 0;
+
+
+		for(r in 1:dim_1[1]) merged[i+r] = append_array(lv1[r], rep_int(-999, max_cols-dim_1[2]));
+
+		i += dim_1[1];
+		for(r in 1:dim_2[1]) merged[i+r] = append_array(lv2[r], rep_int(-999, max_cols-dim_2[2]));
+
+		i += dim_2[1];
+		for(r in 1:dim_3[1]) merged[i+r] = append_array(lv3[r], rep_int(-999, max_cols-dim_3[2]));
+
+		i += dim_3[1];
+		for(r in 1:dim_4[1]) merged[i+r] = append_array(lv4[r], rep_int(-999, max_cols-dim_4[2]));
+
+
+		return(merged);
+
+	}
+
+	vector[] append_real_MPI_arrays(vector[] lv1, vector[] lv2, vector[] lv3, vector[] lv4){
+		int dim_1[2] = {num_elements(lv1[,1]), num_elements(lv1[1])};
+		int dim_2[2] = {num_elements(lv2[,1]), num_elements(lv2[1])};
+		int dim_3[2] = {num_elements(lv3[,1]), num_elements(lv3[1])};
+		int dim_4[2] = {num_elements(lv4[,1]), num_elements(lv4[1])};
+
+		int max_cols = max({dim_1[2], dim_2[2],dim_3[2],dim_4[2]});
+		int tot_rows = dim_1[1] + dim_2[1] + dim_3[1] + dim_4[1];
+
+		vector[max_cols] merged[tot_rows];
+		int i = 0;
+
+
+		for(r in 1:dim_1[1]) merged[i+r] = append_row(lv1[r], rep_vector(-999, max_cols-dim_1[2]));
+
+		i += dim_1[1];
+		for(r in 1:dim_2[1]) merged[i+r] = append_row(lv2[r], rep_vector(-999, max_cols-dim_2[2]));
+
+		i += dim_2[1];
+		for(r in 1:dim_3[1]) merged[i+r] = append_row(lv3[r], rep_vector(-999, max_cols-dim_3[2]));
+
+		i += dim_3[1];
+		for(r in 1:dim_4[1]) merged[i+r] = append_row(lv4[r], rep_vector(-999, max_cols-dim_4[2]));
+
+
+		return(merged);
+
+	}
+
 }
 data {
 	// shards
@@ -367,9 +429,6 @@ data {
   int<lower=0> G4;
   int G4_linear[G4];
 
-	// MPI
-
-
   // Observed counts
   int<lower=0> Y_1;
 	int y_linear_1[Y_1];
@@ -385,22 +444,63 @@ data {
 	int y_linear_S_4[Y_4];
 
 	// MPI
+	int shards_in_levels[4];
 
+	// MPI lv1
 	int<lower=0> size_counts_idx_lv_1_MPI[shards];
 	int counts_idx_lv_1_MPI[shards, max(size_counts_idx_lv_1_MPI)];
-
 	int size_counts_G_lv_1_MPI[shards];
 	int size_counts_S_lv_1_MPI[shards];
 	int size_y_linear_S_1_MPI[shards];
 	int size_y_linear_1_MPI[shards];
-
 	int y_linear_1_MPI[shards,max(size_y_linear_1_MPI)];
 	int y_linear_S_1_MPI[shards,max(size_y_linear_1_MPI)];
 	int counts_G_lv_1_MPI[shards,max(size_counts_G_lv_1_MPI)];
 	int counts_S_lv_1_MPI[shards,max(size_counts_S_lv_1_MPI)];
-
 	int size_G1_linear_MPI[shards];
 	int G1_linear_MPI[shards,max(size_G1_linear_MPI)];
+
+	// MPI lv2
+	int<lower=0> size_counts_idx_lv_2_MPI[shards];
+	int counts_idx_lv_2_MPI[shards, max(size_counts_idx_lv_2_MPI)];
+	int size_counts_G_lv_2_MPI[shards];
+	int size_counts_S_lv_2_MPI[shards];
+	int size_y_linear_S_2_MPI[shards];
+	int size_y_linear_2_MPI[shards];
+	int y_linear_2_MPI[shards,max(size_y_linear_2_MPI)];
+	int y_linear_S_2_MPI[shards,max(size_y_linear_2_MPI)];
+	int counts_G_lv_2_MPI[shards,max(size_counts_G_lv_2_MPI)];
+	int counts_S_lv_2_MPI[shards,max(size_counts_S_lv_2_MPI)];
+	int size_G2_linear_MPI[shards];
+	int G2_linear_MPI[shards,max(size_G2_linear_MPI)];
+
+	// MPI lv3
+	int<lower=0> size_counts_idx_lv_3_MPI[shards];
+	int counts_idx_lv_3_MPI[shards, max(size_counts_idx_lv_3_MPI)];
+	int size_counts_G_lv_3_MPI[shards];
+	int size_counts_S_lv_3_MPI[shards];
+	int size_y_linear_S_3_MPI[shards];
+	int size_y_linear_3_MPI[shards];
+	int y_linear_3_MPI[shards,max(size_y_linear_3_MPI)];
+	int y_linear_S_3_MPI[shards,max(size_y_linear_3_MPI)];
+	int counts_G_lv_3_MPI[shards,max(size_counts_G_lv_3_MPI)];
+	int counts_S_lv_3_MPI[shards,max(size_counts_S_lv_3_MPI)];
+	int size_G3_linear_MPI[shards];
+	int G3_linear_MPI[shards,max(size_G3_linear_MPI)];
+
+	// MPI lv4
+	int<lower=0> size_counts_idx_lv_4_MPI[shards];
+	int counts_idx_lv_4_MPI[shards, max(size_counts_idx_lv_4_MPI)];
+	int size_counts_G_lv_4_MPI[shards];
+	int size_counts_S_lv_4_MPI[shards];
+	int size_y_linear_S_4_MPI[shards];
+	int size_y_linear_4_MPI[shards];
+	int y_linear_4_MPI[shards,max(size_y_linear_4_MPI)];
+	int y_linear_S_4_MPI[shards,max(size_y_linear_4_MPI)];
+	int counts_G_lv_4_MPI[shards,max(size_counts_G_lv_4_MPI)];
+	int counts_S_lv_4_MPI[shards,max(size_counts_S_lv_4_MPI)];
+	int size_G4_linear_MPI[shards];
+	int G4_linear_MPI[shards,max(size_G4_linear_MPI)];
 
 	// Lv2 tree structure parents singles
 	int<lower=1> SLV2;
@@ -431,6 +531,24 @@ data {
 transformed data{
 
 	real real_data[shards, 0];
+	real real_data2[sum(shards_in_levels), 0];
+
+	int dim_indices = 9;
+
+	// Here I am building the whole int package to not have to calculate it every time
+	int int_package[sum(shards_in_levels), dim_indices +	max({
+			max(size_counts_idx_lv_1_MPI) + max(size_y_linear_1_MPI),
+			max(size_counts_idx_lv_2_MPI) + max(size_y_linear_2_MPI),
+			max(size_counts_idx_lv_3_MPI) + max(size_y_linear_3_MPI),
+			max(size_counts_idx_lv_4_MPI) + max(size_y_linear_4_MPI)
+		})] = append_int_MPI_arrays(
+			package_int(			ct_in_levels[1],			G1/ct_in_levels[1],			Q,			shards_in_levels[1],			counts_linear,			size_counts_idx_lv_1_MPI,			size_counts_G_lv_1_MPI,			size_counts_S_lv_1_MPI,			size_G1_linear_MPI,			size_y_linear_S_1_MPI,			size_y_linear_1_MPI,			counts_idx_lv_1_MPI,			y_linear_1_MPI		),
+			package_int(			ct_in_levels[2],			G2/ct_in_levels[2],			Q,			shards_in_levels[2],			counts_linear,			size_counts_idx_lv_2_MPI,			size_counts_G_lv_2_MPI,			size_counts_S_lv_2_MPI,			size_G2_linear_MPI,			size_y_linear_S_2_MPI,			size_y_linear_2_MPI,			counts_idx_lv_2_MPI,			y_linear_2_MPI		),
+			package_int(			ct_in_levels[3],			G3/ct_in_levels[3],			Q,			shards_in_levels[3],			counts_linear,			size_counts_idx_lv_3_MPI,			size_counts_G_lv_3_MPI,			size_counts_S_lv_3_MPI,			size_G3_linear_MPI,			size_y_linear_S_3_MPI,			size_y_linear_3_MPI,			counts_idx_lv_3_MPI,			y_linear_3_MPI		),
+			package_int(			ct_in_levels[4],			G4/ct_in_levels[4],			Q,			shards_in_levels[4],			counts_linear,			size_counts_idx_lv_4_MPI,			size_counts_G_lv_4_MPI,			size_counts_S_lv_4_MPI,			size_G4_linear_MPI,			size_y_linear_S_4_MPI,			size_y_linear_4_MPI,			counts_idx_lv_4_MPI,			y_linear_4_MPI		)
+
+	);
+
 }
 parameters {
 
@@ -514,10 +632,10 @@ transformed parameters{
 }
 model {
 
-	vector[Y_1] lambda_log_deconvoluted_1;
-	vector[Y_2] lambda_log_deconvoluted_2;
-	vector[Y_3] lambda_log_deconvoluted_3;
-	vector[Y_4] lambda_log_deconvoluted_4;
+	// vector[Y_1] lambda_log_deconvoluted_1;
+	// vector[Y_2] lambda_log_deconvoluted_2;
+	// vector[Y_3] lambda_log_deconvoluted_3;
+	// vector[Y_4] lambda_log_deconvoluted_4;
 	real lp;
 	real lp_MPI;
 
@@ -572,100 +690,191 @@ model {
 	// target += lp;
 
 	//Gene-wise properties of the data
-	target += sum(map_rect(
-		lp_reduce ,
-		[sigma_intercept_dec, sigma_slope]' ,
-		package_real(
-			ct_in_levels[1],
-			Q,
-			shards,
+	// target += sum(map_rect(
+	// 	lp_reduce ,
+	// 	[sigma_intercept_dec, sigma_slope]' ,
+	// 	package_real(
+	// 		ct_in_levels[1],
+	// 		Q,
+	// 		shards,
+	//
+	// 		size_counts_G_lv_1_MPI,
+	// 		size_counts_S_lv_1_MPI,
+	// 		size_G1_linear_MPI,
+	// 		size_y_linear_S_1_MPI,
+	//
+	// 		counts_G_lv_1_MPI,
+	// 		counts_S_lv_1_MPI,
+	// 		G1_linear_MPI,
+	// 		y_linear_S_1_MPI,
+	//
+	// 		lambda_log,
+	// 		exposure_rate,
+	// 		sigma_inv_log,
+	// 		prop_1
+	// 	),
+	// 	real_data,
+	// 	package_int(
+	// 		ct_in_levels[1],
+	// 		G1/ct_in_levels[1],
+	// 		Q,
+	// 		shards,
+	//
+	// 		counts_linear,
+	//
+	// 		size_counts_idx_lv_1_MPI,
+	// 		size_counts_G_lv_1_MPI,
+	// 		size_counts_S_lv_1_MPI,
+	// 		size_G1_linear_MPI,
+	// 		size_y_linear_S_1_MPI,
+	// 		size_y_linear_1_MPI,
+	// 		counts_idx_lv_1_MPI,
+	// 		y_linear_1_MPI
+	//
+	// 	)
+	//
+	// ));
 
-			size_counts_G_lv_1_MPI,
-			size_counts_S_lv_1_MPI,
-			size_G1_linear_MPI,
-			size_y_linear_S_1_MPI,
-
-			counts_G_lv_1_MPI,
-			counts_S_lv_1_MPI,
-			G1_linear_MPI,
-			y_linear_S_1_MPI,
-
-			lambda_log,
-			exposure_rate,
-			sigma_inv_log,
-			prop_1
-		),
-		real_data,
-		package_int(
-			ct_in_levels[1],
-			G1/ct_in_levels[1],
-			Q,
-			shards,
-
-			counts_linear,
-
-			size_counts_idx_lv_1_MPI,
-			size_counts_G_lv_1_MPI,
-			size_counts_S_lv_1_MPI,
-			size_G1_linear_MPI,
-			size_y_linear_S_1_MPI,
-			size_y_linear_1_MPI,
-			counts_idx_lv_1_MPI,
-			y_linear_1_MPI
-
-		)
-
-	));
 
 	for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | rep_vector(num_elements(prop_1[1]), num_elements(prop_1[1])));
 
 // Level 2 ////////////////////////////////////////
 
-	// Reference
-	target += neg_binomial_2_log_lpmf(counts_linear[counts_idx_lv_2] |
-		lambda_log[G_to_counts_linear[counts_idx_lv_2]] + exposure_rate[S_linear[counts_idx_lv_2]],
-		1.0 ./ exp( sigma_inv_log[G_to_counts_linear[counts_idx_lv_2]] )
-	);
+	// // Reference
+	// target += neg_binomial_2_log_lpmf(counts_linear[counts_idx_lv_2] |
+	// 	lambda_log[G_to_counts_linear[counts_idx_lv_2]] + exposure_rate[S_linear[counts_idx_lv_2]],
+	// 	1.0 ./ exp( sigma_inv_log[G_to_counts_linear[counts_idx_lv_2]] )
+	// );
+	//
+	// // Calculate convoluted
+	// lambda_log_deconvoluted_2 =
+	// 	log(
+	// 		to_vector(
+	// 			vector_array_to_matrix(prop_2) *
+	// 			exp(to_matrix(lambda_log[G2_linear], ct_in_levels[2], G2/ct_in_levels[2])) // [Q,G] dimensions
+	// 		)
+	// 	);
+	//
+	// // deconvolution
+	// target += neg_binomial_2_log_lpmf(y_linear_2 |
+	// 	lambda_log_deconvoluted_2 + exposure_rate[y_linear_S_2],
+	// 	1.0 ./ exp( ( sigma_slope * lambda_log_deconvoluted_2 + sigma_intercept_dec ) )
+	// );
 
-	// Calculate convoluted
-	lambda_log_deconvoluted_2 =
-		log(
-			to_vector(
-				vector_array_to_matrix(prop_2) *
-				exp(to_matrix(lambda_log[G2_linear], ct_in_levels[2], G2/ct_in_levels[2])) // [Q,G] dimensions
-			)
-		);
-
-	// deconvolution
-	target += neg_binomial_2_log_lpmf(y_linear_2 |
-		lambda_log_deconvoluted_2 + exposure_rate[y_linear_S_2],
-		1.0 ./ exp( ( sigma_slope * lambda_log_deconvoluted_2 + sigma_intercept_dec ) )
-	);
+	// target += sum(map_rect(
+	// 	lp_reduce ,
+	// 	[sigma_intercept_dec, sigma_slope]' ,
+	// 	package_real(
+	// 		ct_in_levels[2],
+	// 		Q,
+	// 		shards,
+	//
+	// 		size_counts_G_lv_2_MPI,
+	// 		size_counts_S_lv_2_MPI,
+	// 		size_G2_linear_MPI,
+	// 		size_y_linear_S_2_MPI,
+	//
+	// 		counts_G_lv_2_MPI,
+	// 		counts_S_lv_2_MPI,
+	// 		G2_linear_MPI,
+	// 		y_linear_S_2_MPI,
+	//
+	// 		lambda_log,
+	// 		exposure_rate,
+	// 		sigma_inv_log,
+	// 		prop_2
+	// 	),
+	// 	real_data,
+	// 	package_int(
+	// 		ct_in_levels[2],
+	// 		G2/ct_in_levels[2],
+	// 		Q,
+	// 		shards,
+	//
+	// 		counts_linear,
+	//
+	// 		size_counts_idx_lv_2_MPI,
+	// 		size_counts_G_lv_2_MPI,
+	// 		size_counts_S_lv_2_MPI,
+	// 		size_G2_linear_MPI,
+	// 		size_y_linear_S_2_MPI,
+	// 		size_y_linear_2_MPI,
+	// 		counts_idx_lv_2_MPI,
+	// 		y_linear_2_MPI
+	//
+	// 	)
+	//
+	// ));
 
 	for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | rep_vector(num_elements(prop_a[1]), num_elements(prop_a[1])));
 
 // Level 3 ////////////////////////////////////////
 
-	// Reference
-	target += neg_binomial_2_log_lpmf(counts_linear[counts_idx_lv_3] |
-		lambda_log[G_to_counts_linear[counts_idx_lv_3]] + exposure_rate[S_linear[counts_idx_lv_3]],
-		1.0 ./ exp( sigma_inv_log[G_to_counts_linear[counts_idx_lv_3]] )
-	);
+	// // Reference
+	// target += neg_binomial_2_log_lpmf(counts_linear[counts_idx_lv_3] |
+	// 	lambda_log[G_to_counts_linear[counts_idx_lv_3]] + exposure_rate[S_linear[counts_idx_lv_3]],
+	// 	1.0 ./ exp( sigma_inv_log[G_to_counts_linear[counts_idx_lv_3]] )
+	// );
+	//
+	// // Calculate convoluted
+	// lambda_log_deconvoluted_3 =
+	// 	log(
+	// 		to_vector(
+	// 			vector_array_to_matrix(prop_3) *
+	// 			exp(to_matrix(lambda_log[G3_linear], ct_in_levels[3], G3/ct_in_levels[3])) // [Q,G] dimensions
+	// 		)
+	// 	);
+	//
+	// // deconvolution
+	// target += neg_binomial_2_log_lpmf(y_linear_3 |
+	// 	lambda_log_deconvoluted_3 + exposure_rate[y_linear_S_3],
+	// 	1.0 ./ exp( ( sigma_slope * lambda_log_deconvoluted_3 + sigma_intercept_dec ) )
+	// );
 
-	// Calculate convoluted
-	lambda_log_deconvoluted_3 =
-		log(
-			to_vector(
-				vector_array_to_matrix(prop_3) *
-				exp(to_matrix(lambda_log[G3_linear], ct_in_levels[3], G3/ct_in_levels[3])) // [Q,G] dimensions
-			)
-		);
-
-	// deconvolution
-	target += neg_binomial_2_log_lpmf(y_linear_3 |
-		lambda_log_deconvoluted_3 + exposure_rate[y_linear_S_3],
-		1.0 ./ exp( ( sigma_slope * lambda_log_deconvoluted_3 + sigma_intercept_dec ) )
-	);
+	// target += sum(map_rect(
+	// 	lp_reduce ,
+	// 	[sigma_intercept_dec, sigma_slope]' ,
+	// 	package_real(
+	// 		ct_in_levels[3],
+	// 		Q,
+	// 		shards,
+	//
+	// 		size_counts_G_lv_3_MPI,
+	// 		size_counts_S_lv_3_MPI,
+	// 		size_G3_linear_MPI,
+	// 		size_y_linear_S_3_MPI,
+	//
+	// 		counts_G_lv_3_MPI,
+	// 		counts_S_lv_3_MPI,
+	// 		G3_linear_MPI,
+	// 		y_linear_S_3_MPI,
+	//
+	// 		lambda_log,
+	// 		exposure_rate,
+	// 		sigma_inv_log,
+	// 		prop_3
+	// 	),
+	// 	real_data,
+	// 	package_int(
+	// 		ct_in_levels[3],
+	// 		G3/ct_in_levels[3],
+	// 		Q,
+	// 		shards,
+	//
+	// 		counts_linear,
+	//
+	// 		size_counts_idx_lv_3_MPI,
+	// 		size_counts_G_lv_3_MPI,
+	// 		size_counts_S_lv_3_MPI,
+	// 		size_G3_linear_MPI,
+	// 		size_y_linear_S_3_MPI,
+	// 		size_y_linear_3_MPI,
+	// 		counts_idx_lv_3_MPI,
+	// 		y_linear_3_MPI
+	//
+	// 	)
+	//
+	// ));
 
 	for(q in 1:Q) target += dirichlet_lpdf(prop_b[q] | rep_vector(num_elements(prop_b[1]), num_elements(prop_b[1])));
 	for(q in 1:Q) target += dirichlet_lpdf(prop_c[q] | rep_vector(num_elements(prop_c[1]), num_elements(prop_c[1])));
@@ -674,30 +883,88 @@ model {
 
 // Level 4 ////////////////////////////////////////
 
-	// Reference
-	target += neg_binomial_2_log_lpmf( counts_linear[counts_idx_lv_4] |
-		lambda_log[G_to_counts_linear[counts_idx_lv_4]] + exposure_rate[S_linear[counts_idx_lv_4]],
-		1.0 ./ exp( sigma_inv_log[G_to_counts_linear[counts_idx_lv_4]] )
-	);
+	// // Reference
+	// target += neg_binomial_2_log_lpmf( counts_linear[counts_idx_lv_4] |
+	// 	lambda_log[G_to_counts_linear[counts_idx_lv_4]] + exposure_rate[S_linear[counts_idx_lv_4]],
+	// 	1.0 ./ exp( sigma_inv_log[G_to_counts_linear[counts_idx_lv_4]] )
+	// );
+	//
+	// // Calculate convoluted
+	// lambda_log_deconvoluted_4 =
+	// 	log(
+	// 		to_vector(
+	// 			vector_array_to_matrix(prop_4) *
+	// 			exp(to_matrix(lambda_log[G4_linear], ct_in_levels[4], G4/ct_in_levels[4])) // [Q,G] dimensions
+	// 		)
+	// 	);
+	//
+	// // deconvolution
+	// target += neg_binomial_2_log_lpmf(y_linear_4 |
+	// 	lambda_log_deconvoluted_4 + exposure_rate[y_linear_S_4],
+	// 	1.0 ./ exp( ( sigma_slope * lambda_log_deconvoluted_4 + sigma_intercept_dec ) )
+	// );
 
-	// Calculate convoluted
-	lambda_log_deconvoluted_4 =
-		log(
-			to_vector(
-				vector_array_to_matrix(prop_4) *
-				exp(to_matrix(lambda_log[G4_linear], ct_in_levels[4], G4/ct_in_levels[4])) // [Q,G] dimensions
-			)
-		);
-
-	// deconvolution
-	target += neg_binomial_2_log_lpmf(y_linear_4 |
-		lambda_log_deconvoluted_4 + exposure_rate[y_linear_S_4],
-		1.0 ./ exp( ( sigma_slope * lambda_log_deconvoluted_4 + sigma_intercept_dec ) )
-	);
+	// target += sum(map_rect(
+	// 	lp_reduce ,
+	// 	[sigma_intercept_dec, sigma_slope]' ,
+	// 	package_real(
+	// 		ct_in_levels[4],
+	// 		Q,
+	// 		shards,
+	//
+	// 		size_counts_G_lv_4_MPI,
+	// 		size_counts_S_lv_4_MPI,
+	// 		size_G4_linear_MPI,
+	// 		size_y_linear_S_4_MPI,
+	//
+	// 		counts_G_lv_4_MPI,
+	// 		counts_S_lv_4_MPI,
+	// 		G4_linear_MPI,
+	// 		y_linear_S_4_MPI,
+	//
+	// 		lambda_log,
+	// 		exposure_rate,
+	// 		sigma_inv_log,
+	// 		prop_4
+	// 	),
+	// 	real_data,
+	// 	package_int(
+	// 		ct_in_levels[4],
+	// 		G4/ct_in_levels[4],
+	// 		Q,
+	// 		shards,
+	//
+	// 		counts_linear,
+	//
+	// 		size_counts_idx_lv_4_MPI,
+	// 		size_counts_G_lv_4_MPI,
+	// 		size_counts_S_lv_4_MPI,
+	// 		size_G4_linear_MPI,
+	// 		size_y_linear_S_4_MPI,
+	// 		size_y_linear_4_MPI,
+	// 		counts_idx_lv_4_MPI,
+	// 		y_linear_4_MPI
+	//
+	// 	)
+	//
+	// ));
 
 	for(q in 1:Q) target += dirichlet_lpdf(prop_f[q] | rep_vector(num_elements(prop_f[1]), num_elements(prop_f[1])));
 	for(q in 1:Q) target += dirichlet_lpdf(prop_g[q] | rep_vector(num_elements(prop_g[1]), num_elements(prop_g[1])));
 	for(q in 1:Q) target += dirichlet_lpdf(prop_h[q] | rep_vector(num_elements(prop_h[1]), num_elements(prop_h[1])));
 	for(q in 1:Q) target += dirichlet_lpdf(prop_i[q] | rep_vector(num_elements(prop_i[1]), num_elements(prop_i[1])));
 
+
+	target += sum(map_rect(
+		lp_reduce ,
+		[sigma_intercept_dec, sigma_slope]' ,
+		append_real_MPI_arrays(
+					package_real(	ct_in_levels[1],	Q,	shards_in_levels[1],	size_counts_G_lv_1_MPI,	size_counts_S_lv_1_MPI,	size_G1_linear_MPI,	size_y_linear_S_1_MPI, counts_G_lv_1_MPI, counts_S_lv_1_MPI,		G1_linear_MPI,			y_linear_S_1_MPI,			lambda_log,			exposure_rate,			sigma_inv_log,			prop_1		),
+					package_real(	ct_in_levels[2],	Q,	shards_in_levels[2],	size_counts_G_lv_2_MPI,	size_counts_S_lv_2_MPI,	size_G2_linear_MPI,	size_y_linear_S_2_MPI, counts_G_lv_2_MPI, counts_S_lv_2_MPI,		G2_linear_MPI,			y_linear_S_2_MPI,			lambda_log,			exposure_rate,			sigma_inv_log,			prop_2		),
+					package_real(	ct_in_levels[3],	Q,	shards_in_levels[3],	size_counts_G_lv_3_MPI,	size_counts_S_lv_3_MPI,	size_G3_linear_MPI,	size_y_linear_S_3_MPI, counts_G_lv_3_MPI, counts_S_lv_3_MPI,		G3_linear_MPI,			y_linear_S_3_MPI,			lambda_log,			exposure_rate,			sigma_inv_log,			prop_3		),
+					package_real(	ct_in_levels[4],	Q,	shards_in_levels[4],	size_counts_G_lv_4_MPI,	size_counts_S_lv_4_MPI,	size_G4_linear_MPI,	size_y_linear_S_4_MPI, counts_G_lv_4_MPI, counts_S_lv_4_MPI,		G4_linear_MPI,			y_linear_S_4_MPI,			lambda_log,			exposure_rate,			sigma_inv_log,			prop_4		)
+		),
+		real_data2,
+		int_package
+	));
 }
