@@ -414,6 +414,120 @@ functions{
 
 	}
 
+	int[] get_elements_per_shard(int lenth_v, int shards){
+
+		// Returned integer(max_size, last_element_size)
+		int tentative_size = lenth_v / shards;
+		int tentative_remaining = lenth_v - (tentative_size * shards);
+		int elements_per_shard = tentative_remaining > 0 ? tentative_size + 1 : tentative_size;
+		int remaining =  (elements_per_shard * shards) - lenth_v;
+
+		int length_obj[shards];
+
+		for(s in 1:shards) {
+			length_obj[s] =
+				s != shards ?
+				elements_per_shard :
+				elements_per_shard - remaining;  // Actual elements in it for last object
+		}
+
+ 		return length_obj;
+
+	}
+
+	int[,] get_int_MPI(int[] v, int shards){
+
+		int elements_per_shard[shards] = get_elements_per_shard(size(v), shards); // Length of the returned object
+		int size_MPI_obj = elements_per_shard[1]; // the first element is always the full size of the object
+		int v_MPI[shards,size_MPI_obj] = rep_array(-1, shards,size_MPI_obj); // Set values to -1 for the ones that are not filled
+
+		int i = 0; // Index sweeping the vector
+
+		for(s in 1:shards){
+			v_MPI[s, 1:elements_per_shard[s]] = v[ (i + 1) : i + elements_per_shard[s] ];
+			i += elements_per_shard[s];
+		}
+
+		return v_MPI;
+	}
+
+	vector[] get_vector_MPI(vector v, int shards){
+
+		int elements_per_shard[shards] = get_elements_per_shard(rows(v), shards); // Length of the returned object
+		int size_MPI_obj = elements_per_shard[1]; // the first element is always the full size of the object
+		vector[size_MPI_obj] v_MPI[shards] ; // Set values to -999 for the ones that are not filled
+
+		int i = 0; // Index sweeping the vector
+
+		for(s in 1:shards){
+			v_MPI[s] = rep_vector(-999.0, size_MPI_obj);
+			v_MPI[s, 1:elements_per_shard[s]] = v[ (i + 1) : i + elements_per_shard[s] ];
+			i += elements_per_shard[s];
+		}
+
+		return v_MPI;
+	}
+
+
+		vector[] get_mu_sigma_vector_MPI(vector mus, vector sigmas, int shards){
+
+		int elements_per_shard[shards] = get_elements_per_shard(rows(mus), shards); // Length of the returned object
+		int size_MPI_obj = elements_per_shard[1]; // the first element is always the full size of the object
+		vector[size_MPI_obj * 2] v_MPI[shards] ; // Set values to -999 for the ones that are not filled
+
+		int i = 0; // Index sweeping the vector
+
+		for(s in 1:shards){
+
+			// If last shard fill in
+			if(s == shards) v_MPI[s] = rep_vector(-999.0, size_MPI_obj * 2);
+
+			v_MPI[s, 1:elements_per_shard[s]] = mus[ (i + 1) : i + elements_per_shard[s] ];
+			v_MPI[s, (elements_per_shard[s]+1):(elements_per_shard[s]+elements_per_shard[s])] = sigmas[ (i + 1) : i + elements_per_shard[s] ];
+
+			i += elements_per_shard[s];
+		}
+
+		return v_MPI;
+	}
+
+		real[,] get_real_MPI(vector v, int shards){
+
+		int elements_per_shard[shards] = get_elements_per_shard(rows(v), shards); // Length of the returned object
+		int size_MPI_obj = elements_per_shard[1]; // the first element is always the full size of the object
+		real v_MPI[shards,size_MPI_obj] ; // Set values to -999 for the ones that are not filled
+
+		int i = 0; // Index sweeping the vector
+
+		for(s in 1:shards){
+			v_MPI[s,] = rep_array(-999.0, size_MPI_obj);
+			v_MPI[s, 1:elements_per_shard[s]] = to_array_1d(v[ (i + 1) : i + elements_per_shard[s] ]);
+			i += elements_per_shard[s];
+		}
+
+		return v_MPI;
+	}
+
+		vector lp_reduce_simple( vector global_parameters , vector mus_sigmas , real[] real_data , int[] int_data ) {
+
+		real lp;
+		real threshold = -999;
+		int size_buffer = get_real_buffer_size(mus_sigmas, threshold);
+		int size_vector = (rows(mus_sigmas)-size_buffer)/2;
+
+		if(min(mus_sigmas[1:(size_vector*2)]) == threshold) print("ERROR! The MPI implmentation is buggy")
+
+		// Reference / exposure rate
+		lp = neg_binomial_2_log_lpmf(
+			int_data[1:size_vector] |
+			mus_sigmas[1:size_vector],
+			1.0 ./ exp( mus_sigmas[size_vector+1:size_vector+size_vector] )
+		);
+
+	 return [lp]';
+
+	}
+
 
 }
 data {
@@ -711,10 +825,22 @@ model {
 	// Level NA - Mix house keeing /////////////////////
 
 	// Reference
-	target += neg_binomial_2_log_lpmf( counts_linear[counts_idx_lv_NA] |
+	// target += neg_binomial_2_log_lpmf( counts_linear[counts_idx_lv_NA] |
+	// 	lambda_log[G_to_counts_linear[counts_idx_lv_NA]] + exposure_rate[S_linear[counts_idx_lv_NA]],
+	// 	1.0 ./ exp( sigma_inv_log[G_to_counts_linear[counts_idx_lv_NA]] )
+	// );
+
+target += sum(map_rect(
+	lp_reduce_simple ,
+	[sigma_intercept, sigma_slope]', // global parameters
+	get_mu_sigma_vector_MPI(
 		lambda_log[G_to_counts_linear[counts_idx_lv_NA]] + exposure_rate[S_linear[counts_idx_lv_NA]],
-		1.0 ./ exp( sigma_inv_log[G_to_counts_linear[counts_idx_lv_NA]] )
-	);
+		sigma_inv_log[G_to_counts_linear[counts_idx_lv_NA]],
+		shards
+	),
+	real_data,
+	get_int_MPI( counts_linear[counts_idx_lv_NA], shards)
+));
 
 	// Level 1 ////////////////////////////////////////
 
