@@ -635,6 +635,16 @@ vb_iterative = function(model,
 	return(res)
 }
 
+get_level_lpdf_weights = function(df){
+
+		df %>%
+		distinct(level, `Cell type category`) %>%
+		drop_na %>%
+		count(level) %>%
+		mutate(`max n` = (.) %>% tail(1) %>% pull(n) ) %>%
+		mutate(weight = (`max n` )/n) %>%
+		select(level, weight)
+}
 
 get_NB_qq_values = function(input.df, transcript_column){
 
@@ -810,7 +820,17 @@ ARMET_tc = function(
 				as_tibble %>%
 				select(-1)
 
-		)
+		) %>%
+
+		# Decrease the number of house keeping used
+		anti_join({
+			mdf = (.) %>%
+				distinct(symbol, `house keeping`) %>%
+				filter(`house keeping`)
+
+			withr::with_seed(	123, 	sample_frac(mdf, 0.7)) %>%
+				distinct(symbol)
+		})
 
 	df =
 		bind_rows(
@@ -1235,6 +1255,13 @@ ARMET_tc = function(
 	# Linear parallelised
 	shards = cores = 8
 	shards_in_levels = c(8, 8, 16, 8)
+	weights =
+		df %>%
+		get_level_lpdf_weights %>%
+		arrange(level) %>%
+		mutate(shards = shards_in_levels) %>%
+		uncount(shards) %>%
+		pull(weight)
 
 	# Count indexes
 	# lv 1
@@ -1869,16 +1896,19 @@ ARMET_tc = function(
 		count(idx_MPI) %>%
 		pull(n)
 
-	# MODEL
-	library(rstan)
-	fileConn<-file("~/.R/Makevars")
-	writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
-	close(fileConn)
+	# # MODEL
 	Sys.setenv("STAN_NUM_THREADS" = cores)
-	ARMET_tc_model = stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc.stan")
+
+
+	# library(rstan)
+	# fileConn<-file("~/.R/Makevars")
+	# writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
+	# close(fileConn)
+	# ARMET_tc_model = stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc.stan")
+
 
 	Sys.time() %>% print
-browser()
+
 	fit =
 		switch(
 			full_bayes %>% `!` %>% sum(1),
@@ -1886,7 +1916,7 @@ browser()
 			# HMC
 			sampling(
 				stanmodels$ARMET_tc, #ARMET_tc_model, #,
-				chains=6, cores=6,
+				chains=3, cores=3,
 				iter=iterations, warmup=iterations-sampling_iterations,
 				#include = F, pars=c("prop_a", "prop_b", "prop_c", "prop_d", "prop_e"),
 				pars=c("prop_1", "prop_2", "prop_3", "prop_4", "exposure_rate", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),

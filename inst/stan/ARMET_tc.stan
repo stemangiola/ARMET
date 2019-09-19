@@ -693,6 +693,7 @@ data {
 	real sigma_intercept_prior[2];
 
 
+	vector[sum(shards_in_levels)] weights;
 }
 transformed data{
 
@@ -1144,5 +1145,33 @@ target += sum(map_rect(
 		),
 		real_data2,
 		int_package
-	));
+	) .* weights);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,7 +1,9 @@
 library(tidyverse)
 library(purrr)
 library(furrr)
-source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/e4ec6a2348efc2f62b88f10b12e70f4c6273a10a/tidy_extensions.R")
+source(
+	"https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/a7479898357de6e109419be49fe264be7775e9a9/tidy_extensions.R"
+)
 options(future.globals.maxSize = 50000 * 1024 ^ 2)
 
 give_rank_to_ref = function(fit_df, level, lambda_threshold = 5) {
@@ -49,7 +51,6 @@ give_rank_to_ref = function(fit_df, level, lambda_threshold = 5) {
 			select(..., everything())
 	}
 
-	n_ct = fit_df %>% distinct(`Cell type category`) %>% nrow
 
 	fit_df %>%
 		left_join(
@@ -116,7 +117,7 @@ give_rank_to_ref = function(fit_df, level, lambda_threshold = 5) {
 				sigma_raw,
 				`gene error mean`,
 				regression,
-				bimodality_NB, bimodality_NB_diff, `marker too noisy`, `symbol too noisy`
+				bimodality
 			)
 		) %>%
 		filter(lambda > !!lambda_threshold) %>%
@@ -127,11 +128,14 @@ give_rank_to_ref = function(fit_df, level, lambda_threshold = 5) {
 
 		# If a marker exists for more cell types (can happen) none of them can be noisy otherwise we screw up the whole gene
 		ungroup() %>%
-
-		# Filter symbols that have more than 10% of noisy markers for any cell type
-		filter(`symbol too noisy` <= (n_ct*0.15) %>% floor ) %>%
-
+		mutate(`too noisy` = (regression >= 0.2 & sigma_raw >= 0.5) | (bimodality >= 0.8)) %>%
+		group_by(symbol) %>%
+		mutate(`too noisy` = `too noisy` %>% any()) %>%
+		ungroup %>%
+		filter(!`too noisy`) %>%
 		group_by(comparison, pair) %>%
+
+		#filter(`gene error mean` < fit_threshold) %>%
 		arrange(delta) %>%
 		mutate(rank = 1:n()) %>%
 		ungroup() %>%
@@ -151,6 +155,24 @@ create_ref = function(ref, markers) {
 
 		select(-contains("idx")) %>%
 		mutate(`read count` = `read count` %>% as.integer)
+}
+
+get_NB_qq_values = function(input.df) {
+	input.df = input.df %>% arrange(`read count normalised bayes`)
+
+	predicted_NB =
+		qnbinom(
+			# If 1 sample, just use median
+			switch(
+				input.df %>% nrow %>% `>` (1) %>% `!` %>% sum(1),
+				ppoints(input.df$`read count normalised bayes`),
+				0.5
+			),
+			size = input.df$sigma_raw %>% unique %>% exp %>% `^` (-1),
+			mu = input.df$lambda %>% unique %>% exp
+		)
+
+	input.df %>%	mutate(predicted_NB = predicted_NB)
 }
 
 plot_trends = function(input.df, symbols) {
@@ -198,22 +220,6 @@ plot_boxplot = function(input.df, symbols) {
 		scale_y_log10()
 }
 
-mixture_mu_ratios = function(x){
-	ss = SIBERG::SIBER(x, model='NB')
-	max(ss[1], ss[2]) / (min(ss[1], ss[2]) + 1)
-}
-
-
-regression_coefficient = function(x){
-
-	mdf = x %>%
-		get_NB_qq_values %>%
-		mutate(a = `read count normalised bayes` %>% `+` (1) %>% log,
-					 b = predicted_NB %>% `+` (1) %>% log)
-
-	lm(a ~  b + I(b ^ 2), data = mdf)$coefficients[3]
-}
-
 
 sample_blacklist = c(
 	"666CRI",
@@ -241,130 +247,39 @@ ref =
 						 		sample_blacklist %>% paste(collapse = "|"), sample
 						 	)))
 
+# ref_2 =
+# 	ref %>%
+# 	#inner_join( (.) %>% distinct(symbol) %>% slice(1:20000)) %>%
+# 	do_parallel_start(
+# 		.f = ~ {
+# 			.x %>%
+# 				get_NB_qq_values %>%
+# 				mutate(
+# 					a = `read count normalised bayes` %>% `+` (1) %>% log,
+# 					b = predicted_NB %>% `+` (1) %>% log
+# 				) %>%
+# 				mutate(regression = lm(a ~  b + I(b^2), data = (.))$coefficients[3])
+# 	} ,
+# 	`Cell type category`,symbol, level
+# )
+
+
 ref_2 =
 	ref %>%
-
-	# Add regression coefficients
-	do_parallel_start(30, "symbol") %>%
+	group_by(`Cell type category`, symbol, level) %>%
 	do({
+		mdf = (.) %>%
+			get_NB_qq_values %>%
+			mutate(a = `read count normalised bayes` %>% `+` (1) %>% log,
+						 b = predicted_NB %>% `+` (1) %>% log)
 
-		`%>%` = magrittr::`%>%`
-		library(tidyverse)
-		library(magrittr)
-
-		get_NB_qq_values = function(input.df) {
-			input.df = input.df %>% arrange(`read count normalised bayes`)
-
-			predicted_NB =
-				qnbinom(
-					# If 1 sample, just use median
-					switch(
-						input.df %>% nrow %>% `>` (1) %>% `!` %>% sum(1),
-						ppoints(input.df$`read count normalised bayes`),
-						0.5
-					),
-					size = input.df$sigma_raw %>% unique %>% exp %>% `^` (-1),
-					mu = input.df$lambda %>% unique %>% exp
-				)
-
-			input.df %>%	mutate(predicted_NB = predicted_NB)
-		}
-
-		(.) %>%
-			group_by(`Cell type category`, symbol, level) %>%
-			do({
-				mdf = (.) %>%
-					get_NB_qq_values %>%
-					mutate(a = `read count normalised bayes` %>% `+` (1) %>% log,
-								 b = predicted_NB %>% `+` (1) %>% log)
-
-				mdf %>%
-					mutate(regression = lm(a ~  b + I(b ^ 2), data = (.))$coefficients[3])
-
-			})
+		mdf %>%
+			mutate(regression = lm(a ~  b + I(b ^ 2), data = (.))$coefficients[3])
 	}) %>%
-	do_parallel_end() %>%
 
 	# Calculate bimodality
-	# mutate(bimodality = modes::bimodality_coefficient(`read count normalised bayes` )) %>%
-	# ungroup %>%
-
-	# Calculate bimodality
-	do_parallel_start(30, "symbol") %>%
-	do({
-
-		`%>%` = magrittr::`%>%`
-		library(tidyverse)
-		library(magrittr)
-
-		siberg_iterative = function(x) {
-
-			if(x %>% unique %>% length %>% `<` (5)) return(c(NA, NA))
-
-
-
-			mu = NA
-			max_i = ceiling(length(x)/10)
-			i = 0
-			while (mu %>% is.na | i <= max_i) {
-				res = SIBERG::SIBER(x, model='NB')
-
-				BI = res[7]
-				mu = res[1]
-				x = x[-1]
-				i = i+1
-
-			}
-
-
-			if(mu %>% is.na & x %>% length %>% `<` (8)) return(c(NA, NA))
-
-			return(c(
-				max(res[1], res[2]) / (min(res[1], res[2]) + 1),
-				res[7]
-			))
-		}
-
-
-
-		(.) %>%
-			group_by(`Cell type category`, symbol, level) %>%
-			do({
-				res = siberg_iterative((.) %>% pull(`read count normalised bayes`) %>% as.integer)
-				(.) %>% mutate(bimodality_NB = res[2], bimodality_NB_diff = res[1])
-
-			})
-	}) %>%
-	do_parallel_end() %>%
-
-	# Classify noisy genes
-	mutate(
-		`marker too noisy` =
-
-			# Regression too parabolic
-			(regression >= 0.2 & sigma_raw >= 0.5) |
-
-			# Too bimodal
-			( (bimodality_NB > 0.5 & bimodality_NB_diff > 10) | bimodality_NB_diff > 100)
-
-	) %>%
-
-	# If NA is bad
-	mutate(`marker too noisy` = ifelse(`marker too noisy` %>% is.na, T, `marker too noisy`)) %>%
-
-	# Salve all really lowly transcribed
-	mutate(`marker too noisy` = ifelse(lambda <= log(10), F, `marker too noisy`)) %>%
-	mutate(`marker too noisy` = ifelse(sigma_raw <= 0, F, `marker too noisy`)) %>%
-
-	# Summarise by each gene
-	left_join(
-		(.) %>%
-			distinct(level, `Cell type category`, symbol, `marker too noisy`) %>%
-			group_by(level, symbol) %>%
-			summarise(`symbol too noisy` = sum(`marker too noisy`))
-	)
-
-
+	mutate(bimodality = modes::bimodality_coefficient(`read count normalised bayes` )) %>%
+	ungroup()
 
 # Some plots
 # ref_2 %>%
@@ -428,8 +343,8 @@ ref_3 =
 
 # (ref_3 %>% filter(ct1 == "epithelial" & ct2 == "endothelial" & level ==1) %>%
 # 		arrange(rank) %>% inner_join( (.) %>% distinct(symbol) %>% slice(1:50)) %>%
-# 		ggplot(aes(x=`Cell type category`, y=`read count normalised bayes`+1, color=`marker too noisy`)) +
-# 		geom_jitter() + facet_wrap(~symbol ) + scale_y_log10() ) %>% plotly::ggplotly()
+# 		ggplot(aes(x=`Cell type category`, y=`read count normalised bayes`+1, color=bimodality)) +
+# 		geom_jitter() + facet_wrap(~symbol ) + scale_y_log10() +scale_color_gradientn(colours = rainbow(5))) %>% plotly::ggplotly()
 
 ARMET_ref = ref_3 %>% mutate_if(is.character, as.factor) %>% mutate(`read count normalised bayes` = `read count normalised bayes` %>% as.integer)
 

@@ -32,8 +32,8 @@ my_theme =
 # Get level
 args <- commandArgs(TRUE)
 
-reps = args[1] %>% as.integer
- reps = 10
+n_markers = args[1] %>% as.integer
+reps = 10
 is_full_bayesian = args[2] %>% as.integer %>% as.logical
 is_full_bayesian = T
 
@@ -43,8 +43,6 @@ out_dir %>% dir.create()
 iterations = 500
 
 # Variable should be already set
-
-# ref = read_csv("docs/ref_1_2_3_4.csv")
 
 decrease_replicates = function(my_df, n_pass=1){
 
@@ -457,24 +455,10 @@ get_input_data = function(markers, reps, pass){
 
 }
 
-
-#source("R/ARMET_tc.R")
-
-mix_base = readRDS("~/PhD/deconvolution/ARMET/dev/mix_base.RDS")
+mix_base = readRDS("dev/mix_base.RDS")
 my_ref = 	mix_base %>% distinct(sample, `Cell type category`, level)
 
 set.seed(123)
-
-# %>%
-# 	filter( ! grepl(sample_blacklist %>% paste(collapse="|"), sample))
-
-#
-marker_df =
-	give_rank_to_ref(ref %>% filter(level ==1), 1, 0.5) %>%
-	rbind(give_rank_to_ref(ref %>% filter(level ==2), 2, 0.4)) %>%
-	rbind(give_rank_to_ref(ref %>% filter(level ==3), 3, 0.5)) %>%
-	rbind(give_rank_to_ref(ref %>% filter(level ==4), 4, 0.5)) %>%
-	separate(pair, c("ct1", "ct2"), sep=" ", remove = F)
 
 get_mix_source = function(){
 	{
@@ -583,41 +567,12 @@ mix_source = get_mix_source()
 # 	) %>% plotly::ggplotly()
 
 
-# TEST
-
-# source("R/ARMET_tc.R")
-# test =
-# 	get_markers_number(0, NULL, NULL) %>%
-# 	get_markers_df(0) %>%
-# 	get_input_data(reps = reps, pass = 0) %>%
-# 	{	ARMET_tc(
-# 		(.) %$% mix,
-# 		# (.) %$% reference,
-# 		(.) %$% reference %>%
-# 			inner_join(
-# 				(.) %>%
-# 					distinct(symbol, ct1, ct2, `house keeping`) %>%
-# 					mutate(n = ifelse(`house keeping`, 30, 5)) %>%
-# 					group_by(ct1, ct2, `house keeping`) %>%
-# 					filter(row_number() <= n) %>%
-# 					ungroup() %>%
-# 					select(-n)
-# 				),
-# 		iterations = 250,
-# 		full_bayes = F,
-# 		cores = 8
-# 	)}
+# foreach(n_markers = c(1:10, seq(15, 50, 5), seq(50, 100, 10))) %do% {
 #
-
-# Pass 0
-
-
-foreach(n_markers = c(1:10, seq(15, 50, 5), seq(50, 100, 10))) %do% {
-
-	file_name = sprintf("%s/markers_%s.RData", out_dir, n_markers)
-
-	if(file.exists(file_name) %>% `!`) {
-		try(
+# 	file_name = sprintf("%s/markers_%s.RData", out_dir, n_markers)
+#
+# 	if(file.exists(file_name) %>% `!`) {
+# 		try(
 
 					ARMET_tc(
 						mix_source %>%
@@ -634,9 +589,9 @@ foreach(n_markers = c(1:10, seq(15, 50, 5), seq(50, 100, 10))) %do% {
 					cores = 10,
 				) %>%
 				saveRDS(file=file_name)
-		)
-	}
-}
+# 		)
+# 	}
+# }
 
 
 # Create reference data set
