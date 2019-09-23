@@ -63,3 +63,13 @@ temp*
 *torque*
 dev/feature_selection*
 dev/run*
+log*
+docs/RECOVERED_FILES/*
+src/ARMET.dll
+src/ARMET.so
+src/stanExports_ARMET_tc.h
+dev/ref_1_2_3_4.csv
+dev/ARMET_ref_Aug2019.RData
+last.dump.rda
+src/ARMET.so
+src/stanExports_ARMET_tc.h

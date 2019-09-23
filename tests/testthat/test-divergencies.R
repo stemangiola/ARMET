@@ -243,7 +243,7 @@ mix_source = get_mix_source()
 res =
   ARMET_tc(
     mix_source %>%
-      inner_join( (.) %>% distinct(sample_mix) %>% slice(1:2) ) %>%
+      inner_join( (.) %>% distinct(sample_mix) %>% slice(1:20) ) %>%
       distinct(symbol, sample_mix, `read count mix`) %>%
       drop_na %>%
       spread(`sample_mix`, `read count mix`) %>%
@@ -257,12 +257,3 @@ res =
     iterations = 250 #,sampling_iterations = 2
   )
 
-test_that("Test data frame",{ expect_equal( ncol(ttSc::counts_sc), 6 ) })
-
-test_that("Create tt object from tibble",{
-
-  expect_equal( ncol(tt), 11 )
-
-  expect_equal( typeof(attr(tt, "parameters")), "list")
-
-})
