@@ -37,6 +37,8 @@ reps = 10
 is_full_bayesian = args[2] %>% as.integer %>% as.logical
 is_full_bayesian = T
 
+levels = 1:(args[3] %>% as.integer)
+
 #out_dir = Sys.time() %>% format("%a_%b_%d_%X") %>% gsub("[: ]", "_", .) %>% sprintf("dev/feature_selection_%s", .)
 out_dir = args[2]  %>% sprintf("dev/feature_selection_%s", .)
 out_dir %>% dir.create()
@@ -530,7 +532,7 @@ ARMET_tc(
 	iterations = 250,
 	n_markers = ARMET::ARMET_ref %>% distinct(ct1, ct2) %>% mutate(`n markers` = n_markers),
 	full_bayes = T,
-	cores = 10,
+	cores = 10, levels = levels
 ) %>%
 	saveRDS(file=file_name)
 # 		)
@@ -539,26 +541,39 @@ ARMET_tc(
 
 #qsub -l nodes=1:ppn=12,mem=32gb,walltime=18:00:00 dev/job_torque.sh -F "20 fist_run"
 
-res_dir = "dev/feature_selection_fist_run"
-
-res =
-	dir(res_dir, full.names = T) %>%
-		map_dfr(
-			~ .x %>%
-				readRDS() %$%
-				proportions %>%
-				mutate(n_markers = .x)
-		) %>%
-	separate(sample, c("run", "pair"), sep="_", extra="merge") %>%
-	separate(pair, c("ct1", "ct2"), sep=" ") %>%
-	filter(`Cell type category` %in% c(ct1, ct2)) %>%
-	separate(n_markers, c("path", "n_markers"), sep="markers_") %>%
-	separate(n_markers, c("n_markers", "extension"), sep="\\.") %>%
-	mutate(CI = .upper - .lower) %>%
-	mutate(error = .value %>% `+` (-0.5) %>% abs)
-
-res %>%
-	ggplot(aes(x=n_markers, y=error, color=`Cell type category`)) + geom_point()
+# Plot results
+# res_dir = "dev/feature_selection_fist_run_normal_queue/"
+#
+# res =
+# 	dir(res_dir, full.names = T) %>%
+# 		map_dfr(
+# 			~ .x %>%
+# 				readRDS() %$%
+# 				proportions %>%
+# 				mutate(n_markers = .x)
+# 		) %>%
+# 	separate(sample, c("run", "pair"), sep="_", extra="merge") %>%
+# 	separate(pair, c("ct1", "ct2"), sep=" ") %>%
+# 	filter(`Cell type category` == ct1 | `Cell type category` == ct2) %>%
+# 	separate(n_markers, c("path", "n_markers"), sep="markers_") %>%
+# 	separate(n_markers, c("n_markers", "extension"), sep="\\.") %>%
+# 	mutate(CI = .upper - .lower) %>%
+# 	mutate(error = .value %>% `+` (-0.5) %>% abs)
+#
+# res %>%
+# 	filter(level ==4) %>%
+# 	mutate(n_markers = n_markers %>% as.integer) %>%
+# 	ggplot(aes(x=n_markers, y=error, color=`Cell type category`)) +
+# 	geom_point() +
+# 	geom_smooth(method = "lm")
+#
+# (res %>%
+# 	filter(level ==2) %>%
+# 	mutate(n_markers = n_markers %>% as.integer) %>%
+# 	ggplot(aes(x=n_markers, y=error, color=`Cell type category`, size=CI, Q=Q, C=C)) +
+# 	geom_point() +
+# 	geom_smooth(method = "lm")
+# ) %>% plotly::ggplotly()
 
 # Create reference data set
 

@@ -281,10 +281,12 @@ functions{
 
 
 	int[,] append_int_MPI_arrays(int[,] lv1, int[,] lv2, int[,] lv3, int[,] lv4){
-		int dim_1[2] = dims(lv1);
-		int dim_2[2] = dims(lv2);
-		int dim_3[2] = dims(lv3);
-		int dim_4[2] = dims(lv4);
+
+		# This is for the BUG that dim(int empty_variable[0,0]) is not {0,0} but {0}
+		int dim_1[2] = size(dims(lv1)) == 2 ? dims(lv1) : rep_array(0,2);
+		int dim_2[2] = size(dims(lv2)) == 2 ? dims(lv2) : rep_array(0,2);
+		int dim_3[2] = size(dims(lv3)) == 2 ? dims(lv3) : rep_array(0,2);
+		int dim_4[2] = size(dims(lv4)) == 2 ? dims(lv4) : rep_array(0,2);
 
 		int max_cols = max({dim_1[2], dim_2[2],dim_3[2],dim_4[2]});
 		int tot_rows = dim_1[1] + dim_2[1] + dim_3[1] + dim_4[1];
@@ -296,49 +298,112 @@ functions{
 
 
 		for(r in 1:dim_1[1]) merged[i+r] = append_array(lv1[r], rep_int(-999, max_cols-dim_1[2]));
-
 		i += dim_1[1];
-		for(r in 1:dim_2[1]) merged[i+r] = append_array(lv2[r], rep_int(-999, max_cols-dim_2[2]));
 
-		i += dim_2[1];
-		for(r in 1:dim_3[1]) merged[i+r] = append_array(lv3[r], rep_int(-999, max_cols-dim_3[2]));
+		if(dim_2[1] > 0) {
+			for(r in 1:dim_2[1]) merged[i+r] = append_array(lv2[r], rep_int(-999, max_cols-dim_2[2]));
+			i += dim_2[1];
+		}
 
-		i += dim_3[1];
-		for(r in 1:dim_4[1]) merged[i+r] = append_array(lv4[r], rep_int(-999, max_cols-dim_4[2]));
+		if(dim_3[1] > 0) {
+			for(r in 1:dim_3[1]) merged[i+r] = append_array(lv3[r], rep_int(-999, max_cols-dim_3[2]));
+			i += dim_3[1];
+		}
 
+		if(dim_4[1] > 0) {
+			for(r in 1:dim_4[1]) merged[i+r] = append_array(lv4[r], rep_int(-999, max_cols-dim_4[2]));
+		}
 
 		return(merged);
 
 	}
 
 	vector[] append_real_MPI_arrays(vector[] lv1, vector[] lv2, vector[] lv3, vector[] lv4){
-		int dim_1[2] = {num_elements(lv1[,1]), num_elements(lv1[1])};
-		int dim_2[2] = {num_elements(lv2[,1]), num_elements(lv2[1])};
-		int dim_3[2] = {num_elements(lv3[,1]), num_elements(lv3[1])};
-		int dim_4[2] = {num_elements(lv4[,1]), num_elements(lv4[1])};
 
-		int max_cols = max({dim_1[2], dim_2[2],dim_3[2],dim_4[2]});
-		int tot_rows = dim_1[1] + dim_2[1] + dim_3[1] + dim_4[1];
+
+		int dim_1[2];
+		int dim_2[2];
+		int dim_3[2];
+		int dim_4[2];
+
+		int max_cols = max({
+			num_elements(lv1) > 0 ? num_elements(lv1[1]) : 0,
+			num_elements(lv2) > 0 ? num_elements(lv2[1]) : 0,
+			num_elements(lv3) > 0 ? num_elements(lv3[1]) : 0,
+			num_elements(lv4) > 0 ? num_elements(lv4[1]) : 0
+		});
+		int tot_rows =
+		( num_elements(lv1) > 0 ? num_elements(lv1[,1]) : 0) +
+		(	num_elements(lv2) > 0 ? num_elements(lv2[,1]) : 0) +
+		(	num_elements(lv3) > 0 ? num_elements(lv3[,1]) : 0) +
+		(	num_elements(lv4) > 0 ? num_elements(lv4[,1]) : 0);
 
 		vector[max_cols] merged[tot_rows];
 		int i = 0;
 
+		if(num_elements(lv1) > 0) dim_1 =  {num_elements(lv1[,1]), num_elements(lv1[1])};
+		else dim_1 = rep_array(0,2);
+
+		if(num_elements(lv2) > 0) dim_2 =  {num_elements(lv2[,1]), num_elements(lv2[1])};
+		else dim_2 = rep_array(0,2);
+
+		if(num_elements(lv3) > 0) dim_3 =  {num_elements(lv3[,1]), num_elements(lv3[1])};
+		else dim_3 = rep_array(0,2);
+
+		if(num_elements(lv4) > 0) dim_4 =  {num_elements(lv4[,1]), num_elements(lv4[1])};
+		else dim_4 = rep_array(0,2);
 
 		for(r in 1:dim_1[1]) merged[i+r] = append_row(lv1[r], rep_vector(-999, max_cols-dim_1[2]));
-
 		i += dim_1[1];
+
+	if(dim_2[1] > 0) {
 		for(r in 1:dim_2[1]) merged[i+r] = append_row(lv2[r], rep_vector(-999, max_cols-dim_2[2]));
-
 		i += dim_2[1];
+	}
+
+	if(dim_3[1] > 0) {
 		for(r in 1:dim_3[1]) merged[i+r] = append_row(lv3[r], rep_vector(-999, max_cols-dim_3[2]));
-
 		i += dim_3[1];
-		for(r in 1:dim_4[1]) merged[i+r] = append_row(lv4[r], rep_vector(-999, max_cols-dim_4[2]));
+	}
 
+	if(dim_4[1] > 0) {
+		for(r in 1:dim_4[1]) merged[i+r] = append_row(lv4[r], rep_vector(-999, max_cols-dim_4[2]));
+	}
 
 		return(merged);
 
 	}
+
+	// vector[] append_real_MPI_arrays_3(vector[] lv1, vector[] lv2, vector[] lv3){
+	//
+	//
+	// 	int dim_1[2] = {num_elements(lv1[,1]), num_elements(lv1[1])};
+	// 	int dim_2[2] = {num_elements(lv2[,1]), num_elements(lv2[1])};
+	// 	int dim_3[2] = {num_elements(lv3[,1]), num_elements(lv3[1])};
+	//
+	// 	int max_cols = max({dim_1[2], dim_2[2],dim_3[2]});
+	// 	int tot_rows = dim_1[1] + dim_2[1] + dim_3[1];
+	//
+	// 	vector[max_cols] merged[tot_rows];
+	// 	int i = 0;
+	//
+	//
+	// 	for(r in 1:dim_1[1]) merged[i+r] = append_row(lv1[r], rep_vector(-999, max_cols-dim_1[2]));
+	// 	i += dim_1[1];
+	//
+	// if(dim_2[1] > 0) {
+	// 	for(r in 1:dim_2[1]) merged[i+r] = append_row(lv2[r], rep_vector(-999, max_cols-dim_2[2]));
+	// 	i += dim_2[1];
+	// }
+	//
+	// if(dim_3[1] > 0) {
+	// 	for(r in 1:dim_3[1]) merged[i+r] = append_row(lv3[r], rep_vector(-999, max_cols-dim_3[2]));
+	// 	i += dim_3[1];
+	// }
+	//
+	// 	return(merged);
+	//
+	// }
 
 	vector lp_reduce( vector global_parameters , vector local_parameters , real[] real_data , int[] int_data ) {
 
@@ -533,7 +598,7 @@ functions{
 data {
 	// shards
 	int<lower=1> shards;
-
+	int is_level_in[4];
 	// Reference matrix inference
 	int<lower=0> G;
 	int<lower=0> GM;
@@ -597,92 +662,92 @@ data {
 	int y_linear_S_4[Y_4];
 
 	// MPI
-	int<lower=1> shards_in_levels[4];
+	int<lower=0> shards_in_levels[4];
 
 	// MPI lv1
-	int<lower=0> size_counts_idx_lv_1_MPI[shards_in_levels[1]];
+	int<lower=0> size_counts_idx_lv_1_MPI[max(shards_in_levels[1], 1)];
 	int counts_idx_lv_1_MPI[shards_in_levels[1], max(size_counts_idx_lv_1_MPI)];
-	int size_counts_G_lv_1_MPI[shards_in_levels[1]];
-	int size_counts_S_lv_1_MPI[shards_in_levels[1]];
-	int size_y_linear_S_1_MPI[shards_in_levels[1]];
-	int size_y_linear_1_MPI[shards_in_levels[1]];
+	int size_counts_G_lv_1_MPI[max(shards_in_levels[1], 1)];
+	int size_counts_S_lv_1_MPI[max(shards_in_levels[1], 1)];
+	int size_y_linear_S_1_MPI[max(shards_in_levels[1], 1)];
+	int size_y_linear_1_MPI[max(shards_in_levels[1], 1)];
 	int y_linear_1_MPI[shards_in_levels[1],max(size_y_linear_1_MPI)];
 	int y_linear_S_1_MPI[shards_in_levels[1],max(size_y_linear_1_MPI)];
 	int counts_G_lv_1_MPI[shards_in_levels[1],max(size_counts_G_lv_1_MPI)];
 	int counts_S_lv_1_MPI[shards_in_levels[1],max(size_counts_S_lv_1_MPI)];
-	int size_G1_linear_MPI[shards_in_levels[1]];
+	int size_G1_linear_MPI[max(shards_in_levels[1], 1)];
 	int G1_linear_MPI[shards_in_levels[1],max(size_G1_linear_MPI)];
-	int size_counts_G_lv_1_MPI_non_redundant[shards_in_levels[1]];
+	int size_counts_G_lv_1_MPI_non_redundant[max(shards_in_levels[1], 1)];
 	int counts_G_lv_1_MPI_non_redundant[shards_in_levels[1], max(size_counts_G_lv_1_MPI_non_redundant)];
 	int counts_G_lv_1_MPI_non_redundant_reps[shards_in_levels[1], max(size_counts_G_lv_1_MPI_non_redundant)];
 
 	// MPI lv2
-	int<lower=0> size_counts_idx_lv_2_MPI[shards_in_levels[2]];
+	int<lower=0> size_counts_idx_lv_2_MPI[max(shards_in_levels[2], 1)];
 	int counts_idx_lv_2_MPI[shards_in_levels[2], max(size_counts_idx_lv_2_MPI)];
-	int size_counts_G_lv_2_MPI[shards_in_levels[2]];
-	int size_counts_S_lv_2_MPI[shards_in_levels[2]];
-	int size_y_linear_S_2_MPI[shards_in_levels[2]];
-	int size_y_linear_2_MPI[shards_in_levels[2]];
+	int size_counts_G_lv_2_MPI[max(shards_in_levels[2], 1)];
+	int size_counts_S_lv_2_MPI[max(shards_in_levels[2], 1)];
+	int size_y_linear_S_2_MPI[max(shards_in_levels[2], 1)];
+	int size_y_linear_2_MPI[max(shards_in_levels[2], 1)];
 	int y_linear_2_MPI[shards_in_levels[2],max(size_y_linear_2_MPI)];
 	int y_linear_S_2_MPI[shards_in_levels[2],max(size_y_linear_2_MPI)];
 	int counts_G_lv_2_MPI[shards_in_levels[2],max(size_counts_G_lv_2_MPI)];
 	int counts_S_lv_2_MPI[shards_in_levels[2],max(size_counts_S_lv_2_MPI)];
-	int size_G2_linear_MPI[shards_in_levels[2]];
+	int size_G2_linear_MPI[max(shards_in_levels[2], 1)];
 	int G2_linear_MPI[shards_in_levels[2],max(size_G2_linear_MPI)];
-	int size_counts_G_lv_2_MPI_non_redundant[shards_in_levels[2]];
+	int size_counts_G_lv_2_MPI_non_redundant[max(shards_in_levels[2], 1)];
 	int counts_G_lv_2_MPI_non_redundant[shards_in_levels[2], max(size_counts_G_lv_2_MPI_non_redundant)];
 	int counts_G_lv_2_MPI_non_redundant_reps[shards_in_levels[2], max(size_counts_G_lv_2_MPI_non_redundant)];
 
 	// MPI lv3
-	int<lower=0> size_counts_idx_lv_3_MPI[shards_in_levels[3]];
+	int<lower=0> size_counts_idx_lv_3_MPI[max(shards_in_levels[3], 1)];
 	int counts_idx_lv_3_MPI[shards_in_levels[3], max(size_counts_idx_lv_3_MPI)];
-	int size_counts_G_lv_3_MPI[shards_in_levels[3]];
-	int size_counts_S_lv_3_MPI[shards_in_levels[3]];
-	int size_y_linear_S_3_MPI[shards_in_levels[3]];
-	int size_y_linear_3_MPI[shards_in_levels[3]];
+	int size_counts_G_lv_3_MPI[max(shards_in_levels[3], 1)];
+	int size_counts_S_lv_3_MPI[max(shards_in_levels[3], 1)];
+	int size_y_linear_S_3_MPI[max(shards_in_levels[3], 1)];
+	int size_y_linear_3_MPI[max(shards_in_levels[3], 1)];
 	int y_linear_3_MPI[shards_in_levels[3],max(size_y_linear_3_MPI)];
 	int y_linear_S_3_MPI[shards_in_levels[3],max(size_y_linear_3_MPI)];
 	int counts_G_lv_3_MPI[shards_in_levels[3],max(size_counts_G_lv_3_MPI)];
 	int counts_S_lv_3_MPI[shards_in_levels[3],max(size_counts_S_lv_3_MPI)];
-	int size_G3_linear_MPI[shards_in_levels[3]];
+	int size_G3_linear_MPI[max(shards_in_levels[3], 1)];
 	int G3_linear_MPI[shards_in_levels[3],max(size_G3_linear_MPI)];
-	int size_counts_G_lv_3_MPI_non_redundant[shards_in_levels[3]];
+	int size_counts_G_lv_3_MPI_non_redundant[max(shards_in_levels[3], 1)];
 	int counts_G_lv_3_MPI_non_redundant[shards_in_levels[3], max(size_counts_G_lv_3_MPI_non_redundant)];
 	int counts_G_lv_3_MPI_non_redundant_reps[shards_in_levels[3], max(size_counts_G_lv_3_MPI_non_redundant)];
 
 	// MPI lv4
-	int<lower=0> size_counts_idx_lv_4_MPI[shards_in_levels[4]];
+	int<lower=0> size_counts_idx_lv_4_MPI[max(shards_in_levels[4], 1)];
 	int counts_idx_lv_4_MPI[shards_in_levels[4], max(size_counts_idx_lv_4_MPI)];
-	int size_counts_G_lv_4_MPI[shards_in_levels[4]];
-	int size_counts_S_lv_4_MPI[shards_in_levels[4]];
-	int size_y_linear_S_4_MPI[shards_in_levels[4]];
-	int size_y_linear_4_MPI[shards_in_levels[4]];
+	int size_counts_G_lv_4_MPI[max(shards_in_levels[4], 1)];
+	int size_counts_S_lv_4_MPI[max(shards_in_levels[4], 1)];
+	int size_y_linear_S_4_MPI[max(shards_in_levels[4], 1)];
+	int size_y_linear_4_MPI[max(shards_in_levels[4], 1)];
 	int y_linear_4_MPI[shards_in_levels[4],max(size_y_linear_4_MPI)];
 	int y_linear_S_4_MPI[shards_in_levels[4],max(size_y_linear_4_MPI)];
 	int counts_G_lv_4_MPI[shards_in_levels[4],max(size_counts_G_lv_4_MPI)];
 	int counts_S_lv_4_MPI[shards_in_levels[4],max(size_counts_S_lv_4_MPI)];
-	int size_G4_linear_MPI[shards_in_levels[4]];
+	int size_G4_linear_MPI[max(shards_in_levels[4], 1)];
 	int G4_linear_MPI[shards_in_levels[4],max(size_G4_linear_MPI)];
-	int size_counts_G_lv_4_MPI_non_redundant[shards_in_levels[4]];
+	int size_counts_G_lv_4_MPI_non_redundant[max(shards_in_levels[4], 1)];
 	int counts_G_lv_4_MPI_non_redundant[shards_in_levels[4], max(size_counts_G_lv_4_MPI_non_redundant)];
 	int counts_G_lv_4_MPI_non_redundant_reps[shards_in_levels[4], max(size_counts_G_lv_4_MPI_non_redundant)];
 
 
 	// Lv2 tree structure parents singles
-	int<lower=1> SLV2;
-	int<lower=1> PLV2;
+	int<lower=0> SLV2;
+	int<lower=0> PLV2;
 	int parents_lv2[PLV2]; // Level one parents
 	int singles_lv2[SLV2]; // Level 1 leafs
 
 	// Lv3 tree structure parents singles
-	int<lower=1> SLV3;
-	int<lower=1> PLV3;
+	int<lower=0> SLV3;
+	int<lower=0> PLV3;
 	int parents_lv3[PLV3]; // Level one parents
 	int singles_lv3[SLV3]; // Level 1 leafs
 
 	// Lv4 tree structure parents singles
-	int<lower=1> SLV4;
-	int<lower=1> PLV4;
+	int<lower=0> SLV4;
+	int<lower=0> PLV4;
 	int parents_lv4[PLV4]; // Level one parents
 	int singles_lv4[SLV4]; // Level 1 leafs
 
@@ -702,19 +767,24 @@ transformed data{
 
 	int dim_indices = 10;
 
-	// Here I am building the whole int package to not have to calculate it every time
-	int int_package[sum(shards_in_levels), dim_indices +	max({
-			max(size_counts_idx_lv_1_MPI) + max(size_counts_G_lv_1_MPI_non_redundant) + max(size_y_linear_1_MPI),
-			max(size_counts_idx_lv_2_MPI) + max(size_counts_G_lv_2_MPI_non_redundant) + max(size_y_linear_2_MPI),
-			max(size_counts_idx_lv_3_MPI) + max(size_counts_G_lv_3_MPI_non_redundant) + max(size_y_linear_3_MPI),
-			max(size_counts_idx_lv_4_MPI) + max(size_counts_G_lv_4_MPI_non_redundant) + max(size_y_linear_4_MPI)
-		})] = append_int_MPI_arrays(
-			package_int(			ct_in_levels[1],			G1/ct_in_levels[1],			Q,			shards_in_levels[1],			counts_linear,			size_counts_idx_lv_1_MPI,			size_counts_G_lv_1_MPI,	size_counts_G_lv_1_MPI_non_redundant,			size_counts_S_lv_1_MPI,			size_G1_linear_MPI,			size_y_linear_S_1_MPI,			size_y_linear_1_MPI,			counts_idx_lv_1_MPI,	counts_G_lv_1_MPI_non_redundant_reps,		y_linear_1_MPI		),
-			package_int(			ct_in_levels[2],			G2/ct_in_levels[2],			Q,			shards_in_levels[2],			counts_linear,			size_counts_idx_lv_2_MPI,			size_counts_G_lv_2_MPI,	size_counts_G_lv_2_MPI_non_redundant,			size_counts_S_lv_2_MPI,			size_G2_linear_MPI,			size_y_linear_S_2_MPI,			size_y_linear_2_MPI,			counts_idx_lv_2_MPI,	counts_G_lv_2_MPI_non_redundant_reps,				y_linear_2_MPI		),
-			package_int(			ct_in_levels[3],			G3/ct_in_levels[3],			Q,			shards_in_levels[3],			counts_linear,			size_counts_idx_lv_3_MPI,			size_counts_G_lv_3_MPI,	size_counts_G_lv_3_MPI_non_redundant,			size_counts_S_lv_3_MPI,			size_G3_linear_MPI,			size_y_linear_S_3_MPI,			size_y_linear_3_MPI,			counts_idx_lv_3_MPI,	counts_G_lv_3_MPI_non_redundant_reps,				y_linear_3_MPI		),
-			package_int(			ct_in_levels[4],			G4/ct_in_levels[4],			Q,			shards_in_levels[4],			counts_linear,			size_counts_idx_lv_4_MPI,			size_counts_G_lv_4_MPI,	size_counts_G_lv_4_MPI_non_redundant,			size_counts_S_lv_4_MPI,			size_G4_linear_MPI,			size_y_linear_S_4_MPI,			size_y_linear_4_MPI,			counts_idx_lv_4_MPI,	counts_G_lv_4_MPI_non_redundant_reps,				y_linear_4_MPI		)
+	int pack_1_cols = dim_indices + max(size_counts_idx_lv_1_MPI) + max(size_counts_G_lv_1_MPI_non_redundant) + max(size_y_linear_1_MPI);
+	int pack_2_cols = dim_indices + max(size_counts_idx_lv_2_MPI) + max(size_counts_G_lv_2_MPI_non_redundant) + max(size_y_linear_2_MPI);
+	int pack_3_cols = dim_indices + max(size_counts_idx_lv_3_MPI) + max(size_counts_G_lv_3_MPI_non_redundant) + max(size_y_linear_3_MPI);
+	int pack_4_cols = dim_indices + max(size_counts_idx_lv_4_MPI) + max(size_counts_G_lv_4_MPI_non_redundant) + max(size_y_linear_4_MPI);
 
-	);
+	int pack_1[shards_in_levels[1], pack_1_cols];
+	int pack_2[shards_in_levels[2], pack_2_cols];
+	int pack_3[shards_in_levels[3], pack_3_cols];
+	int pack_4[shards_in_levels[4], pack_4_cols];
+	int int_package[sum(shards_in_levels), max({pack_1_cols, pack_2_cols, pack_3_cols, pack_4_cols })];
+
+	if(is_level_in[1]) pack_1 = package_int(			ct_in_levels[1],			G1/ct_in_levels[1],			Q,	shards_in_levels[1],		counts_linear,	size_counts_idx_lv_1_MPI,		size_counts_G_lv_1_MPI,	size_counts_G_lv_1_MPI_non_redundant,		size_counts_S_lv_1_MPI,		size_G1_linear_MPI,		size_y_linear_S_1_MPI,	size_y_linear_1_MPI,		counts_idx_lv_1_MPI,counts_G_lv_1_MPI_non_redundant_reps,	y_linear_1_MPI		);
+	if(is_level_in[2]) pack_2 = package_int(			ct_in_levels[2],			G2/ct_in_levels[2],			Q,			shards_in_levels[2],			counts_linear,			size_counts_idx_lv_2_MPI,			size_counts_G_lv_2_MPI,	size_counts_G_lv_2_MPI_non_redundant,			size_counts_S_lv_2_MPI,			size_G2_linear_MPI,			size_y_linear_S_2_MPI,			size_y_linear_2_MPI,			counts_idx_lv_2_MPI,	counts_G_lv_2_MPI_non_redundant_reps,				y_linear_2_MPI		);
+	if(is_level_in[3]) pack_3 = package_int(			ct_in_levels[3],			G3/ct_in_levels[3],			Q,			shards_in_levels[3],			counts_linear,			size_counts_idx_lv_3_MPI,			size_counts_G_lv_3_MPI,	size_counts_G_lv_3_MPI_non_redundant,			size_counts_S_lv_3_MPI,			size_G3_linear_MPI,			size_y_linear_S_3_MPI,			size_y_linear_3_MPI,			counts_idx_lv_3_MPI,	counts_G_lv_3_MPI_non_redundant_reps,				y_linear_3_MPI		);
+	if(is_level_in[4]) pack_4 = package_int(			ct_in_levels[4],			G4/ct_in_levels[4],			Q,			shards_in_levels[4],			counts_linear,			size_counts_idx_lv_4_MPI,			size_counts_G_lv_4_MPI,	size_counts_G_lv_4_MPI_non_redundant,			size_counts_S_lv_4_MPI,			size_G4_linear_MPI,			size_y_linear_S_4_MPI,			size_y_linear_4_MPI,			counts_idx_lv_4_MPI,	counts_G_lv_4_MPI_non_redundant_reps,				y_linear_4_MPI		);
+
+	// Here I am building the whole int package to not have to calculate it every time
+	int_package	= append_int_MPI_arrays(pack_1, pack_2, pack_3, pack_4	)	;
 
 }
 parameters {
@@ -734,22 +804,22 @@ parameters {
 
   // Proportions
   // lv1
-  simplex[ct_in_nodes[1]]  prop_1[Q]; // Root
+  simplex[ct_in_nodes[1]]  prop_1[Q * is_level_in[1]]; // Root
 
   // lv2
-  simplex[ct_in_nodes[2]]  prop_a[Q]; // Immune cells
+  simplex[ct_in_nodes[2]]  prop_a[Q * is_level_in[2]]; // Immune cells
 
   // lv3
-  simplex[ct_in_nodes[3]]  prop_b[Q]; // b cells
-  simplex[ct_in_nodes[4]]  prop_c[Q]; // granulocyte
-  simplex[ct_in_nodes[5]]  prop_d[Q]; // mono_derived
-  simplex[ct_in_nodes[6]]  prop_e[Q]; // t_cell
+  simplex[ct_in_nodes[3]]  prop_b[Q * is_level_in[3]]; // b cells
+  simplex[ct_in_nodes[4]]  prop_c[Q * is_level_in[3]]; // granulocyte
+  simplex[ct_in_nodes[5]]  prop_d[Q * is_level_in[3]]; // mono_derived
+  simplex[ct_in_nodes[6]]  prop_e[Q * is_level_in[3]]; // t_cell
 
 	// lv4
-  simplex[ct_in_nodes[7]]  prop_f[Q]; // dendritic myeloid
-  simplex[ct_in_nodes[8]]  prop_g[Q]; // macrophage
-  simplex[ct_in_nodes[9]]  prop_h[Q]; // CD4
-  simplex[ct_in_nodes[10]] prop_i[Q]; // CD8
+  simplex[ct_in_nodes[7]]  prop_f[Q * is_level_in[4]]; // dendritic myeloid
+  simplex[ct_in_nodes[8]]  prop_g[Q * is_level_in[4]]; // macrophage
+  simplex[ct_in_nodes[9]]  prop_h[Q * is_level_in[4]]; // CD4
+  simplex[ct_in_nodes[10]] prop_i[Q * is_level_in[4]]; // CD8
 
   // Error between reference and mix, to avoid divergencies
   // vector<lower=0>[GM] error_ref_mix_z;
@@ -757,15 +827,21 @@ parameters {
 }
 transformed parameters{
 
+	vector[ct_in_levels[2]] prop_2[Q * is_level_in[2]];
+	vector[ct_in_levels[3]] prop_3[Q * is_level_in[3]];
+	vector[ct_in_levels[4]] prop_4[Q * is_level_in[4]];
+
 	// proportion of level 2
-	vector[ct_in_levels[2]] prop_2[Q] =
+	if(is_level_in[2])
+	prop_2 =
 		append_vector_array(
 			prop_1[,singles_lv2],
 			multiply_by_column(prop_a, prop_1[,parents_lv2[1]])
 		);
 
 	// proportion of level 3
-	vector[ct_in_levels[3]] prop_3[Q] =
+	if(is_level_in[3])
+	prop_3 =
 		append_vector_array(
 			prop_2[,singles_lv3],
 			append_vector_array(
@@ -781,7 +857,8 @@ transformed parameters{
 		);
 
 	// proportion of level 4
-	vector[ct_in_levels[4]] prop_4[Q] =
+	if(is_level_in[4])
+	prop_4 =
 		append_vector_array(
 			prop_3[,singles_lv4],
 			append_vector_array(
@@ -804,8 +881,16 @@ model {
 	// vector[Y_3] lambda_log_deconvoluted_3;
 	// vector[Y_4] lambda_log_deconvoluted_4;
 
+	vector[max(size_counts_G_lv_1_MPI_non_redundant) + max(size_counts_S_lv_1_MPI) + max(size_counts_G_lv_1_MPI_non_redundant) + (ct_in_levels[1] * Q) + max(size_G1_linear_MPI) + max(size_y_linear_S_1_MPI)] pack_r_1[shards_in_levels[1]];
+	vector[max(size_counts_G_lv_2_MPI_non_redundant) + max(size_counts_S_lv_2_MPI) + max(size_counts_G_lv_2_MPI_non_redundant) + (ct_in_levels[2] * Q) + max(size_G2_linear_MPI) + max(size_y_linear_S_2_MPI)] pack_r_2[shards_in_levels[2]];
+	vector[max(size_counts_G_lv_3_MPI_non_redundant) + max(size_counts_S_lv_3_MPI) + max(size_counts_G_lv_3_MPI_non_redundant) + (ct_in_levels[3] * Q) + max(size_G3_linear_MPI) + max(size_y_linear_S_3_MPI)] pack_r_3[shards_in_levels[3]];
+	vector[max(size_counts_G_lv_4_MPI_non_redundant) + max(size_counts_S_lv_4_MPI) + max(size_counts_G_lv_4_MPI_non_redundant) + (ct_in_levels[4] * Q) + max(size_G4_linear_MPI) + max(size_y_linear_S_4_MPI)] pack_r_4[shards_in_levels[4]];
+
+
 	real lp = 0;
 	real lp_MPI = 0;
+
+
 
   // Overall properties of the data
   lambda_mu ~ normal(lambda_mu_prior[1],lambda_mu_prior[2]);
@@ -915,7 +1000,7 @@ target += sum(map_rect(
 	// ));
 
 
-	//for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | rep_vector(num_elements(prop_1[1]), num_elements(prop_1[1])));
+		if(is_level_in[1])  for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | rep_vector(num_elements(prop_1[1]), num_elements(prop_1[1])));
 
 // Level 2 ////////////////////////////////////////
 
@@ -985,7 +1070,7 @@ target += sum(map_rect(
 	//
 	// ));
 
-	//for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | rep_vector(num_elements(prop_a[1]), num_elements(prop_a[1])));
+		if(is_level_in[2])  for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | rep_vector(num_elements(prop_a[1]), num_elements(prop_a[1])));
 
 // Level 3 ////////////////////////////////////////
 
@@ -1055,10 +1140,10 @@ target += sum(map_rect(
 	//
 	// ));
 
-//	for(q in 1:Q) target += dirichlet_lpdf(prop_b[q] | rep_vector(num_elements(prop_b[1]), num_elements(prop_b[1])));
-//	for(q in 1:Q) target += dirichlet_lpdf(prop_c[q] | rep_vector(num_elements(prop_c[1]), num_elements(prop_c[1])));
-//	for(q in 1:Q) target += dirichlet_lpdf(prop_d[q] | rep_vector(num_elements(prop_d[1]), num_elements(prop_d[1])));
-//	for(q in 1:Q) target += dirichlet_lpdf(prop_e[q] | rep_vector(num_elements(prop_e[1]), num_elements(prop_e[1])));
+	if(is_level_in[3]) for(q in 1:Q) target += dirichlet_lpdf(prop_b[q] | rep_vector(num_elements(prop_b[1]), num_elements(prop_b[1])));
+	if(is_level_in[3]) for(q in 1:Q) target += dirichlet_lpdf(prop_c[q] | rep_vector(num_elements(prop_c[1]), num_elements(prop_c[1])));
+	if(is_level_in[3]) for(q in 1:Q) target += dirichlet_lpdf(prop_d[q] | rep_vector(num_elements(prop_d[1]), num_elements(prop_d[1])));
+	if(is_level_in[3]) for(q in 1:Q) target += dirichlet_lpdf(prop_e[q] | rep_vector(num_elements(prop_e[1]), num_elements(prop_e[1])));
 
 // Level 4 ////////////////////////////////////////
 
@@ -1128,21 +1213,23 @@ target += sum(map_rect(
 	//
 	// ));
 
-//	for(q in 1:Q) target += dirichlet_lpdf(prop_f[q] | rep_vector(num_elements(prop_f[1]), num_elements(prop_f[1])));
-//	for(q in 1:Q) target += dirichlet_lpdf(prop_g[q] | rep_vector(num_elements(prop_g[1]), num_elements(prop_g[1])));
-//	for(q in 1:Q) target += dirichlet_lpdf(prop_h[q] | rep_vector(num_elements(prop_h[1]), num_elements(prop_h[1])));
-//	for(q in 1:Q) target += dirichlet_lpdf(prop_i[q] | rep_vector(num_elements(prop_i[1]), num_elements(prop_i[1])));
+		if(is_level_in[4]) for(q in 1:Q) target += dirichlet_lpdf(prop_f[q] | rep_vector(num_elements(prop_f[1]), num_elements(prop_f[1])));
+		if(is_level_in[4]) for(q in 1:Q) target += dirichlet_lpdf(prop_g[q] | rep_vector(num_elements(prop_g[1]), num_elements(prop_g[1])));
+		if(is_level_in[4]) for(q in 1:Q) target += dirichlet_lpdf(prop_h[q] | rep_vector(num_elements(prop_h[1]), num_elements(prop_h[1])));
+		if(is_level_in[4]) for(q in 1:Q) target += dirichlet_lpdf(prop_i[q] | rep_vector(num_elements(prop_i[1]), num_elements(prop_i[1])));
+
+
+	if(is_level_in[1]) pack_r_1 = package_real(	ct_in_levels[1],	Q,	shards_in_levels[1],	size_counts_G_lv_1_MPI, size_counts_G_lv_1_MPI_non_redundant,	size_counts_S_lv_1_MPI,	size_G1_linear_MPI,	size_y_linear_S_1_MPI, counts_G_lv_1_MPI, counts_G_lv_1_MPI_non_redundant, counts_S_lv_1_MPI,		G1_linear_MPI,			y_linear_S_1_MPI,			lambda_log,			exposure_rate,			sigma_inv_log,			prop_1		);
+  if(is_level_in[2]) pack_r_2 = package_real(	ct_in_levels[2],	Q,	shards_in_levels[2],	size_counts_G_lv_2_MPI,	size_counts_G_lv_2_MPI_non_redundant,	size_counts_S_lv_2_MPI,	size_G2_linear_MPI,	size_y_linear_S_2_MPI, counts_G_lv_2_MPI, counts_G_lv_2_MPI_non_redundant, counts_S_lv_2_MPI,		G2_linear_MPI,			y_linear_S_2_MPI,			lambda_log,			exposure_rate,			sigma_inv_log,			prop_2		);
+  if(is_level_in[3]) pack_r_3 = package_real(	ct_in_levels[3],	Q,	shards_in_levels[3],	size_counts_G_lv_3_MPI,	size_counts_G_lv_3_MPI_non_redundant,	size_counts_S_lv_3_MPI,	size_G3_linear_MPI,	size_y_linear_S_3_MPI, counts_G_lv_3_MPI, counts_G_lv_3_MPI_non_redundant ,counts_S_lv_3_MPI,		G3_linear_MPI,			y_linear_S_3_MPI,			lambda_log,			exposure_rate,			sigma_inv_log,			prop_3		);
+  if(is_level_in[4]) pack_r_4 = package_real(	ct_in_levels[4],	Q,	shards_in_levels[4],	size_counts_G_lv_4_MPI,	size_counts_G_lv_4_MPI_non_redundant,	size_counts_S_lv_4_MPI,	size_G4_linear_MPI,	size_y_linear_S_4_MPI, counts_G_lv_4_MPI, counts_G_lv_4_MPI_non_redundant, counts_S_lv_4_MPI,		G4_linear_MPI,			y_linear_S_4_MPI,			lambda_log,			exposure_rate,			sigma_inv_log,			prop_4		);
+
 
 
 	target += sum(map_rect(
 		lp_reduce ,
 		[sigma_intercept_dec, sigma_slope]' ,
-		append_real_MPI_arrays(
-					package_real(	ct_in_levels[1],	Q,	shards_in_levels[1],	size_counts_G_lv_1_MPI, size_counts_G_lv_1_MPI_non_redundant,	size_counts_S_lv_1_MPI,	size_G1_linear_MPI,	size_y_linear_S_1_MPI, counts_G_lv_1_MPI, counts_G_lv_1_MPI_non_redundant, counts_S_lv_1_MPI,		G1_linear_MPI,			y_linear_S_1_MPI,			lambda_log,			exposure_rate,			sigma_inv_log,			prop_1		),
-					package_real(	ct_in_levels[2],	Q,	shards_in_levels[2],	size_counts_G_lv_2_MPI,	size_counts_G_lv_2_MPI_non_redundant,	size_counts_S_lv_2_MPI,	size_G2_linear_MPI,	size_y_linear_S_2_MPI, counts_G_lv_2_MPI, counts_G_lv_2_MPI_non_redundant, counts_S_lv_2_MPI,		G2_linear_MPI,			y_linear_S_2_MPI,			lambda_log,			exposure_rate,			sigma_inv_log,			prop_2		),
-					package_real(	ct_in_levels[3],	Q,	shards_in_levels[3],	size_counts_G_lv_3_MPI,	size_counts_G_lv_3_MPI_non_redundant,	size_counts_S_lv_3_MPI,	size_G3_linear_MPI,	size_y_linear_S_3_MPI, counts_G_lv_3_MPI, counts_G_lv_3_MPI_non_redundant ,counts_S_lv_3_MPI,		G3_linear_MPI,			y_linear_S_3_MPI,			lambda_log,			exposure_rate,			sigma_inv_log,			prop_3		),
-					package_real(	ct_in_levels[4],	Q,	shards_in_levels[4],	size_counts_G_lv_4_MPI,	size_counts_G_lv_4_MPI_non_redundant,	size_counts_S_lv_4_MPI,	size_G4_linear_MPI,	size_y_linear_S_4_MPI, counts_G_lv_4_MPI, counts_G_lv_4_MPI_non_redundant, counts_S_lv_4_MPI,		G4_linear_MPI,			y_linear_S_4_MPI,			lambda_log,			exposure_rate,			sigma_inv_log,			prop_4		)
-		),
+		append_real_MPI_arrays(pack_r_1, pack_r_2, pack_r_3, pack_r_4),
 		real_data2,
 		int_package
 	) .* weights);
