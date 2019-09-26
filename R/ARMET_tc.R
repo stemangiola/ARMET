@@ -659,6 +659,8 @@ vb_iterative = function(model,
 	return(res)
 }
 
+# This is the last chance to go back and make the whole model work with proper NB sums
+
 get_level_lpdf_weights = function(df){
 
 		df %>%
