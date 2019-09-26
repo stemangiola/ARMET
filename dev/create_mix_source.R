@@ -76,16 +76,16 @@ mix_base =
 	# 			bind_rows(
 	# 				.x %>% filter(`read count normalised bayes` %>% is.na %>% `!`),
 	# 				.x %>% filter(`read count normalised bayes` %>% is.na ) %>%
-	# 					mutate(`read count normalised bayes` = sample(values, size = n(), replace = T))
-	# 			)
-	#
-	# 		else (.)
-	#
-	# 	} ,
-	# 	`Cell type category`, symbol
-	# ) %>%
+# 					mutate(`read count normalised bayes` = sample(values, size = n(), replace = T))
+# 			)
+#
+# 		else (.)
+#
+# 	} ,
+# 	`Cell type category`, symbol
+# ) %>%
 
-	do_parallel_start(n_cores, "Cell type category") %>%
+do_parallel_start(n_cores, "Cell type category") %>%
 	do({
 		`%>%` = magrittr::`%>%`
 		library(tidyverse)
@@ -119,17 +119,17 @@ mix_base =
 	# 			bind_rows(
 	# 				.x %>% filter(`read count normalised bayes` %>% is.na %>% `!`),
 	# 				.x %>% filter(`read count normalised bayes` %>% is.na ) %>%
-	# 					mutate(`read count normalised bayes` = sample(values, size = n(), replace = T))
-	# 			)
-	#
-	# 		else (.)
-	#
-	# 	} ,
-	# 	`level_4`, symbol
-	# ) %>%
+# 					mutate(`read count normalised bayes` = sample(values, size = n(), replace = T))
+# 			)
+#
+# 		else (.)
+#
+# 	} ,
+# 	`level_4`, symbol
+# ) %>%
 
 
-	do_parallel_start(n_cores, "level_4") %>%
+do_parallel_start(n_cores, "level_4") %>%
 	do({
 		`%>%` = magrittr::`%>%`
 		library(tidyverse)
@@ -163,16 +163,16 @@ mix_base =
 	# 			bind_rows(
 	# 				.x %>% filter(`read count normalised bayes` %>% is.na %>% `!`),
 	# 				.x %>% filter(`read count normalised bayes` %>% is.na ) %>%
-	# 					mutate(`read count normalised bayes` = sample(values, size = n(), replace = T))
-	# 			)
-	#
-	# 		else (.)
-	#
-	# 	} ,
-	# 	`level_3`, symbol
-	# ) %>%
+# 					mutate(`read count normalised bayes` = sample(values, size = n(), replace = T))
+# 			)
+#
+# 		else (.)
+#
+# 	} ,
+# 	`level_3`, symbol
+# ) %>%
 
-	do_parallel_start(n_cores, "level_3") %>%
+do_parallel_start(n_cores, "level_3") %>%
 	do({
 		`%>%` = magrittr::`%>%`
 		library(tidyverse)
@@ -206,16 +206,16 @@ mix_base =
 	# 			bind_rows(
 	# 				.x %>% filter(`read count normalised bayes` %>% is.na %>% `!`),
 	# 				.x %>% filter(`read count normalised bayes` %>% is.na ) %>%
-	# 					mutate(`read count normalised bayes` = sample(values, size = n(), replace = T))
-	# 			)
-	#
-	# 		else (.)
-	#
-	# 	} ,
-	# 	`level_2`, symbol
-	# ) %>%
+# 					mutate(`read count normalised bayes` = sample(values, size = n(), replace = T))
+# 			)
+#
+# 		else (.)
+#
+# 	} ,
+# 	`level_2`, symbol
+# ) %>%
 
-	do_parallel_start(n_cores, "level_2") %>%
+do_parallel_start(n_cores, "level_2") %>%
 	do({
 		`%>%` = magrittr::`%>%`
 		library(tidyverse)
