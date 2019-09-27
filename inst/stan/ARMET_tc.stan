@@ -137,6 +137,28 @@ functions{
 		return(v_rep);
 	}
 
+vector[] sum_NB_MPI(matrix lambda_mat, matrix sigma_mat, matrix prop_mat){
+
+		// Matrix operation for sum
+		matrix[rows(prop_mat), cols(lambda_mat)] lambda_sum = prop_mat * lambda_mat; //Q rows, G columns
+		matrix[rows(prop_mat), cols(sigma_mat)] sigma_sum =                          //Q rows, G columns
+			square(lambda_sum) ./
+			(
+				square(prop_mat) *
+				(
+					square(lambda_mat) ./
+					sigma_mat
+				)
+			) ;
+
+		vector[rows(prop_mat) * cols(sigma_mat)] sum_obj[2];
+		sum_obj[1] = to_vector(lambda_sum);
+		sum_obj[2] = to_vector(sigma_sum);
+
+		// The vectorisation is G1-Q1, G1-Q2, G1-Q3 etc..
+		return(sum_obj);
+	}
+
 	int[,] package_int(
 		int C,
 		int GM,
