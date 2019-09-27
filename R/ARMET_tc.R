@@ -5,6 +5,8 @@
 # library(rstan)
 # library(tidyTranscriptomics)
 
+# gtools::rdirichlet(150, c(200, 200, 1, 1)) %>% sirt::dirichlet.mle()
+
 #' This is a generalisation of ifelse that acceots an object and return an objects
 #'
 #' @import dplyr
@@ -861,6 +863,7 @@ ARMET_tc = function(
 		# Filter on level considered
 		filter(level %in% levels)
 
+
 	df =
 		bind_rows(
 			# Get reference based on mix genes
@@ -901,7 +904,7 @@ ARMET_tc = function(
 				distinct(symbol, level) %>%
 				group_by(symbol) %>%
 				arrange(level) %>%
-				slice(2:n()) %>%
+				slice(2:max(n(), 2)) %>% # take away house keeping from level 2 above
 				ungroup()
 		) %>%
 
