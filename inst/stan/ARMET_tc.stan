@@ -137,27 +137,6 @@ functions{
 		return(v_rep);
 	}
 
-vector[] sum_NB_MPI(matrix lambda_mat, matrix sigma_mat, matrix prop_mat){
-
-		// Matrix operation for sum
-		matrix[rows(prop_mat), cols(lambda_mat)] lambda_sum = prop_mat * lambda_mat; //Q rows, G columns
-		matrix[rows(prop_mat), cols(sigma_mat)] sigma_sum =                          //Q rows, G columns
-			square(lambda_sum) ./
-			(
-				square(prop_mat) *
-				(
-					square(lambda_mat) ./
-					sigma_mat
-				)
-			) ;
-
-		vector[rows(prop_mat) * cols(sigma_mat)] sum_obj[2];
-		sum_obj[1] = to_vector(lambda_sum);
-		sum_obj[2] = to_vector(sigma_sum);
-
-		// The vectorisation is G1-Q1, G1-Q2, G1-Q3 etc..
-		return(sum_obj);
-	}
 
 	int[,] package_int(
 		int C,
@@ -255,6 +234,7 @@ vector[] sum_NB_MPI(matrix lambda_mat, matrix sigma_mat, matrix prop_mat){
 			max(size_counts_G_lv_1_MPI_non_redundant) +
 			(Q*C) +
 			max(size_G1_linear_MPI) +
+			max(size_G1_linear_MPI) +
 			max(size_y_linear_S_1_MPI);
 
 		vector[max_col] real_pack[shards];
@@ -266,6 +246,7 @@ vector[] sum_NB_MPI(matrix lambda_mat, matrix sigma_mat, matrix prop_mat){
 				size_counts_S_lv_1_MPI[i] +
 				size_counts_G_lv_1_MPI_non_redundant[i] +
 				(Q*C) +
+				size_G1_linear_MPI[i] +
 				size_G1_linear_MPI[i] +
 				size_y_linear_S_1_MPI[i];
 
@@ -286,6 +267,9 @@ vector[] sum_NB_MPI(matrix lambda_mat, matrix sigma_mat, matrix prop_mat){
 
 					// The estimated of ref to de convolved together
 					lambda_log[G1_linear_MPI[i, 1:size_G1_linear_MPI[i]]],
+					
+					// The estimated of ref to de convolved together
+					sigma_inv_log[G1_linear_MPI[i, 1:size_G1_linear_MPI[i]]],
 
 					// The exposure of the mix query samples
 					exposure_rate[y_linear_S_1_MPI[i, 1:size_y_linear_S_1_MPI[i]]],
@@ -300,7 +284,6 @@ vector[] sum_NB_MPI(matrix lambda_mat, matrix sigma_mat, matrix prop_mat){
 
 		return real_pack;
 	}
-
 
 	int[,] append_int_MPI_arrays(int[,] lv1, int[,] lv2, int[,] lv3, int[,] lv4){
 
@@ -396,36 +379,28 @@ vector[] sum_NB_MPI(matrix lambda_mat, matrix sigma_mat, matrix prop_mat){
 
 	}
 
-	// vector[] append_real_MPI_arrays_3(vector[] lv1, vector[] lv2, vector[] lv3){
-	//
-	//
-	// 	int dim_1[2] = {num_elements(lv1[,1]), num_elements(lv1[1])};
-	// 	int dim_2[2] = {num_elements(lv2[,1]), num_elements(lv2[1])};
-	// 	int dim_3[2] = {num_elements(lv3[,1]), num_elements(lv3[1])};
-	//
-	// 	int max_cols = max({dim_1[2], dim_2[2],dim_3[2]});
-	// 	int tot_rows = dim_1[1] + dim_2[1] + dim_3[1];
-	//
-	// 	vector[max_cols] merged[tot_rows];
-	// 	int i = 0;
-	//
-	//
-	// 	for(r in 1:dim_1[1]) merged[i+r] = append_row(lv1[r], rep_vector(-999, max_cols-dim_1[2]));
-	// 	i += dim_1[1];
-	//
-	// if(dim_2[1] > 0) {
-	// 	for(r in 1:dim_2[1]) merged[i+r] = append_row(lv2[r], rep_vector(-999, max_cols-dim_2[2]));
-	// 	i += dim_2[1];
-	// }
-	//
-	// if(dim_3[1] > 0) {
-	// 	for(r in 1:dim_3[1]) merged[i+r] = append_row(lv3[r], rep_vector(-999, max_cols-dim_3[2]));
-	// 	i += dim_3[1];
-	// }
-	//
-	// 	return(merged);
-	//
-	// }
+  vector[] sum_NB_MPI(matrix lambda_mat, matrix sigma_mat, matrix prop_mat){
+
+		// Matrix operation for sum
+		matrix[rows(prop_mat), cols(lambda_mat)] lambda_sum = prop_mat * lambda_mat; //Q rows, G columns
+		matrix[rows(prop_mat), cols(sigma_mat)] sigma_sum =                          //Q rows, G columns
+			square(lambda_sum) ./
+			(
+				square(prop_mat) *
+				(
+					square(lambda_mat) ./
+					sigma_mat
+				)
+			) ;
+
+		vector[rows(prop_mat) * cols(sigma_mat)] sum_obj[2];
+		sum_obj[1] = to_vector(lambda_sum);
+		sum_obj[2] = to_vector(sigma_sum);
+
+		// The vectorisation is G1-Q1, G1-Q2, G1-Q3 etc..
+		return(sum_obj);
+	}
+
 
 	vector lp_reduce( vector global_parameters , vector local_parameters , real[] real_data , int[] int_data ) {
 
@@ -453,16 +428,18 @@ vector[] sum_NB_MPI(matrix lambda_mat, matrix sigma_mat, matrix prop_mat){
 		// real unpacking
 		vector[size_counts_G_lv_1_MPI_non_redundant] ref_lambda_log_for_counts = local_parameters[1 : size_counts_G_lv_1_MPI_non_redundant];
 		vector[size_counts_S_lv_1_MPI] ref_exposure_rate = local_parameters[size_counts_G_lv_1_MPI_non_redundant+1 : size_counts_G_lv_1_MPI_non_redundant+size_counts_S_lv_1_MPI];
-		vector[size_counts_G_lv_1_MPI_non_redundant] ref_sigma_inv_log =  local_parameters[  size_counts_G_lv_1_MPI_non_redundant+size_counts_S_lv_1_MPI+1 :  size_counts_G_lv_1_MPI_non_redundant+size_counts_S_lv_1_MPI+size_counts_G_lv_1_MPI_non_redundant];
+		vector[size_counts_G_lv_1_MPI_non_redundant] ref_sigma_inv_log_for_counts =  local_parameters[  size_counts_G_lv_1_MPI_non_redundant+size_counts_S_lv_1_MPI+1 :  size_counts_G_lv_1_MPI_non_redundant+size_counts_S_lv_1_MPI+size_counts_G_lv_1_MPI_non_redundant];
 		vector[C*Q] prop_1 = local_parameters[size_counts_G_lv_1_MPI_non_redundant+size_counts_S_lv_1_MPI+size_counts_G_lv_1_MPI_non_redundant+1 : size_counts_G_lv_1_MPI_non_redundant+size_counts_S_lv_1_MPI+size_counts_G_lv_1_MPI_non_redundant+(C*Q)];
+		
 		vector[size_G1_linear_MPI] ref_lambda_log = local_parameters[size_counts_G_lv_1_MPI_non_redundant+size_counts_S_lv_1_MPI+size_counts_G_lv_1_MPI_non_redundant+(C*Q)+1 :size_counts_G_lv_1_MPI_non_redundant+size_counts_S_lv_1_MPI+size_counts_G_lv_1_MPI_non_redundant+(C*Q)+size_G1_linear_MPI];
-		vector[size_y_linear_S_1_MPI] mix_exposure_rate = local_parameters[size_counts_G_lv_1_MPI_non_redundant+size_counts_S_lv_1_MPI+size_counts_G_lv_1_MPI_non_redundant+(C*Q)+size_G1_linear_MPI+1 : size_counts_G_lv_1_MPI_non_redundant+size_counts_S_lv_1_MPI+size_counts_G_lv_1_MPI_non_redundant+(C*Q)+size_G1_linear_MPI+size_y_linear_S_1_MPI];
+		
+		vector[size_G1_linear_MPI] ref_sigma_inv_log = local_parameters[size_counts_G_lv_1_MPI_non_redundant+size_counts_S_lv_1_MPI+size_counts_G_lv_1_MPI_non_redundant+(C*Q)+size_G1_linear_MPI+1 : size_counts_G_lv_1_MPI_non_redundant+size_counts_S_lv_1_MPI+size_counts_G_lv_1_MPI_non_redundant+(C*Q)+size_G1_linear_MPI+size_G1_linear_MPI];
+		
+		vector[size_y_linear_S_1_MPI] mix_exposure_rate = local_parameters[size_counts_G_lv_1_MPI_non_redundant+size_counts_S_lv_1_MPI+size_counts_G_lv_1_MPI_non_redundant+(C*Q)+size_G1_linear_MPI+size_G1_linear_MPI+1 : size_counts_G_lv_1_MPI_non_redundant+size_counts_S_lv_1_MPI+size_counts_G_lv_1_MPI_non_redundant+(C*Q)+size_G1_linear_MPI+size_G1_linear_MPI+size_y_linear_S_1_MPI];
 
 		// Ref variables
 		vector[size_counts_G_lv_1_MPI] ref_lambda_log_redundant_normalised = rep_vector_by_array(ref_lambda_log_for_counts, counts_G_lv_1_MPI_non_redundant_reps) + ref_exposure_rate;
-		vector[size_counts_G_lv_1_MPI] ref_sigma_inv_log_redundant =  rep_vector_by_array(ref_sigma_inv_log, counts_G_lv_1_MPI_non_redundant_reps);
-
-		//print(size_ref_counts , "..", size_ref_counts, "..",(C*Q), "..",(GM*C));
+		vector[size_counts_G_lv_1_MPI] ref_sigma_inv_log_redundant =  rep_vector_by_array(ref_sigma_inv_log_for_counts, counts_G_lv_1_MPI_non_redundant_reps);
 
 		// Mix
 
@@ -472,28 +449,38 @@ vector[] sum_NB_MPI(matrix lambda_mat, matrix sigma_mat, matrix prop_mat){
 
 		// Deconvoluted means
 		vector[size_G1_linear_MPI/C*Q] lambda_log_deconvoluted_1;
+    vector[size_G1_linear_MPI/C*Q] sigma_deconvoluted_1;
+
+		// Calculate convoluted
+    vector[size_G1_linear_MPI/C * Q] sumNB[2] = sum_NB_MPI(
+      to_matrix(exp(ref_lambda_log), C, size_G1_linear_MPI/C),
+      to_matrix(1.0 ./ exp( ref_sigma_inv_log ), C, size_G1_linear_MPI/C),
+      to_matrix(prop_1, Q, C)
+    );
+    
+    lambda_log_deconvoluted_1 = log(sumNB[1]);
+    sigma_deconvoluted_1 = sumNB[2];
+    
+    print("---");
+    print(sigma_deconvoluted_1[1:20]);
+    print((1.0 ./ exp( ( sigma_slope * lambda_log_deconvoluted_1 + sigma_intercept_dec ) ))[1:20]);
+		// print(
+		// 	log(
+		// 		to_vector(
+		// 			to_matrix(prop_1, Q, C) *
+		// 			exp(to_matrix(ref_lambda_log, C, size_G1_linear_MPI/C)) // [Q,G] dimensions
+		// 		)
+		// 	)[1:20]
+		// 	);
 
 		// Reference
 		lp = neg_binomial_2_log_lpmf( ref_counts |	ref_lambda_log_redundant_normalised, 1.0 ./ exp( ref_sigma_inv_log_redundant )		);
-
-		//print(to_matrix(prop_1, Q, C) );
-		//print(size_G1_linear_MPI/C);
-
-		// Calculate convoluted
-		lambda_log_deconvoluted_1 =
-			log(
-				to_vector(
-					to_matrix(prop_1, Q, C) *
-					exp(to_matrix(ref_lambda_log, C, size_G1_linear_MPI/C)) // [Q,G] dimensions
-				)
-			);
-
 		//if(sum(to_matrix(prop_1, S, C)[1,]) !=1.0 ) stop("Mpi fucked");
 
 		// deconvolution
-		lp += neg_binomial_2_log_lpmf(mix_counts |
+		lp += neg_binomial_2_log_lpmf(mix_counts | 
 			lambda_log_deconvoluted_1 + mix_exposure_rate,
-			1.0 ./ exp( ( sigma_slope * lambda_log_deconvoluted_1 + sigma_intercept_dec ) )
+			(1.0 ./ exp( ( sigma_slope * lambda_log_deconvoluted_1 + sigma_intercept_dec ) ))
 		);
 
 
@@ -555,8 +542,7 @@ vector[] sum_NB_MPI(matrix lambda_mat, matrix sigma_mat, matrix prop_mat){
 		return v_MPI;
 	}
 
-
-		vector[] get_mu_sigma_vector_MPI(vector mus, vector sigmas, int shards){
+	vector[] get_mu_sigma_vector_MPI(vector mus, vector sigmas, int shards){
 
 		int elements_per_shard[shards] = get_elements_per_shard(rows(mus), shards); // Length of the returned object
 		int size_MPI_obj = elements_per_shard[1]; // the first element is always the full size of the object
@@ -578,7 +564,7 @@ vector[] sum_NB_MPI(matrix lambda_mat, matrix sigma_mat, matrix prop_mat){
 		return v_MPI;
 	}
 
-		real[,] get_real_MPI(vector v, int shards){
+	real[,] get_real_MPI(vector v, int shards){
 
 		int elements_per_shard[shards] = get_elements_per_shard(rows(v), shards); // Length of the returned object
 		int size_MPI_obj = elements_per_shard[1]; // the first element is always the full size of the object
@@ -595,7 +581,7 @@ vector[] sum_NB_MPI(matrix lambda_mat, matrix sigma_mat, matrix prop_mat){
 		return v_MPI;
 	}
 
-		vector lp_reduce_simple( vector global_parameters , vector mus_sigmas , real[] real_data , int[] int_data ) {
+	vector lp_reduce_simple( vector global_parameters , vector mus_sigmas , real[] real_data , int[] int_data ) {
 
 		real lp;
 		real threshold = -999;
@@ -903,10 +889,13 @@ model {
 	// vector[Y_3] lambda_log_deconvoluted_3;
 	// vector[Y_4] lambda_log_deconvoluted_4;
 
-	vector[max(size_counts_G_lv_1_MPI_non_redundant) + max(size_counts_S_lv_1_MPI) + max(size_counts_G_lv_1_MPI_non_redundant) + (ct_in_levels[1] * Q) + max(size_G1_linear_MPI) + max(size_y_linear_S_1_MPI)] pack_r_1[shards_in_levels[1]];
-	vector[max(size_counts_G_lv_2_MPI_non_redundant) + max(size_counts_S_lv_2_MPI) + max(size_counts_G_lv_2_MPI_non_redundant) + (ct_in_levels[2] * Q) + max(size_G2_linear_MPI) + max(size_y_linear_S_2_MPI)] pack_r_2[shards_in_levels[2]];
-	vector[max(size_counts_G_lv_3_MPI_non_redundant) + max(size_counts_S_lv_3_MPI) + max(size_counts_G_lv_3_MPI_non_redundant) + (ct_in_levels[3] * Q) + max(size_G3_linear_MPI) + max(size_y_linear_S_3_MPI)] pack_r_3[shards_in_levels[3]];
-	vector[max(size_counts_G_lv_4_MPI_non_redundant) + max(size_counts_S_lv_4_MPI) + max(size_counts_G_lv_4_MPI_non_redundant) + (ct_in_levels[4] * Q) + max(size_G4_linear_MPI) + max(size_y_linear_S_4_MPI)] pack_r_4[shards_in_levels[4]];
+	vector[max(size_counts_G_lv_1_MPI_non_redundant) + max(size_counts_S_lv_1_MPI) + max(size_counts_G_lv_1_MPI_non_redundant) + (ct_in_levels[1] * Q) + max(size_G1_linear_MPI) + max(size_G1_linear_MPI) + max(size_y_linear_S_1_MPI)] pack_r_1[shards_in_levels[1]];
+	
+	vector[max(size_counts_G_lv_2_MPI_non_redundant) + max(size_counts_S_lv_2_MPI) + max(size_counts_G_lv_2_MPI_non_redundant) + (ct_in_levels[2] * Q) + max(size_G2_linear_MPI)+ max(size_G2_linear_MPI) + max(size_y_linear_S_2_MPI)] pack_r_2[shards_in_levels[2]];
+	
+	vector[max(size_counts_G_lv_3_MPI_non_redundant) + max(size_counts_S_lv_3_MPI) + max(size_counts_G_lv_3_MPI_non_redundant) + (ct_in_levels[3] * Q) + max(size_G3_linear_MPI)+ max(size_G3_linear_MPI) + max(size_y_linear_S_3_MPI)] pack_r_3[shards_in_levels[3]];
+	
+	vector[max(size_counts_G_lv_4_MPI_non_redundant) + max(size_counts_S_lv_4_MPI) + max(size_counts_G_lv_4_MPI_non_redundant) + (ct_in_levels[4] * Q) + max(size_G4_linear_MPI)+ max(size_G4_linear_MPI) + max(size_y_linear_S_4_MPI)] pack_r_4[shards_in_levels[4]];
 
 
 	real lp = 0;
@@ -1256,29 +1245,6 @@ target += sum(map_rect(
 		int_package
 	) .* weights);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
