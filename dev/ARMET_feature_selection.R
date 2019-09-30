@@ -515,10 +515,15 @@ get_input_data = function(markers, reps, pass){
 
 # foreach(n_markers = c(1:10, seq(15, 50, 5), seq(50, 100, 10))) %do% {
 #
-file_name = sprintf("%s/markers_%s.RData", out_dir, n_markers)
+
+s = sample(size = 1, 1:99999999)
+
+file_name = sprintf("%s/markers_%s_%s.RData", out_dir, n_markers, s)
 #
 # 	if(file.exists(file_name) %>% `!`) {
 # 		try(
+
+set.seed(s)
 
 ARMET_tc(
 	readRDS("dev/mix_source.rds") %>%
@@ -528,7 +533,8 @@ ARMET_tc(
 		drop_na %>%
 		gather(sample_mix, `read count mix`, -symbol) %>%
 		spread(`symbol`, `read count mix`) %>%
-		rename(sample = sample_mix),
+		rename(sample = sample_mix) %>%
+		inner_join((.) %>% distinct(sample) %>% sample_n(50)),
 	iterations = 250,
 	n_markers = ARMET::ARMET_ref %>% distinct(ct1, ct2) %>% mutate(`n markers` = n_markers),
 	full_bayes = T,
@@ -539,9 +545,11 @@ ARMET_tc(
 # 	}
 # }
 
+
+
 #qsub -l nodes=1:ppn=12,mem=32gb,walltime=18:00:00 dev/job_torque.sh -F "20 fist_run"
 
-# Plot results
+# # Plot results
 # res_dir = "dev/feature_selection_fist_run_normal_queue/"
 #
 # res =

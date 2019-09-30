@@ -856,7 +856,7 @@ ARMET_tc = function(
 				distinct(symbol, `house keeping`) %>%
 				filter(`house keeping`)
 
-			withr::with_seed(	123, 	sample_frac(mdf, 0.7)) %>%
+			withr::with_seed(	123, 	sample_frac(mdf, 0.8)) %>%
 				distinct(symbol)
 		}) %>%
 
@@ -1283,6 +1283,7 @@ ARMET_tc = function(
 	lambda_skew_prior =  c( -2.7, 1)
 	sigma_intercept_prior = c( 1.9 , 0.1)
 	lambda_log_scale = 	counts_baseline %>% filter(!query) %>% distinct(G, lambda) %>% arrange(G) %>% pull(lambda)
+	sigma_inv_log_scale = 	counts_baseline %>% filter(!query) %>% distinct(G, sigma_raw) %>% arrange(G) %>% pull(sigma_raw)
 
 	# Linear parallelised
 	shards = cores = 8
@@ -2032,6 +2033,9 @@ ARMET_tc = function(
 	# close(fileConn)
 	# ARMET_tc_model = stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc.stan")
 
+	# browser()
+
+
 
 	Sys.time() %>% print
 
@@ -2041,13 +2045,14 @@ ARMET_tc = function(
 
 			# HMC
 			sampling(
-				stanmodels$ARMET_tc, #ARMET_tc_model, #,
+				stanmodels$ARMET_tc, # ARMET_tc_model, #,
 				chains=3, cores=3,
 				iter=iterations, warmup=iterations-sampling_iterations,
+				#control = list(stepsize = 0.05, adapt_delta = 0.99),
 				#include = F, pars=c("prop_a", "prop_b", "prop_c", "prop_d", "prop_e"),
-				pars=c("prop_1", "prop_2", "prop_3", "prop_4", "exposure_rate", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),
+				#pars=c("prop_1", "prop_2", "prop_3", "prop_4", "exposure_rate", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),
 				#,
-				init = function () list(	lambda_log = lambda_log_scale) # runif(G,  lambda_log_scale - 1, lambda_log_scale + 1)	)
+				init = function () list(	lambda_log = lambda_log_scale, sigma_inv_log = sigma_inv_log_scale) # runif(G,  lambda_log_scale - 1, lambda_log_scale + 1)	)
 				#save_warmup = FALSE,
 				#pars = c("prop_1", "prop_2", "prop_3", "exposure_rate") #, "nb_sum") #,"mu_sum", "phi_sum"),
 			) %>%
