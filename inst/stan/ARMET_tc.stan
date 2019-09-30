@@ -271,6 +271,9 @@ functions{
 					// The estimated of ref to de convolved together
 					sigma_inv_log[G1_linear_MPI[i, 1:size_G1_linear_MPI[i]]],
 
+					// The estimated of ref to de convolved together
+					sigma_inv_log[G1_linear_MPI[i, 1:size_G1_linear_MPI[i]]],
+
 					// The exposure of the mix query samples
 					exposure_rate[y_linear_S_1_MPI[i, 1:size_y_linear_S_1_MPI[i]]],
 
@@ -1262,8 +1265,3 @@ target += sum(map_rect(
 		int_package
 	) .* weights);
 }
-
-
-
-
-
