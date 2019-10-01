@@ -850,15 +850,15 @@ ARMET_tc = function(
 
 		) %>%
 
-		# Decrease the number of house keeping used
-		anti_join({
-			mdf = (.) %>%
-				distinct(symbol, `house keeping`) %>%
-				filter(`house keeping`)
-
-			withr::with_seed(	123, 	sample_frac(mdf, 0.8)) %>%
-				distinct(symbol)
-		}) %>%
+		# # Decrease the number of house keeping used
+		# anti_join({
+		# 	mdf = (.) %>%
+		# 		distinct(symbol, `house keeping`) %>%
+		# 		filter(`house keeping`)
+		#
+		# 	withr::with_seed(	123, 	sample_frac(mdf, 0.8)) %>%
+		# 		distinct(symbol)
+		# }) %>%
 
 		# Filter on level considered
 		filter(level %in% levels)
