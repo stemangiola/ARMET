@@ -20,7 +20,7 @@ my_theme =
 		text = element_text(size=12),
 		legend.position="bottom",
 		aspect.ratio=1,
-		axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+		#axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
 		strip.background = element_blank(),
 		axis.title.x  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10)),
 		axis.title.y  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10))
@@ -549,39 +549,54 @@ ARMET_tc(
 
 #qsub -l nodes=1:ppn=12,mem=32gb,walltime=18:00:00 dev/job_torque.sh -F "20 fist_run"
 
-# # Plot results
-# res_dir = "dev/feature_selection_fist_run_normal_queue/"
-#
-# res =
-# 	dir(res_dir, full.names = T) %>%
-# 		map_dfr(
-# 			~ .x %>%
-# 				readRDS() %$%
-# 				proportions %>%
-# 				mutate(n_markers = .x)
-# 		) %>%
-# 	separate(sample, c("run", "pair"), sep="_", extra="merge") %>%
-# 	separate(pair, c("ct1", "ct2"), sep=" ") %>%
-# 	filter(`Cell type category` == ct1 | `Cell type category` == ct2) %>%
-# 	separate(n_markers, c("path", "n_markers"), sep="markers_") %>%
-# 	separate(n_markers, c("n_markers", "extension"), sep="\\.") %>%
-# 	mutate(CI = .upper - .lower) %>%
-# 	mutate(error = .value %>% `+` (-0.5) %>% abs)
-#
-# res %>%
-# 	filter(level ==4) %>%
-# 	mutate(n_markers = n_markers %>% as.integer) %>%
-# 	ggplot(aes(x=n_markers, y=error, color=`Cell type category`)) +
-# 	geom_point() +
-# 	geom_smooth(method = "lm")
-#
-# (res %>%
-# 	filter(level ==2) %>%
-# 	mutate(n_markers = n_markers %>% as.integer) %>%
-# 	ggplot(aes(x=n_markers, y=error, color=`Cell type category`, size=CI, Q=Q, C=C)) +
-# 	geom_point() +
-# 	geom_smooth(method = "lm")
-# ) %>% plotly::ggplotly()
+# Plot results
+res_dir = "dev/feature_selection_second_run_skylake_1//"
+
+res_dir = "dev/feature_selection_second_run_2/"
+res_dir = "dev/feature_selection_second_run_skylake_4/"
+
+res =
+	dir(res_dir, full.names = T) %>%
+		map_dfr(
+			~ .x %>%
+				readRDS() %$%
+				proportions %>%
+				mutate(n_markers = .x)
+		) %>%
+	separate(sample, c("run", "pair"), sep="_", extra="merge") %>%
+	separate(pair, c("ct1", "ct2"), sep=" ") %>%
+	filter(`Cell type category` == ct1 | `Cell type category` == ct2) %>%
+	separate(n_markers, c("path", "n_markers"), sep="markers_") %>%
+	separate(n_markers, c("n_markers", "dummy"), sep="_") %>%
+	mutate(CI = .upper - .lower) %>%
+	mutate(error = .value %>% `+` (-0.5) %>% abs)
+
+
+
+(res %>%
+		left_join(
+			tree %>%
+				data.tree::ToDataFrameTree("name", "level") %>%
+				as_tibble %>%
+				select(name, level) %>%
+				mutate(level = level-1) %>%
+				rename(`Cell type category` = name, level_tree = level)
+		) %>%
+		filter(level == level_tree) %>%
+	#filter(level ==2) %>%
+	mutate(n_markers = n_markers %>% as.integer) %>%
+	ggplot(aes(x=(n_markers), y=error, color=interaction(ct1, ct2), size=CI, Q=Q, C=C)) +
+	#geom_violin() +
+	geom_jitter(alpha=0.3, width = 0.7) +
+	#	stat_smooth(method = "lm", formula = y ~ x + I(x^2), size = 1, se = F)
+	stat_summary(aes(y = error), fun.y=mean, geom="line", size=3) +
+		facet_wrap(~level) +
+		my_theme
+) %>% plotly::ggplotly()
+
+
+# print bies in normalisation
+#rr$signatures %>% distinct(`Cell type category`, G, lambda) %>% drop_na %>% filter(`Cell type category` != "house_keeping") %>% left_join(rr$fit %>% tidybayes::gather_draws(lambda_log[G]) %>% tidybayes::mean_qi() %>% select(G, .value)) %>% ggplot(aes(x=lambda, y=.value, color=`Cell type category`)) + geom_point() + geom_smooth()
 
 # Create reference data set
 
