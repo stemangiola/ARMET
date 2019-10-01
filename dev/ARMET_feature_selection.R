@@ -551,29 +551,67 @@ ARMET_tc(
 
 # Plot results
 res_dir = "dev/feature_selection_second_run_skylake_1//"
-
 res_dir = "dev/feature_selection_second_run_2/"
 res_dir = "dev/feature_selection_second_run_skylake_4/"
+res_dir = "dev/feature_selection_third_run_skylake_1/"
 
-res =
-	dir(res_dir, full.names = T) %>%
-		map_dfr(
-			~ .x %>%
-				readRDS() %$%
-				proportions %>%
-				mutate(n_markers = .x)
-		) %>%
-	separate(sample, c("run", "pair"), sep="_", extra="merge") %>%
-	separate(pair, c("ct1", "ct2"), sep=" ") %>%
-	filter(`Cell type category` == ct1 | `Cell type category` == ct2) %>%
-	separate(n_markers, c("path", "n_markers"), sep="markers_") %>%
-	separate(n_markers, c("n_markers", "dummy"), sep="_") %>%
-	mutate(CI = .upper - .lower) %>%
-	mutate(error = .value %>% `+` (-0.5) %>% abs)
-
-
-
+# res =
+# 	dir(res_dir, full.names = T) %>%
+# 		map_dfr(
+# 			~ .x %>%
+# 				readRDS() %$%
+# 				proportions %>%
+# 				mutate(n_markers = .x)
+# 		) %>%
+# 	separate(sample, c("run", "pair"), sep="_", extra="merge") %>%
+# 	separate(pair, c("ct1", "ct2"), sep=" ") %>%
+# 	#filter(`Cell type category` == ct1 | `Cell type category` == ct2) %>%
+# 	mutate(truth = ifelse(`Cell type category` == ct1 | `Cell type category` == ct2, 0.5, 0)) %>%
+# 	mutate(error =  .value - truth ) %>%
+# 	separate(n_markers, c("path", "n_markers"), sep="markers_") %>%
+# 	separate(n_markers, c("n_markers", "dummy"), sep="_") %>%
+# 	mutate(CI = .upper - .lower)
+#
+# # res  %>%
+# res %>%
+# 	left_join(
+# 		tree %>%
+# 			data.tree::ToDataFrameTree("name", "level") %>%
+# 			as_tibble %>%
+# 			select(name, level) %>%
+# 			mutate(level = level-1) %>%
+# 			rename(`Cell type category` = name, level_tree = level)
+# 	) %>%
+# 	filter(level == level_tree) %>% filter(ct1 %in% c("epthelial", "fibroblast", "endothelial", "immune_cell") | ct2 %in% c("epthelial", "fibroblast", "endothelial", "immune_cell")) %>%
+# 	group_by(run,   ct1 ,  ct2, dummy) %>%
+# 	do({
+#
+# 		(.) %>%
+# 			left_join(
+# 				(.) %>%
+# 					distinct(`Cell type category`, error) %>%
+# 					ttBulk::as_matrix(rownames=`Cell type category`) %>%
+# 					dist() %>%
+# 					as.matrix()%>%
+# 					as_tibble(rownames="Cell type category") %>%
+# 					gather(`other ct`, `dist`, -`Cell type category`) %>%
+# 					group_by(`Cell type category`) %>%
+# 					arrange(dist %>% desc) %>%
+# 					slice(1) %>%
+# 					ungroup(),
+# 				by = "Cell type category"
+# 			)
+# 	}) %>%
+# 	filter(truth == 0.5 & error < 0) %>% select(`Cell type category`, run,   ct1  , ct2 ,  path , n_markers, dummy, truth,   error, `other ct`) %>% group_by(n_markers, `Cell type category`, `other ct`) %>% summarise(error %>% mean) %>% arrange(n_markers %>% desc, `error %>% mean`) %>% ungroup() %>% mutate(n_markers = n_markers %>% as.integer) %>%
+# 	ggplot(aes(x=n_markers, y=`error %>% mean`, color=interaction(`Cell type category`, `other ct`))) +
+# 	#geom_jitter(alpha=0.3, width = 0.7) +
+# 	#	stat_smooth(method = "lm", formula = y ~ x + I(x^2), size = 1, se = F)
+# 	stat_summary(aes(y =  `error %>% mean`), fun.y=mean, geom="line", size=3)
+#
+#
 (res %>%
+		filter(truth == 0.5) %>%
+		mutate(error = error %>% abs) %>%
 		left_join(
 			tree %>%
 				data.tree::ToDataFrameTree("name", "level") %>%
