@@ -1,141 +1,313 @@
 functions{
 
-	int[] rep_int(int x, int n){
-		int out_int[n];
+int[] rep_int(int x, int n){
+	int out_int[n];
 
-		for(i in 1:n)	out_int[i] = x;
+	for(i in 1:n)	out_int[i] = x;
 
-		return out_int;
+	return out_int;
+}
+
+// takes as input an array of the form {a,b,c,d} where a,b,c,d are
+// real 1d arrays. These are then returned as concatenated 1d array
+real[] concatenate_real_array(real[,] elems);
+real[] concatenate_real_array(real[,] elems) {
+  int num_elems = size(elems);
+
+  if (num_elems == 1)
+    return(elems[1]);
+
+  if (num_elems == 2)
+    return(to_array_1d(append_row(to_vector(elems[1]), to_vector(elems[2]))));
+
+  // else
+  return(to_array_1d(append_row(to_vector(elems[1]), to_vector( concatenate_real_array(elems[2:num_elems]) ))));
+}
+
+// takes as input an array of the form {a,b,c,d} where a,b,c,d are
+// 1d vectors. These are then returned as concatenated 1d vector
+vector concatenate_vector_array(vector[] elems);
+vector concatenate_vector_array(vector[] elems) {
+  int num_elems = size(elems);
+
+  if (num_elems == 1) return(elems[1]);
+
+  if (num_elems == 2) return(append_row(elems[1], elems[2]));
+
+  // else
+ 	return(append_row(elems[1],  concatenate_vector_array(elems[2:num_elems]) ));
+}
+
+int[] append_int(int[] i1, int[] i2){
+	int i3[size(i1)+size(i2)];
+
+	i3[1:size(i1)] = i1;
+	i3[size(i1)+1:size(i1)+size(i2)] = i2;
+
+	return i3;
+}
+
+// takes as input an array of the form {a,b,c,d} where a,b,c,d are
+// 1d int[. These are then returned as concatenated 1d integer
+int[] concatenate_int_array(int[,] elems);
+int[] concatenate_int_array(int[,] elems) {
+  int num_elems = size(elems);
+
+  if (num_elems == 1) return(elems[1]);
+
+  if (num_elems == 2) return(append_int(elems[1], elems[2]));
+
+  // else
+ 	return(append_int(elems[1],  concatenate_int_array(elems[2:num_elems]) ));
+}
+
+matrix vector_array_to_matrix(vector[] x) {
+		matrix[size(x), rows(x[1])] y;
+		for (m in 1:size(x))
+		  y[m] = x[m]';
+		return y;
+}
+
+vector[] multiply_by_column(vector[] v, real[] r){
+	int n_rows = num_elements(v[,1]);
+	int n_cols = num_elements(v[1]);
+
+	vector[n_cols] v_mult [n_rows];
+	for(i in 1:n_cols) v_mult[,i] = to_array_1d(to_row_vector(v[,i]) .* to_row_vector(r));
+
+	return v_mult;
+}
+
+vector[] append_vector_array(vector[] v1, vector[] v2){
+	vector[num_elements(v1[1]) + num_elements(v2[1])] v3[num_elements(v1[,1])];
+
+	v3[,1:num_elements(v1[1])] = v1;
+	v3[,num_elements(v1[1])+1:num_elements(v3[1])] = v2;
+
+	return v3;
+}
+
+int get_int_buffer_size(int[] v, int threshold){
+	// This function finds how may fake indexes -1 there are in a vector, added for map_rect needs
+
+	int i = threshold; // Value of the index
+	int n = 0; // Length of the buffer
+	int s = num_elements(v); // Size of the whole vector
+
+	while(i == threshold){
+		i = v[s-n];
+		if(i==threshold) n += 1;
 	}
 
-	// takes as input an array of the form {a,b,c,d} where a,b,c,d are
-	// real 1d arrays. These are then returned as concatenated 1d array
-	real[] concatenate_real_array(real[,] elems);
-	real[] concatenate_real_array(real[,] elems) {
-	  int num_elems = size(elems);
+	return n;
+}
 
-	  if (num_elems == 1)
-	    return(elems[1]);
+int get_real_buffer_size(vector v, real threshold){
+	// This function finds how may fake indexes -1 there are in a vector, added for map_rect needs
 
-	  if (num_elems == 2)
-	    return(to_array_1d(append_row(to_vector(elems[1]), to_vector(elems[2]))));
+	real i = threshold; // Value of the index
+	int n = 0; // Length of the buffer
+	int s = rows(v); // Size of the whole vector
 
-	  // else
-	  return(to_array_1d(append_row(to_vector(elems[1]), to_vector( concatenate_real_array(elems[2:num_elems]) ))));
+	while(i == threshold){
+		i = v[s-n];
+		if(i==threshold) n += 1;
 	}
 
-	// takes as input an array of the form {a,b,c,d} where a,b,c,d are
-	// 1d vectors. These are then returned as concatenated 1d vector
-	vector concatenate_vector_array(vector[] elems);
-	vector concatenate_vector_array(vector[] elems) {
-	  int num_elems = size(elems);
+	return n;
+}
 
-	  if (num_elems == 1) return(elems[1]);
+vector clear_real_from_buffer(vector v, real buffer_value){
+	return v[1:(rows(v)- get_real_buffer_size(v, buffer_value))];
+}
 
-	  if (num_elems == 2) return(append_row(elems[1], elems[2]));
+int[] clear_int_from_buffer(int[] v, int buffer_value){
+	return v[1:(num_elements(v) - get_int_buffer_size(v, buffer_value))];
+}
 
-	  // else
-	 	return(append_row(elems[1],  concatenate_vector_array(elems[2:num_elems]) ));
+vector rep_vector_by_array(vector v, int[] reps){
+	vector[sum(reps)] v_rep;
+	int i = 0;
+
+	for(n in 1:num_elements(reps)){
+		v_rep[i+1:i+reps[n]] = rep_vector(v[n], reps[n]);
+		i += reps[n];
 	}
 
-	int[] append_int(int[] i1, int[] i2){
-		int i3[size(i1)+size(i2)];
+	return(v_rep);
+}
 
-		i3[1:size(i1)] = i1;
-		i3[size(i1)+1:size(i1)+size(i2)] = i2;
 
-		return i3;
+int[] get_elements_per_shard(int lenth_v, int shards){
+
+	// Returned integer(max_size, last_element_size)
+	int tentative_size = lenth_v / shards;
+	int tentative_remaining = lenth_v - (tentative_size * shards);
+	int elements_per_shard = tentative_remaining > 0 ? tentative_size + 1 : tentative_size;
+	int remaining =  (elements_per_shard * shards) - lenth_v;
+
+	int length_obj[shards];
+
+	for(s in 1:shards) {
+		length_obj[s] =
+			s != shards ?
+			elements_per_shard :
+			elements_per_shard - remaining;  // Actual elements in it for last object
 	}
 
-	// takes as input an array of the form {a,b,c,d} where a,b,c,d are
-	// 1d int[. These are then returned as concatenated 1d integer
-	int[] concatenate_int_array(int[,] elems);
-	int[] concatenate_int_array(int[,] elems) {
-	  int num_elems = size(elems);
+ 	return length_obj;
 
-	  if (num_elems == 1) return(elems[1]);
+}
 
-	  if (num_elems == 2) return(append_int(elems[1], elems[2]));
+int[,] get_int_MPI(int[] v, int shards){
+  // Simple MPI for int vector
 
-	  // else
-	 	return(append_int(elems[1],  concatenate_int_array(elems[2:num_elems]) ));
+	int elements_per_shard[shards] = get_elements_per_shard(size(v), shards); // Length of the returned object
+	int size_MPI_obj = elements_per_shard[1]; // the first element is always the full size of the object
+	int v_MPI[shards,size_MPI_obj] = rep_array(-1, shards,size_MPI_obj); // Set values to -1 for the ones that are not filled
+
+	int i = 0; // Index sweeping the vector
+
+	for(s in 1:shards){
+		v_MPI[s, 1:elements_per_shard[s]] = v[ (i + 1) : i + elements_per_shard[s] ];
+		i += elements_per_shard[s];
 	}
 
-	matrix vector_array_to_matrix(vector[] x) {
-			matrix[size(x), rows(x[1])] y;
-			for (m in 1:size(x))
-			  y[m] = x[m]';
-			return y;
+	return v_MPI;
+}
+
+vector[] get_vector_MPI(vector v, int shards){
+
+  // Simple MPI for real vector
+	int elements_per_shard[shards] = get_elements_per_shard(rows(v), shards); // Length of the returned object
+	int size_MPI_obj = elements_per_shard[1]; // the first element is always the full size of the object
+	vector[size_MPI_obj] v_MPI[shards] ; // Set values to -999 for the ones that are not filled
+
+	int i = 0; // Index sweeping the vector
+
+	for(s in 1:shards){
+		v_MPI[s] = rep_vector(-999.0, size_MPI_obj);
+		v_MPI[s, 1:elements_per_shard[s]] = v[ (i + 1) : i + elements_per_shard[s] ];
+		i += elements_per_shard[s];
 	}
 
-	vector[] multiply_by_column(vector[] v, real[] r){
-		int n_rows = num_elements(v[,1]);
-		int n_cols = num_elements(v[1]);
+	return v_MPI;
+}
 
-		vector[n_cols] v_mult [n_rows];
-		for(i in 1:n_cols) v_mult[,i] = to_array_1d(to_row_vector(v[,i]) .* to_row_vector(r));
+real[,] get_real_MPI(vector v, int shards){
 
-		return v_mult;
+	int elements_per_shard[shards] = get_elements_per_shard(rows(v), shards); // Length of the returned object
+	int size_MPI_obj = elements_per_shard[1]; // the first element is always the full size of the object
+	real v_MPI[shards,size_MPI_obj] ; // Set values to -999 for the ones that are not filled
+
+	int i = 0; // Index sweeping the vector
+
+	for(s in 1:shards){
+		v_MPI[s,] = rep_array(-999.0, size_MPI_obj);
+		v_MPI[s, 1:elements_per_shard[s]] = to_array_1d(v[ (i + 1) : i + elements_per_shard[s] ]);
+		i += elements_per_shard[s];
 	}
 
-	vector[] append_vector_array(vector[] v1, vector[] v2){
-		vector[num_elements(v1[1]) + num_elements(v2[1])] v3[num_elements(v1[,1])];
+	return v_MPI;
+}
 
-		v3[,1:num_elements(v1[1])] = v1;
-		v3[,num_elements(v1[1])+1:num_elements(v3[1])] = v2;
+int[,] append_int_MPI_arrays(int[,] lv1, int[,] lv2, int[,] lv3, int[,] lv4){
 
-		return v3;
+	# This is for the BUG that dim(int empty_variable[0,0]) is not {0,0} but {0}
+	int dim_1[2] = size(dims(lv1)) == 2 ? dims(lv1) : rep_array(0,2);
+	int dim_2[2] = size(dims(lv2)) == 2 ? dims(lv2) : rep_array(0,2);
+	int dim_3[2] = size(dims(lv3)) == 2 ? dims(lv3) : rep_array(0,2);
+	int dim_4[2] = size(dims(lv4)) == 2 ? dims(lv4) : rep_array(0,2);
+
+	int max_cols = max({dim_1[2], dim_2[2],dim_3[2],dim_4[2]});
+	int tot_rows = dim_1[1] + dim_2[1] + dim_3[1] + dim_4[1];
+
+
+	int merged[tot_rows, max_cols];
+
+	int i = 0;
+
+
+	for(r in 1:dim_1[1]) merged[i+r] = append_array(lv1[r], rep_int(-999, max_cols-dim_1[2]));
+	i += dim_1[1];
+
+	if(dim_2[1] > 0) {
+		for(r in 1:dim_2[1]) merged[i+r] = append_array(lv2[r], rep_int(-999, max_cols-dim_2[2]));
+		i += dim_2[1];
 	}
 
-	int get_int_buffer_size(int[] v, int threshold){
-		// This function finds how may fake indexes -1 there are in a vector, added for map_rect needs
-
-		int i = threshold; // Value of the index
-		int n = 0; // Length of the buffer
-		int s = num_elements(v); // Size of the whole vector
-
-		while(i == threshold){
-			i = v[s-n];
-			if(i==threshold) n += 1;
-		}
-
-		return n;
+	if(dim_3[1] > 0) {
+		for(r in 1:dim_3[1]) merged[i+r] = append_array(lv3[r], rep_int(-999, max_cols-dim_3[2]));
+		i += dim_3[1];
 	}
 
-	int get_real_buffer_size(vector v, real threshold){
-		// This function finds how may fake indexes -1 there are in a vector, added for map_rect needs
-
-		real i = threshold; // Value of the index
-		int n = 0; // Length of the buffer
-		int s = rows(v); // Size of the whole vector
-
-		while(i == threshold){
-			i = v[s-n];
-			if(i==threshold) n += 1;
-		}
-
-		return n;
+	if(dim_4[1] > 0) {
+		for(r in 1:dim_4[1]) merged[i+r] = append_array(lv4[r], rep_int(-999, max_cols-dim_4[2]));
 	}
 
-	vector clear_real_from_buffer(vector v, real buffer_value){
-		return v[1:(rows(v)- get_real_buffer_size(v, buffer_value))];
-	}
+	return(merged);
 
-	int[] clear_int_from_buffer(int[] v, int buffer_value){
-		return v[1:(num_elements(v) - get_int_buffer_size(v, buffer_value))];
-	}
+}
 
-	vector rep_vector_by_array(vector v, int[] reps){
-		vector[sum(reps)] v_rep;
-		int i = 0;
+vector[] append_vector_MPI_arrays(vector[] lv1, vector[] lv2, vector[] lv3, vector[] lv4){
 
-		for(n in 1:num_elements(reps)){
-			v_rep[i+1:i+reps[n]] = rep_vector(v[n], reps[n]);
-			i += reps[n];
-		}
+  // Function for appending many vectors[] inserting the buffer
+	int dim_1[2];
+	int dim_2[2];
+	int dim_3[2];
+	int dim_4[2];
 
-		return(v_rep);
-	}
+	int max_cols = max({
+		num_elements(lv1) > 0 ? num_elements(lv1[1]) : 0,
+		num_elements(lv2) > 0 ? num_elements(lv2[1]) : 0,
+		num_elements(lv3) > 0 ? num_elements(lv3[1]) : 0,
+		num_elements(lv4) > 0 ? num_elements(lv4[1]) : 0
+	});
+	int tot_rows =
+	( num_elements(lv1) > 0 ? num_elements(lv1[,1]) : 0) +
+	(	num_elements(lv2) > 0 ? num_elements(lv2[,1]) : 0) +
+	(	num_elements(lv3) > 0 ? num_elements(lv3[,1]) : 0) +
+	(	num_elements(lv4) > 0 ? num_elements(lv4[,1]) : 0);
+
+	vector[max_cols] merged[tot_rows];
+	int i = 0;
+
+	if(num_elements(lv1) > 0) dim_1 =  {num_elements(lv1[,1]), num_elements(lv1[1])};
+	else dim_1 = rep_array(0,2);
+
+	if(num_elements(lv2) > 0) dim_2 =  {num_elements(lv2[,1]), num_elements(lv2[1])};
+	else dim_2 = rep_array(0,2);
+
+	if(num_elements(lv3) > 0) dim_3 =  {num_elements(lv3[,1]), num_elements(lv3[1])};
+	else dim_3 = rep_array(0,2);
+
+	if(num_elements(lv4) > 0) dim_4 =  {num_elements(lv4[,1]), num_elements(lv4[1])};
+	else dim_4 = rep_array(0,2);
+
+	for(r in 1:dim_1[1]) merged[i+r] = append_row(lv1[r], rep_vector(-999, max_cols-dim_1[2]));
+	i += dim_1[1];
+
+if(dim_2[1] > 0) {
+	for(r in 1:dim_2[1]) merged[i+r] = append_row(lv2[r], rep_vector(-999, max_cols-dim_2[2]));
+	i += dim_2[1];
+}
+
+if(dim_3[1] > 0) {
+	for(r in 1:dim_3[1]) merged[i+r] = append_row(lv3[r], rep_vector(-999, max_cols-dim_3[2]));
+	i += dim_3[1];
+}
+
+if(dim_4[1] > 0) {
+	for(r in 1:dim_4[1]) merged[i+r] = append_row(lv4[r], rep_vector(-999, max_cols-dim_4[2]));
+}
+
+	return(merged);
+
+}
+
+
+
+
 
 
 	int[,] package_int(
@@ -288,99 +460,7 @@ functions{
 		return real_pack;
 	}
 
-	int[,] append_int_MPI_arrays(int[,] lv1, int[,] lv2, int[,] lv3, int[,] lv4){
 
-		# This is for the BUG that dim(int empty_variable[0,0]) is not {0,0} but {0}
-		int dim_1[2] = size(dims(lv1)) == 2 ? dims(lv1) : rep_array(0,2);
-		int dim_2[2] = size(dims(lv2)) == 2 ? dims(lv2) : rep_array(0,2);
-		int dim_3[2] = size(dims(lv3)) == 2 ? dims(lv3) : rep_array(0,2);
-		int dim_4[2] = size(dims(lv4)) == 2 ? dims(lv4) : rep_array(0,2);
-
-		int max_cols = max({dim_1[2], dim_2[2],dim_3[2],dim_4[2]});
-		int tot_rows = dim_1[1] + dim_2[1] + dim_3[1] + dim_4[1];
-
-
-		int merged[tot_rows, max_cols];
-
-		int i = 0;
-
-
-		for(r in 1:dim_1[1]) merged[i+r] = append_array(lv1[r], rep_int(-999, max_cols-dim_1[2]));
-		i += dim_1[1];
-
-		if(dim_2[1] > 0) {
-			for(r in 1:dim_2[1]) merged[i+r] = append_array(lv2[r], rep_int(-999, max_cols-dim_2[2]));
-			i += dim_2[1];
-		}
-
-		if(dim_3[1] > 0) {
-			for(r in 1:dim_3[1]) merged[i+r] = append_array(lv3[r], rep_int(-999, max_cols-dim_3[2]));
-			i += dim_3[1];
-		}
-
-		if(dim_4[1] > 0) {
-			for(r in 1:dim_4[1]) merged[i+r] = append_array(lv4[r], rep_int(-999, max_cols-dim_4[2]));
-		}
-
-		return(merged);
-
-	}
-
-	vector[] append_real_MPI_arrays(vector[] lv1, vector[] lv2, vector[] lv3, vector[] lv4){
-
-
-		int dim_1[2];
-		int dim_2[2];
-		int dim_3[2];
-		int dim_4[2];
-
-		int max_cols = max({
-			num_elements(lv1) > 0 ? num_elements(lv1[1]) : 0,
-			num_elements(lv2) > 0 ? num_elements(lv2[1]) : 0,
-			num_elements(lv3) > 0 ? num_elements(lv3[1]) : 0,
-			num_elements(lv4) > 0 ? num_elements(lv4[1]) : 0
-		});
-		int tot_rows =
-		( num_elements(lv1) > 0 ? num_elements(lv1[,1]) : 0) +
-		(	num_elements(lv2) > 0 ? num_elements(lv2[,1]) : 0) +
-		(	num_elements(lv3) > 0 ? num_elements(lv3[,1]) : 0) +
-		(	num_elements(lv4) > 0 ? num_elements(lv4[,1]) : 0);
-
-		vector[max_cols] merged[tot_rows];
-		int i = 0;
-
-		if(num_elements(lv1) > 0) dim_1 =  {num_elements(lv1[,1]), num_elements(lv1[1])};
-		else dim_1 = rep_array(0,2);
-
-		if(num_elements(lv2) > 0) dim_2 =  {num_elements(lv2[,1]), num_elements(lv2[1])};
-		else dim_2 = rep_array(0,2);
-
-		if(num_elements(lv3) > 0) dim_3 =  {num_elements(lv3[,1]), num_elements(lv3[1])};
-		else dim_3 = rep_array(0,2);
-
-		if(num_elements(lv4) > 0) dim_4 =  {num_elements(lv4[,1]), num_elements(lv4[1])};
-		else dim_4 = rep_array(0,2);
-
-		for(r in 1:dim_1[1]) merged[i+r] = append_row(lv1[r], rep_vector(-999, max_cols-dim_1[2]));
-		i += dim_1[1];
-
-	if(dim_2[1] > 0) {
-		for(r in 1:dim_2[1]) merged[i+r] = append_row(lv2[r], rep_vector(-999, max_cols-dim_2[2]));
-		i += dim_2[1];
-	}
-
-	if(dim_3[1] > 0) {
-		for(r in 1:dim_3[1]) merged[i+r] = append_row(lv3[r], rep_vector(-999, max_cols-dim_3[2]));
-		i += dim_3[1];
-	}
-
-	if(dim_4[1] > 0) {
-		for(r in 1:dim_4[1]) merged[i+r] = append_row(lv4[r], rep_vector(-999, max_cols-dim_4[2]));
-	}
-
-		return(merged);
-
-	}
 
   vector[] sum_NB_MPI(matrix lambda_mat, matrix sigma_mat, matrix prop_mat){
 
@@ -403,7 +483,6 @@ functions{
 		// The vectorisation is G1-Q1, G1-Q2, G1-Q3 etc..
 		return(sum_obj);
 	}
-
 
 	vector lp_reduce( vector global_parameters , vector local_parameters , real[] real_data , int[] int_data ) {
 
@@ -491,60 +570,6 @@ functions{
 
 	}
 
-	int[] get_elements_per_shard(int lenth_v, int shards){
-
-		// Returned integer(max_size, last_element_size)
-		int tentative_size = lenth_v / shards;
-		int tentative_remaining = lenth_v - (tentative_size * shards);
-		int elements_per_shard = tentative_remaining > 0 ? tentative_size + 1 : tentative_size;
-		int remaining =  (elements_per_shard * shards) - lenth_v;
-
-		int length_obj[shards];
-
-		for(s in 1:shards) {
-			length_obj[s] =
-				s != shards ?
-				elements_per_shard :
-				elements_per_shard - remaining;  // Actual elements in it for last object
-		}
-
- 		return length_obj;
-
-	}
-
-	int[,] get_int_MPI(int[] v, int shards){
-
-		int elements_per_shard[shards] = get_elements_per_shard(size(v), shards); // Length of the returned object
-		int size_MPI_obj = elements_per_shard[1]; // the first element is always the full size of the object
-		int v_MPI[shards,size_MPI_obj] = rep_array(-1, shards,size_MPI_obj); // Set values to -1 for the ones that are not filled
-
-		int i = 0; // Index sweeping the vector
-
-		for(s in 1:shards){
-			v_MPI[s, 1:elements_per_shard[s]] = v[ (i + 1) : i + elements_per_shard[s] ];
-			i += elements_per_shard[s];
-		}
-
-		return v_MPI;
-	}
-
-	vector[] get_vector_MPI(vector v, int shards){
-
-		int elements_per_shard[shards] = get_elements_per_shard(rows(v), shards); // Length of the returned object
-		int size_MPI_obj = elements_per_shard[1]; // the first element is always the full size of the object
-		vector[size_MPI_obj] v_MPI[shards] ; // Set values to -999 for the ones that are not filled
-
-		int i = 0; // Index sweeping the vector
-
-		for(s in 1:shards){
-			v_MPI[s] = rep_vector(-999.0, size_MPI_obj);
-			v_MPI[s, 1:elements_per_shard[s]] = v[ (i + 1) : i + elements_per_shard[s] ];
-			i += elements_per_shard[s];
-		}
-
-		return v_MPI;
-	}
-
 	vector[] get_mu_sigma_vector_MPI(vector mus, vector sigmas, int shards){
 
 		int elements_per_shard[shards] = get_elements_per_shard(rows(mus), shards); // Length of the returned object
@@ -561,23 +586,6 @@ functions{
 			v_MPI[s, 1:elements_per_shard[s]] = mus[ (i + 1) : i + elements_per_shard[s] ];
 			v_MPI[s, (elements_per_shard[s]+1):(elements_per_shard[s]+elements_per_shard[s])] = sigmas[ (i + 1) : i + elements_per_shard[s] ];
 
-			i += elements_per_shard[s];
-		}
-
-		return v_MPI;
-	}
-
-	real[,] get_real_MPI(vector v, int shards){
-
-		int elements_per_shard[shards] = get_elements_per_shard(rows(v), shards); // Length of the returned object
-		int size_MPI_obj = elements_per_shard[1]; // the first element is always the full size of the object
-		real v_MPI[shards,size_MPI_obj] ; // Set values to -999 for the ones that are not filled
-
-		int i = 0; // Index sweeping the vector
-
-		for(s in 1:shards){
-			v_MPI[s,] = rep_array(-999.0, size_MPI_obj);
-			v_MPI[s, 1:elements_per_shard[s]] = to_array_1d(v[ (i + 1) : i + elements_per_shard[s] ]);
 			i += elements_per_shard[s];
 		}
 
@@ -891,10 +899,6 @@ vector[Y_1] lambda_log_deconvoluted_1;
 vector[Y_1] sigma_deconvoluted_1;
 
 vector[Y_1] sumNB[2];
-	// vector[Y_1] lambda_log_deconvoluted_1;
-	// vector[Y_2] lambda_log_deconvoluted_2;
-	// vector[Y_3] lambda_log_deconvoluted_3;
-	// vector[Y_4] lambda_log_deconvoluted_4;
 
 	vector[max(size_counts_G_lv_1_MPI_non_redundant) + max(size_counts_S_lv_1_MPI) + max(size_counts_G_lv_1_MPI_non_redundant) + (ct_in_levels[1] * Q) + max(size_G1_linear_MPI) + max(size_G1_linear_MPI) + max(size_y_linear_S_1_MPI)] pack_r_1[shards_in_levels[1]];
 
@@ -1260,7 +1264,7 @@ target += sum(map_rect(
 	target +=  sum(map_rect(
 		lp_reduce ,
 		[sigma_intercept_dec, sigma_slope]' ,
-		append_real_MPI_arrays(pack_r_1, pack_r_2, pack_r_3, pack_r_4),
+		append_vector_MPI_arrays(pack_r_1, pack_r_2, pack_r_3, pack_r_4),
 		real_data2,
 		int_package
 	) .* weights);

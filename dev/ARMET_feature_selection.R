@@ -34,14 +34,15 @@ args <- commandArgs(TRUE)
 
 n_markers = args[1] %>% as.integer
 reps = 10
-is_full_bayesian = args[2] %>% as.integer %>% as.logical
-is_full_bayesian = T
+
 
 levels = 1:(args[3] %>% as.integer)
 
 #out_dir = Sys.time() %>% format("%a_%b_%d_%X") %>% gsub("[: ]", "_", .) %>% sprintf("dev/feature_selection_%s", .)
 out_dir = args[2]  %>% sprintf("dev/feature_selection_%s", .)
 out_dir %>% dir.create()
+
+full_bayesian = args[4] %>% as.integer %>% as.logical
 
 iterations = 500
 
@@ -537,7 +538,7 @@ ARMET_tc(
 		inner_join((.) %>% distinct(sample) %>% sample_n(50)),
 	iterations = 250,
 	n_markers = ARMET::ARMET_ref %>% distinct(ct1, ct2) %>% mutate(`n markers` = n_markers),
-	full_bayes = T,
+	full_bayesian  = full_bayesian,
 	cores = 10, levels = levels
 ) %>%
 	saveRDS(file=file_name)
@@ -550,10 +551,10 @@ ARMET_tc(
 #qsub -l nodes=1:ppn=12,mem=32gb,walltime=18:00:00 dev/job_torque.sh -F "20 fist_run"
 
 # Plot results
-res_dir = "dev/feature_selection_second_run_skylake_1//"
-res_dir = "dev/feature_selection_second_run_2/"
-res_dir = "dev/feature_selection_second_run_skylake_4/"
-res_dir = "dev/feature_selection_third_run_skylake_1/"
+# res_dir = "dev/feature_selection_second_run_skylake_1//"
+# res_dir = "dev/feature_selection_second_run_2/"
+# res_dir = "dev/feature_selection_second_run_skylake_4/"
+# res_dir = "dev/feature_selection_third_run_skylake_1/"
 
 # res =
 # 	dir(res_dir, full.names = T) %>%
@@ -609,28 +610,28 @@ res_dir = "dev/feature_selection_third_run_skylake_1/"
 # 	stat_summary(aes(y =  `error %>% mean`), fun.y=mean, geom="line", size=3)
 #
 #
-(res %>%
-		filter(truth == 0.5) %>%
-		mutate(error = error %>% abs) %>%
-		left_join(
-			tree %>%
-				data.tree::ToDataFrameTree("name", "level") %>%
-				as_tibble %>%
-				select(name, level) %>%
-				mutate(level = level-1) %>%
-				rename(`Cell type category` = name, level_tree = level)
-		) %>%
-		filter(level == level_tree) %>%
-	#filter(level ==2) %>%
-	mutate(n_markers = n_markers %>% as.integer) %>%
-	ggplot(aes(x=(n_markers), y=error, color=interaction(ct1, ct2), size=CI, Q=Q, C=C)) +
-	#geom_violin() +
-	geom_jitter(alpha=0.3, width = 0.7) +
-	#	stat_smooth(method = "lm", formula = y ~ x + I(x^2), size = 1, se = F)
-	stat_summary(aes(y = error), fun.y=mean, geom="line", size=3) +
-		facet_wrap(~level) +
-		my_theme
-) %>% plotly::ggplotly()
+# (res %>%
+# 		filter(truth == 0.5) %>%
+# 		mutate(error = error %>% abs) %>%
+# 		left_join(
+# 			tree %>%
+# 				data.tree::ToDataFrameTree("name", "level") %>%
+# 				as_tibble %>%
+# 				select(name, level) %>%
+# 				mutate(level = level-1) %>%
+# 				rename(`Cell type category` = name, level_tree = level)
+# 		) %>%
+# 		filter(level == level_tree) %>%
+# 	#filter(level ==2) %>%
+# 	mutate(n_markers = n_markers %>% as.integer) %>%
+# 	ggplot(aes(x=(n_markers), y=error, color=interaction(ct1, ct2), size=CI, Q=Q, C=C)) +
+# 	#geom_violin() +
+# 	geom_jitter(alpha=0.3, width = 0.7) +
+# 	#	stat_smooth(method = "lm", formula = y ~ x + I(x^2), size = 1, se = F)
+# 	stat_summary(aes(y = error), fun.y=mean, geom="line", size=3) +
+# 		facet_wrap(~level) +
+# 		my_theme
+# ) %>% plotly::ggplotly()
 
 
 # print bies in normalisation
