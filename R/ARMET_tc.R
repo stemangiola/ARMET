@@ -849,7 +849,8 @@ ARMET_tc = function(
 		ARMET::ARMET_ref %>%
 		left_join(n_markers, by=c("ct1", "ct2")) %>%
 		filter_reference(mix) %>%
-		select(-ct1, -ct2, -rank, -`n markers`) %>%	distinct
+		select(-ct1, -ct2, -rank, -`n markers`) %>%
+		distinct %>%
 
 		# Select cell types in hierarchy
 		inner_join(
