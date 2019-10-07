@@ -335,7 +335,7 @@ ARMET_tc = function(
 	shards = cores = 8
 	shards_in_levels = c(8, 8, 16, 8) %>% `*` (1:4 %in% levels)
 	is_level_in = shards_in_levels %>% `>` (0) %>% as.integer
-
+browser()
 	weights =
 		df %>%
 		get_level_lpdf_weights %>%
@@ -345,729 +345,89 @@ ARMET_tc = function(
 		pull(weight)
 
 
+	parse_baseline = function(.data, lv){
+		.data %>%
+		filter(level==lv) %>%
+		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
+		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
+		format_for_MPI_from_linear()
+	}
+
 	# Count indexes
 	# lv 1
-	counts_idx_lv_1_MPI =
-		counts_baseline_to_linear %>%
-		filter(level==1) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, counts_idx, `read count MPI row`)  %>%
-		spread(idx_MPI,  counts_idx) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
 
-	size_counts_idx_lv_1_MPI =
-		counts_baseline_to_linear %>%
-		filter(level==1) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, counts_idx, `read count MPI row`)  %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
+	MPI1 = get_MPI_df(counts_baseline_to_linear, y_source, counts_baseline,1)
 
-	# Count indexes
-	counts_G_lv_1_MPI =
-		counts_baseline_to_linear %>%
-		filter(level==1) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, G, `read count MPI row`)  %>%
-		spread(idx_MPI,  G) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
+	counts_idx_lv_1_MPI = MPI1$counts_idx_lv_MPI
+	size_counts_idx_lv_1_MPI = MPI1$size_counts_idx_lv_MPI
+	counts_G_lv_1_MPI = MPI1$counts_G_lv_MPI
+	size_counts_G_lv_1_MPI = MPI1$size_counts_G_lv_MPI
+	counts_G_lv_1_MPI_non_redundant = MPI1$counts_G_lv_MPI_non_redundant
+	size_counts_G_lv_1_MPI_non_redundant = MPI1$size_counts_G_lv_MPI_non_redundant
+	counts_G_lv_1_MPI_non_redundant_reps = MPI1$counts_G_lv_MPI_non_redundant_reps
+	counts_S_lv_1_MPI = MPI1$counts_S_lv_MPI
+	size_counts_S_lv_1_MPI = MPI1$size_counts_S_lv_MPI
+	y_linear_1_MPI = MPI1$y_linear_MPI
+	size_y_linear_1_MPI = MPI1$size_y_linear_MPI
+	y_linear_S_1_MPI = MPI1$y_linear_S_MPI
+	size_y_linear_S_1_MPI = MPI1$size_y_linear_S_MPI
+	G1_linear_MPI = MPI1$G_linear_MPI
+	size_G1_linear_MPI = MPI1$size_G_linear_MPI
 
-	size_counts_G_lv_1_MPI =
-		counts_baseline_to_linear %>%
-		filter(level==1) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, G, `read count MPI row`)  %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
 
-	counts_G_lv_1_MPI_non_redundant =
-		counts_baseline_to_linear %>%
-		filter(level==1) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, G)  %>%
-		group_by(idx_MPI) %>% do( (.) %>% rowid_to_column("read count MPI row")) %>% ungroup() %>%
-		spread(idx_MPI,  G) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
+	MPI2 = get_MPI_df(counts_baseline_to_linear, y_source, counts_baseline,2)
 
-	size_counts_G_lv_1_MPI_non_redundant =
-		counts_baseline_to_linear %>%
-		filter(level==1) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, G)  %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
+	counts_idx_lv_2_MPI = MPI2$counts_idx_lv_MPI
+	size_counts_idx_lv_2_MPI = MPI2$size_counts_idx_lv_MPI
+	counts_G_lv_2_MPI = MPI2$counts_G_lv_MPI
+	size_counts_G_lv_2_MPI = MPI2$size_counts_G_lv_MPI
+	counts_G_lv_2_MPI_non_redundant = MPI2$counts_G_lv_MPI_non_redundant
+	size_counts_G_lv_2_MPI_non_redundant = MPI2$size_counts_G_lv_MPI_non_redundant
+	counts_G_lv_2_MPI_non_redundant_reps = MPI2$counts_G_lv_MPI_non_redundant_reps
+	counts_S_lv_2_MPI = MPI2$counts_S_lv_MPI
+	size_counts_S_lv_2_MPI = MPI2$size_counts_S_lv_MPI
+	y_linear_2_MPI = MPI2$y_linear_MPI
+	size_y_linear_2_MPI = MPI2$size_y_linear_MPI
+	y_linear_S_2_MPI = MPI2$y_linear_S_MPI
+	size_y_linear_S_2_MPI = MPI2$size_y_linear_S_MPI
+	G2_linear_MPI = MPI2$G_linear_MPI
+	size_G2_linear_MPI = MPI2$size_G_linear_MPI
 
-	counts_G_lv_1_MPI_non_redundant_reps =
-		counts_baseline_to_linear %>%
-		filter(level==1) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, G, `read count MPI row`)  %>%
-		left_join( (.) %>% count(idx_MPI, G) ) %>%
-		distinct(idx_MPI, G, n) %>%
-		group_by(idx_MPI) %>% do( (.) %>% rowid_to_column("read count MPI row")) %>% ungroup() %>%
-		distinct(idx_MPI, n, `read count MPI row` ) %>%
-		spread(idx_MPI,  n) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
+	MPI3 = get_MPI_df(counts_baseline_to_linear, y_source, counts_baseline,3)
 
-	# Count indexes
-	counts_S_lv_1_MPI =
-		counts_baseline_to_linear %>%
-		filter(level==1) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, S, `read count MPI row`)  %>%
-		spread(idx_MPI,  S) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
+	counts_idx_lv_3_MPI = MPI3$counts_idx_lv_MPI
+	size_counts_idx_lv_3_MPI = MPI3$size_counts_idx_lv_MPI
+	counts_G_lv_3_MPI = MPI3$counts_G_lv_MPI
+	size_counts_G_lv_3_MPI = MPI3$size_counts_G_lv_MPI
+	counts_G_lv_3_MPI_non_redundant = MPI3$counts_G_lv_MPI_non_redundant
+	size_counts_G_lv_3_MPI_non_redundant = MPI3$size_counts_G_lv_MPI_non_redundant
+	counts_G_lv_3_MPI_non_redundant_reps = MPI3$counts_G_lv_MPI_non_redundant_reps
+	counts_S_lv_3_MPI = MPI3$counts_S_lv_MPI
+	size_counts_S_lv_3_MPI = MPI3$size_counts_S_lv_MPI
+	y_linear_3_MPI = MPI3$y_linear_MPI
+	size_y_linear_3_MPI = MPI3$size_y_linear_MPI
+	y_linear_S_3_MPI = MPI3$y_linear_S_MPI
+	size_y_linear_S_3_MPI = MPI3$size_y_linear_S_MPI
+	G3_linear_MPI = MPI3$G_linear_MPI
+	size_G3_linear_MPI = MPI3$size_G_linear_MPI
 
-	size_counts_S_lv_1_MPI =
-		counts_baseline_to_linear %>%
-		filter(level==1) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, S, `read count MPI row`)   %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
+	MPI4 = get_MPI_df(counts_baseline_to_linear, y_source, counts_baseline,4)
 
-	# mix Counts
-	y_linear_1_MPI =
-		y_source %>%
-		filter(level ==1) %>%
-		distinct(GM, Q, S, `read count`, level) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear_GM() %>%
-		distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
-		spread(idx_MPI,  `read count`) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
-
-	size_y_linear_1_MPI =
-		y_source %>%
-		filter(level ==1) %>%
-		distinct(GM, Q, S, `read count`, level) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear_GM() %>%
-		distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
-
-	y_linear_S_1_MPI =
-		y_source %>%
-		filter(level ==1) %>%
-		distinct(GM, Q, S, `read count`, level) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear_GM() %>%
-		distinct(idx_MPI, S, `read count MPI row`)  %>%
-		spread(idx_MPI,  S) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
-
-	size_y_linear_S_1_MPI =
-		y_source %>%
-		filter(level ==1) %>%
-		distinct(GM, Q, S, `read count`, level) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear_GM() %>%
-		distinct(idx_MPI, S, `read count MPI row`)  %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
-
-	G1_linear_MPI =
-		counts_baseline %>% filter(level ==1) %>%
-		distinct(G, GM, C, level) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear_dec() %>%
-		distinct(idx_MPI, G, `read count MPI row`) %>%
-		spread(idx_MPI,  G) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
-
-	size_G1_linear_MPI =
-		counts_baseline %>% filter(level ==1) %>%
-		distinct(G, GM, C, level) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear_dec() %>%
-		distinct(idx_MPI, G, `read count MPI row`)   %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
-
-	# lv 2
-	counts_idx_lv_2_MPI =
-		counts_baseline_to_linear %>%
-		filter(level==2) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, counts_idx, `read count MPI row`)  %>%
-		spread(idx_MPI,  counts_idx) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
-
-	size_counts_idx_lv_2_MPI =
-		counts_baseline_to_linear %>%
-		filter(level==2) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-				left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, counts_idx, `read count MPI row`)  %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
-
-	# Count indexes
-	counts_G_lv_2_MPI =
-		counts_baseline_to_linear %>%
-		filter(level==2) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-				left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, G, `read count MPI row`)  %>%
-		spread(idx_MPI,  G) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
-
-	size_counts_G_lv_2_MPI =
-		counts_baseline_to_linear %>%
-		filter(level==2) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-				left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, G, `read count MPI row`)  %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
-
-	counts_G_lv_2_MPI_non_redundant =
-		counts_baseline_to_linear %>%
-		filter(level==2) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-				left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, G)  %>%
-		group_by(idx_MPI) %>%
-		do( (.) %>% rowid_to_column("read count MPI row")) %>% ungroup() %>%
-		spread(idx_MPI,  G) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
-
-	size_counts_G_lv_2_MPI_non_redundant =
-		counts_baseline_to_linear %>%
-		filter(level==2) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-				left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, G)  %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
-
-	counts_G_lv_2_MPI_non_redundant_reps =
-		counts_baseline_to_linear %>%
-		filter(level==2) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-				left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, G, `read count MPI row`)  %>%
-		left_join( (.) %>% count(idx_MPI, G) ) %>%
-		distinct(idx_MPI, G, n) %>%
-		group_by(idx_MPI) %>% do( (.) %>% rowid_to_column("read count MPI row")) %>% ungroup() %>%
-		distinct(idx_MPI, n, `read count MPI row` ) %>%
-		spread(idx_MPI,  n) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
-
-	# Count indexes
-	counts_S_lv_2_MPI =
-		counts_baseline_to_linear %>%
-		filter(level==2) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-				left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, S, `read count MPI row`)  %>%
-		spread(idx_MPI,  S) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
-
-	size_counts_S_lv_2_MPI =
-		counts_baseline_to_linear %>%
-		filter(level==2) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-				left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, S, `read count MPI row`)   %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
-
-	# mix Counts
-	y_linear_2_MPI =
-		y_source %>%
-		filter(level ==2) %>%
-		distinct(GM, Q, S, `read count`, level) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear_GM() %>%
-		distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
-		spread(idx_MPI,  `read count`) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
-
-	size_y_linear_2_MPI =
-		y_source %>%
-		filter(level ==2) %>%
-		distinct(GM, Q, S, `read count`, level) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear_GM() %>%
-		distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
-
-	y_linear_S_2_MPI =
-		y_source %>%
-		filter(level ==2) %>%
-		distinct(GM, Q, S, `read count`, level) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear_GM() %>%
-		distinct(idx_MPI, S, `read count MPI row`)  %>%
-		spread(idx_MPI,  S) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
-
-	size_y_linear_S_2_MPI =
-		y_source %>%
-		filter(level ==2) %>%
-		distinct(GM, Q, S, `read count`, level) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear_GM() %>%
-		distinct(idx_MPI, S, `read count MPI row`)  %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
-
-	G2_linear_MPI =
-		counts_baseline %>% filter(level ==2) %>%
-		distinct(G, GM, C, level) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear_dec() %>%
-		distinct(idx_MPI, G, `read count MPI row`) %>%
-		spread(idx_MPI,  G) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
-
-	size_G2_linear_MPI =
-		counts_baseline %>% filter(level ==2) %>%
-		distinct(G, GM, C, level) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear_dec() %>%
-		distinct(idx_MPI, G, `read count MPI row`)   %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
-
-	# lv 3
-	counts_idx_lv_3_MPI =
-		counts_baseline_to_linear %>%
-		filter(level==3) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-				left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, counts_idx, `read count MPI row`)  %>%
-		spread(idx_MPI,  counts_idx) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>%
-		as.data.frame
-
-	size_counts_idx_lv_3_MPI =
-		counts_baseline_to_linear %>%
-		filter(level==3) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-				left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, counts_idx, `read count MPI row`)  %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%
-		as.array
-
-	# Count indexes
-	counts_G_lv_3_MPI =
-		counts_baseline_to_linear %>%
-		filter(level==3) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-				left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, G, `read count MPI row`)  %>%
-		spread(idx_MPI,  G) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
-
-	size_counts_G_lv_3_MPI =
-		counts_baseline_to_linear %>%
-		filter(level==3) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-				left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, G, `read count MPI row`)  %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
-
-	counts_G_lv_3_MPI_non_redundant =
-		counts_baseline_to_linear %>%
-		filter(level==3) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-				left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, G)  %>%
-		group_by(idx_MPI) %>% do( (.) %>% rowid_to_column("read count MPI row")) %>% ungroup() %>%
-		spread(idx_MPI,  G) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
-
-	size_counts_G_lv_3_MPI_non_redundant =
-		counts_baseline_to_linear %>%
-		filter(level==3) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-				left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, G)  %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
-
-	counts_G_lv_3_MPI_non_redundant_reps =
-		counts_baseline_to_linear %>%
-		filter(level==3) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-				left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, G, `read count MPI row`)  %>%
-		left_join( (.) %>% count(idx_MPI, G) ) %>%
-		distinct(idx_MPI, G, n) %>%
-		group_by(idx_MPI) %>% do( (.) %>% rowid_to_column("read count MPI row")) %>% ungroup() %>%
-		distinct(idx_MPI, n, `read count MPI row` ) %>%
-		spread(idx_MPI,  n) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
-
-	# Count indexes
-	counts_S_lv_3_MPI =
-		counts_baseline_to_linear %>%
-		filter(level==3) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-				left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, S, `read count MPI row`)  %>%
-		spread(idx_MPI,  S) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
-
-	size_counts_S_lv_3_MPI =
-		counts_baseline_to_linear %>%
-		filter(level==3) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-				left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, S, `read count MPI row`)   %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
-
-	# mix Counts
-	y_linear_3_MPI =
-		y_source %>%
-		filter(level ==3) %>%
-		distinct(GM, Q, S, `read count`, level) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear_GM() %>%
-		distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
-		spread(idx_MPI,  `read count`) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
-
-	size_y_linear_3_MPI =
-		y_source %>%
-		filter(level ==3) %>%
-		distinct(GM, Q, S, `read count`, level) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear_GM() %>%
-		distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
-
-	y_linear_S_3_MPI =
-		y_source %>%
-		filter(level ==3) %>%
-		distinct(GM, Q, S, `read count`, level) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear_GM() %>%
-		distinct(idx_MPI, S, `read count MPI row`)  %>%
-		spread(idx_MPI,  S) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
-
-	size_y_linear_S_3_MPI =
-		y_source %>%
-		filter(level ==3) %>%
-		distinct(GM, Q, S, `read count`, level) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear_GM() %>%
-		distinct(idx_MPI, S, `read count MPI row`)  %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
-
-	G3_linear_MPI =
-		counts_baseline %>% filter(level ==3) %>%
-		distinct(G, GM, C, level) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear_dec() %>%
-		distinct(idx_MPI, G, `read count MPI row`) %>%
-		spread(idx_MPI,  G) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
-
-	size_G3_linear_MPI =
-		counts_baseline %>% filter(level ==3) %>%
-		distinct(G, GM, C, level) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear_dec() %>%
-		distinct(idx_MPI, G, `read count MPI row`)   %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
-
-	# lv 4
-	counts_idx_lv_4_MPI =
-		counts_baseline_to_linear %>%
-		filter(level==4) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-				left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, counts_idx, `read count MPI row`)  %>%
-		spread(idx_MPI,  counts_idx) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
-
-	size_counts_idx_lv_4_MPI =
-		counts_baseline_to_linear %>%
-		filter(level==4) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-				left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, counts_idx, `read count MPI row`)  %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
-
-	# Count indexes
-	counts_G_lv_4_MPI =
-		counts_baseline_to_linear %>%
-		filter(level==4) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-				left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, G, `read count MPI row`)  %>%
-		spread(idx_MPI,  G) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
-
-	size_counts_G_lv_4_MPI =
-		counts_baseline_to_linear %>%
-		filter(level==4) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-				left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, G, `read count MPI row`)  %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
-
-	counts_G_lv_4_MPI_non_redundant =
-		counts_baseline_to_linear %>%
-		filter(level==4) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-				left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, G)  %>%
-		group_by(idx_MPI) %>% do( (.) %>% rowid_to_column("read count MPI row")) %>% ungroup() %>%
-		spread(idx_MPI,  G) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
-
-	size_counts_G_lv_4_MPI_non_redundant =
-		counts_baseline_to_linear %>%
-		filter(level==4) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-				left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, G)  %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
-
-	counts_G_lv_4_MPI_non_redundant_reps =
-		counts_baseline_to_linear %>%
-		filter(level==4) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-				left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, G, `read count MPI row`)  %>%
-		left_join( (.) %>% count(idx_MPI, G) ) %>%
-		distinct(idx_MPI, G, n) %>%
-		group_by(idx_MPI) %>% do( (.) %>% rowid_to_column("read count MPI row")) %>% ungroup() %>%
-		distinct(idx_MPI, n, `read count MPI row` ) %>%
-		spread(idx_MPI,  n) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
-
-	# Count indexes
-	counts_S_lv_4_MPI =
-		counts_baseline_to_linear %>%
-		filter(level==4) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-				left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, S, `read count MPI row`)  %>%
-		spread(idx_MPI,  S) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
-
-	size_counts_S_lv_4_MPI =
-		counts_baseline_to_linear %>%
-		filter(level==4) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-				left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear() %>%
-		distinct(idx_MPI, S, `read count MPI row`)   %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
-
-	# mix Counts
-	y_linear_4_MPI =
-		y_source %>%
-		filter(level ==4) %>%
-		distinct(GM, Q, S, `read count`, level) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear_GM() %>%
-		distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
-		spread(idx_MPI,  `read count`) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
-
-	size_y_linear_4_MPI =
-		y_source %>%
-		filter(level ==4) %>%
-		distinct(GM, Q, S, `read count`, level) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear_GM() %>%
-		distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
-
-	y_linear_S_4_MPI =
-		y_source %>%
-		filter(level ==4) %>%
-		distinct(GM, Q, S, `read count`, level) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear_GM() %>%
-		distinct(idx_MPI, S, `read count MPI row`)  %>%
-		spread(idx_MPI,  S) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
-
-	size_y_linear_S_4_MPI =
-		y_source %>%
-		filter(level ==4) %>%
-		distinct(GM, Q, S, `read count`, level) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear_GM() %>%
-		distinct(idx_MPI, S, `read count MPI row`)  %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
-
-	G4_linear_MPI =
-		counts_baseline %>% filter(level ==4) %>%
-		distinct(G, GM, C, level) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear_dec() %>%
-		distinct(idx_MPI, G, `read count MPI row`) %>%
-		spread(idx_MPI,  G) %>%
-		select(-`read count MPI row`) %>%
-		replace(is.na(.), -999 %>% as.integer) %>%
-		as_matrix() %>% t %>% 		as.data.frame
-
-	size_G4_linear_MPI =
-		counts_baseline %>% filter(level ==4) %>%
-		distinct(G, GM, C, level) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear_dec() %>%
-		distinct(idx_MPI, G, `read count MPI row`)   %>%
-		count(idx_MPI) %>%
-		pull(n) %>%
-		ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
+	counts_idx_lv_4_MPI = MPI4$counts_idx_lv_MPI
+	size_counts_idx_lv_4_MPI = MPI4$size_counts_idx_lv_MPI
+	counts_G_lv_4_MPI = MPI4$counts_G_lv_MPI
+	size_counts_G_lv_4_MPI = MPI4$size_counts_G_lv_MPI
+	counts_G_lv_4_MPI_non_redundant = MPI4$counts_G_lv_MPI_non_redundant
+	size_counts_G_lv_4_MPI_non_redundant = MPI4$size_counts_G_lv_MPI_non_redundant
+	counts_G_lv_4_MPI_non_redundant_reps = MPI4$counts_G_lv_MPI_non_redundant_reps
+	counts_S_lv_4_MPI = MPI4$counts_S_lv_MPI
+	size_counts_S_lv_4_MPI = MPI4$size_counts_S_lv_MPI
+	y_linear_4_MPI = MPI4$y_linear_MPI
+	size_y_linear_4_MPI = MPI4$size_y_linear_MPI
+	y_linear_S_4_MPI = MPI4$y_linear_S_MPI
+	size_y_linear_S_4_MPI = MPI4$size_y_linear_S_MPI
+	G4_linear_MPI = MPI4$G_linear_MPI
+	size_G4_linear_MPI = MPI4$size_G_linear_MPI
 
 	# # MODEL
 	Sys.setenv("STAN_NUM_THREADS" = cores)
