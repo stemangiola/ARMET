@@ -417,7 +417,8 @@ filter_reference = function(reference, mix){
 								(.) %>%
 									distinct(symbol, rank) %>%
 									arrange(rank) %>%
-									slice(1:n_markers)
+									slice(1:n_markers),
+								by = c("symbol", "rank")
 							)
 
 					}) %>%
@@ -442,8 +443,7 @@ filter_reference = function(reference, mix){
 				# Get house keeping genes
 				(.) %>% filter(`house keeping`)
 			)
-		} %>%
-		select(-ct1, -ct2, -rank, -`n markers`) %>%	distinct
+		}
 }
 
 #' get_idx_level
@@ -696,6 +696,16 @@ get_NB_qq_values = function(input.df, transcript_column){
 		ungroup
 }
 
+filter_house_keeping_query_if_fixed =  function(.data, full_bayesian){
+	.data %>%
+
+		# If full Bayesian false just keep house keeping
+		ifelse_pipe(
+			!full_bayesian,
+			~ .x %>% filter(`house keeping` & `query`)
+		)
+}
+
 #' ARMET-tc main
 #'
 #' @description This function calls the stan model.
@@ -744,7 +754,7 @@ get_NB_qq_values = function(input.df, transcript_column){
 ARMET_tc = function(
 	mix,
 	reference = NULL,
-	#full_bayesian = 0,
+	full_bayesian = T,
 	verbose =                           F,
 	omit_regression =                   F,
 	save_fit =                          F,
@@ -757,7 +767,6 @@ ARMET_tc = function(
 	n_markers
 ){
 
-	full_bayesian = T
 	input = c(as.list(environment()))
 
 
@@ -840,6 +849,7 @@ ARMET_tc = function(
 		ARMET::ARMET_ref %>%
 		left_join(n_markers, by=c("ct1", "ct2")) %>%
 		filter_reference(mix) %>%
+		select(-ct1, -ct2, -rank, -`n markers`) %>%	distinct
 
 		# Select cell types in hierarchy
 		inner_join(
@@ -945,12 +955,6 @@ ARMET_tc = function(
 		# Eliminate the query part, not the house keeping of the query
 		filter(!`query` | `house keeping`)  %>%
 
-		# If full Bayesian false just keep house keeping
-		{
-			if(!full_bayesian) (.) %>% filter(`house keeping` & `query`)
-			else (.)
-		} %>%
-
 		format_for_MPI(shards)
 
 	S = counts_baseline %>% distinct(sample) %>% nrow()
@@ -1006,170 +1010,12 @@ ARMET_tc = function(
 		arrange(C, Q, symbol) %>%
 		mutate(`Cell type category` = factor(`Cell type category`, unique(`Cell type category`)))
 
-	# # # Data MPI for deconvolution level 1
-	# y_MPI_lv1 = y_source %>% get_MPI_deconv(shards, 1, tree)
-	# idx_1_source = y_source %>% filter(level == 1) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
-	# idx_1 = idx_1_source %>% pull(G)
-	# I1 = idx_1 %>% length
-	# I1_dim = c(idx_1_source %>% distinct(symbol) %>% nrow, idx_1_source %>% distinct(`Cell type category`) %>% nrow)
-	# y_MPI_source_lv1 = y_MPI_lv1 %$% y_MPI_source
-	# y_MPI_symbol_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_symbol_per_shard
-	# y_MPI_idx_symbol_lv1 = y_MPI_lv1 %$% y_MPI_idx_symbol
-	# y_MPI_G_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_G_per_shard
-	# GM_lv1 = df %>% filter(!`house keeping`) %>% filter(level==1) %>% distinct(symbol) %>% nrow()
-	# y_idx_lv1 =  y_MPI_lv1 %$% y_idx
-	# y_MPI_idx_lv1 = y_MPI_lv1 %$% y_MPI_idx
-	# y_MPI_N_per_shard_lv1 = y_MPI_lv1 %$% y_MPI_N_per_shard
-	# y_MPI_count_lv1 = y_MPI_lv1 %$% y_MPI_count
-	#
-	# # Data MPI for deconvolution level 2
-	# y_MPI_lv2 = y_source %>% get_MPI_deconv(shards, 2, tree)
-	# idx_2_source = y_source %>% filter(level == 2) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
-	# idx_2 = idx_2_source %>% pull(G)
-	# I2 = idx_2 %>% length
-	# I2_dim = c(idx_2_source %>% distinct(symbol) %>% nrow, idx_2_source %>% distinct(`Cell type category`) %>% nrow)
-	# y_MPI_source_lv2 = y_MPI_lv2 %$% y_MPI_source
-	# y_MPI_symbol_per_shard_lv2 = y_MPI_lv2 %$% y_MPI_symbol_per_shard
-	# y_MPI_idx_symbol_lv2 = y_MPI_lv2 %$% y_MPI_idx_symbol
-	# y_MPI_G_per_shard_lv2 = y_MPI_lv2 %$% y_MPI_G_per_shard
-	# GM_lv2 = df %>% filter(!`house keeping`) %>% filter(level==2) %>% distinct(symbol) %>% nrow()
-	# y_idx_lv2 =  y_MPI_lv2 %$% y_idx
-	# y_MPI_idx_lv2 = y_MPI_lv2 %$% y_MPI_idx
-	# y_MPI_N_per_shard_lv2 = y_MPI_lv2 %$% y_MPI_N_per_shard
-	# y_MPI_count_lv2 = y_MPI_lv2 %$% y_MPI_count
-	#
-	# # Data MPI for deconvolution level 3
-	# y_MPI_lv3 = y_source %>% get_MPI_deconv(shards, 3, tree)
-	# idx_3_source = y_source %>% filter(level == 3) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
-	# idx_3 = idx_3_source %>% pull(G)
-	# I3 = idx_3 %>% length
-	# I3_dim = c(idx_3_source %>% distinct(symbol) %>% nrow, idx_3_source %>% distinct(`Cell type category`) %>% nrow)
-	# y_MPI_source_lv3 = y_MPI_lv3 %$% y_MPI_source
-	# y_MPI_symbol_per_shard_lv3 = y_MPI_lv3 %$% y_MPI_symbol_per_shard
-	# y_MPI_idx_symbol_lv3 = y_MPI_lv3 %$% y_MPI_idx_symbol
-	# y_MPI_G_per_shard_lv3 = y_MPI_lv3 %$% y_MPI_G_per_shard
-	# GM_lv3 = df %>% filter(!`house keeping`) %>% filter(level==3) %>% distinct(symbol) %>% nrow()
-	# y_idx_lv3 =  y_MPI_lv3 %$% y_idx
-	# y_MPI_idx_lv3 = y_MPI_lv3 %$% y_MPI_idx
-	# y_MPI_N_per_shard_lv3 = y_MPI_lv3 %$% y_MPI_N_per_shard
-	# y_MPI_count_lv3 = y_MPI_lv3 %$% y_MPI_count
-	#
-	# # Data MPI for deconvolution level 4
-	# y_MPI_lv4 = y_source %>% get_MPI_deconv(shards, 4, tree)
-	# idx_4_source = y_source %>% filter(level == 4) %>% distinct(symbol, G, `Cell type category`) %>% arrange(`Cell type category`, symbol)
-	# idx_4 = idx_4_source %>% pull(G)
-	# I4 = idx_4 %>% length
-	# I4_dim = c(idx_4_source %>% distinct(symbol) %>% nrow, idx_4_source %>% distinct(`Cell type category`) %>% nrow)
-	# y_MPI_source_lv4 = y_MPI_lv4 %$% y_MPI_source
-	# y_MPI_symbol_per_shard_lv4 = y_MPI_lv4 %$% y_MPI_symbol_per_shard
-	# y_MPI_idx_symbol_lv4 = y_MPI_lv4 %$% y_MPI_idx_symbol
-	# y_MPI_G_per_shard_lv4 = y_MPI_lv4 %$% y_MPI_G_per_shard
-	# GM_lv4 = df %>% filter(!`house keeping`) %>% filter(level==4) %>% distinct(symbol) %>% nrow()
-	# y_idx_lv4 =  y_MPI_lv4 %$% y_idx
-	# y_MPI_idx_lv4 = y_MPI_lv4 %$% y_MPI_idx
-	# y_MPI_N_per_shard_lv4 = y_MPI_lv4 %$% y_MPI_N_per_shard
-	# y_MPI_count_lv4 = y_MPI_lv4 %$% y_MPI_count
-
 	Q = df %>% filter(`query`) %>% distinct(Q) %>% nrow
-
-	#######################################
-	# Merge all MPI
-	#######################################
-
-	# # Reference
-	# counts_package =
-	# 	# Dimensions data sets
-	# 	rep(c(M, N, S), shards) %>%
-	# 	matrix(nrow = shards, byrow = T) %>%
-	# 	cbind(G_per_shard) %>%
-	# 	cbind(symbol_end) %>%
-	# 	cbind(sample_idx) %>%
-	# 	cbind(counts)
-	#
-	# # level 1
-	# lev1_package =
-	# 	# Dimensions data sets
-	# 	rep(c(ct_in_levels[1], Q, S), shards) %>%
-	# 	matrix(nrow = shards, byrow = T) %>%
-	# 	cbind(y_MPI_symbol_per_shard_lv1) %>%
-	# 	cbind(y_MPI_G_per_shard_lv1) %>%
-	# 	cbind(y_MPI_N_per_shard_lv1) %>%
-	# 	cbind(y_MPI_count_lv1)
-	#
-	# # level 2
-	# lev2_package =
-	# 	# Dimensions data sets
-	# 	rep(c(ct_in_levels[2], Q, S), shards) %>%
-	# 	matrix(nrow = shards, byrow = T) %>%
-	# 	cbind(y_MPI_symbol_per_shard_lv2) %>%
-	# 	cbind(y_MPI_G_per_shard_lv2) %>%
-	# 	cbind(y_MPI_N_per_shard_lv2) %>%
-	# 	cbind(y_MPI_count_lv2)
-	#
-	# # level 3
-	# lev3_package =
-	# 	# Dimensions data sets
-	# 	rep(c(ct_in_levels[3], Q, S), shards) %>%
-	# 	matrix(nrow = shards, byrow = T) %>%
-	# 	cbind(y_MPI_symbol_per_shard_lv3) %>%
-	# 	cbind(y_MPI_G_per_shard_lv3) %>%
-	# 	cbind(y_MPI_N_per_shard_lv3) %>%
-	# 	cbind(y_MPI_count_lv3)
-	#
-	# # level 4
-	# lev4_package =
-	# 	# Dimensions data sets
-	# 	rep(c(ct_in_levels[4], Q, S), shards) %>%
-	# 	matrix(nrow = shards, byrow = T) %>%
-	# 	cbind(y_MPI_symbol_per_shard_lv4) %>%
-	# 	cbind(y_MPI_G_per_shard_lv4) %>%
-	# 	cbind(y_MPI_N_per_shard_lv4) %>%
-	# 	cbind(y_MPI_count_lv4)
-
-	# Integrate everything
-	# data_package =
-	#
-	# 	# Size 3 data data sets
-	# 	rep(c(
-	# 		ncol(counts_package),
-	# 		ncol(lev1_package),
-	# 		ncol(lev2_package),
-	# 		ncol(lev3_package),
-	# 		ncol(lev4_package)
-	# 	), shards) %>%
-	# 	matrix(nrow = shards, byrow = T) %>%
-	#
-	# 	# Size parameter datasets
-	# 	cbind(
-	# 		rep(c(
-	# 			(M + 2 + S), # lambda, sigma slope intercept, exposure
-	# 			(max(y_MPI_G_per_shard_lv1) + 2 + Q + max(y_MPI_symbol_per_shard_lv1) + (Q * ct_in_levels[1])),
-	# 			(max(y_MPI_G_per_shard_lv2) + 2 + Q + max(y_MPI_symbol_per_shard_lv2) + (Q * ct_in_levels[2])),
-	# 			(max(y_MPI_G_per_shard_lv3) + 2 + Q + max(y_MPI_symbol_per_shard_lv3) + (Q * ct_in_levels[3])),
-	# 			(max(y_MPI_G_per_shard_lv4) + 2 + Q + max(y_MPI_symbol_per_shard_lv4) + (Q * ct_in_levels[4]))
-	#
-	# 		), shards) %>%
-	# 			matrix(nrow = shards, byrow = T)
-	# 	) %>%
-	#
-	# 	# Data sets
-	# 	cbind(counts_package) %>%
-	# 	cbind(lev1_package) %>%
-	# 	cbind(lev2_package) %>%
-	# 	cbind(lev3_package) %>%
-	# 	cbind(lev4_package)
-
-	########################################
-	########################################
 
 	# Old data structure
 
 	y = y_source %>% distinct(level, Q, S, symbol, `read count`) %>% arrange(level, Q, symbol) %>% select(`read count`, S) %>% as_matrix
 	I = y %>% nrow
-
-
-	# Pass previously infered parameters
-	do_infer = full_bayesian
 
 	lambda_log_data =
 		df %>%
@@ -1184,7 +1030,7 @@ ARMET_tc = function(
 		arrange(G)%>%
 		pull(lambda)
 
-	sigma_raw_data =
+	sigma_log_inv_data =
 		df %>%
 
 		# Eliminate the query part, not the house keeping of the query
@@ -1197,44 +1043,20 @@ ARMET_tc = function(
 		arrange(G)%>%
 		pull(sigma_raw)
 
-	########################################
-	# Build better scales
-
-	exposure_rate_shift_scale =
-		df %>%
-		filter(`house keeping`) %>%
-		distinct(symbol, sample, `read count`, query) %>%
-		drop_na %>%
-		inner_join( (.) %>% distinct(sample, symbol) %>% count(symbol) %>% filter(n == max(n)), by="symbol") %>% # Eliminate genes that are missing from samples
-		tidyTranscriptomics::add_normalised_counts_bulk(sample_column = sample, transcript_column = symbol, counts_column = `read count`) %>%
-		filter(query) %>%
-		mutate(l = multiplier %>% log) %>%
-		summarise(shift = l %>% mean, scale = l %>% sd) %>%
-		as.numeric
-
-	intercept_shift_scale =
+	counts_baseline_to_linear =
 		counts_baseline %>%
-		filter(`house keeping`) %>%
-		distinct(symbol, sample, `read count`, query) %>%
-		tidyTranscriptomics::add_normalised_counts_bulk(sample_column = sample, transcript_column = symbol, counts_column = `read count`) %>%
-		mutate(
-			cc = `read count normalised` %>%
-				`+` (1) %>% log
-		) %>%
-		summarise(shift = cc %>% mean, scale = cc %>% sd) %>%
-		as.numeric
+		filter_house_keeping_query_if_fixed(full_bayesian) %>%
+		arrange(G, S) %>%
+		mutate(counts_idx = 1:n()) %>%
+		mutate(S = S %>% as.factor %>% as.integer)
 
-	##########################################
-	##########################################
-
-	counts_baseline_to_linear = counts_baseline %>% arrange(G, S) %>% mutate(counts_idx = 1:n()) %>% mutate(S = S %>% as.factor %>% as.integer)
 	counts_linear = counts_baseline_to_linear %>%  pull(`read count`)
 	G_to_counts_linear = counts_baseline_to_linear %>% pull(G)
 	G_linear = G_to_counts_linear
 	S_linear = counts_baseline_to_linear %>% pull(S)
 
 	CL = length(counts_linear)
-	G = counts_baseline_to_linear %>%  distinct(G) %>% nrow
+	#G = counts_baseline_to_linear %>%  distinct(G) %>% nrow
 	S = counts_baseline_to_linear %>% distinct(S) %>% nrow
 
 	# Counts idx for each level for each level
@@ -1282,8 +1104,9 @@ ARMET_tc = function(
 	lambda_sigma_prior =  c( log(3.3) , 1)
 	lambda_skew_prior =  c( -2.7, 1)
 	sigma_intercept_prior = c( 1.9 , 0.1)
-	lambda_log_scale = 	counts_baseline %>% filter(!query) %>% distinct(G, lambda) %>% arrange(G) %>% pull(lambda)
-	sigma_inv_log_scale = 	counts_baseline %>% filter(!query) %>% distinct(G, sigma_raw) %>% arrange(G) %>% pull(sigma_raw)
+
+	lambda_log = 	  counts_baseline %>% filter(!query) %>% distinct(G, lambda) %>% arrange(G) %>% pull(lambda)
+	sigma_inv_log = counts_baseline %>% filter(!query) %>% distinct(G, sigma_raw) %>% arrange(G) %>% pull(sigma_raw)
 
 	# Linear parallelised
 	shards = cores = 8
@@ -1297,7 +1120,6 @@ ARMET_tc = function(
 		left_join(tibble(level=1:4, shards = shards_in_levels)) %>%
 		uncount(shards) %>%
 		pull(weight)
-
 
 
 	# Count indexes
@@ -2033,11 +1855,14 @@ ARMET_tc = function(
 	# close(fileConn)
 	# ARMET_tc_model = stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc.stan")
 
-	# browser()
-
-
 
 	Sys.time() %>% print
+
+	model  = switch(
+		full_bayesian %>% `!` %>% sum(1),
+		stanmodels$ARMET_tc,
+		stanmodels$ARMET_tc_fix
+	)
 
 	fit =
 		switch(
@@ -2045,14 +1870,14 @@ ARMET_tc = function(
 
 			# HMC
 			sampling(
-				stanmodels$ARMET_tc, # ARMET_tc_model, #,
+				model, # ARMET_tc_model, #,
 				chains=3, cores=3,
 				iter=iterations, warmup=iterations-sampling_iterations,
 				#control = list(stepsize = 0.05, adapt_delta = 0.99),
 				#include = F, pars=c("prop_a", "prop_b", "prop_c", "prop_d", "prop_e"),
 				#pars=c("prop_1", "prop_2", "prop_3", "prop_4", "exposure_rate", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),
 				#,
-				init = function () list(	lambda_log = lambda_log_scale, sigma_inv_log = sigma_inv_log_scale) # runif(G,  lambda_log_scale - 1, lambda_log_scale + 1)	)
+				init = function () list(	lambda_log = lambda_log, sigma_inv_log = sigma_inv_log) # runif(G,  lambda_log - 1, lambda_log + 1)	)
 				#save_warmup = FALSE,
 				#pars = c("prop_1", "prop_2", "prop_3", "exposure_rate") #, "nb_sum") #,"mu_sum", "phi_sum"),
 			) %>%
@@ -2062,13 +1887,13 @@ ARMET_tc = function(
 				},
 
 			vb_iterative(
-				stanmodels$ARMET_tc, #ARMET_tc_model,
+				model, #ARMET_tc_model,
 				output_samples=100,
 				iter = 50000,
 				tol_rel_obj=0.01,
 				pars=c("prop_1", "prop_2", "prop_3","prop_4", "exposure_rate", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),
 				#,
-				init = function () list(	lambda_log = lambda_log_scale) # runif(G,  lambda_log_scale - 1, lambda_log_scale + 1)	)
+				init = function () list(	lambda_log = lambda_log) # runif(G,  lambda_log - 1, lambda_log + 1)	)
 
 			)
 		)

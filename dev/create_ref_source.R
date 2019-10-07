@@ -1,4 +1,5 @@
 library(tidyverse)
+library(magrittr)
 library(purrr)
 library(furrr)
 source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/e4ec6a2348efc2f62b88f10b12e70f4c6273a10a/tidy_extensions.R")
@@ -245,7 +246,7 @@ ref_2 =
 	ref %>%
 
 	# Add regression coefficients
-	do_parallel_start(30, "symbol") %>%
+	do_parallel_start(20, "symbol") %>%
 	do({
 
 		`%>%` = magrittr::`%>%`
@@ -290,7 +291,7 @@ ref_2 =
 	# ungroup %>%
 
 	# Calculate bimodality
-	do_parallel_start(30, "symbol") %>%
+	do_parallel_start(20, "symbol") %>%
 	do({
 
 		`%>%` = magrittr::`%>%`
@@ -345,7 +346,7 @@ ref_2 =
 			(regression >= 0.2 & sigma_raw >= 0.5) |
 
 			# Too bimodal
-			( (bimodality_NB > 0.5 & bimodality_NB_diff > 10) | bimodality_NB_diff > 100)
+			( (bimodality_NB > 0.8 & bimodality_NB_diff > 20) | bimodality_NB_diff > 100)
 
 	) %>%
 
@@ -364,7 +365,7 @@ ref_2 =
 			summarise(`symbol too noisy` = sum(`marker too noisy`))
 	)
 
-
+saveRDS(ref_2, file='ref_2.rds')
 
 # Some plots
 # ref_2 %>%
