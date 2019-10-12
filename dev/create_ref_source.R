@@ -129,8 +129,22 @@ give_rank_to_ref = function(fit_df, level, lambda_threshold = 5) {
 		# If a marker exists for more cell types (can happen) none of them can be noisy otherwise we screw up the whole gene
 		ungroup() %>%
 
-		# Filter symbols that have more than 10% of noisy markers for any cell type
-		filter(`symbol too noisy` <= (n_ct*0.15) %>% floor ) %>%
+		# For markers Filter if the marker itself is noisy
+		group_by(symbol) %>%
+		add_tally() %>%
+		mutate(`high trans noisy frac` = sum(`marker too noisy`)/n) %>%
+		ungroup() %>%
+		filter(`high trans noisy frac` < 0.1666667) %>%
+
+		# For non markers Filter symbols that have more than 10% of noisy markers for any cell type
+		filter(`symbol too noisy` <= (n_ct*0.20) %>% floor ) %>%
+
+		# Filter markers that have competitor genes way to highly transcribed (e.g., eosinophil 1000 neutrophil 10, but monocytes 100000)
+		# group_by(symbol) %>%
+		# mutate(`mean lambda` = lambda %>% mean) %>%
+		# ungroup() %>%
+		# filter(lambda > `mean lambda`) %>%
+
 
 		group_by(comparison, pair) %>%
 		arrange(delta) %>%
@@ -179,31 +193,10 @@ plot_trends = function(input.df, symbols) {
 
 }
 
-plot_boxplot = function(input.df, symbols) {
-	input.df %>%
-		filter(symbol %in% symbols) %>%
-		filter(level == 1) %>%
-		#filter(`Cell type category` == "endothelial")  %>%
-		ggplot(
-			aes(
-				x = `Cell type category`,
-				y = `read count normalised bayes` + 1,
-				label = symbol,
-				color = `regression`
-			)
-		) +
-		geom_jitter() +
-		geom_boxplot() +
-		facet_wrap( ~ symbol + `Cell type category`, scales = "free")  +
-		expand_limits(y = 1, x = 1) +
-		scale_y_log10()
-}
-
 mixture_mu_ratios = function(x){
 	ss = SIBERG::SIBER(x, model='NB')
 	max(ss[1], ss[2]) / (min(ss[1], ss[2]) + 1)
 }
-
 
 regression_coefficient = function(x){
 
@@ -214,7 +207,6 @@ regression_coefficient = function(x){
 
 	lm(a ~  b + I(b ^ 2), data = mdf)$coefficients[3]
 }
-
 
 sample_blacklist = c(
 	"666CRI",
@@ -365,7 +357,7 @@ ref_2 =
 			summarise(`symbol too noisy` = sum(`marker too noisy`))
 	)
 
-saveRDS(ref_2, file='ref_2.rds')
+saveRDS(ref_2, file='dev/ref_2.rds')
 
 # Some plots
 # ref_2 %>%
