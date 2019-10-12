@@ -759,11 +759,19 @@ filter_house_keeping_query_if_fixed =  function(.data, full_bayesian) {
 								~ .x %>% filter(`house keeping` & `query`))
 }
 
-get_MPI_df = function(counts_baseline_to_linear, y_source, counts_baseline, lv) {
+parse_baseline = function(.data, shards_in_levels, lv){
+	.data %>%
+		filter(level==lv) %>%
+		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
+		left_join( tibble(level=lv, shards = shards_in_levels) ) %>%
+		format_for_MPI_from_linear()
+}
+
+get_MPI_df = function(counts_baseline_to_linear, y_source, counts_baseline, shards_in_levels, lv) {
 	list(
 		counts_idx_lv_MPI =
 			counts_baseline_to_linear %>%
-			parse_baseline(lv)  %>%
+			parse_baseline(shards_in_levels, lv)  %>%
 			distinct(idx_MPI, counts_idx, `read count MPI row`) %>%
 			spread(idx_MPI,  counts_idx) %>%
 			select(-`read count MPI row`) %>%
@@ -772,7 +780,7 @@ get_MPI_df = function(counts_baseline_to_linear, y_source, counts_baseline, lv) 
 
 		size_counts_idx_lv_MPI =
 			counts_baseline_to_linear %>%
-			parse_baseline(lv)   %>%
+			parse_baseline(shards_in_levels, lv)   %>%
 			distinct(idx_MPI, counts_idx, `read count MPI row`) %>%
 			count(idx_MPI) %>%
 			pull(n) %>%
@@ -781,7 +789,7 @@ get_MPI_df = function(counts_baseline_to_linear, y_source, counts_baseline, lv) 
 		# Count indexes
 		counts_G_lv_MPI =
 			counts_baseline_to_linear %>%
-			parse_baseline(lv)   %>%
+			parse_baseline(shards_in_levels, lv)   %>%
 			distinct(idx_MPI, G, `read count MPI row`)  %>%
 			spread(idx_MPI,  G) %>%
 			select(-`read count MPI row`) %>%
@@ -790,7 +798,7 @@ get_MPI_df = function(counts_baseline_to_linear, y_source, counts_baseline, lv) 
 
 		size_counts_G_lv_MPI =
 			counts_baseline_to_linear %>%
-			parse_baseline(lv)   %>%
+			parse_baseline(shards_in_levels, lv)   %>%
 			distinct(idx_MPI, G, `read count MPI row`)  %>%
 			count(idx_MPI) %>%
 			pull(n) %>%
@@ -798,7 +806,7 @@ get_MPI_df = function(counts_baseline_to_linear, y_source, counts_baseline, lv) 
 
 		counts_G_lv_MPI_non_redundant =
 			counts_baseline_to_linear %>%
-			parse_baseline(lv)   %>%
+			parse_baseline(shards_in_levels, lv)   %>%
 			distinct(idx_MPI, G)  %>%
 			group_by(idx_MPI) %>% do((.) %>% rowid_to_column("read count MPI row")) %>% ungroup() %>%
 			spread(idx_MPI,  G) %>%
@@ -808,7 +816,7 @@ get_MPI_df = function(counts_baseline_to_linear, y_source, counts_baseline, lv) 
 
 		size_counts_G_lv_MPI_non_redundant =
 			counts_baseline_to_linear %>%
-			parse_baseline(lv)   %>%
+			parse_baseline(shards_in_levels, lv)   %>%
 			distinct(idx_MPI, G)  %>%
 			count(idx_MPI) %>%
 			pull(n) %>%
@@ -816,7 +824,7 @@ get_MPI_df = function(counts_baseline_to_linear, y_source, counts_baseline, lv) 
 
 		counts_G_lv_MPI_non_redundant_reps =
 			counts_baseline_to_linear %>%
-			parse_baseline(lv)   %>%
+			parse_baseline(shards_in_levels, lv)   %>%
 			distinct(idx_MPI, G, `read count MPI row`)  %>%
 			left_join((.) %>% count(idx_MPI, G)) %>%
 			distinct(idx_MPI, G, n) %>%
@@ -830,7 +838,7 @@ get_MPI_df = function(counts_baseline_to_linear, y_source, counts_baseline, lv) 
 		# Count indexes
 		counts_S_lv_MPI =
 			counts_baseline_to_linear %>%
-			parse_baseline(lv) %>%
+			parse_baseline(shards_in_levels, lv) %>%
 			distinct(idx_MPI, S, `read count MPI row`)  %>%
 			spread(idx_MPI,  S) %>%
 			select(-`read count MPI row`) %>%
@@ -839,7 +847,7 @@ get_MPI_df = function(counts_baseline_to_linear, y_source, counts_baseline, lv) 
 
 		size_counts_S_lv_MPI =
 			counts_baseline_to_linear %>%
-			parse_baseline(lv) %>%
+			parse_baseline(shards_in_levels, lv) %>%
 			distinct(idx_MPI, S, `read count MPI row`)   %>%
 			count(idx_MPI) %>%
 			pull(n) %>%
@@ -850,7 +858,7 @@ get_MPI_df = function(counts_baseline_to_linear, y_source, counts_baseline, lv) 
 			y_source %>%
 			filter(level == lv) %>%
 			distinct(GM, Q, S, `read count`, level) %>%
-			left_join(tibble(level = levels, shards = shards_in_levels[levels])) %>%
+			left_join(tibble(level = lv, shards = shards_in_levels)) %>%
 			format_for_MPI_from_linear_GM() %>%
 			distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
 			spread(idx_MPI,  `read count`) %>%
@@ -862,7 +870,7 @@ get_MPI_df = function(counts_baseline_to_linear, y_source, counts_baseline, lv) 
 			y_source %>%
 			filter(level == lv) %>%
 			distinct(GM, Q, S, `read count`, level) %>%
-			left_join(tibble(level = levels, shards = shards_in_levels[levels])) %>%
+			left_join(tibble(level = lv, shards = shards_in_levels)) %>%
 			format_for_MPI_from_linear_GM() %>%
 			distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
 			count(idx_MPI) %>%
@@ -873,7 +881,7 @@ get_MPI_df = function(counts_baseline_to_linear, y_source, counts_baseline, lv) 
 			y_source %>%
 			filter(level == lv) %>%
 			distinct(GM, Q, S, `read count`, level) %>%
-			left_join(tibble(level = levels, shards = shards_in_levels[levels])) %>%
+			left_join(tibble(level = lv, shards = shards_in_levels)) %>%
 			format_for_MPI_from_linear_GM() %>%
 			distinct(idx_MPI, S, `read count MPI row`)  %>%
 			spread(idx_MPI,  S) %>%
@@ -885,7 +893,7 @@ get_MPI_df = function(counts_baseline_to_linear, y_source, counts_baseline, lv) 
 			y_source %>%
 			filter(level == lv) %>%
 			distinct(GM, Q, S, `read count`, level) %>%
-			left_join(tibble(level = levels, shards = shards_in_levels[levels])) %>%
+			left_join(tibble(level = lv, shards = shards_in_levels)) %>%
 			format_for_MPI_from_linear_GM() %>%
 			distinct(idx_MPI, S, `read count MPI row`)  %>%
 			count(idx_MPI) %>%
@@ -895,7 +903,7 @@ get_MPI_df = function(counts_baseline_to_linear, y_source, counts_baseline, lv) 
 		G_linear_MPI =
 			counts_baseline %>% filter(level == lv) %>%
 			distinct(G, GM, C, level) %>%
-			left_join(tibble(level = levels, shards = shards_in_levels[levels])) %>%
+			left_join(tibble(level = lv, shards = shards_in_levels)) %>%
 			format_for_MPI_from_linear_dec() %>%
 			distinct(idx_MPI, G, `read count MPI row`) %>%
 			spread(idx_MPI,  G) %>%
@@ -906,11 +914,323 @@ get_MPI_df = function(counts_baseline_to_linear, y_source, counts_baseline, lv) 
 		size_G_linear_MPI =
 			counts_baseline %>% filter(level == lv) %>%
 			distinct(G, GM, C, level) %>%
-			left_join(tibble(level = levels, shards = shards_in_levels[levels])) %>%
+			left_join(tibble(level = lv, shards = shards_in_levels)) %>%
 			format_for_MPI_from_linear_dec() %>%
 			distinct(idx_MPI, G, `read count MPI row`)   %>%
 			count(idx_MPI) %>%
 			pull(n) %>%
 			ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
 	)
+}
+
+ref_mix_format = function(ref, mix){
+
+	bind_rows(
+		# Get reference based on mix genes
+		ref %>% mutate(`query` = FALSE),
+		mix %>%
+			gather(`symbol`, `read count`, -sample) %>%
+			inner_join(ref %>% distinct(symbol) ) %>%
+			left_join( ref %>% distinct(symbol, `house keeping`) ) %>%
+			mutate(`Cell type category` = "query") %>%
+			mutate(`query` = TRUE)
+	)	%>%
+
+		# Add marker symbol indeces
+		left_join(
+			(.) %>%
+				filter(!`house keeping`) %>%
+				distinct(`symbol`) %>%
+				mutate(M = 1:n())
+		) %>%
+
+		# Add sample indeces
+		arrange(!`query`) %>% # query first
+		mutate(S = factor(sample, levels = .$sample %>% unique) %>% as.integer) %>%
+
+		# Add query samples indeces
+		left_join(
+			(.) %>%
+				filter(`query`) %>%
+				distinct(`sample`) %>%
+				mutate(Q = 1:n())
+		) %>%
+
+		# Add house keeping into Cell type label
+		mutate(`Cell type category` = ifelse(`house keeping`, "house_keeping", `Cell type category`)) %>%
+		anti_join(
+			(.) %>%
+				filter(`house keeping` & !`query`) %>%
+				distinct(symbol, level) %>%
+				group_by(symbol) %>%
+				arrange(level) %>%
+				slice(2:max(n(), 2)) %>% # take away house keeping from level 2 above
+				ungroup()
+		) %>%
+
+		# If house keeping delete level infomation
+		mutate(level = ifelse(`house keeping`, NA, level)) %>%
+
+		# Create unique symbol ID
+		unite(ct_symbol, c("Cell type category", "symbol"), remove = F) %>%
+
+		# Add gene idx
+		left_join(
+			(.) %>%
+				filter(!`query`) %>%
+				distinct(`Cell type category`, ct_symbol, `house keeping`) %>%
+				arrange(!`house keeping`, ct_symbol) %>% # House keeping first
+				mutate(G = 1:n())
+		) %>%
+		left_join(
+			(.) %>%
+				filter(!`house keeping` & !`query`) %>%
+				distinct(level, symbol) %>%
+				arrange(level, symbol) %>%
+				mutate(GM = 1:n()) %>%
+				select(-level)
+		)
+
+}
+
+run_model = function(reference_filtered, mix, shards, lv, full_bayesian, approximate_posterior, prop_posterior){
+
+
+	# Filter on level considered
+	reference_filtered = reference_filtered %>% filter(level %in% lv)
+
+	df = ref_mix_format(reference_filtered, mix)
+
+	G = df %>% filter(!`query`) %>% distinct(G) %>% nrow()
+	GM = df %>% filter(!`house keeping`) %>% distinct(symbol) %>% nrow()
+
+	# For  reference MPI inference
+	counts_baseline =
+		df %>%
+
+		# Eliminate the query part, not the house keeping of the query
+		filter(!`query` | `house keeping`)  %>%
+
+		format_for_MPI(shards)
+
+	S = counts_baseline %>% distinct(sample) %>% nrow()
+	N = counts_baseline %>% distinct(idx_MPI, `read count`, `read count MPI row`) %>%  count(idx_MPI) %>% summarise(max(n)) %>% pull(1)
+	M = counts_baseline %>% distinct(start, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
+
+	lambda_log = 	  counts_baseline %>% filter(!query) %>% distinct(G, lambda) %>% arrange(G) %>% pull(lambda)
+	sigma_inv_log = counts_baseline %>% filter(!query) %>% distinct(G, sigma_raw) %>% arrange(G) %>% pull(sigma_raw)
+
+	y_source =
+		df %>%
+		filter(`query` & !`house keeping`) %>%
+		select(S, Q, `symbol`, `read count`, GM, sample) %>%
+		left_join(	df %>% filter(!query) %>% distinct(`symbol`, G, `Cell type category`, level, lambda, sigma_raw, GM, C) ) %>%
+		arrange(C, Q, symbol) %>%
+		mutate(`Cell type category` = factor(`Cell type category`, unique(`Cell type category`)))
+
+	counts_baseline_to_linear =
+		counts_baseline %>%
+		filter_house_keeping_query_if_fixed(full_bayesian) %>%
+		arrange(G, S) %>%
+		mutate(counts_idx = 1:n()) %>%
+		mutate(S = S %>% as.factor %>% as.integer)
+
+	counts_linear = counts_baseline_to_linear %>%  pull(`read count`)
+	G_to_counts_linear = counts_baseline_to_linear %>% pull(G)
+	G_linear = G_to_counts_linear
+	S_linear = counts_baseline_to_linear %>% pull(S)
+
+	CL = length(counts_linear)
+	S = counts_baseline_to_linear %>% distinct(S) %>% nrow
+
+	# Counts idx for each level for each level
+	counts_idx_lv_NA = counts_baseline_to_linear %>% filter(level %>% is.na) %>% pull(counts_idx)
+	CL_NA = counts_idx_lv_NA %>% length
+
+	# Level specific
+	counts_idx_lv = counts_baseline_to_linear %>% filter(level==lv) %>% pull(counts_idx)
+	CL_lv = counts_idx_lv %>% length
+
+	# Deconvolution, get G only for markers of each level. Exclude house keeping
+	G_lv_linear = counts_baseline %>% filter(level==lv) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
+	G_lv = G_lv_linear %>% length
+
+	# Observed mix counts
+	y_linear_lv = y_source %>% filter(level==lv) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
+
+	# Observed mix samples indexes
+	y_linear_S_lv = y_source %>% filter(level==lv) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
+
+	# Lengths indexes
+	Y_lv = y_linear_lv %>% length
+
+
+	MPI_data = get_MPI_df(counts_baseline_to_linear,	y_source,	counts_baseline, shards,	lv	)
+
+	model  = switch(
+		full_bayesian %>% `!` %>% sum(1),
+		stanmodels$ARMET_tc,
+		stanmodels$ARMET_tc_fix
+	)
+
+	# library(rstan)
+	# fileConn<-file("~/.R/Makevars")
+	# writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
+	# close(fileConn)
+	# ARMET_tc_model = stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc.stan")
+	# ARMET_tc_model = stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix.stan", auto_write = F)
+
+	iterations = 250
+	sampling_iterations = 100
+
+	Sys.setenv("STAN_NUM_THREADS" = shards)
+
+	list(
+		df,
+		switch(
+			approximate_posterior %>% sum(1),
+
+			# HMC
+			sampling(
+				model, # ARMET_tc_model, #,
+				chains=3, cores=3,
+				iter=iterations, warmup=iterations-sampling_iterations,
+				data = MPI_data %>% c(prop_posterior),
+				#control = list(stepsize = 0.05, adapt_delta = 0.99),
+				#include = F, pars=c("prop_a", "prop_b", "prop_c", "prop_d", "prop_e"),
+				#pars=c("prop_1", "prop_2", "prop_3", "prop_4", "exposure_rate", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),
+				#,
+				init = function () list(	lambda_log = lambda_log, sigma_inv_log = sigma_inv_log) # runif(G,  lambda_log - 1, lambda_log + 1)	)
+				#save_warmup = FALSE,
+				#pars = c("prop_1", "prop_2", "prop_3", "exposure_rate") #, "nb_sum") #,"mu_sum", "phi_sum"),
+			) %>%
+				{
+					(.)  %>% rstan::summary() %$% summary %>% as_tibble(rownames="par") %>% arrange(Rhat %>% desc) %>% print
+					(.)
+				},
+
+			vb_iterative(
+				model, #ARMET_tc_model,
+				output_samples=100,
+				iter = 50000,
+				tol_rel_obj=0.01,
+				data = MPI_data,
+				pars=c("prop_1", "prop_2", "prop_3","prop_4", "exposure_rate", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),
+				#,
+				init = function () list(	lambda_log = lambda_log, sigma_inv_log = sigma_inv_log) # runif(G,  lambda_log - 1, lambda_log + 1)	)
+
+			)
+		)
+	)
+
+}
+
+get_prop = function(fit, approximate_posterior, df){
+	fit %>%
+
+		# If MCMC is used check divergencies as well
+		ifelse_pipe(
+			!approximate_posterior,
+			~ .x %>% parse_summary_check_divergence(),
+			~ .x %>% parse_summary() %>% rename(.value = mean)
+		) %>%
+
+		# Parse
+		separate(.variable, c(".variable", "level"), convert = T) %>%
+
+		# Add tree information
+		left_join(
+			tree %>% data.tree::ToDataFrameTree("name", "C1", "C2", "C3", "C4") %>%
+				as_tibble %>%
+				select(-1) %>%
+				rename(`Cell type category` = name) %>%
+				gather(level, C, -`Cell type category`) %>%
+				mutate(level = gsub("C", "", level)) %>%
+				drop_na %>%
+				mutate(C = C %>% as.integer, level = level %>% as.integer)
+		) %>%
+
+		# Add sample information
+		left_join(
+			df %>%
+				filter(`query`) %>%
+				distinct(Q, sample)
+		)
+}
+
+draws_to_alphas = function(.data, pars){
+	.data %>%
+		tidybayes::gather_draws(`prop_[1,a-z]`[Q, C], regex=T) %>%
+		ungroup() %>%
+		filter(.variable %in% pars) %>%
+		nest(data = -c(.variable, Q)) %>%
+		mutate( alphas = map(data, ~
+												 	.x %>%
+												 	spread(C, .value) %>%
+												 	select(-c(1:3)) %>%
+												 	as_matrix() %>%
+												 	sirt::dirichlet.mle() %$%
+												 	alpha %>%
+												 	as_tibble() %>%
+												 	rename(alpha = value) %>%
+												 	mutate(C = 1:n())
+		) ) %>%
+		select(-data) %>%
+		unnest(cols = alphas) %>%
+		spread(C, alpha) %>%
+		select(-Q) %>%
+		nest(alphas = -.variable) %>%
+		pull(alphas)
+}
+
+get_null_prop_posterior = function(ct_in_nodes){
+	prop_posterior = list()
+	for(i in 1:(length(ct_in_nodes))){
+		prop_posterior[[i]] =  matrix(ncol = ct_in_nodes[i]) %>% as_tibble() %>% setNames(c(1:ct_in_nodes[i])) %>% slice(0)
+	}
+	names(prop_posterior) = sprintf("prop_%s_prior", c(1, letters[1:12]))
+	prop_posterior
+}
+
+plot_boxplot = function(input.df, symbols) {
+	input.df %>%
+		filter(symbol %in% symbols) %>%
+		#filter(level == 1) %>%
+		#filter(`Cell type category` == "endothelial")  %>%
+		ggplot(
+			aes(
+				x = `Cell type category`,
+				y = `read count normalised bayes` + 1,
+				label = symbol,
+				color = `regression`
+			)
+		) +
+		geom_jitter() +
+		geom_boxplot() +
+		facet_wrap( ~ symbol + `Cell type category`, scales = "free")  +
+		expand_limits(y = 1, x = 1) +
+		scale_y_log10()
+}
+
+plot_markers = function(.data, n_markers, mix, ct, n = 10){
+	ARMET::ARMET_ref %>%
+		left_join(n_markers, by=c("ct1", "ct2")) %>%
+		filter_reference(mix) %>% filter(level%in%levels) %>%
+		filter(ct1=="b_memory") %>%
+		filter(rank<n) %>%
+		distinct(`Cell type category`, sample, `read count normalised bayes`, symbol, regression, bimodality_NB) %>%
+		ggplot(
+			aes(
+				x = `Cell type category`,
+				y = `read count normalised bayes` + 1,
+				label = symbol,
+				color = `bimodality_NB`
+			)
+		) +
+		geom_boxplot() +
+		geom_jitter() +
+		facet_wrap( ~ symbol , scales = "free")  +
+		expand_limits(y = 1, x = 1) +
+		scale_y_log10() +
+		my_theme
 }

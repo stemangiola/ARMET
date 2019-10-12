@@ -48,6 +48,7 @@ ARMET_tc = function(
 	mix,
 	reference = NULL,
 	full_bayesian = T,
+	approximate_posterior = F,
 	verbose =                           F,
 	omit_regression =                   F,
 	save_fit =                          F,
@@ -56,7 +57,6 @@ ARMET_tc = function(
 	iterations = 300,
 	sampling_iterations = 100,
 	levels = 1:4,
-	full_bayes = T,
 	n_markers
 ){
 
@@ -72,12 +72,17 @@ ARMET_tc = function(
 			panel.grid.minor = element_line(size = 0.1),
 			text = element_text(size=12),
 			legend.position="bottom",
-			aspect.ratio=1,
-			axis.text.x = element_text(angle = 90, hjust = 1),
+			#aspect.ratio=1,
+			axis.text.x = element_text(angle = 30, hjust = 1),
 			strip.background = element_blank(),
 			axis.title.x  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10)),
 			axis.title.y  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10))
 		)
+
+	shards = cores #* 2
+	shards = cores = 8
+	shards = shards
+	is_level_in = shards %>% `>` (0) %>% as.integer
 
 	# Global properties - derived by previous analyses of the whole reference dataset
 	sigma_intercept = 1.3420415
@@ -86,8 +91,13 @@ ARMET_tc = function(
 	lambda_mu_mu = 5.612671
 	lambda_sigma = 7.131593
 
-	# Set up tree structure
+	# Non centered
+	lambda_mu_prior = c(6.2, 1)
+	lambda_sigma_prior =  c( log(3.3) , 1)
+	lambda_skew_prior =  c( -2.7, 1)
+	sigma_intercept_prior = c( 1.9 , 0.1)
 
+	# Set up tree structure
 	levels_in_the_tree = 1:4
 
 	tree = 	data.tree::Clone(tree) %>%	{
@@ -96,7 +106,13 @@ ARMET_tc = function(
 		.
 	}
 
-	ct_in_nodes = tree %>% data.tree::ToDataFrameTree("name", "level", "C", "count", "isLeaf") %>% as_tibble %>% arrange(level, C) %>% filter(!isLeaf) %>% pull(count)
+	ct_in_nodes =
+		tree %>%
+		data.tree::ToDataFrameTree("name", "level", "C", "count", "isLeaf") %>%
+		as_tibble %>%
+		arrange(level, C) %>%
+		filter(!isLeaf) %>%
+		pull(count)
 
 	# Get the number of leafs for every level
 	ct_in_levels = foreach(l=levels_in_the_tree+1, .combine = c) %do% {
@@ -137,6 +153,7 @@ ARMET_tc = function(
 	# For G house keeing first
 	# For GM level 1 first
 
+	Q = mix %>% nrow
 
 	reference_filtered =
 		ARMET::ARMET_ref %>%
@@ -152,369 +169,84 @@ ARMET_tc = function(
 				as_tibble %>%
 				select(-1)
 
-		) %>%
-
-		# # Decrease the number of house keeping used
-		# anti_join({
-		# 	mdf = (.) %>%
-		# 		distinct(symbol, `house keeping`) %>%
-		# 		filter(`house keeping`)
-		#
-		# 	withr::with_seed(	123, 	sample_frac(mdf, 0.8)) %>%
-		# 		distinct(symbol)
-		# }) %>%
-
-		# Filter on level considered
-		filter(level %in% levels)
-
-
-	df =
-		bind_rows(
-			# Get reference based on mix genes
-			reference_filtered %>% mutate(`query` = FALSE),
-			mix %>%
-				gather(`symbol`, `read count`, -sample) %>%
-				inner_join(reference_filtered %>% distinct(symbol) ) %>%
-				left_join( reference_filtered %>% distinct(symbol, `house keeping`) ) %>%
-				mutate(`Cell type category` = "query") %>%
-				mutate(`query` = TRUE)
-		)	%>%
-
-		# Add marker symbol indeces
-		left_join(
-			(.) %>%
-				filter(!`house keeping`) %>%
-				distinct(`symbol`) %>%
-				mutate(M = 1:n())
-		) %>%
-
-		# Add sample indeces
-		arrange(!`query`) %>% # query first
-		mutate(S = factor(sample, levels = .$sample %>% unique) %>% as.integer) %>%
-
-		# Add query samples indeces
-		left_join(
-			(.) %>%
-				filter(`query`) %>%
-				distinct(`sample`) %>%
-				mutate(Q = 1:n())
-		) %>%
-
-		# Add house keeping into Cell type label
-		mutate(`Cell type category` = ifelse(`house keeping`, "house_keeping", `Cell type category`)) %>%
-		anti_join(
-			(.) %>%
-				filter(`house keeping` & !`query`) %>%
-				distinct(symbol, level) %>%
-				group_by(symbol) %>%
-				arrange(level) %>%
-				slice(2:max(n(), 2)) %>% # take away house keeping from level 2 above
-				ungroup()
-		) %>%
-
-		# If house keeping delete level infomation
-		mutate(level = ifelse(`house keeping`, NA, level)) %>%
-
-		# Create unique symbol ID
-		unite(ct_symbol, c("Cell type category", "symbol"), remove = F) %>%
-
-		# Add gene idx
-		left_join(
-			(.) %>%
-				filter(!`query`) %>%
-				distinct(`Cell type category`, ct_symbol, `house keeping`) %>%
-				arrange(!`house keeping`, ct_symbol) %>% # House keeping first
-				mutate(G = 1:n())
-		) %>%
-		left_join(
-			(.) %>%
-				filter(!`house keeping` & !`query`) %>%
-				distinct(level, symbol) %>%
-				arrange(level, symbol) %>%
-				mutate(GM = 1:n()) %>%
-				select(-level)
 		)
+	#%>%
+	# # Decrease the number of house keeping used
+	# anti_join({
+	# 	mdf = (.) %>%
+	# 		distinct(symbol, `house keeping`) %>%
+	# 		filter(`house keeping`)
+	#
+	# 	withr::with_seed(	123, 	sample_frac(mdf, 0.8)) %>%
+	# 		distinct(symbol)
+	# }) %>%
 
-	G = df %>% filter(!`query`) %>% distinct(G) %>% nrow()
-	GM = df %>% filter(!`house keeping`) %>% distinct(symbol) %>% nrow()
-
-
-	# For  reference MPI inference
-
-	shards = cores #* 2
-
-	counts_baseline =
-		df %>%
-
-		# Eliminate the query part, not the house keeping of the query
-		filter(!`query` | `house keeping`)  %>%
-
-		format_for_MPI(shards)
-
-	S = counts_baseline %>% distinct(sample) %>% nrow()
-	N = counts_baseline %>% distinct(idx_MPI, `read count`, `read count MPI row`) %>%  count(idx_MPI) %>% summarise(max(n)) %>% pull(1)
-	M = counts_baseline %>% distinct(start, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
-
-	y_source =
-		df %>%
-		filter(`query` & !`house keeping`) %>%
-		select(S, Q, `symbol`, `read count`, GM, sample) %>%
-		left_join(	df %>% filter(!query) %>% distinct(`symbol`, G, `Cell type category`, level, lambda, sigma_raw, GM, C) ) %>%
-		arrange(C, Q, symbol) %>%
-		mutate(`Cell type category` = factor(`Cell type category`, unique(`Cell type category`)))
-
-	Q = df %>% filter(`query`) %>% distinct(Q) %>% nrow
+	prop_posterior = get_null_prop_posterior(ct_in_nodes)
 
 
-	counts_baseline_to_linear =
-		counts_baseline %>%
-		filter_house_keeping_query_if_fixed(full_bayesian) %>%
-		arrange(G, S) %>%
-		mutate(counts_idx = 1:n()) %>%
-		mutate(S = S %>% as.factor %>% as.integer)
+	######################################
 
-	counts_linear = counts_baseline_to_linear %>%  pull(`read count`)
-	G_to_counts_linear = counts_baseline_to_linear %>% pull(G)
-	G_linear = G_to_counts_linear
-	S_linear = counts_baseline_to_linear %>% pull(S)
+	res1 = run_model(	reference_filtered, mix, shards,	1,	full_bayesian, approximate_posterior, prop_posterior	)
 
-	CL = length(counts_linear)
-	#G = counts_baseline_to_linear %>%  distinct(G) %>% nrow
-	S = counts_baseline_to_linear %>% distinct(S) %>% nrow
+	df1 = res1[[1]]
+	fit1 = res1[[2]]
 
-	# Counts idx for each level for each level
-	counts_idx_lv_NA = counts_baseline_to_linear %>% filter(level %>% is.na) %>% pull(counts_idx)
-	CL_NA = counts_idx_lv_NA %>% length
-	counts_idx_lv_1 = counts_baseline_to_linear %>% filter(level==1) %>% pull(counts_idx)
-	CL_1 = counts_idx_lv_1 %>% length
-	counts_idx_lv_2 = counts_baseline_to_linear %>% filter(level==2) %>% pull(counts_idx)
-	CL_2 = counts_idx_lv_2 %>% length
-	counts_idx_lv_3 = counts_baseline_to_linear %>% filter(level==3) %>% pull(counts_idx)
-	CL_3 = counts_idx_lv_3 %>% length
-	counts_idx_lv_4 = counts_baseline_to_linear %>% filter(level==4) %>% pull(counts_idx)
-	CL_4 = counts_idx_lv_4 %>% length
+	prop_posterior[[1]] = fit1 %>% draws_to_alphas("prop_1") %>% `[[` (1)
 
-	# Deconvolution, get G only for markers of each level. Exclude house keeping
-	G1_linear = counts_baseline %>% filter(level ==1) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
-	G1 = G1_linear %>% length
-	G2_linear = counts_baseline %>% filter(level ==2) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
-	G2 = G2_linear %>% length
-	G3_linear = counts_baseline %>% filter(level ==3) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
-	G3 = G3_linear %>% length
-	G4_linear = counts_baseline %>% filter(level ==4) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
-	G4 = G4_linear %>% length
+	prop1 = get_prop(fit1, approximate_posterior, df1)
 
-	# Observed mix counts
-	y_linear_1 = y_source %>% filter(level ==1) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
-	y_linear_2 = y_source %>% filter(level ==2) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
-	y_linear_3 = y_source %>% filter(level ==3) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
-	y_linear_4 = y_source %>% filter(level ==4) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
+	draws_1 =
+		fit1 %>%
+		tidybayes::gather_draws(prop_1[Q, C]) %>%
+		ungroup() %>%
+		select(-.variable)
 
-	# Observed mix samples indexes
-	y_linear_S_1 = y_source %>% filter(level ==1) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
-	y_linear_S_2 = y_source %>% filter(level ==2) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
-	y_linear_S_3 = y_source %>% filter(level ==3) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
-	y_linear_S_4 = y_source %>% filter(level ==4) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
+	######################################
 
-	# Lengths indexes
-	Y_1 = y_linear_1 %>% length
-	Y_2 = y_linear_2 %>% length
-	Y_3 = y_linear_3 %>% length
-	Y_4 = y_linear_4 %>% length
+	res2 = run_model(	reference_filtered, mix, shards,	2,	full_bayesian, approximate_posterior, prop_posterior	)
 
-	# Non centered
-	lambda_mu_prior = c(6.2, 1)
-	lambda_sigma_prior =  c( log(3.3) , 1)
-	lambda_skew_prior =  c( -2.7, 1)
-	sigma_intercept_prior = c( 1.9 , 0.1)
+	df2 = res2[[1]]
+	fit2 = res2[[2]]
 
-	lambda_log = 	  counts_baseline %>% filter(!query) %>% distinct(G, lambda) %>% arrange(G) %>% pull(lambda)
-	sigma_inv_log = counts_baseline %>% filter(!query) %>% distinct(G, sigma_raw) %>% arrange(G) %>% pull(sigma_raw)
+	fit2_to_prop2 = function(){
 
-	# Linear parallelised
-	shards = cores = 8
-	shards_in_levels = c(8, 8, 16, 8) %>% `*` (1:4 %in% levels)
-	is_level_in = shards_in_levels %>% `>` (0) %>% as.integer
-browser()
-	weights =
-		df %>%
-		get_level_lpdf_weights %>%
-		arrange(level) %>%
-		left_join(tibble(level=1:4, shards = shards_in_levels)) %>%
-		uncount(shards) %>%
-		pull(weight)
-
-
-	parse_baseline = function(.data, lv){
-		.data %>%
-		filter(level==lv) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-		left_join( tibble(level=levels, shards = shards_in_levels[levels]) ) %>%
-		format_for_MPI_from_linear()
 	}
 
-	# Count indexes
-	# lv 1
+	prop_2 =
+		draws_1 %>%
+		left_join(
+			fit2 %>%
+			tidybayes::gather_draws(prop_a[Q, C]) %>%
+			ungroup() %>%
+			select(-.variable) %>%
+			rename(C2 = C, .value2 = .value) %>%
+			mutate(C = parents_lv2[1]),
+		by = c(".chain", ".iteration", ".draw", "Q",  "C")
+		) %>%
+		mutate(
+			.value2 = ifelse(.value2 %>% is.na, .value, .value * .value2),
+			C2 = ifelse(C2 %>% is.na, C, C + C2 -1)
+		) %>%
+		select(-C, -.value) %>%
+		rename(C = C2, .value = .value2) %>%
+		mutate(.variable = "prop_2") %>%
+		group_by(.variable,  Q,  C) %>%
+		tidybayes::median_qi()
 
-	MPI1 = get_MPI_df(counts_baseline_to_linear, y_source, counts_baseline,1)
-
-	counts_idx_lv_1_MPI = MPI1$counts_idx_lv_MPI
-	size_counts_idx_lv_1_MPI = MPI1$size_counts_idx_lv_MPI
-	counts_G_lv_1_MPI = MPI1$counts_G_lv_MPI
-	size_counts_G_lv_1_MPI = MPI1$size_counts_G_lv_MPI
-	counts_G_lv_1_MPI_non_redundant = MPI1$counts_G_lv_MPI_non_redundant
-	size_counts_G_lv_1_MPI_non_redundant = MPI1$size_counts_G_lv_MPI_non_redundant
-	counts_G_lv_1_MPI_non_redundant_reps = MPI1$counts_G_lv_MPI_non_redundant_reps
-	counts_S_lv_1_MPI = MPI1$counts_S_lv_MPI
-	size_counts_S_lv_1_MPI = MPI1$size_counts_S_lv_MPI
-	y_linear_1_MPI = MPI1$y_linear_MPI
-	size_y_linear_1_MPI = MPI1$size_y_linear_MPI
-	y_linear_S_1_MPI = MPI1$y_linear_S_MPI
-	size_y_linear_S_1_MPI = MPI1$size_y_linear_S_MPI
-	G1_linear_MPI = MPI1$G_linear_MPI
-	size_G1_linear_MPI = MPI1$size_G_linear_MPI
-
-
-	MPI2 = get_MPI_df(counts_baseline_to_linear, y_source, counts_baseline,2)
-
-	counts_idx_lv_2_MPI = MPI2$counts_idx_lv_MPI
-	size_counts_idx_lv_2_MPI = MPI2$size_counts_idx_lv_MPI
-	counts_G_lv_2_MPI = MPI2$counts_G_lv_MPI
-	size_counts_G_lv_2_MPI = MPI2$size_counts_G_lv_MPI
-	counts_G_lv_2_MPI_non_redundant = MPI2$counts_G_lv_MPI_non_redundant
-	size_counts_G_lv_2_MPI_non_redundant = MPI2$size_counts_G_lv_MPI_non_redundant
-	counts_G_lv_2_MPI_non_redundant_reps = MPI2$counts_G_lv_MPI_non_redundant_reps
-	counts_S_lv_2_MPI = MPI2$counts_S_lv_MPI
-	size_counts_S_lv_2_MPI = MPI2$size_counts_S_lv_MPI
-	y_linear_2_MPI = MPI2$y_linear_MPI
-	size_y_linear_2_MPI = MPI2$size_y_linear_MPI
-	y_linear_S_2_MPI = MPI2$y_linear_S_MPI
-	size_y_linear_S_2_MPI = MPI2$size_y_linear_S_MPI
-	G2_linear_MPI = MPI2$G_linear_MPI
-	size_G2_linear_MPI = MPI2$size_G_linear_MPI
-
-	MPI3 = get_MPI_df(counts_baseline_to_linear, y_source, counts_baseline,3)
-
-	counts_idx_lv_3_MPI = MPI3$counts_idx_lv_MPI
-	size_counts_idx_lv_3_MPI = MPI3$size_counts_idx_lv_MPI
-	counts_G_lv_3_MPI = MPI3$counts_G_lv_MPI
-	size_counts_G_lv_3_MPI = MPI3$size_counts_G_lv_MPI
-	counts_G_lv_3_MPI_non_redundant = MPI3$counts_G_lv_MPI_non_redundant
-	size_counts_G_lv_3_MPI_non_redundant = MPI3$size_counts_G_lv_MPI_non_redundant
-	counts_G_lv_3_MPI_non_redundant_reps = MPI3$counts_G_lv_MPI_non_redundant_reps
-	counts_S_lv_3_MPI = MPI3$counts_S_lv_MPI
-	size_counts_S_lv_3_MPI = MPI3$size_counts_S_lv_MPI
-	y_linear_3_MPI = MPI3$y_linear_MPI
-	size_y_linear_3_MPI = MPI3$size_y_linear_MPI
-	y_linear_S_3_MPI = MPI3$y_linear_S_MPI
-	size_y_linear_S_3_MPI = MPI3$size_y_linear_S_MPI
-	G3_linear_MPI = MPI3$G_linear_MPI
-	size_G3_linear_MPI = MPI3$size_G_linear_MPI
-
-	MPI4 = get_MPI_df(counts_baseline_to_linear, y_source, counts_baseline,4)
-
-	counts_idx_lv_4_MPI = MPI4$counts_idx_lv_MPI
-	size_counts_idx_lv_4_MPI = MPI4$size_counts_idx_lv_MPI
-	counts_G_lv_4_MPI = MPI4$counts_G_lv_MPI
-	size_counts_G_lv_4_MPI = MPI4$size_counts_G_lv_MPI
-	counts_G_lv_4_MPI_non_redundant = MPI4$counts_G_lv_MPI_non_redundant
-	size_counts_G_lv_4_MPI_non_redundant = MPI4$size_counts_G_lv_MPI_non_redundant
-	counts_G_lv_4_MPI_non_redundant_reps = MPI4$counts_G_lv_MPI_non_redundant_reps
-	counts_S_lv_4_MPI = MPI4$counts_S_lv_MPI
-	size_counts_S_lv_4_MPI = MPI4$size_counts_S_lv_MPI
-	y_linear_4_MPI = MPI4$y_linear_MPI
-	size_y_linear_4_MPI = MPI4$size_y_linear_MPI
-	y_linear_S_4_MPI = MPI4$y_linear_S_MPI
-	size_y_linear_S_4_MPI = MPI4$size_y_linear_S_MPI
-	G4_linear_MPI = MPI4$G_linear_MPI
-	size_G4_linear_MPI = MPI4$size_G_linear_MPI
-
-	# # MODEL
-	Sys.setenv("STAN_NUM_THREADS" = cores)
-
-	# library(rstan)
-	# fileConn<-file("~/.R/Makevars")
-	# writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
-	# close(fileConn)
-	# ARMET_tc_model = stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc.stan")
+	prop_posterior[[2]] = fit2 %>% draws_to_alphas(sprintf("prop_%s", "a")) %>% `[[` (1)
 
 
-	Sys.time() %>% print
-browser()
-	model  = switch(
-		full_bayesian %>% `!` %>% sum(1),
-		stanmodels$ARMET_tc,
-		stanmodels$ARMET_tc_fix
-	)
+	###########################################
 
-	fit =
-		switch(
-			full_bayes %>% `!` %>% sum(1),
+	browser()
 
-			# HMC
-			sampling(
-				model, # ARMET_tc_model, #,
-				chains=3, cores=3,
-				iter=iterations, warmup=iterations-sampling_iterations,
-				#control = list(stepsize = 0.05, adapt_delta = 0.99),
-				#include = F, pars=c("prop_a", "prop_b", "prop_c", "prop_d", "prop_e"),
-				#pars=c("prop_1", "prop_2", "prop_3", "prop_4", "exposure_rate", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),
-				#,
-				init = function () list(	lambda_log = lambda_log, sigma_inv_log = sigma_inv_log) # runif(G,  lambda_log - 1, lambda_log + 1)	)
-				#save_warmup = FALSE,
-				#pars = c("prop_1", "prop_2", "prop_3", "exposure_rate") #, "nb_sum") #,"mu_sum", "phi_sum"),
-			) %>%
-				{
-					(.)  %>% rstan::summary() %$% summary %>% as_tibble(rownames="par") %>% arrange(Rhat %>% desc) %>% print
-					(.)
-				},
+	res3 = run_model(	reference_filtered, mix, shards,	3,	full_bayesian, approximate_posterior, prop_posterior	)
 
-			vb_iterative(
-				model, #ARMET_tc_model,
-				output_samples=100,
-				iter = 50000,
-				tol_rel_obj=0.01,
-				pars=c("prop_1", "prop_2", "prop_3","prop_4", "exposure_rate", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),
-				#,
-				init = function () list(	lambda_log = lambda_log) # runif(G,  lambda_log - 1, lambda_log + 1)	)
+	df3 = res3[[1]]
+	fit3 = res3[[2]]
 
-			)
-		)
-
-	Sys.time() %>% print
 
 	# Produce results
-	prop =
-		fit %>%
-
-		# If MCMC is used check divergencies as well
-		ifelse_pipe(
-			full_bayes,
-			~ .x %>% parse_summary_check_divergence(),
-			~ .x %>% parse_summary()
-		) %>%
-
-		# Parse
-		separate(.variable, c(".variable", "level"), convert = T) %>%
-
-		# Add tree information
-		left_join(
-			tree %>% data.tree::ToDataFrameTree("name", "C1", "C2", "C3", "C4") %>%
-				as_tibble %>%
-				select(-1) %>%
-				rename(`Cell type category` = name) %>%
-				gather(level, C, -`Cell type category`) %>%
-				mutate(level = gsub("C", "", level)) %>%
-				drop_na %>%
-				mutate(C = C %>% as.integer, level = level %>% as.integer)
-		) %>%
-
-		# Add sample information
-		left_join(
-			df %>%
-				filter(`query`) %>%
-				distinct(Q, sample)
-		)
 
 	# Return
 	list(
@@ -528,10 +260,10 @@ browser()
 		# Return the fitted object
 		fit = fit,
 
-		# Return data source
-		data_source = y_source,
-
-		signatures = counts_baseline
+		# # Return data source
+		# data_source = y_source,
+		signatures = reference_filtered,
+		signatures1 = df1
 	)
 
 }
