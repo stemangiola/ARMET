@@ -993,7 +993,7 @@ ref_mix_format = function(ref, mix){
 
 }
 
-run_model = function(reference_filtered, mix, shards, lv, full_bayesian, approximate_posterior, prop_posterior){
+run_model = function(reference_filtered, mix, shards, lv, full_bayesian, approximate_posterior, prop_posterior, exposure_posterior = tibble(.mean=0, .sd=0)[0,]){
 
 
 	# Filter on level considered
@@ -1078,10 +1078,17 @@ run_model = function(reference_filtered, mix, shards, lv, full_bayesian, approxi
 	# writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
 	# close(fileConn)
 	# ARMET_tc_model = stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc.stan")
-	# ARMET_tc_model = stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix.stan", auto_write = F)
+	# ARMET_tc_model = rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix.stan", auto_write = F)
 
 	iterations = 250
 	sampling_iterations = 100
+
+	exposure_rate_init = switch(
+		(lv > 1) %>% `!` %>% as.numeric %>% sum(1),
+		exposure_posterior %>% pull(1),
+		runif(S, -0.5, 0.5)
+	)
+	exposure_rate_multiplier = sd(exposure_rate_init)
 
 	Sys.setenv("STAN_NUM_THREADS" = shards)
 
@@ -1100,7 +1107,11 @@ run_model = function(reference_filtered, mix, shards, lv, full_bayesian, approxi
 				#include = F, pars=c("prop_a", "prop_b", "prop_c", "prop_d", "prop_e"),
 				#pars=c("prop_1", "prop_2", "prop_3", "prop_4", "exposure_rate", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),
 				#,
-				init = function () list(	lambda_log = lambda_log, sigma_inv_log = sigma_inv_log) # runif(G,  lambda_log - 1, lambda_log + 1)	)
+				init = function () list(
+					lambda_log = lambda_log,
+					sigma_inv_log = sigma_inv_log,
+					exposure_rate = exposure_rate_init
+				)
 				#save_warmup = FALSE,
 				#pars = c("prop_1", "prop_2", "prop_3", "exposure_rate") #, "nb_sum") #,"mu_sum", "phi_sum"),
 			) %>%
@@ -1181,6 +1192,14 @@ draws_to_alphas = function(.data, pars){
 		select(-Q) %>%
 		nest(alphas = -.variable) %>%
 		pull(alphas)
+}
+
+draws_to_exposure = function(.data){
+	.data %>%
+		tidybayes::gather_draws(exposure_rate[Q]) %>%
+		summarise(.mean = .value %>% mean, .sd = .value %>% sd)%>%
+		ungroup() %>%
+		select(.mean , .sd)
 }
 
 get_null_prop_posterior = function(ct_in_nodes){

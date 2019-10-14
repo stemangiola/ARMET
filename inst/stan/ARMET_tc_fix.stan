@@ -692,6 +692,9 @@ data {
   vector[ct_in_nodes[5]]  prop_d_prior[Q * (lv > 3)]; // mono_derived
   vector[ct_in_nodes[6]]  prop_e_prior[Q * (lv > 3)]; // t_cell
 
+	// exposure posterior previous fit
+	vector[2] exposure_posterior[Q * (lv > 1)];
+	real exposure_rate_multiplier;
 }
 transformed data{
 
@@ -736,7 +739,7 @@ parameters {
 	//real<upper=0> sigma_slope_dec;
 
   // Local properties of the data
-  vector[S] exposure_rate;
+  vector<multiplier = exposure_rate_multiplier>[S] exposure_rate;
 
   // Proportions
   // lv1
@@ -816,8 +819,8 @@ model {
 	vector[(ct_in_levels[lv] * Q) + max(size_y_linear_S_MPI)] pack_r_1[shards];
 
 	// Exposure
-	exposure_rate ~ normal(0,1);
-
+	if(lv == 1) exposure_rate ~ normal(0,1);
+	//else exposure_rate ~ normal(exposure_posterior[,1],exposure_posterior[,2]);
 	// Deconvolution
 	sigma_intercept_dec ~ student_t(3, 0, 2);
 
@@ -834,7 +837,7 @@ model {
 		),
 		real_data,
 		get_int_MPI( counts_linear[counts_idx_lv_NA], shards)
-	));
+	)) * 2;
 
 	if(lv == 1) for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | rep_vector(num_elements(prop_1[1]), num_elements(prop_1[1])));
 	if(lv > 1)  for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | prop_1_prior[q]);
@@ -863,11 +866,11 @@ model {
 		prop_lv
 	);
 
-	// target += sum(map_rect(
-	// 	lp_reduce ,
-	// 	[sigma_intercept_dec, sigma_slope]' ,
-	// 	pack_r_1,
-	// 	pack_R_1,
-	// 	int_package
-	// ));
+	target += sum(map_rect(
+		lp_reduce ,
+		[sigma_intercept_dec, sigma_slope]' ,
+		pack_r_1,
+		pack_R_1,
+		int_package
+	));
 }

@@ -203,7 +203,7 @@ ARMET_tc = function(
 
 	######################################
 
-	res2 = run_model(	reference_filtered, mix, shards,	2,	full_bayesian, approximate_posterior, prop_posterior	)
+	res2 = run_model(	reference_filtered, mix, shards,	2,	full_bayesian, approximate_posterior, prop_posterior, draws_to_exposure(fit1)	)
 
 	df2 = res2[[1]]
 	fit2 = res2[[2]]
@@ -240,7 +240,7 @@ ARMET_tc = function(
 
 	browser()
 
-	res3 = run_model(	reference_filtered, mix, shards,	3,	full_bayesian, approximate_posterior, prop_posterior	)
+	res3 = run_model(	reference_filtered, mix, shards,	3,	full_bayesian, approximate_posterior, prop_posterior, draws_to_exposure(fit2)	)
 
 	df3 = res3[[1]]
 	fit3 = res3[[2]]

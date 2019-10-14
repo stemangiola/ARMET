@@ -403,105 +403,109 @@ get_input_data = function(markers, reps, pass){
 }
 
 # mix_base = readRDS("dev/mix_base.RDS")
-# my_ref = 	mix_base %>% distinct(sample, `Cell type category`, level)
+# my_ref = 	mix_base %>% distinct(sample, `Cell type category`, level) %>% ungroup() %>% mutate_if(is.character, as.factor) %>% mutate(level = level %>% as.integer)
 #
 # set.seed(123)
 #
-get_mix_source = function(){
-	{
-
-		# This function goes thought nodes and grubs names of the cluster
-		gn = function(node) {
-			if(length(node$children) > 0) {
-
-				result =
-
-					# Get cildren names
-					#tibble(parent = node$name, children = foreach(cc = node$children, .combine = c) %do% {cc$name}) %>%
-					foreach(cc = node$children, .combine = c) %do% {cc$name} %>%
-
-					#create cmbinations
-					combn(m = 2) %>%
-					t %>%
-					as_tibble %>%
-					mutate(parent = node$name, level = node$level )
-
-				# Merge results with other nodes
-				result %<>%
-					bind_rows(
-						foreach(nc = node$children, .combine = bind_rows) %do% {gn(nc)}
-					)
-
-				return (result)
-			}
-		}
-
-		gn(Clone(ARMET::tree))
-	} %>%
-		mutate(`#` = 1:n()) %>%
-
-		# Make more runs
-		right_join(
-			tibble(`#` = (1: ((.) %>% nrow)) %>% rep(reps))  %>%
-				mutate(run = 1:n())
-		) %>%
-		select(-`#`) %>%
-
-		#multidplyr::partition(run) %>%
-		group_by(run) %>%
-		do({
-			`%>%` = magrittr::`%>%`
-
-			cc = (.)
-
-			bind_rows(
-				my_ref %>%
-					filter(`Cell type category` == (cc %>% pull(V1)) & level == (cc %>% pull(level))) %>%
-					sample_n(1) %>%
-					distinct(sample, `Cell type category`),
-				my_ref %>%
-					filter(`Cell type category` == (cc %>% pull(V2))  & level == (cc %>% pull(level))) %>%
-					sample_n(1) %>%
-					distinct(sample, `Cell type category`)
-			) %>%
-				mutate(run = cc %>% distinct(run) %>% pull(1)) %>%
-				mutate(level = cc %>% distinct(level) %>% pull(1))
-		}) %>%
-		#multidplyr::collect() %>%
-		ungroup() %>%
-
-		# Again solving the problem with house keeping genes
-		left_join(mix_base  %>% distinct(`symbol`, `read count normalised bayes`, `Cell type category`, sample, level, `house keeping`))  %>%
-
-		# Add mix_sample
-		left_join(
-			(.) %>%
-				group_by(run) %>%
-				do(
-					(.) %>%
-						distinct(`symbol`, `read count normalised bayes`, `Cell type category`, run, level) %>%
-						spread(`Cell type category`, `read count normalised bayes`) %>%
-						drop_na %>%
-						mutate(pair = names((.))[4:5] %>% paste(collapse=" ")) %>%
-						setNames(c("symbol", "run", "level", "1", "2", "pair")) %>%
-						mutate( `read count mix` = ( (`1` + `2`) / 2 ) %>% as.integer ) %>%
-						unite(sample_mix, c("run", "pair"), remove = F)
-				) %>%
-				ungroup() %>%
-				distinct(symbol, run, level, pair, sample_mix,  `read count mix`)
-		) %>%
-
-		# Eliminate duplicated of difference levels for example house keepng genes
-		group_by(run, symbol, sample) %>%
-		arrange(level) %>%
-		slice(1) %>%
-		ungroup %>%
-
-		# Decrease size
-		mutate_if(is.character, as.factor)
-}
+# cl = multidplyr::create_cluster()
+# clusterExport(cl, "my_ref")
 #
-# mix_source = get_mix_source()
+#
+# get_mix_source = function(cl){
+# 	{
+#
+# 		# This function goes thought nodes and grubs names of the cluster
+# 		gn = function(node) {
+# 			if(length(node$children) > 0) {
+#
+# 				result =
+#
+# 					# Get cildren names
+# 					#tibble(parent = node$name, children = foreach(cc = node$children, .combine = c) %do% {cc$name}) %>%
+# 					foreach(cc = node$children, .combine = c) %do% {cc$name} %>%
+#
+# 					#create cmbinations
+# 					combn(m = 2) %>%
+# 					t %>%
+# 					as_tibble %>%
+# 					mutate(parent = node$name, level = node$level )
+#
+# 				# Merge results with other nodes
+# 				result %<>%
+# 					bind_rows(
+# 						foreach(nc = node$children, .combine = bind_rows) %do% {gn(nc)}
+# 					)
+#
+# 				return (result)
+# 			}
+# 		}
+#
+# 		gn(Clone(ARMET::tree))
+# 	} %>%
+# 		mutate(`#` = 1:n()) %>%
+#
+# 		# Make more runs
+# 		right_join(
+# 			tibble(`#` = (1: ((.) %>% nrow)) %>% rep(reps))  %>%
+# 				mutate(run = 1:n())
+# 		) %>%
+# 		select(-`#`) %>%
+#
+# 		multidplyr::partition(run, cluster = cl) %>%
+# 		#group_by(run) %>%
+# 		do({
+# 			`%>%` = magrittr::`%>%`
+#
+# 			cc = (.)
+#
+# 			dplyr::bind_rows(
+# 				my_ref %>%
+# 					dplyr::filter(`Cell type category` == (cc %>% dplyr::pull(V1)) & level == (cc %>% dplyr::pull(level))) %>%
+# 					dplyr::sample_n(1) %>%
+# 					dplyr::distinct(sample, `Cell type category`),
+# 				my_ref %>%
+# 					dplyr::filter(`Cell type category` == (cc %>% dplyr::pull(V2))  & level == (cc %>% dplyr::pull(level))) %>%
+# 					dplyr::sample_n(1) %>%
+# 					dplyr::distinct(sample, `Cell type category`)
+# 			) %>%
+# 				dplyr::mutate(run = cc %>% dplyr::distinct(run) %>% dplyr::pull(1)) %>%
+# 				dplyr::mutate(level = cc %>% dplyr::distinct(level) %>% dplyr::pull(1))
+# 		}) %>%
+# 		collect() %>%
+# 		ungroup() %>%
+#
+# 		# Again solving the problem with house keeping genes
+# 		left_join(mix_base  %>% distinct(`symbol`, `read count normalised bayes`, `Cell type category`, sample, level, `house keeping`))  %>%
+#
+# 		# Add mix_sample
+# 		left_join(
+# 			(.) %>%
+# 				group_by(run) %>%
+# 				do(
+# 					(.) %>%
+# 						distinct(`symbol`, `read count normalised bayes`, `Cell type category`, run, level) %>%
+# 						spread(`Cell type category`, `read count normalised bayes`) %>%
+# 						drop_na %>%
+# 						mutate(pair = names((.))[4:5] %>% paste(collapse=" ")) %>%
+# 						setNames(c("symbol", "run", "level", "1", "2", "pair")) %>%
+# 						mutate( `read count mix` = ( (`1` + `2`) / 2 ) %>% as.integer ) %>%
+# 						unite(sample_mix, c("run", "pair"), remove = F)
+# 				) %>%
+# 				ungroup() %>%
+# 				distinct(symbol, run, level, pair, sample_mix,  `read count mix`)
+# 		) %>%
+#
+# 		# Eliminate duplicated of difference levels for example house keepng genes
+# 		group_by(run, symbol, sample) %>%
+# 		arrange(level) %>%
+# 		slice(1) %>%
+# 		ungroup %>%
+#
+# 		# Decrease size
+# 		mutate_if(is.character, as.factor)
+# }
+#
+# mix_source = get_mix_source(cl)
 #
 # saveRDS(mix_source, file="dev/mix_source_30_reps.rds")
 
@@ -526,13 +530,13 @@ s = sample(size = 1, 1:99999999)
 # 	if(file.exists(file_name) %>% `!`) {
 # 		try(
 
-n_mark_df = ARMET::ARMET_ref %>% distinct(ct1, ct2) %>% mutate(`n markers` = n_markers)
+n_mark_df = ARMET::ARMET_ref %>% distinct(ct1, ct2) %>% mutate(`n markers` = 20)
 
-mix_source = readRDS("dev/mix_source_30_reps.rds")
-#mix_source = readRDS("dev/mix_source.rds")
+#mix_source = readRDS("dev/mix_source_30_reps.rds")
+mix_source = readRDS("dev/mix_source.rds")
+
 
 iteration = 1
-
 do_iterate = function(mix_source, n_mark_df, full_bayesian, levels, iteration, out_dir){
 	result =
 		ARMET_tc(
@@ -604,33 +608,34 @@ do_iterate = function(mix_source, n_mark_df, full_bayesian, levels, iteration, o
 		mutate(add_markers = -`error %>% mean` %>% `-` (0.05) %>% magrittr::multiply_by( 20) %>% ceiling )
 
 
-		if(iteration<50)
-			do_iterate(
-				mix_source,
+	if(iteration<50)
+		do_iterate(
+			mix_source,
 
-				# new n_mark_df
-				n_mark_df %>%
-					left_join(
-						add_markers %>%
-							rename(ct1 = `Cell type category`, ct2 = `other ct` ) %>%
-							select(c(2, 3, 5))
-					) %>%
-					mutate(add_markers = ifelse(add_markers %>% is.na, 0, add_markers)) %>%
-					mutate(`n markers` = `n markers` + add_markers) %>%
-					select(1:3),
-				full_bayesian,
-				levels,
-				iteration + 1,
-				out_dir
-			)
+			# new n_mark_df
+			n_mark_df %>%
+				left_join(
+					add_markers %>%
+						rename(ct1 = `Cell type category`, ct2 = `other ct` ) %>%
+						select(c(2, 3, 5))
+				) %>%
+				mutate(add_markers = ifelse(add_markers %>% is.na, 0, add_markers)) %>%
+				mutate(`n markers` = `n markers` + add_markers) %>%
+				select(1:3),
+			full_bayesian,
+			levels,
+			iteration + 1,
+			out_dir
+		)
 
-	}
+}
+#debugonce(do_iterate)
 
 do_iterate(mix_source, n_mark_df, full_bayesian, levels, iteration, out_dir)
 
 # res_dir = "dev/feature_selection_first_iterative_run_fix_skylake_1/"
 # res_dir = "dev/feature_selection_feature_selection_second_iterative_run_fix_skylake_1/"
-# res_dir = "dev/feature_selection_fourth_iterative_run_fix_skylake_1"
+# res_dir = "dev/feature_selection_third_iterative_run_fix_skylake_1/"
 #
 #
 # res =
@@ -719,7 +724,7 @@ do_iterate(mix_source, n_mark_df, full_bayesian, levels, iteration, out_dir)
 # #
 # (res %>%
 # 		filter(truth == 0.5) %>%
-# 		filter(error < 0) %>%
+# 		filter(error <= 0) %>%
 # 		#mutate(error = error %>% abs) %>%
 # 		rowwise()%>%
 # 		mutate(error = ifelse(dplyr::between(truth, .lower, .upper), 0, error)) %>%
