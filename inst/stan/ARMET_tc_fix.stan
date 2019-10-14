@@ -820,7 +820,7 @@ model {
 
 	// Exposure
 	if(lv == 1) exposure_rate ~ normal(0,1);
-	//else exposure_rate ~ normal(exposure_posterior[,1],exposure_posterior[,2]);
+	else exposure_rate ~ normal(exposure_posterior[,1],exposure_posterior[,2]);
 	// Deconvolution
 	sigma_intercept_dec ~ student_t(3, 0, 2);
 
