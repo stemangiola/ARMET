@@ -580,7 +580,16 @@ do_iterate = function(mix_source, n_mark_df, full_bayesian, levels, iteration, o
 				mutate(level = level-1) %>%
 				rename(`Cell type category` = name, level_tree = level)
 		) %>%
-		filter(level == level_tree) %>% filter(ct1 %in% c("epthelial", "fibroblast", "endothelial", "immune_cell") | ct2 %in% c("epthelial", "fibroblast", "endothelial", "immune_cell")) %>%
+		filter(level == level_tree) %>%
+		left_join(
+			tree %>%
+				data.tree::ToDataFrameTree("name", "level") %>%
+				as_tibble %>%
+				select(name, level) %>%
+				mutate(level = level-1) %>%
+				rename(ct1 = name, level_pair = level)
+		) %>%
+		filter(level_pair == level_tree) %>%
 		group_by(run,   ct1 ,  ct2, iteration) %>%
 		do({
 
@@ -600,7 +609,8 @@ do_iterate = function(mix_source, n_mark_df, full_bayesian, levels, iteration, o
 					by = "Cell type category"
 				)
 		}) %>%
-		filter(truth == 0.5 & error <= 0) %>% select(`Cell type category`, run,   ct1  , ct2  , iteration, truth,   error, `other ct`) %>%
+		filter(truth == 0.5 & error <= 0) %>%
+		select(`Cell type category`, run,   ct1  , ct2  , iteration, truth,   error, `other ct`) %>%
 		group_by(iteration, `Cell type category`, `other ct`) %>%
 		summarise(error %>% mean) %>%
 		arrange(iteration %>% desc, `error %>% mean`) %>% ungroup() %>%
@@ -669,15 +679,15 @@ do_iterate(mix_source, n_mark_df, full_bayesian, levels, iteration, out_dir)
 # 			rename(`Cell type category` = name, level_tree = level)
 # 	) %>%
 # 	filter(level == level_tree) %>%
-# 	left_join(
-# 		tree %>%
-# 			data.tree::ToDataFrameTree("name", "level") %>%
-# 			as_tibble %>%
-# 			select(name, level) %>%
-# 			mutate(level = level-1) %>%
-# 			rename(ct1 = name, level_pair = level)
-# 	) %>%
-# 	filter(level_pair == level_tree) %>%
+	# left_join(
+	# 	tree %>%
+	# 		data.tree::ToDataFrameTree("name", "level") %>%
+	# 		as_tibble %>%
+	# 		select(name, level) %>%
+	# 		mutate(level = level-1) %>%
+	# 		rename(ct1 = name, level_pair = level)
+	# ) %>%
+	# filter(level_pair == level_tree) %>%
 # 	group_by(run,   ct1 ,  ct2, iteration)  %>%
 # 	do({
 #

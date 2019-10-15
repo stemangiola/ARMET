@@ -693,7 +693,7 @@ data {
   vector[ct_in_nodes[6]]  prop_e_prior[Q * (lv > 3)]; // t_cell
 
 	// exposure posterior previous fit
-	vector[2] exposure_posterior[Q * (lv > 1)];
+	vector[2] exposure_posterior[Q];
 	real exposure_rate_multiplier;
 }
 transformed data{
@@ -819,41 +819,41 @@ model {
 	vector[(ct_in_levels[lv] * Q) + max(size_y_linear_S_MPI)] pack_r_1[shards];
 
 	// Exposure
-	if(lv == 1) exposure_rate ~ normal(0,1);
-	else exposure_rate ~ normal(exposure_posterior[,1],exposure_posterior[,2]);
+	exposure_rate ~ normal(0,1);
 	// Deconvolution
 	sigma_intercept_dec ~ student_t(3, 0, 2);
 
 	// Level NA - Mix house keeing /////////////////////
 
 	// Reference
-	target += sum(map_rect(
-		lp_reduce_simple ,
-		[sigma_intercept, sigma_slope]', // global parameters
-		get_mu_sigma_vector_MPI(
-			lambda_log[G_to_counts_linear[counts_idx_lv_NA]] + exposure_rate[S_linear[counts_idx_lv_NA]],
-			sigma_inv_log[G_to_counts_linear[counts_idx_lv_NA]],
-			shards
-		),
-		real_data,
-		get_int_MPI( counts_linear[counts_idx_lv_NA], shards)
-	)) * 2;
+	if(lv == 1)
+		target += sum(map_rect(
+			lp_reduce_simple ,
+			[sigma_intercept, sigma_slope]', // global parameters
+			get_mu_sigma_vector_MPI(
+				lambda_log[G_to_counts_linear[counts_idx_lv_NA]] + exposure_rate[S_linear[counts_idx_lv_NA]],
+				sigma_inv_log[G_to_counts_linear[counts_idx_lv_NA]],
+				shards
+			),
+			real_data,
+			get_int_MPI( counts_linear[counts_idx_lv_NA], shards)
+		));
 
-	if(lv == 1) for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | rep_vector(num_elements(prop_1[1]), num_elements(prop_1[1])));
+	if(lv == 1) for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | rep_vector(num_elements(prop_1[1]) * 5, num_elements(prop_1[1])));
 	if(lv > 1)  for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | prop_1_prior[q]);
 
-	if(lv == 2) for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | rep_vector(num_elements(prop_a[1]), num_elements(prop_a[1])));
+	if(lv == 2) for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | rep_vector(num_elements(prop_a[1]) * 5, num_elements(prop_a[1])));
 	if(lv > 2)  for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | prop_a_prior[q]);
 
-	if(lv == 3) for(q in 1:Q) target += dirichlet_lpdf(prop_b[q] | rep_vector(num_elements(prop_b[1]), num_elements(prop_b[1])));
-	if(lv == 3) for(q in 1:Q) target += dirichlet_lpdf(prop_c[q] | rep_vector(num_elements(prop_c[1]), num_elements(prop_c[1])));
-	if(lv == 3) for(q in 1:Q) target += dirichlet_lpdf(prop_d[q] | rep_vector(num_elements(prop_d[1]), num_elements(prop_d[1])));
-	if(lv == 3) for(q in 1:Q) target += dirichlet_lpdf(prop_e[q] | rep_vector(num_elements(prop_e[1]), num_elements(prop_e[1])));
+	if(lv == 3) for(q in 1:Q) target += dirichlet_lpdf(prop_b[q] | rep_vector(num_elements(prop_b[1]) * 5, num_elements(prop_b[1])));
+	if(lv == 3) for(q in 1:Q) target += dirichlet_lpdf(prop_c[q] | rep_vector(num_elements(prop_c[1]) * 5, num_elements(prop_c[1])));
+	if(lv == 3) for(q in 1:Q) target += dirichlet_lpdf(prop_d[q] | rep_vector(num_elements(prop_d[1]) * 5, num_elements(prop_d[1])));
+	if(lv == 3) for(q in 1:Q) target += dirichlet_lpdf(prop_e[q] | rep_vector(num_elements(prop_e[1]) * 5, num_elements(prop_e[1])));
 
-	if(lv == 4) for(q in 1:Q) target += dirichlet_lpdf(prop_f[q] | rep_vector(num_elements(prop_f[1]), num_elements(prop_f[1])));
-	if(lv == 4) for(q in 1:Q) target += dirichlet_lpdf(prop_g[q] | rep_vector(num_elements(prop_g[1]), num_elements(prop_g[1])));
-	if(lv == 4) for(q in 1:Q) target += dirichlet_lpdf(prop_h[q] | rep_vector(num_elements(prop_h[1]), num_elements(prop_h[1])));
-	if(lv == 4) for(q in 1:Q) target += dirichlet_lpdf(prop_i[q] | rep_vector(num_elements(prop_i[1]), num_elements(prop_i[1])));
+	if(lv == 4) for(q in 1:Q) target += dirichlet_lpdf(prop_f[q] | rep_vector(num_elements(prop_f[1]) * 5, num_elements(prop_f[1])));
+	if(lv == 4) for(q in 1:Q) target += dirichlet_lpdf(prop_g[q] | rep_vector(num_elements(prop_g[1]) * 5, num_elements(prop_g[1])));
+	if(lv == 4) for(q in 1:Q) target += dirichlet_lpdf(prop_h[q] | rep_vector(num_elements(prop_h[1]) * 5, num_elements(prop_h[1])));
+	if(lv == 4) for(q in 1:Q) target += dirichlet_lpdf(prop_i[q] | rep_vector(num_elements(prop_i[1]) * 5, num_elements(prop_i[1])));
 
 
 	pack_r_1 = package_vector_parameters(
@@ -862,7 +862,7 @@ model {
 		shards,
 		size_y_linear_S_MPI,
 		y_linear_S_MPI,
-		exposure_rate,
+		lv == 1 ? exposure_rate : to_vector(exposure_posterior[,1]),
 		prop_lv
 	);
 
@@ -874,3 +874,21 @@ model {
 		int_package
 	));
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

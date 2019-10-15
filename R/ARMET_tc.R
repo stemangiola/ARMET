@@ -169,20 +169,18 @@ ARMET_tc = function(
 				as_tibble %>%
 				select(-1)
 
-		)
-	#%>%
-	# # Decrease the number of house keeping used
-	# anti_join({
-	# 	mdf = (.) %>%
-	# 		distinct(symbol, `house keeping`) %>%
-	# 		filter(`house keeping`)
-	#
-	# 	withr::with_seed(	123, 	sample_frac(mdf, 0.8)) %>%
-	# 		distinct(symbol)
-	# }) %>%
+		)	%>%
+	# Decrease the number of house keeping used
+	anti_join({
+		mdf = (.) %>%
+			distinct(symbol, `house keeping`) %>%
+			filter(`house keeping`)
+
+		withr::with_seed(	123, 	sample_frac(mdf, 0.5)) %>%
+			distinct(symbol)
+	})
 
 	prop_posterior = get_null_prop_posterior(ct_in_nodes)
-
 
 	######################################
 
@@ -193,60 +191,134 @@ ARMET_tc = function(
 
 	prop_posterior[[1]] = fit1 %>% draws_to_alphas("prop_1") %>% `[[` (1)
 
-	prop1 = get_prop(fit1, approximate_posterior, df1)
+	prop_1 = get_prop(fit1, approximate_posterior, df1)
 
 	draws_1 =
 		fit1 %>%
-		tidybayes::gather_draws(prop_1[Q, C]) %>%
+		tidybayes::gather_draws(prop_1[Q, C1]) %>%
 		ungroup() %>%
 		select(-.variable)
 
+	prop = prop_1
+	fit = list(fit1)
+	df = list(df1)
+browser()
 	######################################
 
+	if(levels >1){
 	res2 = run_model(	reference_filtered, mix, shards,	2,	full_bayesian, approximate_posterior, prop_posterior, draws_to_exposure(fit1)	)
 
 	df2 = res2[[1]]
 	fit2 = res2[[2]]
 
-	fit2_to_prop2 = function(){
+	prop_posterior[[2]] = fit2 %>% draws_to_alphas(sprintf("prop_%s", "a")) %>% `[[` (1)
 
-	}
+	draws_a =
+		fit2 %>%
+		tidybayes::gather_draws(prop_a[Q, C]) %>%
+		ungroup() %>%
+		select(-.variable)
 
-	prop_2 =
+	draws_2 =
 		draws_1 %>%
 		left_join(
 			fit2 %>%
-			tidybayes::gather_draws(prop_a[Q, C]) %>%
-			ungroup() %>%
-			select(-.variable) %>%
-			rename(C2 = C, .value2 = .value) %>%
-			mutate(C = parents_lv2[1]),
-		by = c(".chain", ".iteration", ".draw", "Q",  "C")
+				tidybayes::gather_draws(`prop_[a]`[Q, C], regex = T) %>%
+				drop_na %>%
+				ungroup() %>%
+				left_join(
+					tibble(
+						.variable = c("prop_a"),
+						C1 = parents_lv2
+					)
+				) %>%
+				select(-.variable) %>%
+				rename(.value2 = .value, C2 = C),
+			by = c(".chain", ".iteration", ".draw", "Q",  "C1")
 		) %>%
+		group_by(.chain, .iteration, .draw, Q) %>%
+		arrange(C1, C2) %>%
 		mutate(
-			.value2 = ifelse(.value2 %>% is.na, .value, .value * .value2),
-			C2 = ifelse(C2 %>% is.na, C, C + C2 -1)
+			C2 = tree$Get("C2") %>% na.omit,
+			`Cell type category` = tree$Get("C2") %>% na.omit %>% names
 		) %>%
-		select(-C, -.value) %>%
+		ungroup() %>%
+		mutate(
+			.value2 = ifelse(.value2 %>% is.na, .value, .value * .value2)
+		)
+
+	prop_2 =
+		draws_2 %>%
+		select(.chain, .iteration, .draw,     Q,     C2 , `Cell type category`,   .value2 ) %>%
 		rename(C = C2, .value = .value2) %>%
 		mutate(.variable = "prop_2") %>%
-		group_by(.variable,  Q,  C) %>%
-		tidybayes::median_qi()
+		group_by(.variable,  Q,  C, `Cell type category`) %>%
+		tidybayes::median_qi() %>%
+		ungroup() %>%
+		mutate(level=2) %>%
+		left_join(df2 %>% distinct(Q, sample))
 
-	prop_posterior[[2]] = fit2 %>% draws_to_alphas(sprintf("prop_%s", "a")) %>% `[[` (1)
+	prop = bind_rows(prop, prop_2)
+	fit = fit %>% c(list(fit2))
+	df = df %>% c(list(df2))
+	}
 
+	######################################
 
-	###########################################
-
-	browser()
+	if(levels > 2){
 
 	res3 = run_model(	reference_filtered, mix, shards,	3,	full_bayesian, approximate_posterior, prop_posterior, draws_to_exposure(fit2)	)
 
 	df3 = res3[[1]]
 	fit3 = res3[[2]]
 
+	draws_3 =
+		draws_2 %>%
+		left_join(
+			fit3 %>%
+			tidybayes::gather_draws(`prop_[b, c, d, e]`[Q, C], regex = T) %>%
+			drop_na %>%
+			ungroup() %>%
+			left_join(
+				tibble(
+					.variable = c("prop_b", "prop_c", "prop_d", "prop_e"),
+					C2 = parents_lv3
+				)
+			) %>%
+			select(-.variable) %>%
+			rename(.value3 = .value, C3 = C),
+			by = c(".chain", ".iteration", ".draw", "Q",  "C2")
+		) %>%
+		group_by(.chain, .iteration, .draw, Q) %>%
+		arrange(C1, C2, C3) %>%
+		mutate(
+			C3 = tree$Get("C3") %>% na.omit,
+			`Cell type category` = tree$Get("C3") %>% na.omit %>% names
+		) %>%
+		ungroup() %>%
+		mutate(
+			.value3 = ifelse(.value3 %>% is.na, .value2, .value2 * .value3)
+		)
 
-	# Produce results
+
+	prop_3 =
+		draws_3 %>%
+		select(.chain, .iteration, .draw,     Q,     C3 , `Cell type category`,   .value3 ) %>%
+		rename(C = C3, .value = .value3) %>%
+		mutate(.variable = "prop_3") %>%
+		group_by(.variable,  Q,  C, `Cell type category`) %>%
+		tidybayes::median_qi() %>%
+		ungroup() %>%
+		mutate(level=3) %>%
+		left_join(df3 %>% distinct(Q, sample))
+
+	prop = bind_rows(prop, prop_3)
+	fit = fit %>% c(list(fit3))
+	df = df %>% c(list(df3))
+
+	}
+
+	######################################
 
 	# Return
 	list(
@@ -262,8 +334,7 @@ ARMET_tc = function(
 
 		# # Return data source
 		# data_source = y_source,
-		signatures = reference_filtered,
-		signatures1 = df1
+		signatures = df
 	)
 
 }
