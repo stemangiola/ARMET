@@ -54,7 +54,7 @@ ARMET_tc = function(
 	save_fit =                          F,
 	seed =                              NULL,
 	cores = 14,
-	iterations = 300,
+	iterations = 250,
 	sampling_iterations = 100,
 	levels = 1:4,
 	n_markers
@@ -62,6 +62,8 @@ ARMET_tc = function(
 
 	input = c(as.list(environment()))
 
+library(tidyverse)
+	library(magrittr)
 
 	my_theme =
 		theme_bw() +
@@ -184,7 +186,7 @@ ARMET_tc = function(
 
 	######################################
 
-	res1 = run_model(	reference_filtered, mix, shards,	1,	full_bayesian, approximate_posterior, prop_posterior	)
+	res1 = run_model(	reference_filtered, mix, shards,	1,	full_bayesian, approximate_posterior, prop_posterior, iterations = iterations,	sampling_iterations = sampling_iterations	)
 
 	df1 = res1[[1]]
 	fit1 = res1[[2]]
@@ -202,11 +204,11 @@ ARMET_tc = function(
 	prop = prop_1
 	fit = list(fit1)
 	df = list(df1)
-browser()
+
 	######################################
 
 	if(levels >1){
-	res2 = run_model(	reference_filtered, mix, shards,	2,	full_bayesian, approximate_posterior, prop_posterior, draws_to_exposure(fit1)	)
+	res2 = run_model(	reference_filtered, mix, shards,	2,	full_bayesian, approximate_posterior, prop_posterior, draws_to_exposure(fit1)	, iterations = iterations,	sampling_iterations = sampling_iterations	)
 
 	df2 = res2[[1]]
 	fit2 = res2[[2]]
@@ -267,7 +269,7 @@ browser()
 
 	if(levels > 2){
 
-	res3 = run_model(	reference_filtered, mix, shards,	3,	full_bayesian, approximate_posterior, prop_posterior, draws_to_exposure(fit2)	)
+	res3 = run_model(	reference_filtered, mix, shards,	3,	full_bayesian, approximate_posterior, prop_posterior, draws_to_exposure(fit2), iterations = iterations,	sampling_iterations = sampling_iterations		)
 
 	df3 = res3[[1]]
 	fit3 = res3[[2]]

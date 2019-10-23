@@ -520,6 +520,7 @@ if(dim_4[1] > 0) {
 		vector[size_counts_G_lv_1_MPI] ref_lambda_log_redundant_normalised = rep_vector_by_array(ref_lambda_log_for_counts, counts_G_lv_1_MPI_non_redundant_reps) + ref_exposure_rate;
 		vector[size_counts_G_lv_1_MPI] ref_sigma_inv_log_redundant =  rep_vector_by_array(ref_sigma_inv_log_for_counts, counts_G_lv_1_MPI_non_redundant_reps);
 
+
 		// Mix
 
 		// global parameters
@@ -537,20 +538,18 @@ if(dim_4[1] > 0) {
       to_matrix(prop_1, Q, C)
     );
 
+
+
+
     lambda_log_deconvoluted_1 = log(sumNB[1]);
     sigma_deconvoluted_1 = sumNB[2];
 
-    // print("---");
-    // print(sigma_deconvoluted_1[1:20]);
-    // print((1.0 ./ exp( ( sigma_slope * lambda_log_deconvoluted_1 + sigma_intercept_dec ) ))[1:20]);
-		// print(
-		// 	log(
-		// 		to_vector(
-		// 			to_matrix(prop_1, Q, C) *
-		// 			exp(to_matrix(ref_lambda_log, C, size_G1_linear_MPI/C)) // [Q,G] dimensions
-		// 		)
-		// 	)[1:20]
-		// 	);
+
+// print(mix_counts);
+// print(lambda_log_deconvoluted_1);
+// print(mix_exposure_rate);
+// print(sigma_deconvoluted_1);
+
 
 		// Reference
 		lp = neg_binomial_2_log_lpmf( ref_counts |	ref_lambda_log_redundant_normalised, 1.0 ./ exp( ref_sigma_inv_log_redundant )		);
@@ -607,6 +606,13 @@ if(dim_4[1] > 0) {
 
 	 return [lp]';
 
+	}
+
+		vector[] which(int x, vector[] a, vector[] b, vector[] c, vector[] d){
+		if(x == 1) return(a);
+		if(x == 2) return(b);
+		if(x == 3) return(c);
+		else return(d);
 	}
 
 
@@ -695,6 +701,23 @@ data {
 	real lambda_skew_prior[2];
 	real sigma_intercept_prior[2];
 
+  // Proportions priors
+  // lv1
+  vector[ct_in_nodes[1]]  prop_1_prior[Q * (lv > 1)]; // Root
+
+  // lv2
+  vector[ct_in_nodes[2]]  prop_a_prior[Q * (lv > 2)]; // Immune cells
+
+  // lv3
+  vector[ct_in_nodes[3]]  prop_b_prior[Q * (lv > 3)]; // b cells
+  vector[ct_in_nodes[4]]  prop_c_prior[Q * (lv > 3)]; // granulocyte
+  vector[ct_in_nodes[5]]  prop_d_prior[Q * (lv > 3)]; // mono_derived
+  vector[ct_in_nodes[6]]  prop_e_prior[Q * (lv > 3)]; // t_cell
+
+	// exposure posterior previous fit
+	// vector[2] exposure_posterior[Q * (lv > 1)];
+	// real exposure_rate_multiplier;
+
 }
 transformed data{
 
@@ -710,8 +733,8 @@ transformed data{
 	int int_package[shards, max({pack_cols })];
 
 	pack = package_int(
-		ct_in_levels[1],
-		G_lv/ct_in_levels[1],
+		ct_in_levels[lv],
+		G_lv/ct_in_levels[lv],
 		Q,
 		shards,
 		counts_linear,
@@ -748,22 +771,22 @@ parameters {
 
   // Proportions
   // lv1
-  simplex[ct_in_nodes[1]]  prop_1[Q * (lv == 1)]; // Root
+  simplex[ct_in_nodes[1]]  prop_1[Q * (lv >= 1)]; // Root
 
   // lv2
-  simplex[ct_in_nodes[2]]  prop_a[Q * (lv == 2)]; // Immune cells
+  simplex[ct_in_nodes[2]]  prop_a[Q * (lv >= 2)]; // Immune cells
 
   // lv3
-  simplex[ct_in_nodes[3]]  prop_b[Q * (lv == 3)]; // b cells
-  simplex[ct_in_nodes[4]]  prop_c[Q * (lv == 3)]; // granulocyte
-  simplex[ct_in_nodes[5]]  prop_d[Q * (lv == 3)]; // mono_derived
-  simplex[ct_in_nodes[6]]  prop_e[Q * (lv == 3)]; // t_cell
+  simplex[ct_in_nodes[3]]  prop_b[Q * (lv >= 3)]; // b cells
+  simplex[ct_in_nodes[4]]  prop_c[Q * (lv >= 3)]; // granulocyte
+  simplex[ct_in_nodes[5]]  prop_d[Q * (lv >= 3)]; // mono_derived
+  simplex[ct_in_nodes[6]]  prop_e[Q * (lv >= 3)]; // t_cell
 
 	// lv4
-  simplex[ct_in_nodes[7]]  prop_f[Q * (lv == 4)]; // dendritic myeloid
-  simplex[ct_in_nodes[8]]  prop_g[Q * (lv == 4)]; // macrophage
-  simplex[ct_in_nodes[9]]  prop_h[Q * (lv == 4)]; // CD4
-  simplex[ct_in_nodes[10]] prop_i[Q * (lv == 4)]; // CD8
+  simplex[ct_in_nodes[7]]  prop_f[Q * (lv >= 4)]; // dendritic myeloid
+  simplex[ct_in_nodes[8]]  prop_g[Q * (lv >= 4)]; // macrophage
+  simplex[ct_in_nodes[9]]  prop_h[Q * (lv >= 4)]; // CD4
+  simplex[ct_in_nodes[10]] prop_i[Q * (lv >= 4)]; // CD8
 
   // Error between reference and mix, to avoid divergencies
   // vector<lower=0>[GM] error_ref_mix_z;
@@ -771,12 +794,12 @@ parameters {
 }
 transformed parameters{
 
-	vector[ct_in_levels[2]] prop_2[Q * lv == 2];
-	vector[ct_in_levels[3]] prop_3[Q * lv == 3];
-	vector[ct_in_levels[4]] prop_4[Q * lv == 4];
+	vector[ct_in_levels[2]] prop_2[Q * (lv >= 2)];
+	vector[ct_in_levels[3]] prop_3[Q * (lv >= 3)];
+	vector[ct_in_levels[4]] prop_4[Q * (lv >= 4)];
 
 	// proportion of level 2
-	if(lv == 2)
+	if(lv >= 2)
 	prop_2 =
 		append_vector_array(
 			prop_1[,singles_lv2],
@@ -784,7 +807,7 @@ transformed parameters{
 		);
 
 	// proportion of level 3
-	if(lv == 3)
+	if(lv >= 3)
 	prop_3 =
 		append_vector_array(
 			prop_2[,singles_lv3],
@@ -801,7 +824,7 @@ transformed parameters{
 		);
 
 	// proportion of level 4
-	if(lv == 4)
+	if(lv >= 4)
 	prop_4 =
 		append_vector_array(
 			prop_3[,singles_lv4],
@@ -823,13 +846,15 @@ model {
 	vector[Y_lv] lambda_log_deconvoluted;
 	vector[Y_lv] sigma_deconvoluted;
 
+ 	vector[ct_in_levels[lv]] prop_lv[Q] = which(lv, prop_1, prop_2, prop_3, prop_4);
+
 	vector[Y_lv] sumNB[2];
 
 	vector[
 		max(size_counts_G_lv_MPI_non_redundant) +
 		max(size_counts_S_lv_MPI) +
 		max(size_counts_G_lv_MPI_non_redundant) +
-		(ct_in_levels[1] * Q) +
+		(ct_in_levels[lv] * Q) +
 		max(size_G_linear_MPI) +
 		max(size_G_linear_MPI) +
 		max(size_y_linear_S_MPI)
@@ -856,23 +881,24 @@ model {
 
 	// Level NA - Mix house keeing /////////////////////
 
-target += sum(map_rect(
-	lp_reduce_simple ,
-	[sigma_intercept, sigma_slope]', // global parameters
-	get_mu_sigma_vector_MPI(
-		lambda_log[G_to_counts_linear[counts_idx_lv_NA]] + exposure_rate[S_linear[counts_idx_lv_NA]],
-		sigma_inv_log[G_to_counts_linear[counts_idx_lv_NA]],
-		shards
-	),
-	real_data,
-	get_int_MPI( counts_linear[counts_idx_lv_NA], shards)
-));
+	target += sum(map_rect(
+		lp_reduce_simple ,
+		[sigma_intercept, sigma_slope]', // global parameters
+		get_mu_sigma_vector_MPI(
+			lambda_log[G_to_counts_linear[counts_idx_lv_NA]] + exposure_rate[S_linear[counts_idx_lv_NA]],
+			sigma_inv_log[G_to_counts_linear[counts_idx_lv_NA]],
+			shards
+		),
+		real_data,
+		get_int_MPI( counts_linear[counts_idx_lv_NA], shards)
+	));
 
 
+	if(lv == 1) for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | rep_vector(num_elements(prop_1[1]) * 5, num_elements(prop_1[1])));
+	if(lv > 1)  for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | prop_1_prior[q]);
 
-	if(lv == 1)  for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | rep_vector(num_elements(prop_1[1]), num_elements(prop_1[1])));
-
-	if(lv == 2)  for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | rep_vector(num_elements(prop_a[1]), num_elements(prop_a[1])));
+	if(lv == 2) for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | rep_vector(num_elements(prop_a[1]) * 5, num_elements(prop_a[1])));
+	if(lv > 2)  for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | prop_a_prior[q]);
 
 	if(lv == 3) for(q in 1:Q) target += dirichlet_lpdf(prop_b[q] | rep_vector(num_elements(prop_b[1]), num_elements(prop_b[1])));
 	if(lv == 3) for(q in 1:Q) target += dirichlet_lpdf(prop_c[q] | rep_vector(num_elements(prop_c[1]), num_elements(prop_c[1])));
@@ -885,8 +911,8 @@ target += sum(map_rect(
 	if(lv == 4) for(q in 1:Q) target += dirichlet_lpdf(prop_i[q] | rep_vector(num_elements(prop_i[1]), num_elements(prop_i[1])));
 
 
-	if(lv == 1) pack_r = package_real(
-		ct_in_levels[1],
+	pack_r = package_real(
+		ct_in_levels[lv],
 		Q,
 		shards,
 		size_counts_G_lv_MPI,
@@ -902,10 +928,8 @@ target += sum(map_rect(
 		lambda_log,
 		exposure_rate,
 		sigma_inv_log,
-		prop_1
+		prop_lv
 	);
-
-
 
 	target +=  sum(map_rect(
 		lp_reduce ,
@@ -914,4 +938,12 @@ target += sum(map_rect(
 		real_data2,
 		int_package
 	));
+
+	// 	target +=
+	// 	lp_reduce(
+	// 	[sigma_intercept_dec, sigma_slope]' ,
+	// 	pack_r[1],
+	// 	real_data2[1],
+	// 	int_package[1]
+	// );
 }

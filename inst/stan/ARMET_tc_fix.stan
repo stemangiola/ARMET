@@ -693,7 +693,7 @@ data {
   vector[ct_in_nodes[6]]  prop_e_prior[Q * (lv > 3)]; // t_cell
 
 	// exposure posterior previous fit
-	vector[2] exposure_posterior[Q];
+	vector[2] exposure_posterior[Q * (lv > 1)];
 	real exposure_rate_multiplier;
 }
 transformed data{

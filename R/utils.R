@@ -1,5 +1,6 @@
 
 
+
 # library(magrittr)
 # library(tidyverse)
 # library(foreach)
@@ -231,7 +232,7 @@ get_MPI_deconv = function(y_source, shards, my_level, tree) {
 			select(-symbol) %>%
 			spread(partition, G) %>%
 			arrange(MPI_row, `Cell type category`) %>%
-			select(-MPI_row, -`Cell type category`) %>%
+			select(-MPI_row,-`Cell type category`) %>%
 			replace(is.na(.), 0 %>% as.integer) %>%
 			as_matrix %>%
 			t,
@@ -252,7 +253,7 @@ get_MPI_deconv = function(y_source, shards, my_level, tree) {
 			distinct(MPI_row, `read count`, partition, Q) %>%
 			spread(partition, `read count`) %>%
 			arrange(MPI_row, Q) %>%
-			select(-MPI_row, -Q) %>%
+			select(-MPI_row,-Q) %>%
 			replace(is.na(.), 0 %>% as.integer) %>%
 			as_matrix %>%
 			t
@@ -301,7 +302,7 @@ plot_differences_in_lambda = function() {
 			) %>%
 			as.data.frame %>% as_tibble() %>%
 			mutate(chain = rep(1:3, 100) %>% sort %>% as.factor) %>%
-			select(chain, everything()) %>% gather(par, draw,-chain) %>%
+			select(chain, everything()) %>% gather(par, draw, -chain) %>%
 			group_by(chain, par) %>%
 			summarise(d = draw %>% median) %>%
 			ggplot(aes(
@@ -369,7 +370,7 @@ plot_counts_inferred_sum = function(fit_obj, samples = NULL) {
 		geom_point(alpha = 0.5)  +
 		geom_abline(slope = 1, intercept = 0) +
 		geom_errorbar(aes(ymin = `2.5%`, ymax = `97.5%`), alpha = 0.5) +
-		facet_wrap( ~ sample) +
+		facet_wrap(~ sample) +
 		scale_y_log10() +
 		scale_x_log10()
 
@@ -562,6 +563,7 @@ create_tree_object = function() {
 								level = .$Get('level')
 							) %>%
 							left_join((.) %>% arrange(level, name) %>%	 	mutate(C = 0:(n(
+
 							) - 1)))	%>%
 							pull(C))
 			.$Set(C1 = get_idx_level(., 1))
@@ -759,15 +761,30 @@ filter_house_keeping_query_if_fixed =  function(.data, full_bayesian) {
 								~ .x %>% filter(`house keeping` & `query`))
 }
 
-parse_baseline = function(.data, shards_in_levels, lv){
+parse_baseline = function(.data, shards_in_levels, lv) {
 	.data %>%
-		filter(level==lv) %>%
-		distinct(sample, symbol, `Cell type category`, level, `read count`, counts_idx, G, GM, S, `house keeping`) %>%
-		left_join( tibble(level=lv, shards = shards_in_levels) ) %>%
+		filter(level == lv) %>%
+		distinct(
+			sample,
+			symbol,
+			`Cell type category`,
+			level,
+			`read count`,
+			counts_idx,
+			G,
+			GM,
+			S,
+			`house keeping`
+		) %>%
+		left_join(tibble(level = lv, shards = shards_in_levels)) %>%
 		format_for_MPI_from_linear()
 }
 
-get_MPI_df = function(counts_baseline_to_linear, y_source, counts_baseline, shards_in_levels, lv) {
+get_MPI_df = function(counts_baseline_to_linear,
+											y_source,
+											counts_baseline,
+											shards_in_levels,
+											lv) {
 	list(
 		counts_idx_lv_MPI =
 			counts_baseline_to_linear %>%
@@ -775,7 +792,7 @@ get_MPI_df = function(counts_baseline_to_linear, y_source, counts_baseline, shar
 			distinct(idx_MPI, counts_idx, `read count MPI row`) %>%
 			spread(idx_MPI,  counts_idx) %>%
 			select(-`read count MPI row`) %>%
-			replace(is.na(.),-999 %>% as.integer) %>%
+			replace(is.na(.), -999 %>% as.integer) %>%
 			as_matrix() %>% t %>% 		as.data.frame,
 
 		size_counts_idx_lv_MPI =
@@ -793,7 +810,7 @@ get_MPI_df = function(counts_baseline_to_linear, y_source, counts_baseline, shar
 			distinct(idx_MPI, G, `read count MPI row`)  %>%
 			spread(idx_MPI,  G) %>%
 			select(-`read count MPI row`) %>%
-			replace(is.na(.),-999 %>% as.integer) %>%
+			replace(is.na(.), -999 %>% as.integer) %>%
 			as_matrix() %>% t %>% 		as.data.frame,
 
 		size_counts_G_lv_MPI =
@@ -811,7 +828,7 @@ get_MPI_df = function(counts_baseline_to_linear, y_source, counts_baseline, shar
 			group_by(idx_MPI) %>% do((.) %>% rowid_to_column("read count MPI row")) %>% ungroup() %>%
 			spread(idx_MPI,  G) %>%
 			select(-`read count MPI row`) %>%
-			replace(is.na(.),-999 %>% as.integer) %>%
+			replace(is.na(.), -999 %>% as.integer) %>%
 			as_matrix() %>% t %>% 		as.data.frame,
 
 		size_counts_G_lv_MPI_non_redundant =
@@ -832,7 +849,7 @@ get_MPI_df = function(counts_baseline_to_linear, y_source, counts_baseline, shar
 			distinct(idx_MPI, n, `read count MPI row`) %>%
 			spread(idx_MPI,  n) %>%
 			select(-`read count MPI row`) %>%
-			replace(is.na(.),-999 %>% as.integer) %>%
+			replace(is.na(.), -999 %>% as.integer) %>%
 			as_matrix() %>% t %>% 		as.data.frame,
 
 		# Count indexes
@@ -842,7 +859,7 @@ get_MPI_df = function(counts_baseline_to_linear, y_source, counts_baseline, shar
 			distinct(idx_MPI, S, `read count MPI row`)  %>%
 			spread(idx_MPI,  S) %>%
 			select(-`read count MPI row`) %>%
-			replace(is.na(.),-999 %>% as.integer) %>%
+			replace(is.na(.), -999 %>% as.integer) %>%
 			as_matrix() %>% t %>% 		as.data.frame,
 
 		size_counts_S_lv_MPI =
@@ -863,7 +880,7 @@ get_MPI_df = function(counts_baseline_to_linear, y_source, counts_baseline, shar
 			distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
 			spread(idx_MPI,  `read count`) %>%
 			select(-`read count MPI row`) %>%
-			replace(is.na(.),-999 %>% as.integer) %>%
+			replace(is.na(.), -999 %>% as.integer) %>%
 			as_matrix() %>% t %>% 		as.data.frame,
 
 		size_y_linear_MPI =
@@ -886,7 +903,7 @@ get_MPI_df = function(counts_baseline_to_linear, y_source, counts_baseline, shar
 			distinct(idx_MPI, S, `read count MPI row`)  %>%
 			spread(idx_MPI,  S) %>%
 			select(-`read count MPI row`) %>%
-			replace(is.na(.),-999 %>% as.integer) %>%
+			replace(is.na(.), -999 %>% as.integer) %>%
 			as_matrix() %>% t %>% 		as.data.frame,
 
 		size_y_linear_S_MPI =
@@ -908,7 +925,7 @@ get_MPI_df = function(counts_baseline_to_linear, y_source, counts_baseline, shar
 			distinct(idx_MPI, G, `read count MPI row`) %>%
 			spread(idx_MPI,  G) %>%
 			select(-`read count MPI row`) %>%
-			replace(is.na(.),-999 %>% as.integer) %>%
+			replace(is.na(.), -999 %>% as.integer) %>%
 			as_matrix() %>% t %>% 		as.data.frame,
 
 		size_G_linear_MPI =
@@ -923,38 +940,33 @@ get_MPI_df = function(counts_baseline_to_linear, y_source, counts_baseline, shar
 	)
 }
 
-ref_mix_format = function(ref, mix){
-
+ref_mix_format = function(ref, mix) {
 	bind_rows(
 		# Get reference based on mix genes
 		ref %>% mutate(`query` = FALSE),
 		mix %>%
-			gather(`symbol`, `read count`, -sample) %>%
-			inner_join(ref %>% distinct(symbol) ) %>%
-			left_join( ref %>% distinct(symbol, `house keeping`) ) %>%
+			gather(`symbol`, `read count`,-sample) %>%
+			inner_join(ref %>% distinct(symbol)) %>%
+			left_join(ref %>% distinct(symbol, `house keeping`)) %>%
 			mutate(`Cell type category` = "query") %>%
 			mutate(`query` = TRUE)
 	)	%>%
 
 		# Add marker symbol indeces
-		left_join(
-			(.) %>%
-				filter(!`house keeping`) %>%
-				distinct(`symbol`) %>%
-				mutate(M = 1:n())
-		) %>%
+		left_join((.) %>%
+								filter(!`house keeping`) %>%
+								distinct(`symbol`) %>%
+								mutate(M = 1:n())) %>%
 
 		# Add sample indeces
 		arrange(!`query`) %>% # query first
 		mutate(S = factor(sample, levels = .$sample %>% unique) %>% as.integer) %>%
 
 		# Add query samples indeces
-		left_join(
-			(.) %>%
-				filter(`query`) %>%
-				distinct(`sample`) %>%
-				mutate(Q = 1:n())
-		) %>%
+		left_join((.) %>%
+								filter(`query`) %>%
+								distinct(`sample`) %>%
+								mutate(Q = 1:n())) %>%
 
 		# Add house keeping into Cell type label
 		mutate(`Cell type category` = ifelse(`house keeping`, "house_keeping", `Cell type category`)) %>%
@@ -993,9 +1005,16 @@ ref_mix_format = function(ref, mix){
 
 }
 
-run_model = function(reference_filtered, mix, shards, lv, full_bayesian, approximate_posterior, prop_posterior, exposure_posterior = tibble(.mean=0, .sd=0)[0,]){
-
-
+run_model = function(reference_filtered,
+										 mix,
+										 shards,
+										 lv,
+										 full_bayesian,
+										 approximate_posterior,
+										 prop_posterior,
+										 exposure_posterior = tibble(.mean = 0, .sd = 0)[0, ],
+										 iterations = iterations,
+										 sampling_iterations = sampling_iterations	) {
 	# Filter on level considered
 	reference_filtered = reference_filtered %>% filter(level %in% lv)
 
@@ -1024,7 +1043,18 @@ run_model = function(reference_filtered, mix, shards, lv, full_bayesian, approxi
 		df %>%
 		filter(`query` & !`house keeping`) %>%
 		select(S, Q, `symbol`, `read count`, GM, sample) %>%
-		left_join(	df %>% filter(!query) %>% distinct(`symbol`, G, `Cell type category`, level, lambda, sigma_raw, GM, C) ) %>%
+		left_join(
+			df %>% filter(!query) %>% distinct(
+				`symbol`,
+				G,
+				`Cell type category`,
+				level,
+				lambda,
+				sigma_raw,
+				GM,
+				C
+			)
+		) %>%
 		arrange(C, Q, symbol) %>%
 		mutate(`Cell type category` = factor(`Cell type category`, unique(`Cell type category`)))
 
@@ -1048,95 +1078,111 @@ run_model = function(reference_filtered, mix, shards, lv, full_bayesian, approxi
 	CL_NA = counts_idx_lv_NA %>% length
 
 	# Level specific
-	counts_idx_lv = counts_baseline_to_linear %>% filter(level==lv) %>% pull(counts_idx)
+	counts_idx_lv = counts_baseline_to_linear %>% filter(level == lv) %>% pull(counts_idx)
 	CL_lv = counts_idx_lv %>% length
 
 	# Deconvolution, get G only for markers of each level. Exclude house keeping
-	G_lv_linear = counts_baseline %>% filter(level==lv) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
+	G_lv_linear = counts_baseline %>% filter(level == lv) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
 	G_lv = G_lv_linear %>% length
 
 	# Observed mix counts
-	y_linear_lv = y_source %>% filter(level==lv) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
+	y_linear_lv = y_source %>% filter(level == lv) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
 
 	# Observed mix samples indexes
-	y_linear_S_lv = y_source %>% filter(level==lv) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
+	y_linear_S_lv = y_source %>% filter(level == lv) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
 
 	# Lengths indexes
 	Y_lv = y_linear_lv %>% length
 
 
-	MPI_data = get_MPI_df(counts_baseline_to_linear,	y_source,	counts_baseline, shards,	lv	)
+	MPI_data = get_MPI_df(counts_baseline_to_linear,
+												y_source,
+												counts_baseline,
+												shards,
+												lv)
 
-	model  = switch(
-		full_bayesian %>% `!` %>% sum(1),
-		stanmodels$ARMET_tc,
-		stanmodels$ARMET_tc_fix
-	)
+	model  = switch(full_bayesian %>% `!` %>% sum(1),
+									stanmodels$ARMET_tc,
+									stanmodels$ARMET_tc_fix)
 
 	# library(rstan)
 	# fileConn<-file("~/.R/Makevars")
 	# writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
 	# close(fileConn)
 	# ARMET_tc_model = stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc.stan")
-	# ARMET_tc_model = rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix.stan", auto_write = F)
-
-	iterations = 250
-	sampling_iterations = 100
+	#ARMET_tc_model = rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc.stan", auto_write = F)
 
 	exposure_rate_init = switch(
 		(lv > 1) %>% `!` %>% as.numeric %>% sum(1),
 		exposure_posterior %>% pull(1),
-		runif(S, -0.5, 0.5)
-	)
-	exposure_rate_multiplier = sd(exposure_rate_init)
+		runif(S,-0.5, 0.5)
+	) %>% as.array
+
+	exposure_rate_multiplier = sd(exposure_rate_init) %>% ifelse_pipe((.) %>% is.na, ~ 0.1)
+
+	init_list = list(lambda_log = lambda_log,
+									 sigma_inv_log = sigma_inv_log) %>%
+		ifelse_pipe(!full_bayesian,
+								~ .x %>% c(list(exposure_rate = exposure_rate_init)))
 
 	Sys.setenv("STAN_NUM_THREADS" = shards)
 
-	list(
-		df,
-		switch(
-			approximate_posterior %>% sum(1),
+	#browser()
 
-			# HMC
-			sampling(
-				model, # ARMET_tc_model, #,
-				chains=3, cores=3,
-				iter=iterations, warmup=iterations-sampling_iterations,
-				data = MPI_data %>% c(prop_posterior),
-				#control = list(stepsize = 0.05, adapt_delta = 0.99),
-				#include = F, pars=c("prop_a", "prop_b", "prop_c", "prop_d", "prop_e"),
-				#pars=c("prop_1", "prop_2", "prop_3", "prop_4", "exposure_rate", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),
-				#,
-				init = function () list(
-					lambda_log = lambda_log,
-					sigma_inv_log = sigma_inv_log,
-					exposure_rate = exposure_rate_init
-				)
-				#save_warmup = FALSE,
-				#pars = c("prop_1", "prop_2", "prop_3", "exposure_rate") #, "nb_sum") #,"mu_sum", "phi_sum"),
-			) %>%
-				{
-					(.)  %>% rstan::summary() %$% summary %>% as_tibble(rownames="par") %>% arrange(Rhat %>% desc) %>% print
-					(.)
-				},
+	list(df,
+			 switch(
+			 	approximate_posterior %>% sum(1),
 
-			vb_iterative(
-				model, #ARMET_tc_model,
-				output_samples=100,
-				iter = 50000,
-				tol_rel_obj=0.01,
-				data = MPI_data,
-				pars=c("prop_1", "prop_2", "prop_3","prop_4", "exposure_rate", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),
-				#,
-				init = function () list(	lambda_log = lambda_log, sigma_inv_log = sigma_inv_log) # runif(G,  lambda_log - 1, lambda_log + 1)	)
+			 	# HMC
+			 	sampling(
+			 		model,
+			 		#ARMET_tc_model, #,
+			 		chains = 3,
+			 		cores = 3,
+			 		iter = iterations,
+			 		warmup = iterations - sampling_iterations,
+			 		data = MPI_data %>% c(prop_posterior),
+			 		#control = list(stepsize = 0.05, adapt_delta = 0.99),
+			 		#include = F, pars=c("prop_a", "prop_b", "prop_c", "prop_d", "prop_e"),
+			 		#pars=c("prop_1", "prop_2", "prop_3", "prop_4", "exposure_rate", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),
+			 		#,
+			 		init = function ()
+			 			init_list
+			 		#save_warmup = FALSE,
+			 		#pars = c("prop_1", "prop_2", "prop_3", "exposure_rate") #, "nb_sum") #,"mu_sum", "phi_sum"),
+			 	) %>%
+			 		{
+			 			(.)  %>% rstan::summary() %$% summary %>% as_tibble(rownames = "par") %>% arrange(Rhat %>% desc) %>% print
+			 			(.)
+			 		},
 
-			)
-		)
-	)
+			 	vb_iterative(
+			 		model,
+			 		#ARMET_tc_model,
+			 		output_samples = 100,
+			 		iter = 50000,
+			 		tol_rel_obj = 0.01,
+			 		data = MPI_data,
+			 		pars = c(
+			 			"prop_1",
+			 			"prop_2",
+			 			"prop_3",
+			 			"prop_4",
+			 			"exposure_rate",
+			 			"lambda_log",
+			 			"sigma_inv_log",
+			 			"sigma_intercept_dec"
+			 		),
+			 		#,
+			 		init = function ()
+			 			list(lambda_log = lambda_log, sigma_inv_log = sigma_inv_log) # runif(G,  lambda_log - 1, lambda_log + 1)	)
+
+			 	)
+			 ))
 
 }
 
-get_prop = function(fit, approximate_posterior, df){
+get_prop = function(fit, approximate_posterior, df) {
 	fit %>%
 
 		# If MCMC is used check divergencies as well
@@ -1155,37 +1201,48 @@ get_prop = function(fit, approximate_posterior, df){
 				as_tibble %>%
 				select(-1) %>%
 				rename(`Cell type category` = name) %>%
-				gather(level, C, -`Cell type category`) %>%
+				gather(level, C,-`Cell type category`) %>%
 				mutate(level = gsub("C", "", level)) %>%
 				drop_na %>%
 				mutate(C = C %>% as.integer, level = level %>% as.integer)
 		) %>%
 
 		# Add sample information
-		left_join(
-			df %>%
-				filter(`query`) %>%
-				distinct(Q, sample)
-		)
+		left_join(df %>%
+								filter(`query`) %>%
+								distinct(Q, sample))
 }
 
-draws_to_alphas = function(.data, pars){
+#' @export
+draws_to_alphas = function(.data, pars) {
 	.data %>%
-		tidybayes::gather_draws(`prop_[1,a-z]`[Q, C], regex=T) %>%
+		tidybayes::gather_draws(`prop_[1,a-z]`[Q, C], regex = T) %>%
 		ungroup() %>%
+		{
+			print((.))
+			(.)
+		} %>%
 		filter(.variable %in% pars) %>%
+		{
+			print((.))
+			(.)
+		} %>%
 		nest(data = -c(.variable, Q)) %>%
-		mutate( alphas = map(data, ~
-												 	.x %>%
-												 	spread(C, .value) %>%
-												 	select(-c(1:3)) %>%
-												 	as_matrix() %>%
-												 	sirt::dirichlet.mle() %$%
-												 	alpha %>%
-												 	as_tibble() %>%
-												 	rename(alpha = value) %>%
-												 	mutate(C = 1:n())
-		) ) %>%
+		mutate(
+			alphas = map(
+				data,
+				~
+					.x %>%
+					spread(C, .value) %>%
+					select(-c(1:3)) %>%
+					as_matrix() %>%
+					sirt::dirichlet.mle() %$%
+					alpha %>%
+					as_tibble() %>%
+					rename(alpha = value) %>%
+					mutate(C = 1:n())
+			)
+		) %>%
 		select(-data) %>%
 		unnest(cols = alphas) %>%
 		spread(C, alpha) %>%
@@ -1194,17 +1251,17 @@ draws_to_alphas = function(.data, pars){
 		pull(alphas)
 }
 
-draws_to_exposure = function(.data){
+draws_to_exposure = function(.data) {
 	.data %>%
 		tidybayes::gather_draws(exposure_rate[Q]) %>%
-		summarise(.mean = .value %>% mean, .sd = .value %>% sd)%>%
+		summarise(.mean = .value %>% mean, .sd = .value %>% sd) %>%
 		ungroup() %>%
 		select(.mean , .sd)
 }
 
-get_null_prop_posterior = function(ct_in_nodes){
+get_null_prop_posterior = function(ct_in_nodes) {
 	prop_posterior = list()
-	for(i in 1:(length(ct_in_nodes))){
+	for (i in 1:(length(ct_in_nodes))) {
 		prop_posterior[[i]] =  matrix(ncol = ct_in_nodes[i]) %>% as_tibble() %>% setNames(c(1:ct_in_nodes[i])) %>% slice(0)
 	}
 	names(prop_posterior) = sprintf("prop_%s_prior", c(1, letters[1:12]))
@@ -1226,18 +1283,56 @@ plot_boxplot = function(input.df, symbols) {
 		) +
 		geom_jitter() +
 		geom_boxplot() +
-		facet_wrap( ~ symbol + `Cell type category`, scales = "free")  +
+		facet_wrap(~ symbol + `Cell type category`, scales = "free")  +
 		expand_limits(y = 1, x = 1) +
 		scale_y_log10()
 }
 
-plot_markers = function(.data, n_markers, mix, ct, n = 10){
+plot_markers = function(.data, n_markers, mix, ct1, ct2, n = 10, level) {
+	my_theme =
+		theme_bw() +
+		theme(
+			panel.border = element_blank(),
+			axis.line = element_line(),
+			panel.grid.major = element_line(size = 0.2),
+			panel.grid.minor = element_line(size = 0.1),
+			text = element_text(size = 12),
+			legend.position = "bottom",
+			aspect.ratio = 1,
+			axis.text.x = element_text(
+				angle = 90,
+				hjust = 1,
+				vjust = 0.5
+			),
+			strip.background = element_blank(),
+			axis.title.x  = element_text(margin = margin(
+				t = 10,
+				r = 10,
+				b = 10,
+				l = 10
+			)),
+			axis.title.y  = element_text(margin = margin(
+				t = 10,
+				r = 10,
+				b = 10,
+				l = 10
+			))
+		)
+
 	ARMET::ARMET_ref %>%
-		left_join(n_markers, by=c("ct1", "ct2")) %>%
-		filter_reference(mix) %>% filter(level%in%levels) %>%
-		filter(ct1=="b_memory") %>%
-		filter(rank<n) %>%
-		distinct(`Cell type category`, sample, `read count normalised bayes`, symbol, regression, bimodality_NB) %>%
+		left_join(n_markers, by = c("ct1", "ct2")) %>%
+		filter_reference(mix) %>%
+		filter(level %in% level) %>%
+		filter(ct1 == !!ct1 & ct2 == !!ct2) %>%
+		filter(rank < n) %>%
+		distinct(
+			`Cell type category`,
+			sample,
+			`read count normalised bayes`,
+			symbol,
+			regression,
+			bimodality_NB
+		) %>%
 		ggplot(
 			aes(
 				x = `Cell type category`,
@@ -1248,7 +1343,7 @@ plot_markers = function(.data, n_markers, mix, ct, n = 10){
 		) +
 		geom_boxplot() +
 		geom_jitter() +
-		facet_wrap( ~ symbol , scales = "free")  +
+		facet_wrap(~ symbol , scales = "free")  +
 		expand_limits(y = 1, x = 1) +
 		scale_y_log10() +
 		my_theme
