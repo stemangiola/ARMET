@@ -18,7 +18,7 @@ result_full =
 		cores = 10, levels = 2
 	)
 
-result_full =
+result_fix =
 	ARMET_tc(
 		res$input$mix %>% filter(sample=="10_b_cell natural_killer"),
 		iterations = 50,

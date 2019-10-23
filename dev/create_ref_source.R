@@ -2,7 +2,21 @@ library(tidyverse)
 library(magrittr)
 library(purrr)
 library(furrr)
-source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/e4ec6a2348efc2f62b88f10b12e70f4c6273a10a/tidy_extensions.R")
+library(data.tree)
+library(foreach)
+library(ARMET)
+source("~/PostDoc/ppcSeq/R/do_parallel.R")
+
+ifelse_pipe = function(.x, .p, .f1, .f2 = NULL) {
+	switch(.p %>% `!` %>% sum(1),
+				 as_mapper(.f1)(.x),
+				 if (.f2 %>% is.null %>% `!`)
+				 	as_mapper(.f2)(.x)
+				 else
+				 	.x)
+
+}
+
 options(future.globals.maxSize = 50000 * 1024 ^ 2)
 
 give_rank_to_ref = function(fit_df, level, lambda_threshold = 5) {
@@ -204,7 +218,6 @@ mixture_mu_ratios = function(x){
 	max(ss[1], ss[2]) / (min(ss[1], ss[2]) + 1)
 }
 
-
 regression_coefficient = function(x){
 
 	mdf = x %>%
@@ -214,7 +227,6 @@ regression_coefficient = function(x){
 
 	lm(a ~  b + I(b ^ 2), data = mdf)$coefficients[3]
 }
-
 
 sample_blacklist = c(
 	"666CRI",
@@ -240,7 +252,8 @@ ref =
 						 	distinct(sample) %>%
 						 	filter(!grepl(
 						 		sample_blacklist %>% paste(collapse = "|"), sample
-						 	)))
+						 	))) %>%
+	filter(`Data base` != "FANTOM5")
 
 ref_2 =
 	ref %>%
