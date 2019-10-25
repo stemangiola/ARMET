@@ -280,7 +280,7 @@ library(tidyverse)
 	}
 
 	######################################
-browser()
+
 	if(levels > 2){
 
 	res3 = run_model(	reference_filtered, mix, shards,	3,	full_bayesian, approximate_posterior, prop_posterior, draws_to_exposure(fit2), iterations = iterations,	sampling_iterations = sampling_iterations		)
