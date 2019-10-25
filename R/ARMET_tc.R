@@ -102,9 +102,12 @@ library(tidyverse)
 	# Set up tree structure
 	levels_in_the_tree = 1:4
 
-	tree = 	data.tree::Clone(tree) %>%	{
+	tree = 	data.tree::Clone(ARMET::tree) %>%	{
 		# Filter selected levels
 		data.tree::Prune(., function(x) x$level <= max(levels_in_the_tree) + 1)
+
+		# Filter if not in referenc
+		#data.tree::Prune(., function(x) ( x$name %in% (ARMET::ARMET_ref %>% distinct(`Cell type category`) %>% pull(1) %>% as.character) ))
 		.
 	}
 
@@ -159,6 +162,17 @@ library(tidyverse)
 
 	reference_filtered =
 		ARMET::ARMET_ref %>%
+
+		# Bug after I deleted FANTOM5 I have to rerun infer NB. Some genes are not in all cell types anynore
+		# Other bug
+		filter(`Cell type category` %>% is.na %>% `!`) %>%
+		group_by(level) %>%
+		do(
+			(.) %>% inner_join( (.) %>% distinct(symbol, `Cell type category`) %>% count(symbol) %>% filter(n == max(n)) )
+		) %>%
+		ungroup() %>%
+
+
 		left_join(n_markers, by=c("ct1", "ct2")) %>%
 		filter_reference(mix) %>%
 		select(-ct1, -ct2, -rank, -`n markers`) %>%
@@ -266,7 +280,7 @@ library(tidyverse)
 	}
 
 	######################################
-
+browser()
 	if(levels > 2){
 
 	res3 = run_model(	reference_filtered, mix, shards,	3,	full_bayesian, approximate_posterior, prop_posterior, draws_to_exposure(fit2), iterations = iterations,	sampling_iterations = sampling_iterations		)

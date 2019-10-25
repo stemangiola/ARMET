@@ -650,6 +650,8 @@ do_iterate(mix_source, n_mark_df, full_bayesian, levels, iteration, out_dir)
 # res_dir = "dev/feature_selection_third_iterative_run_fix_skylake_1/"
 # res_dir = "dev/feature_selection_fifth_iterative_run_fix_skylake_1/"
 # res_dir = "dev/feature_selection_fifth_iterative_run_fix_skylake_2/"
+# res_dir = "dev/feature_selection_sixth_iterative_run_fix_skylake_2//"
+# res_dir = "dev/feature_selection_sixth_iterative_run_fix_skylake_3//"
 #
 #
 # res =

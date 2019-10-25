@@ -68,7 +68,13 @@ ref =
 			distinct(sample) %>%
 			filter( !grepl(sample_blacklist %>% paste(collapse="|"), sample))
 	) %>%
-	filter(`Data base` != "FANTOM5")
+	filter(`Data base` != "FANTOM5")  %>%
+
+	# Filter dendritic that look too much like monocytes
+	filter(!(
+		(`Cell type formatted` == "dendritic_myeloid" & `Data base` == "Immune Singapoor") |
+			(`Cell type formatted` == "dendritic_myeloid" & `Data base` == "bloodRNA")
+	))
 
 all_genes =
 	ref %>%

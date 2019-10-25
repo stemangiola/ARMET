@@ -553,6 +553,10 @@ create_tree_object = function() {
 		data.tree::as.Node() %>%
 
 		{
+
+			# Filter if not in referenc
+			data.tree::Prune(., function(x) ( x$name %in% (ARMET::ARMET_ref %>% distinct(`Cell type category`) %>% pull(1) %>% as.character) ))
+
 			# Sort tree by name
 			Sort(., "name")
 
@@ -574,6 +578,8 @@ create_tree_object = function() {
 
 			# Set Cell type category label
 			.$Set("Cell type category" = .$Get("name"))
+
+			.
 
 		}
 }
@@ -1264,7 +1270,7 @@ get_null_prop_posterior = function(ct_in_nodes) {
 	for (i in 1:(length(ct_in_nodes))) {
 		prop_posterior[[i]] =  matrix(ncol = ct_in_nodes[i]) %>% as_tibble() %>% setNames(c(1:ct_in_nodes[i])) %>% slice(0)
 	}
-	names(prop_posterior) = sprintf("prop_%s_prior", c(1, letters[1:12]))
+	names(prop_posterior) = sprintf("prop_%s_prior", c(1, letters[1:(length(prop_posterior)-1)]))
 	prop_posterior
 }
 

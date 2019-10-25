@@ -25,5 +25,5 @@ result_fix =
 		sampling_iterations = 5,
 		n_markers = res$input$n_markers,
 		full_bayesian  = F,
-		cores = 10, levels = 2
+		cores = 10, levels = 3
 	)
