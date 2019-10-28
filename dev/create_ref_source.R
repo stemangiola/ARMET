@@ -82,7 +82,8 @@ give_rank_to_ref = function(fit_df, level, lambda_threshold = 5) {
 				distinct %>%
 				group_by_at(1) %>%
 				summarise(n = n()) %>%
-				filter(n > 1)
+				filter(n > 1),
+			by=sprintf("level_%s", level)
 		) %>%
 
 		# For each category
@@ -248,6 +249,7 @@ sample_blacklist = c(
 
 ref =
 	read_csv("dev/ref_1_2_3_4.csv") %>%
+
 	inner_join((.) %>%
 						 	distinct(sample) %>%
 						 	filter(!grepl(
@@ -259,7 +261,16 @@ ref =
 	filter(!(
 		(`Cell type formatted` == "dendritic_myeloid" & `Data base` == "Immune Singapoor") |
 			(`Cell type formatted` == "dendritic_myeloid" & `Data base` == "bloodRNA")
-	))
+	)) %>%
+
+	# Bug after I deleted FANTOM5 I have to rerun infer NB. Some genes are not in all cell types anynore
+	# Other bug
+	filter(`Cell type category` %>% is.na %>% `!`) %>%
+	group_by(level) %>%
+	do(
+		(.) %>% inner_join( (.) %>% distinct(symbol, `Cell type category`) %>% count(symbol) %>% filter(n == max(n)) )
+	) %>%
+	ungroup()
 
 ref_2 =
 	ref %>%
@@ -384,7 +395,7 @@ ref_2 =
 			summarise(`symbol too noisy` = sum(`marker too noisy`))
 	)
 
-saveRDS(ref_2, file='ref_2.rds')
+saveRDS(ref_2, file='dev/ref_2.rds')
 
 # Some plots
 # ref_2 %>%
