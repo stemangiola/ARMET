@@ -2,7 +2,21 @@ library(tidyverse)
 library(magrittr)
 library(purrr)
 library(furrr)
-source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/e4ec6a2348efc2f62b88f10b12e70f4c6273a10a/tidy_extensions.R")
+library(data.tree)
+library(foreach)
+library(ARMET)
+source("~/PostDoc/ppcSeq/R/do_parallel.R")
+
+ifelse_pipe = function(.x, .p, .f1, .f2 = NULL) {
+	switch(.p %>% `!` %>% sum(1),
+				 as_mapper(.f1)(.x),
+				 if (.f2 %>% is.null %>% `!`)
+				 	as_mapper(.f2)(.x)
+				 else
+				 	.x)
+
+}
+
 options(future.globals.maxSize = 50000 * 1024 ^ 2)
 
 give_rank_to_ref = function(fit_df, level, lambda_threshold = 5) {
@@ -68,7 +82,8 @@ give_rank_to_ref = function(fit_df, level, lambda_threshold = 5) {
 				distinct %>%
 				group_by_at(1) %>%
 				summarise(n = n()) %>%
-				filter(n > 1)
+				filter(n > 1),
+			by=sprintf("level_%s", level)
 		) %>%
 
 		# For each category
@@ -228,11 +243,28 @@ sample_blacklist = c(
 
 ref =
 	read_csv("dev/ref_1_2_3_4.csv") %>%
+
 	inner_join((.) %>%
 						 	distinct(sample) %>%
 						 	filter(!grepl(
 						 		sample_blacklist %>% paste(collapse = "|"), sample
-						 	)))
+						 	))) %>%
+	filter(`Data base` != "FANTOM5") %>%
+
+	# Filter dendritic that look too much like monocytes
+	filter(!(
+		(`Cell type formatted` == "dendritic_myeloid" & `Data base` == "Immune Singapoor") |
+			(`Cell type formatted` == "dendritic_myeloid" & `Data base` == "bloodRNA")
+	)) %>%
+
+	# Bug after I deleted FANTOM5 I have to rerun infer NB. Some genes are not in all cell types anynore
+	# Other bug
+	filter(`Cell type category` %>% is.na %>% `!`) %>%
+	group_by(level) %>%
+	do(
+		(.) %>% inner_join( (.) %>% distinct(symbol, `Cell type category`) %>% count(symbol) %>% filter(n == max(n)) )
+	) %>%
+	ungroup()
 
 ref_2 =
 	ref %>%

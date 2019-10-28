@@ -15,6 +15,7 @@ library(parallel)
 library(doParallel)
 library(multidplyr)
 library(data.tree)
+library(ttBulk)
 
 # library(future)
 # plan(multiprocess)
@@ -40,7 +41,7 @@ clusterEvalQ(cl, library(tidyverse))
 clusterEvalQ(cl, library(magrittr))
 
 registerDoParallel(cl)
-set_default_cluster(cl)
+#set_default_cluster(cl)
 
 my_theme =
 	theme_bw() +
@@ -59,8 +60,19 @@ my_theme =
 	)
 
 # Tools
-source("https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/e4ec6a2348efc2f62b88f10b12e70f4c6273a10a/tidy_extensions.R")
+source("../../../PostDoc/ppcSeq/R/do_parallel.R")
 source("https://gist.githubusercontent.com/stemangiola/9d2ba5d599b7ac80404c753cdee04a01/raw/26e5b48fde0cd4f5b0fd7cbf2fde6081a5f63e7f/tidy_data_tree.R")
+
+ifelse_pipe = function(.x, .p, .f1, .f2 = NULL) {
+	switch(.p %>% `!` %>% sum(1),
+				 as_mapper(.f1)(.x),
+				 if (.f2 %>% is.null %>% `!`)
+				 	as_mapper(.f2)(.x)
+				 else
+				 	.x)
+
+}
+
 
 #options(error = quote({dump.frames(to.file=TRUE); q()}))
 
@@ -68,6 +80,24 @@ source("https://gist.githubusercontent.com/stemangiola/9d2ba5d599b7ac80404c753cd
 tree =
 	yaml:: yaml.load_file("/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/data/tree.yaml") %>%
 	data.tree::as.Node()
+
+sample_blacklist = c(
+	"666CRI",
+	"972UYG",
+	"344KCP",
+	"555QVG",
+	"370KKZ",
+	"511TST",
+	"13816.11933",
+	"13819.11936",
+	"13817.11934",
+	"13818.11935",
+	"096DQV",
+	"711SNV",
+	"counts.Ciliary%20Epithelial%20Cells%2c%20donor3.CNhs12009.11399-118D4"   ,
+	"counts.Iris%20Pigment%20Epithelial%20Cells%2c%20donor1.CNhs12596.11530-119I9",
+	"ENCFF890DJO"
+)
 
 ct_to_correlation_threshold =
 
@@ -77,7 +107,7 @@ ct_to_correlation_threshold =
 	rename(`Cell type category` =  name) %>%
 	as_tibble %>%
 	left_join(
-		tibble(level=1:6, threshold=c(0.9, 0.95, 0.99, 0.99, 0.99, 0.99))
+		tibble(level=1:6, threshold=c(0.9, 0.975, 0.99, 0.99, 0.99, 0.99))
 	)
 
 
@@ -99,6 +129,20 @@ counts =
 
 	filter((symbol %>% is.na %>% `!`) & (symbol != "")) %>%
 	filter(`Cell type formatted` %>% is.na %>% `!`) %>%
+
+	# Filter out FANTOM 5
+	filter(`Data base` != "FANTOM5") %>%
+
+	# Filter out black list
+	filter(!grepl(
+		sample_blacklist %>% paste(collapse = "|"), sample
+	)) %>%
+
+	# Filter dendritic that look too much like monocytes
+	filter(!(
+		(`Cell type formatted` == "dendritic_myeloid" & `Data base` == "Immune Singapoor") |
+			(`Cell type formatted` == "dendritic_myeloid" & `Data base` == "bloodRNA")
+	)) %>%
 
 	# Setup Cell type category names
 	left_join(
@@ -122,13 +166,14 @@ counts =
 	) %>%
 
 	filter(`Cell type category` %>% is.na %>% `!`) %>%
+
 	mutate(level = !!my_level) %>%
 
 	# Eliminate genes that are not in all cell types
 	inner_join( (.) %>% distinct(symbol, `Cell type category`) %>% count(symbol) %>% filter(n == max(n)) ) %>%
 
 	# Setup house keeping genes
-	mutate(`Cell type category` = ifelse(symbol %in% (read_csv("docs/hk_600.txt", col_names = FALSE) %>% pull(1)), "house_keeping", `Cell type category`)) %>%
+	mutate(`Cell type category` = ifelse(symbol %in% (read_csv("dev/hk_600.txt", col_names = FALSE) %>% pull(1)), "house_keeping", `Cell type category`)) %>%
 
 	# Median redundant
 	do_parallel_start(n_cores, "symbol") %>%
@@ -145,12 +190,8 @@ counts =
 	do_parallel_end() %>%
 
 	# Normalise
-	norm_RNAseq(
-		sample_column = "sample",
-		gene_column = "symbol",
-		value_column = "read count",
-		cpm_threshold = 0.5
-	) %>%
+	ttBulk::scale_abundance(sample, symbol, `read count`) %>%
+
 	mutate(`read count normalised` = `read count normalised` %>% as.integer) %>%
 	mutate(`read count normalised log` = `read count normalised` %>% `+` (1) %>% log) %>%
 
@@ -158,61 +199,61 @@ counts =
 	mutate(`symbol original` = symbol) %>%
 	unite(symbol, c("Cell type category", "symbol"), remove = F) %>%
 
-	# Mark the bimodal distributions
-	do_parallel_start(n_cores, "symbol") %>%
-	do({
-		`%>%` = magrittr::`%>%`
-		library(tidyverse)
-		library(magrittr)
-
-		(.) %>%
-			group_by(symbol) %>%
-			do(
-				(.) %>%
-					mutate(
-						`bimodal p-value` =
-							(.) %>%
-							pull(`read count normalised log`) %>%
-							diptest::dip.test() %$%
-							`p.value`,
-
-						`bimodal coefficient` =
-							(.) %>%
-							pull(`read count normalised log`) %>%
-							modes::bimodality_coefficient(),
-
-						`anova p-value` =
-							ifelse(
-								(.) %>% distinct(`Data base`) %>% nrow > 1 & (.) %>% distinct(`Cell type formatted`) %>% nrow > 1 ,
-								(.) %>% aov(`read count normalised log` ~ `Cell type formatted` + `Data base`, .) %>% anova %$% `Pr(>F)` %>% `[` (1),
-								ifelse(
-									(.) %>% distinct(`Data base`) %>% nrow > 1,
-									(.) %>% aov(`read count normalised log` ~ `Data base`, .) %>% anova %$% `Pr(>F)` %>% `[` (1),
-									ifelse(
-										(.) %>% distinct(`Cell type formatted`) %>% nrow > 1,
-										(.) %>% aov(`read count normalised log` ~ `Cell type formatted`, .) %>% anova %$% `Pr(>F)` %>% `[` (1),
-										NA
-									)
-								)
-
-							)
-					)
-			) %>%
-			ungroup()
-
-	}) %>%
-	do_parallel_end() %>%
-	mutate(
-		`anova p-value` = ifelse(`anova p-value` == "NaN", 1, `anova p-value`),
-		`bimodal coefficient` = ifelse(`bimodal coefficient` == "NaN", 0, `bimodal coefficient`)
-	) %>%
-	mutate(
-		`hard bimodality` =
-			(`bimodal p-value` < 0.05) +
-			(`bimodal coefficient` > 0.6666667) +
-			(`anova p-value` < 0.05 ) >= 2
-	) %>%
-	mutate(`soft bimodality` = `anova p-value` < 0.0001) %>%
+	# # Mark the bimodal distributions
+	# do_parallel_start(n_cores, "symbol") %>%
+	# do({
+	# 	`%>%` = magrittr::`%>%`
+	# 	library(tidyverse)
+	# 	library(magrittr)
+	#
+	# 	(.) %>%
+	# 		group_by(symbol) %>%
+	# 		do(
+	# 			(.) %>%
+	# 				mutate(
+	# 					`bimodal p-value` =
+	# 						(.) %>%
+	# 						pull(`read count normalised log`) %>%
+	# 						diptest::dip.test() %$%
+	# 						`p.value`,
+	#
+	# 					`bimodal coefficient` =
+	# 						(.) %>%
+	# 						pull(`read count normalised log`) %>%
+	# 						modes::bimodality_coefficient(),
+	#
+	# 					`anova p-value` =
+	# 						ifelse(
+	# 							(.) %>% distinct(`Data base`) %>% nrow > 1 & (.) %>% distinct(`Cell type formatted`) %>% nrow > 1 ,
+	# 							(.) %>% aov(`read count normalised log` ~ `Cell type formatted` + `Data base`, .) %>% anova %$% `Pr(>F)` %>% `[` (1),
+	# 							ifelse(
+	# 								(.) %>% distinct(`Data base`) %>% nrow > 1,
+	# 								(.) %>% aov(`read count normalised log` ~ `Data base`, .) %>% anova %$% `Pr(>F)` %>% `[` (1),
+	# 								ifelse(
+	# 									(.) %>% distinct(`Cell type formatted`) %>% nrow > 1,
+	# 									(.) %>% aov(`read count normalised log` ~ `Cell type formatted`, .) %>% anova %$% `Pr(>F)` %>% `[` (1),
+	# 									NA
+	# 								)
+	# 							)
+	#
+	# 						)
+	# 				)
+	# 		) %>%
+	# 		ungroup()
+	#
+	# }) %>%
+	# do_parallel_end() %>%
+	# mutate(
+	# 	`anova p-value` = ifelse(`anova p-value` == "NaN", 1, `anova p-value`),
+	# 	`bimodal coefficient` = ifelse(`bimodal coefficient` == "NaN", 0, `bimodal coefficient`)
+	# ) %>%
+	# mutate(
+	# 	`hard bimodality` =
+	# 		(`bimodal p-value` < 0.05) +
+	# 		(`bimodal coefficient` > 0.6666667) +
+	# 		(`anova p-value` < 0.05 ) >= 2
+	# ) %>%
+	# mutate(`soft bimodality` = `anova p-value` < 0.0001) %>%
 
 	# Remove redundant samples
 	{
@@ -263,6 +304,7 @@ counts =
 	mutate(sample = sample %>% as.factor)
 
 
+
 # study whole dataset
 # counts.plus =
 # 	counts %>%
@@ -274,7 +316,7 @@ counts =
 #
 # counts.plus %>%
 # 	select(-contains("Dimension")) %>%
-# 	filter(symbol %in% (read_csv("docs/hk_600.txt", col_names = FALSE) %>% pull(1))) %>%
+# 	filter(symbol %in% (read_csv("dev/hk_600.txt", col_names = FALSE) %>% pull(1))) %>%
 # 	inner_join((.) %>% distinct(symbol) %>% head(n=300)) %>%
 # 	add_MDS_components(replicates_column = "symbol", cluster_by_column = "sample", value_column = "read count normalised") %>%
 # 	rotate_MDS_components(rotation_degrees = -50) %>%
@@ -412,7 +454,7 @@ counts_stan_MPI %>% distinct(symbol, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>%
 	sprintf("Genes per shard %s", .) %>%
 	print
 
-save(list=c("data_for_stan_MPI", "counts_stan_MPI", "counts", "tree"), file=sprintf("docs/level_%s_input.RData", my_level))
+save(list=c("data_for_stan_MPI", "counts_stan_MPI", "counts", "tree"), file=sprintf("dev/level_%s_input.RData", my_level))
 
 fileConn<-file("~/.R/Makevars")
 writeLines(c("CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
@@ -428,10 +470,10 @@ fit_MPI =
 		chains=3, iter=300, warmup=200, save_warmup = FALSE,
 		pars = c("lambda", "sigma_raw", "sigma_intercept", "sigma_slope", "sigma_sigma", "lambda_mu", "lambda_sigma", "exposure_rate")
 	)
-save(fit_MPI, file= sprintf("docs/fit_MPI_level%s.RData", my_level))
+save(fit_MPI, file= sprintf("dev/fit_MPI_level%s.RData", my_level))
 Sys.time()
 
-#load("docs/fit_MPI_level1.RData")
+#load("dev/fit_MPI_level1.RData")
 
 # Parse fit and ave data
 fit_MPI %>%
@@ -497,4 +539,4 @@ mutate(
 			symbol
 		)
 ) %>%
-	write_csv(sprintf("docs/fit_level%s.csv", my_level))
+	write_csv(sprintf("dev/fit_level%s.csv", my_level))

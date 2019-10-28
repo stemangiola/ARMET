@@ -36,7 +36,7 @@ n_markers = args[1] %>% as.integer
 reps = 10
 
 
-levels = 1:(args[3] %>% as.integer)
+levels = (args[3] %>% as.integer)
 
 #out_dir = Sys.time() %>% format("%a_%b_%d_%X") %>% gsub("[: ]", "_", .) %>% sprintf("dev/feature_selection_%s", .)
 out_dir = args[2]  %>% sprintf("dev/feature_selection_%s", .)
@@ -403,11 +403,15 @@ get_input_data = function(markers, reps, pass){
 }
 
 # mix_base = readRDS("dev/mix_base.RDS")
-# my_ref = 	mix_base %>% distinct(sample, `Cell type category`, level)
+# my_ref = 	mix_base %>% distinct(sample, `Cell type category`, level) %>% ungroup() %>% mutate_if(is.character, as.factor) %>% mutate(level = level %>% as.integer)
 #
 # set.seed(123)
 #
-# get_mix_source = function(){
+# cl = multidplyr::create_cluster()
+# clusterExport(cl, "my_ref")
+#
+#
+# get_mix_source = function(cl){
 # 	{
 #
 # 		# This function goes thought nodes and grubs names of the cluster
@@ -447,27 +451,27 @@ get_input_data = function(markers, reps, pass){
 # 		) %>%
 # 		select(-`#`) %>%
 #
-# 		#multidplyr::partition(run) %>%
-# 		group_by(run) %>%
+# 		multidplyr::partition(run, cluster = cl) %>%
+# 		#group_by(run) %>%
 # 		do({
 # 			`%>%` = magrittr::`%>%`
 #
 # 			cc = (.)
 #
-# 			bind_rows(
+# 			dplyr::bind_rows(
 # 				my_ref %>%
-# 					filter(`Cell type category` == (cc %>% pull(V1)) & level == (cc %>% pull(level))) %>%
-# 					sample_n(1) %>%
-# 					distinct(sample, `Cell type category`),
+# 					dplyr::filter(`Cell type category` == (cc %>% dplyr::pull(V1)) & level == (cc %>% dplyr::pull(level))) %>%
+# 					dplyr::sample_n(1) %>%
+# 					dplyr::distinct(sample, `Cell type category`),
 # 				my_ref %>%
-# 					filter(`Cell type category` == (cc %>% pull(V2))  & level == (cc %>% pull(level))) %>%
-# 					sample_n(1) %>%
-# 					distinct(sample, `Cell type category`)
+# 					dplyr::filter(`Cell type category` == (cc %>% dplyr::pull(V2))  & level == (cc %>% dplyr::pull(level))) %>%
+# 					dplyr::sample_n(1) %>%
+# 					dplyr::distinct(sample, `Cell type category`)
 # 			) %>%
-# 				mutate(run = cc %>% distinct(run) %>% pull(1)) %>%
-# 				mutate(level = cc %>% distinct(level) %>% pull(1))
+# 				dplyr::mutate(run = cc %>% dplyr::distinct(run) %>% dplyr::pull(1)) %>%
+# 				dplyr::mutate(level = cc %>% dplyr::distinct(level) %>% dplyr::pull(1))
 # 		}) %>%
-# 		#multidplyr::collect() %>%
+# 		collect() %>%
 # 		ungroup() %>%
 #
 # 		# Again solving the problem with house keeping genes
@@ -501,7 +505,7 @@ get_input_data = function(markers, reps, pass){
 # 		mutate_if(is.character, as.factor)
 # }
 #
-# mix_source = get_mix_source()
+# mix_source = get_mix_source(cl)
 #
 # saveRDS(mix_source, file="dev/mix_source_30_reps.rds")
 
@@ -526,14 +530,15 @@ s = sample(size = 1, 1:99999999)
 # 	if(file.exists(file_name) %>% `!`) {
 # 		try(
 
-n_mark_df = ARMET::ARMET_ref %>% distinct(ct1, ct2) %>% mutate(`n markers` = n_markers)
+if(levels==1) n_mark_df = ARMET::ARMET_ref %>% distinct(ct1, ct2) %>% mutate(`n markers` = n_markers)
+if(levels==2) n_mark_df = readRDS("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/feature_selection_fifth_iterative_run_fix_skylake_1/markers_50.RData")$input$n_markers
+if(levels==3) n_mark_df = readRDS("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/feature_selection_fifth_iterative_run_fix_skylake_2/markers_17.RData")$input$n_markers
 
 mix_source = readRDS("dev/mix_source_30_reps.rds")
 #mix_source = readRDS("dev/mix_source.rds")
 
 
 iteration = 1
-
 do_iterate = function(mix_source, n_mark_df, full_bayesian, levels, iteration, out_dir){
 	result =
 		ARMET_tc(
@@ -577,7 +582,16 @@ do_iterate = function(mix_source, n_mark_df, full_bayesian, levels, iteration, o
 				mutate(level = level-1) %>%
 				rename(`Cell type category` = name, level_tree = level)
 		) %>%
-		filter(level == level_tree) %>% filter(ct1 %in% c("epthelial", "fibroblast", "endothelial", "immune_cell") | ct2 %in% c("epthelial", "fibroblast", "endothelial", "immune_cell")) %>%
+		filter(level == level_tree) %>%
+		left_join(
+			tree %>%
+				data.tree::ToDataFrameTree("name", "level") %>%
+				as_tibble %>%
+				select(name, level) %>%
+				mutate(level = level-1) %>%
+				rename(ct1 = name, level_pair = level)
+		) %>%
+		filter(level_pair == level_tree) %>%
 		group_by(run,   ct1 ,  ct2, iteration) %>%
 		do({
 
@@ -597,7 +611,8 @@ do_iterate = function(mix_source, n_mark_df, full_bayesian, levels, iteration, o
 					by = "Cell type category"
 				)
 		}) %>%
-		filter(truth == 0.5 & error <= 0) %>% select(`Cell type category`, run,   ct1  , ct2  , iteration, truth,   error, `other ct`) %>%
+		filter(truth == 0.5 & error <= 0) %>%
+		select(`Cell type category`, run,   ct1  , ct2  , iteration, truth,   error, `other ct`) %>%
 		group_by(iteration, `Cell type category`, `other ct`) %>%
 		summarise(error %>% mean) %>%
 		arrange(iteration %>% desc, `error %>% mean`) %>% ungroup() %>%
@@ -605,33 +620,38 @@ do_iterate = function(mix_source, n_mark_df, full_bayesian, levels, iteration, o
 		mutate(add_markers = -`error %>% mean` %>% `-` (0.05) %>% magrittr::multiply_by( 20) %>% ceiling )
 
 
-		if(iteration<50)
-			do_iterate(
-				mix_source,
+	if(iteration<50)
+		do_iterate(
+			mix_source,
 
-				# new n_mark_df
-				n_mark_df %>%
-					left_join(
-						add_markers %>%
-							rename(ct1 = `Cell type category`, ct2 = `other ct` ) %>%
-							select(c(2, 3, 5))
-					) %>%
-					mutate(add_markers = ifelse(add_markers %>% is.na, 0, add_markers)) %>%
-					mutate(`n markers` = `n markers` + add_markers) %>%
-					select(1:3),
-				full_bayesian,
-				levels,
-				iteration + 1,
-				out_dir
-			)
+			# new n_mark_df
+			n_mark_df %>%
+				left_join(
+					add_markers %>%
+						rename(ct1 = `Cell type category`, ct2 = `other ct` ) %>%
+						select(c(2, 3, 5))
+				) %>%
+				mutate(add_markers = ifelse(add_markers %>% is.na, 0, add_markers)) %>%
+				mutate(`n markers` = `n markers` + add_markers) %>%
+				select(1:3),
+			full_bayesian,
+			levels,
+			iteration + 1,
+			out_dir
+		)
 
-	}
+}
+#debugonce(do_iterate)
 
 do_iterate(mix_source, n_mark_df, full_bayesian, levels, iteration, out_dir)
 
 # res_dir = "dev/feature_selection_first_iterative_run_fix_skylake_1/"
 # res_dir = "dev/feature_selection_feature_selection_second_iterative_run_fix_skylake_1/"
 # res_dir = "dev/feature_selection_third_iterative_run_fix_skylake_1/"
+# res_dir = "dev/feature_selection_fifth_iterative_run_fix_skylake_1/"
+# res_dir = "dev/feature_selection_fifth_iterative_run_fix_skylake_2/"
+# res_dir = "dev/feature_selection_sixth_iterative_run_fix_skylake_2//"
+# res_dir = "dev/feature_selection_sixth_iterative_run_fix_skylake_3//"
 #
 #
 # res =
@@ -665,15 +685,15 @@ do_iterate(mix_source, n_mark_df, full_bayesian, levels, iteration, out_dir)
 # 			rename(`Cell type category` = name, level_tree = level)
 # 	) %>%
 # 	filter(level == level_tree) %>%
-# 	left_join(
-# 		tree %>%
-# 			data.tree::ToDataFrameTree("name", "level") %>%
-# 			as_tibble %>%
-# 			select(name, level) %>%
-# 			mutate(level = level-1) %>%
-# 			rename(ct1 = name, level_pair = level)
-# 	) %>%
-# 	filter(level_pair == level_tree) %>%
+# left_join(
+# 	tree %>%
+# 		data.tree::ToDataFrameTree("name", "level") %>%
+# 		as_tibble %>%
+# 		select(name, level) %>%
+# 		mutate(level = level-1) %>%
+# 		rename(ct1 = name, level_pair = level)
+# ) %>%
+# filter(level_pair == level_tree) %>%
 # 	group_by(run,   ct1 ,  ct2, iteration)  %>%
 # 	do({
 #
@@ -714,10 +734,11 @@ do_iterate(mix_source, n_mark_df, full_bayesian, levels, iteration, out_dir)
 # 	ggplot(aes(x=iteration, y=`error %>% mean`, color=interaction(`Cell type category`, `other ct`))) +
 # 	stat_summary(aes(y =  `error %>% mean`), fun.y=mean, geom="line", size=3) +
 # 	geom_point(aes(size=`n markers`), color="black")
-# 	#geom_jitter(alpha=0.3, width = 0.7) +
-# 	#	stat_smooth(method = "lm", formula = y ~ x + I(x^2), size = 1, se = F)
-# #
-# #
+#
+# # geom_jitter(alpha=0.3, width = 0.7) +
+# # stat_smooth(method = "lm", formula = y ~ x + I(x^2), size = 1, se = F)
+#
+#
 # (res %>%
 # 		filter(truth == 0.5) %>%
 # 		filter(error <= 0) %>%
@@ -743,7 +764,7 @@ do_iterate(mix_source, n_mark_df, full_bayesian, levels, iteration, out_dir)
 # 		facet_wrap(~level) +
 # 		my_theme
 # ) %>% plotly::ggplotly()
-#
+
 #
 # rrr = readRDS("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/feature_selection_first_iterative_run_fix_skylake_1/markers_10.RData")
 #

@@ -366,23 +366,23 @@ if(dim_4[1] > 0) {
 		int GM,
 		int Q,
 		int shards,
-		int[] size_G1_linear_MPI,
-		int[] size_y_linear_S_1_MPI,
-		int[] size_y_linear_1_MPI,
+		int[] size_G_linear_MPI,
+		int[] size_y_linear_S_MPI,
+		int[] size_y_linear_MPI,
 
-		int[,]	y_linear_1_MPI
+		int[,]	y_linear_MPI
 
 	){
 		int threshold = -999;
 		int dim_indices = 6;
 
-		int max_col = dim_indices + max(size_y_linear_1_MPI) ;
+		int max_col = dim_indices + max(size_y_linear_MPI) ;
 
 		int int_pack[shards,max_col];
 
 		for(i in 1:shards){
 
-			int real_col = dim_indices + size_y_linear_1_MPI[i] ;
+			int real_col = dim_indices + size_y_linear_MPI[i] ;
 
 			int_pack[i] =
 				concatenate_int_array({
@@ -390,12 +390,12 @@ if(dim_4[1] > 0) {
 					{C},
 					{GM},
 					{Q},
-		 			{size_G1_linear_MPI[i]},
-		 			{size_y_linear_S_1_MPI[i]},
-		 			{size_y_linear_1_MPI[i]},
+		 			{size_G_linear_MPI[i]},
+		 			{size_y_linear_S_MPI[i]},
+		 			{size_y_linear_MPI[i]},
 
 					// counts mix
-					y_linear_1_MPI[i, 1:size_y_linear_1_MPI[i]],
+					y_linear_MPI[i, 1:size_y_linear_MPI[i]],
 
 					// Buffer
 					rep_int(threshold, max_col-real_col)
@@ -410,20 +410,20 @@ if(dim_4[1] > 0) {
 		int Q,
 		int shards,
 
-		int[] size_y_linear_S_1_MPI,
-		int[,] y_linear_S_1_MPI,
+		int[] size_y_linear_S_MPI,
+		int[,] y_linear_S_MPI,
 		vector exposure_rate,
 		vector[] prop_1
 	){
 		real threshold = -999;
 
-		int max_col =	(Q*C) +	max(size_y_linear_S_1_MPI);
+		int max_col =	(Q*C) +	max(size_y_linear_S_MPI);
 
 		vector[max_col] real_pack[shards];
 
 		for(i in 1:shards){
 
-			int real_col =	(Q*C) +	size_y_linear_S_1_MPI[i];
+			int real_col =	(Q*C) +	size_y_linear_S_MPI[i];
 
 			real_pack[i] =
 				concatenate_vector_array({
@@ -432,7 +432,7 @@ if(dim_4[1] > 0) {
 					to_vector(vector_array_to_matrix(prop_1)),
 
 					// The exposure of the mix query samples
-					exposure_rate[y_linear_S_1_MPI[i, 1:size_y_linear_S_1_MPI[i]]],
+					exposure_rate[y_linear_S_MPI[i, 1:size_y_linear_S_MPI[i]]],
 
 					// Buffer
 					rep_vector(threshold, max_col-real_col)
@@ -445,29 +445,29 @@ if(dim_4[1] > 0) {
 
 	real[,] package_real_data(
 		int shards,
-		int[] size_G1_linear_MPI,
-		int[,] G1_linear_MPI,
+		int[] size_G_linear_MPI,
+		int[,] G_linear_MPI,
 		vector lambda_log,
 		vector sigma_inv_log
 	){
 		real threshold = -999;
 
-		int max_col =	max(size_G1_linear_MPI) +	max(size_G1_linear_MPI);
+		int max_col =	max(size_G_linear_MPI) +	max(size_G_linear_MPI);
 
 		real real_pack[shards,max_col];
 
 		for(i in 1:shards){
 
-			int real_col = size_G1_linear_MPI[i] + size_G1_linear_MPI[i] ;
+			int real_col = size_G_linear_MPI[i] + size_G_linear_MPI[i] ;
 
 			real_pack[i] =
 				concatenate_real_array({
 
 					// The estimated of ref to de convolved together
-					to_array_1d(lambda_log[G1_linear_MPI[i, 1:size_G1_linear_MPI[i]]]),
+					to_array_1d(lambda_log[G_linear_MPI[i, 1:size_G_linear_MPI[i]]]),
 
 					// The estimated of ref to de convolved together
-					to_array_1d(sigma_inv_log[G1_linear_MPI[i, 1:size_G1_linear_MPI[i]]]),
+					to_array_1d(sigma_inv_log[G_linear_MPI[i, 1:size_G_linear_MPI[i]]]),
 
 					// Buffer
 					rep_array(threshold, max_col-real_col)
@@ -510,32 +510,29 @@ if(dim_4[1] > 0) {
 		int C = int_data[1];
 		int GM = int_data[2];
 		int Q = int_data[3];
-		int size_G1_linear_MPI= int_data[4];
-		int size_y_linear_S_1_MPI= int_data[5];
-		int size_y_linear_1_MPI= int_data[6];
+		int size_G_linear_MPI= int_data[4];
+		int size_y_linear_S_MPI= int_data[5];
+		int size_y_linear_MPI= int_data[6];
 		int dim_indices = 6;
 
-		int mix_counts[size_y_linear_1_MPI] = int_data[dim_indices+1 : dim_indices+ size_y_linear_1_MPI];
+		int mix_counts[size_y_linear_MPI] = int_data[dim_indices+1 : dim_indices+ size_y_linear_MPI];
 
 		// real unpacking
 		vector[C*Q] prop_1 = local_parameters[1 : (C*Q)];
-		vector[size_y_linear_S_1_MPI] mix_exposure_rate = local_parameters[(C*Q)+1 : (C*Q)+size_y_linear_S_1_MPI];
+		vector[size_y_linear_S_MPI] mix_exposure_rate = local_parameters[(C*Q)+1 : (C*Q)+size_y_linear_S_MPI];
 
 		// real data unpacking
-		vector[size_G1_linear_MPI] ref_lambda_log = to_vector(real_data[1 :size_G1_linear_MPI]);
-		vector[size_G1_linear_MPI] ref_sigma_inv_log = to_vector(real_data[size_G1_linear_MPI+1 : size_G1_linear_MPI + size_G1_linear_MPI]);
+		vector[size_G_linear_MPI] ref_lambda_log = to_vector(real_data[1 :size_G_linear_MPI]);
+		vector[size_G_linear_MPI] ref_sigma_inv_log = to_vector(real_data[size_G_linear_MPI+1 : size_G_linear_MPI + size_G_linear_MPI]);
 
 		// Deconvoluted means
-		vector[size_G1_linear_MPI/C*Q] lambda_log_deconvoluted_1;
-    vector[size_G1_linear_MPI/C*Q] sigma_deconvoluted_1;
-
-// print("----lambda---" , size_G1_linear_MPI, " ", ref_lambda_log);
-// print("----sigma---" , size_G1_linear_MPI, " ", ref_sigma_inv_log);
+		vector[size_G_linear_MPI/C*Q] lambda_log_deconvoluted_1;
+    vector[size_G_linear_MPI/C*Q] sigma_deconvoluted_1;
 
 		// Calculate convoluted
-    vector[size_G1_linear_MPI/C * Q] sumNB[2] = sum_NB_MPI(
-      to_matrix(exp(ref_lambda_log), C, size_G1_linear_MPI/C),
-      to_matrix(1.0 ./ exp( ref_sigma_inv_log ), C, size_G1_linear_MPI/C),
+    vector[size_G_linear_MPI/C * Q] sumNB[2] = sum_NB_MPI(
+      to_matrix(exp(ref_lambda_log), C, size_G_linear_MPI/C),
+      to_matrix(1.0 ./ exp( ref_sigma_inv_log ), C, size_G_linear_MPI/C),
       to_matrix(prop_1, Q, C)
     );
 
@@ -595,12 +592,17 @@ if(dim_4[1] > 0) {
 
 	}
 
-
+	vector[] which(int x, vector[] a, vector[] b, vector[] c, vector[] d){
+		if(x == 1) return(a);
+		if(x == 2) return(b);
+		if(x == 3) return(c);
+		else return(d);
+	}
 }
 data {
 	// shards
 	int<lower=1> shards;
-	int is_level_in[4];
+	int lv;
 	// Reference matrix inference
 	int<lower=0> G;
 	int<lower=0> GM;
@@ -616,15 +618,8 @@ data {
 	// Reference counts per level
 	int<lower=0> CL_NA;
 	int<lower=0> counts_idx_lv_NA[CL_NA];
-	int<lower=0> CL_1;
-	int<lower=0> counts_idx_lv_1[CL_1];
-	int<lower=0> CL_2;
-	int<lower=0> counts_idx_lv_2[CL_2];
-	int<lower=0> CL_3;
-	int<lower=0> counts_idx_lv_3[CL_3];
-	int<lower=0> CL_4;
-	int<lower=0> counts_idx_lv_4[CL_4];
-
+	int<lower=0> CL_lv;
+	int<lower=0> counts_idx_lv[CL_lv];
 
 	// Priors
 	real<upper=0> sigma_slope;
@@ -639,60 +634,22 @@ data {
   int<lower=1> ct_in_levels[n_levels];
 
   // Deconvolution
-  int<lower=0> G1;
-  int G1_linear[G1];
-  int<lower=0> G2;
-  int G2_linear[G2];
-  int<lower=0> G3;
-  int G3_linear[G3];
-  int<lower=0> G4;
-  int G4_linear[G4];
+  int<lower=0> G_lv;
+  int G_lv_linear[G_lv];
 
   // Observed counts
-  int<lower=0> Y_1;
-	int y_linear_1[Y_1];
-	int y_linear_S_1[Y_1];
-  int<lower=0> Y_2;
-	int y_linear_2[Y_2];
-	int y_linear_S_2[Y_2];
-	int<lower=0> Y_3;
-	int y_linear_3[Y_3];
-	int y_linear_S_3[Y_3];
-	int<lower=0> Y_4;
-	int y_linear_4[Y_4];
-	int y_linear_S_4[Y_4];
+  int<lower=0> Y_lv;
+	int y_linear_lv[Y_lv];
+	int y_linear_S_lv[Y_lv];
 
 	// MPI
-	int<lower=0> shards_in_levels[4];
+	int size_y_linear_MPI[max(shards, 1)];
+	int size_y_linear_S_MPI[max(shards, 1)];
+	int y_linear_S_MPI[shards,max(size_y_linear_S_MPI)];
+	int size_G_linear_MPI[max(shards, 1)];
+	int G_linear_MPI[shards,max(size_G_linear_MPI)];
+	int y_linear_MPI[shards,max(size_y_linear_MPI)];
 
-
-	int size_y_linear_S_1_MPI[max(shards_in_levels[1], 1)];
-	int y_linear_S_1_MPI[shards_in_levels[1],max(size_y_linear_S_1_MPI)];
-	int size_G1_linear_MPI[max(shards_in_levels[1], 1)];
-	int G1_linear_MPI[shards_in_levels[1],max(size_G1_linear_MPI)];
-	int size_y_linear_1_MPI[max(shards_in_levels[1], 1)];
-	int y_linear_1_MPI[shards_in_levels[1],max(size_y_linear_1_MPI)];
-
-	int size_y_linear_S_2_MPI[max(shards_in_levels[2], 1)];
-	int y_linear_S_2_MPI[shards_in_levels[2],max(size_y_linear_S_2_MPI)];
-	int size_G2_linear_MPI[max(shards_in_levels[2], 1)];
-	int G2_linear_MPI[shards_in_levels[2],max(size_G2_linear_MPI)];
-	int size_y_linear_2_MPI[max(shards_in_levels[2], 1)];
-	int y_linear_2_MPI[shards_in_levels[2],max(size_y_linear_2_MPI)];
-
-	int size_y_linear_S_3_MPI[max(shards_in_levels[3], 1)];
-	int y_linear_S_3_MPI[shards_in_levels[3],max(size_y_linear_S_3_MPI)];
-	int size_G3_linear_MPI[max(shards_in_levels[3], 1)];
-	int G3_linear_MPI[shards_in_levels[3],max(size_G3_linear_MPI)];
-	int size_y_linear_3_MPI[max(shards_in_levels[3], 1)];
-	int y_linear_3_MPI[shards_in_levels[3],max(size_y_linear_3_MPI)];
-
-	int size_y_linear_S_4_MPI[max(shards_in_levels[4], 1)];
-	int y_linear_S_4_MPI[shards_in_levels[4],max(size_y_linear_S_4_MPI)];
-	int size_G4_linear_MPI[max(shards_in_levels[4], 1)];
-	int G4_linear_MPI[shards_in_levels[4],max(size_G4_linear_MPI)];
-	int size_y_linear_4_MPI[max(shards_in_levels[4], 1)];
-	int y_linear_4_MPI[shards_in_levels[4],max(size_y_linear_4_MPI)];
 
 	// Lv2 tree structure parents singles
 	int<lower=0> SLV2;
@@ -719,92 +676,99 @@ data {
 	real sigma_intercept_prior[2];
 
 
-	vector[sum(shards_in_levels)] weights;
-
 	vector[G] lambda_log;
   vector[G] sigma_inv_log;
+
+  // Proportions priors
+  // lv1
+  vector[ct_in_nodes[1]]  prop_1_prior[Q * (lv > 1)]; // Root
+
+  // lv2
+  vector[ct_in_nodes[2]]  prop_a_prior[Q * (lv > 2)]; // Immune cells
+
+  // lv3
+  vector[ct_in_nodes[3]]  prop_b_prior[Q * (lv > 3)]; // b cells
+  vector[ct_in_nodes[4]]  prop_c_prior[Q * (lv > 3)]; // granulocyte
+  vector[ct_in_nodes[5]]  prop_d_prior[Q * (lv > 3)]; // mono_derived
+  vector[ct_in_nodes[6]]  prop_e_prior[Q * (lv > 3)]; // t_cell
+
+	// exposure posterior previous fit
+	vector[2] exposure_posterior[Q * (lv > 1)];
+	real exposure_rate_multiplier;
 }
 transformed data{
 
 	real real_data[shards, 0];
-	real real_data2[sum(shards_in_levels), 0];
 
-	real pack_R_1[shards_in_levels[1], max(size_G1_linear_MPI) +	max(size_G1_linear_MPI)];
-	real pack_R_2[shards_in_levels[2], max(size_G2_linear_MPI) +	max(size_G2_linear_MPI)];
-	real pack_R_3[shards_in_levels[3], max(size_G3_linear_MPI) +	max(size_G3_linear_MPI)];
-	real pack_R_4[shards_in_levels[4], max(size_G4_linear_MPI) +	max(size_G4_linear_MPI)];
+	real pack_R_1[shards, max(size_G_linear_MPI) +	max(size_G_linear_MPI)];
 
 	int dim_indices = 6;
 
-	int pack_1_cols = dim_indices + max(size_y_linear_1_MPI);
-	int pack_2_cols = dim_indices + max(size_y_linear_2_MPI);
-	int pack_3_cols = dim_indices + max(size_y_linear_3_MPI);
-	int pack_4_cols = dim_indices + max(size_y_linear_4_MPI);
+	int pack_1_cols = dim_indices + max(size_y_linear_MPI);
 
-	int pack_1[shards_in_levels[1], pack_1_cols];
-	int pack_2[shards_in_levels[2], pack_2_cols];
-	int pack_3[shards_in_levels[3], pack_3_cols];
-	int pack_4[shards_in_levels[4], pack_4_cols];
-	int int_package[sum(shards_in_levels), max({pack_1_cols, pack_2_cols, pack_3_cols, pack_4_cols })];
+	int pack_1[shards, pack_1_cols];
 
-	if(is_level_in[1]) pack_1 = package_int(			ct_in_levels[1],			G1/ct_in_levels[1],			Q,	shards_in_levels[1],			size_G1_linear_MPI,		size_y_linear_S_1_MPI,	size_y_linear_1_MPI,		y_linear_1_MPI		);
-	if(is_level_in[2]) pack_2 = package_int(			ct_in_levels[2],			G2/ct_in_levels[2],			Q,	shards_in_levels[2],			size_G2_linear_MPI,		size_y_linear_S_2_MPI,	size_y_linear_2_MPI,		y_linear_2_MPI		);
-	if(is_level_in[3]) pack_3 = package_int(			ct_in_levels[3],			G3/ct_in_levels[3],			Q,	shards_in_levels[3],			size_G3_linear_MPI,		size_y_linear_S_3_MPI,	size_y_linear_3_MPI,		y_linear_3_MPI		);
-	if(is_level_in[4]) pack_4 = package_int(			ct_in_levels[4],			G4/ct_in_levels[4],			Q,	shards_in_levels[4],			size_G4_linear_MPI,		size_y_linear_S_4_MPI,	size_y_linear_4_MPI,		y_linear_4_MPI		);
+	int int_package[shards, max({pack_1_cols })];
 
+	pack_1 = package_int(
+		ct_in_levels[lv],
+		G_lv/ct_in_levels[lv],
+		Q,
+		shards,
+		size_G_linear_MPI,
+		size_y_linear_S_MPI,
+		size_y_linear_MPI,
+		y_linear_MPI
+	);
 
-	if(is_level_in[1]) pack_R_1 = package_real_data(shards_in_levels[1],	size_G1_linear_MPI, G1_linear_MPI, lambda_log, sigma_inv_log);
-  if(is_level_in[2]) pack_R_2 = package_real_data(shards_in_levels[2],	size_G2_linear_MPI, G2_linear_MPI, lambda_log, sigma_inv_log);
-  if(is_level_in[3]) pack_R_3 = package_real_data(shards_in_levels[3],	size_G3_linear_MPI, G3_linear_MPI, lambda_log, sigma_inv_log);
-  if(is_level_in[4]) pack_R_4 = package_real_data(shards_in_levels[4],	size_G4_linear_MPI, G4_linear_MPI, lambda_log, sigma_inv_log);
-
+	pack_R_1 = package_real_data(
+		shards,
+		size_G_linear_MPI,
+		G_linear_MPI,
+		lambda_log,
+		sigma_inv_log
+	);
 
 	// Here I am building the whole int package to not have to calculate it every time
-	int_package	= append_int_MPI_arrays(pack_1, pack_2, pack_3, pack_4	)	;
+	int_package	= pack_1	;
 
 
 }
 parameters {
-
-
-
 	real sigma_intercept_dec;
 	//real<upper=0> sigma_slope_dec;
 
   // Local properties of the data
-  vector[S] exposure_rate;
+  vector<multiplier = exposure_rate_multiplier>[S] exposure_rate;
 
   // Proportions
   // lv1
-  simplex[ct_in_nodes[1]]  prop_1[Q * is_level_in[1]]; // Root
+  simplex[ct_in_nodes[1]]  prop_1[Q * (lv >= 1)]; // Root
 
   // lv2
-  simplex[ct_in_nodes[2]]  prop_a[Q * is_level_in[2]]; // Immune cells
+  simplex[ct_in_nodes[2]]  prop_a[Q * (lv >= 2)]; // Immune cells
 
   // lv3
-  simplex[ct_in_nodes[3]]  prop_b[Q * is_level_in[3]]; // b cells
-  simplex[ct_in_nodes[4]]  prop_c[Q * is_level_in[3]]; // granulocyte
-  simplex[ct_in_nodes[5]]  prop_d[Q * is_level_in[3]]; // mono_derived
-  simplex[ct_in_nodes[6]]  prop_e[Q * is_level_in[3]]; // t_cell
+  simplex[ct_in_nodes[3]]  prop_b[Q * (lv >= 3)]; // b cells
+  simplex[ct_in_nodes[4]]  prop_c[Q * (lv >= 3)]; // granulocyte
+  simplex[ct_in_nodes[5]]  prop_d[Q * (lv >= 3)]; // mono_derived
+  simplex[ct_in_nodes[6]]  prop_e[Q * (lv >= 3)]; // t_cell
 
 	// lv4
-  simplex[ct_in_nodes[7]]  prop_f[Q * is_level_in[4]]; // dendritic myeloid
-  simplex[ct_in_nodes[8]]  prop_g[Q * is_level_in[4]]; // macrophage
-  simplex[ct_in_nodes[9]]  prop_h[Q * is_level_in[4]]; // CD4
-  simplex[ct_in_nodes[10]] prop_i[Q * is_level_in[4]]; // CD8
-
-  // Error between reference and mix, to avoid divergencies
-  // vector<lower=0>[GM] error_ref_mix_z;
+  simplex[ct_in_nodes[7]]  prop_f[Q * (lv >= 4)]; // dendritic myeloid
+  simplex[ct_in_nodes[8]]  prop_g[Q * (lv >= 4)]; // macrophage
+  simplex[ct_in_nodes[9]]  prop_h[Q * (lv >= 4)]; // CD4
+  simplex[ct_in_nodes[10]] prop_i[Q * (lv >= 4)]; // CD8
 
 }
 transformed parameters{
 
-	vector[ct_in_levels[2]] prop_2[Q * is_level_in[2]];
-	vector[ct_in_levels[3]] prop_3[Q * is_level_in[3]];
-	vector[ct_in_levels[4]] prop_4[Q * is_level_in[4]];
+	vector[ct_in_levels[2]] prop_2[Q * (lv >= 2)];
+	vector[ct_in_levels[3]] prop_3[Q * (lv >= 3)];
+	vector[ct_in_levels[4]] prop_4[Q * (lv >= 4)];
 
 	// proportion of level 2
-	if(is_level_in[2])
+	if(lv >= 2)
 	prop_2 =
 		append_vector_array(
 			prop_1[,singles_lv2],
@@ -812,7 +776,7 @@ transformed parameters{
 		);
 
 	// proportion of level 3
-	if(is_level_in[3])
+	if(lv >= 3)
 	prop_3 =
 		append_vector_array(
 			prop_2[,singles_lv3],
@@ -829,7 +793,7 @@ transformed parameters{
 		);
 
 	// proportion of level 4
-	if(is_level_in[4])
+	if(lv >= 4)
 	prop_4 =
 		append_vector_array(
 			prop_3[,singles_lv4],
@@ -848,84 +812,83 @@ transformed parameters{
 }
 model {
 
-	vector[Y_1] lambda_log_deconvoluted_1;
-	vector[Y_1] sigma_deconvoluted_1;
+	vector[Y_lv] lambda_log_deconvoluted_1;
+	vector[Y_lv] sigma_deconvoluted_1;
 
-	vector[Y_1] sumNB[2];
-
-	vector[(ct_in_levels[1] * Q) + max(size_y_linear_S_1_MPI)] pack_r_1[shards_in_levels[1]];
-	vector[(ct_in_levels[2] * Q) + max(size_y_linear_S_2_MPI)] pack_r_2[shards_in_levels[2]];
-	vector[(ct_in_levels[3] * Q) + max(size_y_linear_S_3_MPI)] pack_r_3[shards_in_levels[3]];
-	vector[(ct_in_levels[4] * Q) + max(size_y_linear_S_4_MPI)] pack_r_4[shards_in_levels[4]];
-
-
-
-	real lp = 0;
-	real lp_MPI = 0;
-
+ 	vector[ct_in_levels[lv]] prop_lv[Q] = which(lv, prop_1, prop_2, prop_3, prop_4);
+	vector[(ct_in_levels[lv] * Q) + max(size_y_linear_S_MPI)] pack_r_1[shards];
 
 	// Exposure
 	exposure_rate ~ normal(0,1);
-
 	// Deconvolution
 	sigma_intercept_dec ~ student_t(3, 0, 2);
 
 	// Level NA - Mix house keeing /////////////////////
 
 	// Reference
-	target += sum(map_rect(
-		lp_reduce_simple ,
-		[sigma_intercept, sigma_slope]', // global parameters
-		get_mu_sigma_vector_MPI(
-			lambda_log[G_to_counts_linear[counts_idx_lv_NA]] + exposure_rate[S_linear[counts_idx_lv_NA]],
-			sigma_inv_log[G_to_counts_linear[counts_idx_lv_NA]],
-			shards
-		),
-		real_data,
-		get_int_MPI( counts_linear[counts_idx_lv_NA], shards)
-	));
+	if(lv == 1)
+		target += sum(map_rect(
+			lp_reduce_simple ,
+			[sigma_intercept, sigma_slope]', // global parameters
+			get_mu_sigma_vector_MPI(
+				lambda_log[G_to_counts_linear[counts_idx_lv_NA]] + exposure_rate[S_linear[counts_idx_lv_NA]],
+				sigma_inv_log[G_to_counts_linear[counts_idx_lv_NA]],
+				shards
+			),
+			real_data,
+			get_int_MPI( counts_linear[counts_idx_lv_NA], shards)
+		));
+
+	if(lv == 1) for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | rep_vector(num_elements(prop_1[1]) * 5, num_elements(prop_1[1])));
+	if(lv > 1)  for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | prop_1_prior[q]);
+
+	if(lv == 2) for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | rep_vector(num_elements(prop_a[1]) * 5, num_elements(prop_a[1])));
+	if(lv > 2)  for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | prop_a_prior[q]);
+
+	if(lv == 3) for(q in 1:Q) target += dirichlet_lpdf(prop_b[q] | rep_vector(num_elements(prop_b[1]) * 5, num_elements(prop_b[1])));
+	if(lv == 3) for(q in 1:Q) target += dirichlet_lpdf(prop_c[q] | rep_vector(num_elements(prop_c[1]) * 5, num_elements(prop_c[1])));
+	if(lv == 3) for(q in 1:Q) target += dirichlet_lpdf(prop_d[q] | rep_vector(num_elements(prop_d[1]) * 5, num_elements(prop_d[1])));
+	if(lv == 3) for(q in 1:Q) target += dirichlet_lpdf(prop_e[q] | rep_vector(num_elements(prop_e[1]) * 5, num_elements(prop_e[1])));
+
+	if(lv == 4) for(q in 1:Q) target += dirichlet_lpdf(prop_f[q] | rep_vector(num_elements(prop_f[1]) * 5, num_elements(prop_f[1])));
+	if(lv == 4) for(q in 1:Q) target += dirichlet_lpdf(prop_g[q] | rep_vector(num_elements(prop_g[1]) * 5, num_elements(prop_g[1])));
+	if(lv == 4) for(q in 1:Q) target += dirichlet_lpdf(prop_h[q] | rep_vector(num_elements(prop_h[1]) * 5, num_elements(prop_h[1])));
+	if(lv == 4) for(q in 1:Q) target += dirichlet_lpdf(prop_i[q] | rep_vector(num_elements(prop_i[1]) * 5, num_elements(prop_i[1])));
 
 
-// 	sumNB = sum_NB_MPI(
-//       to_matrix(exp(lambda_log[G1_linear]), ct_in_levels[1], G1/ct_in_levels[1]),
-//       to_matrix(1.0 ./ exp(sigma_inv_log[G1_linear]), ct_in_levels[1], G1/ct_in_levels[1]),
-//       vector_array_to_matrix(prop_1)
-//     );
-//
-//    lambda_log_deconvoluted_1 = log(sumNB[1]);
-//    sigma_deconvoluted_1 = sumNB[2];
-//
-// 	// deconvolution
-// 	print(neg_binomial_2_log_lpmf(y_linear_1 |
-// 		lambda_log_deconvoluted_1 + exposure_rate[y_linear_S_1],
-// 		sigma_deconvoluted_1
-// 	));
-
-	if(is_level_in[1])  for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | rep_vector(num_elements(prop_1[1]), num_elements(prop_1[1])));
-
-	if(is_level_in[2])  for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | rep_vector(num_elements(prop_a[1]), num_elements(prop_a[1])));
-
-	if(is_level_in[3]) for(q in 1:Q) target += dirichlet_lpdf(prop_b[q] | rep_vector(num_elements(prop_b[1]), num_elements(prop_b[1])));
-	if(is_level_in[3]) for(q in 1:Q) target += dirichlet_lpdf(prop_c[q] | rep_vector(num_elements(prop_c[1]), num_elements(prop_c[1])));
-	if(is_level_in[3]) for(q in 1:Q) target += dirichlet_lpdf(prop_d[q] | rep_vector(num_elements(prop_d[1]), num_elements(prop_d[1])));
-	if(is_level_in[3]) for(q in 1:Q) target += dirichlet_lpdf(prop_e[q] | rep_vector(num_elements(prop_e[1]), num_elements(prop_e[1])));
-
-	if(is_level_in[4]) for(q in 1:Q) target += dirichlet_lpdf(prop_f[q] | rep_vector(num_elements(prop_f[1]), num_elements(prop_f[1])));
-	if(is_level_in[4]) for(q in 1:Q) target += dirichlet_lpdf(prop_g[q] | rep_vector(num_elements(prop_g[1]), num_elements(prop_g[1])));
-	if(is_level_in[4]) for(q in 1:Q) target += dirichlet_lpdf(prop_h[q] | rep_vector(num_elements(prop_h[1]), num_elements(prop_h[1])));
-	if(is_level_in[4]) for(q in 1:Q) target += dirichlet_lpdf(prop_i[q] | rep_vector(num_elements(prop_i[1]), num_elements(prop_i[1])));
-
-	if(is_level_in[1]) pack_r_1 = package_vector_parameters(	ct_in_levels[1],	Q,	shards_in_levels[1],	size_y_linear_S_1_MPI, 	y_linear_S_1_MPI,		exposure_rate,	prop_1	);
-  if(is_level_in[2]) pack_r_2 = package_vector_parameters(	ct_in_levels[2],	Q,	shards_in_levels[2],	size_y_linear_S_2_MPI, 	y_linear_S_2_MPI,		exposure_rate,	prop_2	);
-  if(is_level_in[3]) pack_r_3 = package_vector_parameters(	ct_in_levels[3],	Q,	shards_in_levels[3],	size_y_linear_S_3_MPI, 	y_linear_S_3_MPI,		exposure_rate,	prop_3	);
-  if(is_level_in[4]) pack_r_4 = package_vector_parameters(	ct_in_levels[4],	Q,	shards_in_levels[4],	size_y_linear_S_4_MPI, 	y_linear_S_4_MPI,		exposure_rate,	prop_4	);
-
+	pack_r_1 = package_vector_parameters(
+		ct_in_levels[lv],
+		Q,
+		shards,
+		size_y_linear_S_MPI,
+		y_linear_S_MPI,
+		lv == 1 ? exposure_rate : to_vector(exposure_posterior[,1]),
+		prop_lv
+	);
 
 	target += sum(map_rect(
 		lp_reduce ,
 		[sigma_intercept_dec, sigma_slope]' ,
-		append_vector_MPI_arrays(		pack_r_1,			pack_r_2,			pack_r_3,			pack_r_4		),
-		append_real_MPI_arrays(			pack_R_1,			pack_R_2,			pack_R_3,			pack_R_4		),
+		pack_r_1,
+		pack_R_1,
 		int_package
-	) .* weights);
+	));
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

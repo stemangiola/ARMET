@@ -1,7 +1,26 @@
 # Create mix_base withn NA - imputed values
 
-source(	"https://gist.githubusercontent.com/stemangiola/dd3573be22492fc03856cd2c53a755a9/raw/a7479898357de6e109419be49fe264be7775e9a9/tidy_extensions.R")
+library(tidyverse)
+library(magrittr)
+library(purrr)
+library(furrr)
+library(data.tree)
+library(foreach)
+library(ARMET)
+source("~/PhD/deconvolution/ARMET/R/utils.R")
+source("~/PostDoc/ppcSeq/R/do_parallel.R")
 n_cores = 20
+
+
+ifelse_pipe = function(.x, .p, .f1, .f2 = NULL) {
+	switch(.p %>% `!` %>% sum(1),
+				 as_mapper(.f1)(.x),
+				 if (.f2 %>% is.null %>% `!`)
+				 	as_mapper(.f2)(.x)
+				 else
+				 	.x)
+
+}
 
 sample_blacklist = c(
 	"666CRI",
@@ -48,7 +67,14 @@ ref =
 		(.) %>%
 			distinct(sample) %>%
 			filter( !grepl(sample_blacklist %>% paste(collapse="|"), sample))
-	)
+	) %>%
+	filter(`Data base` != "FANTOM5")  %>%
+
+	# Filter dendritic that look too much like monocytes
+	filter(!(
+		(`Cell type formatted` == "dendritic_myeloid" & `Data base` == "Immune Singapoor") |
+			(`Cell type formatted` == "dendritic_myeloid" & `Data base` == "bloodRNA")
+	))
 
 all_genes =
 	ref %>%
