@@ -598,6 +598,20 @@ if(dim_4[1] > 0) {
 		if(x == 3) return(c);
 		else return(d);
 	}
+
+	real dirichlet_regression_lpdf(vector p, row_vector X, matrix alpha, real phi){
+
+		// Build sum to zero variable
+		int c = cols(alpha);
+		int r = rows(alpha);
+		matrix[r, c]  alpha_ = alpha;
+		alpha_[1,c] = -sum(alpha_[1, 1:(c-1)]);
+
+print(alpha_);
+
+		// Calculate log prob
+		return (dirichlet_lpdf(p | softmax( to_vector(X * alpha_ ))  * exp(phi) + 1 ));
+	}
 }
 data {
 	// shards
@@ -767,7 +781,7 @@ parameters {
 
 	// Direch regression
   // lv1
-  matrix[A * (lv == 1) * do_regression,ct_in_nodes[1]-1]  alpha_1_raw; // Root
+  matrix[A * (lv == 1) * do_regression,ct_in_nodes[1]]  alpha_1; // Root
 
   // lv2
   matrix[A * (lv == 2) * do_regression,ct_in_nodes[2]]  alpha_a; // Immune cells
@@ -792,12 +806,6 @@ transformed parameters{
 	vector[ct_in_levels[2]] prop_2[Q * (lv >= 2)];
 	vector[ct_in_levels[3]] prop_3[Q * (lv >= 3)];
 	vector[ct_in_levels[4]] prop_4[Q * (lv >= 4)];
-
-	matrix[A * (lv == 1) * do_regression, ct_in_nodes[1]]  alpha_1; // Root
-
-	alpha_1[1, 1:3] = alpha_1_raw[1];
-	alpha_1[1, 4] = -sum(alpha_1_raw[1]);
-
 
 	// proportion of level 2
 	if(lv >= 2)
@@ -874,9 +882,9 @@ model {
 	// lv 1
   if(lv == 1 && do_regression) {
 
-  	for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | softmax( to_vector( X[1] * alpha_1 ) ) * exp(phi[1]) + 1 );
+  	for(q in 1:Q) print( dirichlet_regression_lpdf(prop_1[q] | X[q], alpha_1, phi[1] ) );
 
-  	alpha_1_raw[1] ~ normal(0,1);
+  	alpha_1[1] ~ normal(0,1);
 		//sum(alpha_1[1]) ~ normal(0, 0.001 * ct_in_nodes[1]) ;
 		//if(A > 1) for(a in 2:A)	alpha_1[a] ~ normal (0 , 1);
 
@@ -957,21 +965,3 @@ model {
 
 
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
