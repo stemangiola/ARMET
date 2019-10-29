@@ -1011,6 +1011,7 @@ ref_mix_format = function(ref, mix) {
 
 }
 
+#' @export
 run_model = function(reference_filtered,
 										 mix,
 										 shards,
@@ -1019,8 +1020,10 @@ run_model = function(reference_filtered,
 										 approximate_posterior,
 										 prop_posterior,
 										 exposure_posterior = tibble(.mean = 0, .sd = 0)[0, ],
-										 iterations = iterations,
-										 sampling_iterations = sampling_iterations	) {
+										 iterations = 250,
+										 sampling_iterations = 100,
+										 X,
+										 do_regression) {
 	# Filter on level considered
 	reference_filtered = reference_filtered %>% filter(level %in% lv)
 
@@ -1107,16 +1110,21 @@ run_model = function(reference_filtered,
 												shards,
 												lv)
 
+	# Dirichlet regression
+	A = X %>% ncol
+
+
+
 	model  = switch(full_bayesian %>% `!` %>% sum(1),
 									stanmodels$ARMET_tc,
 									stanmodels$ARMET_tc_fix)
 
 	# library(rstan)
 	# fileConn<-file("~/.R/Makevars")
-	# writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
+	# writeLines(c( "CXX14FLAGS += -O2","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
 	# close(fileConn)
 	# ARMET_tc_model = stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc.stan")
-	#ARMET_tc_model = rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc.stan", auto_write = F)
+	# ARMET_tc_model = rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix.stan", auto_write = F)
 
 	exposure_rate_init = switch(
 		(lv > 1) %>% `!` %>% as.numeric %>% sum(1),
@@ -1133,7 +1141,7 @@ run_model = function(reference_filtered,
 
 	Sys.setenv("STAN_NUM_THREADS" = shards)
 
-	#browser()
+	browser()
 
 	list(df,
 			 switch(

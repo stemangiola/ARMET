@@ -57,7 +57,9 @@ ARMET_tc = function(
 	iterations = 250,
 	sampling_iterations = 100,
 	levels = 1:4,
-	n_markers
+	n_markers,
+	X = matrix(rep(1, nrow(mix))),
+	do_regression = F
 ){
 
 	input = c(as.list(environment()))
@@ -200,7 +202,7 @@ library(tidyverse)
 
 	######################################
 
-	res1 = run_model(	reference_filtered, mix, shards,	1,	full_bayesian, approximate_posterior, prop_posterior, iterations = iterations,	sampling_iterations = sampling_iterations	)
+	res1 = run_model(	reference_filtered, mix, shards,	1,	full_bayesian, approximate_posterior, prop_posterior, iterations = iterations,	sampling_iterations = sampling_iterations, X = X, do_regression = do_regression	)
 
 	df1 = res1[[1]]
 	fit1 = res1[[2]]

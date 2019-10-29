@@ -695,6 +695,11 @@ data {
 	// exposure posterior previous fit
 	vector[2] exposure_posterior[Q * (lv > 1)];
 	real exposure_rate_multiplier;
+
+	// Dirichlet regression
+	int A; // factors of interest
+	matrix[Q,A] X;
+	int do_regression;
 }
 transformed data{
 
@@ -730,7 +735,7 @@ transformed data{
 	);
 
 	// Here I am building the whole int package to not have to calculate it every time
-	int_package	= pack_1	;
+	int_package	= pack_1;
 
 
 }
@@ -760,12 +765,39 @@ parameters {
   simplex[ct_in_nodes[9]]  prop_h[Q * (lv >= 4)]; // CD4
   simplex[ct_in_nodes[10]] prop_i[Q * (lv >= 4)]; // CD8
 
+	// Direch regression
+  // lv1
+  matrix[A * (lv == 1) * do_regression,ct_in_nodes[1]-1]  alpha_1_raw; // Root
+
+  // lv2
+  matrix[A * (lv == 2) * do_regression,ct_in_nodes[2]]  alpha_a; // Immune cells
+
+  // lv3
+  matrix[A * (lv == 3) * do_regression,ct_in_nodes[3]]  alpha_b; // b cells
+  matrix[A * (lv == 3) * do_regression,ct_in_nodes[4]]  alpha_c; // granulocyte
+  matrix[A * (lv == 3) * do_regression,ct_in_nodes[5]]  alpha_d; // mono_derived
+  matrix[A * (lv == 3) * do_regression,ct_in_nodes[6]]  alpha_e; // t_cell
+
+	// lv4
+  matrix[A * (lv == 4) * do_regression,ct_in_nodes[7]]  alpha_f; // dendritic myeloid
+  matrix[A * (lv == 4) * do_regression,ct_in_nodes[8]]  alpha_g; // macrophage
+  matrix[A * (lv == 4) * do_regression,ct_in_nodes[9]]  alpha_h; // CD4
+  matrix[A * (lv == 4) * do_regression,ct_in_nodes[10]] alpha_i; // CD8
+
+	real phi[1];
+
 }
 transformed parameters{
 
 	vector[ct_in_levels[2]] prop_2[Q * (lv >= 2)];
 	vector[ct_in_levels[3]] prop_3[Q * (lv >= 3)];
 	vector[ct_in_levels[4]] prop_4[Q * (lv >= 4)];
+
+	matrix[A * (lv == 1) * do_regression, ct_in_nodes[1]]  alpha_1; // Root
+
+	alpha_1[1, 1:3] = alpha_1_raw[1];
+	alpha_1[1, 4] = -sum(alpha_1_raw[1]);
+
 
 	// proportion of level 2
 	if(lv >= 2)
@@ -839,21 +871,67 @@ model {
 			get_int_MPI( counts_linear[counts_idx_lv_NA], shards)
 		));
 
-	if(lv == 1) for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | rep_vector(num_elements(prop_1[1]) * 5, num_elements(prop_1[1])));
+	// lv 1
+  if(lv == 1 && do_regression) {
+
+  	for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | softmax( to_vector( X[1] * alpha_1 ) ) * exp(phi[1]) + 1 );
+
+  	alpha_1_raw[1] ~ normal(0,1);
+		//sum(alpha_1[1]) ~ normal(0, 0.001 * ct_in_nodes[1]) ;
+		//if(A > 1) for(a in 2:A)	alpha_1[a] ~ normal (0 , 1);
+
+  }
+	if(lv == 1 && !do_regression) for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | rep_vector(num_elements(prop_1[1]) * 5, num_elements(prop_1[1])));
 	if(lv > 1)  for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | prop_1_prior[q]);
 
-	if(lv == 2) for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | rep_vector(num_elements(prop_a[1]) * 5, num_elements(prop_a[1])));
+	// lv 2
+  if(lv == 2 && do_regression) {
+  	for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | softmax( to_vector( X[q] * alpha_a ) ) * inv(sqrt(phi[2])) + 1);
+
+  	alpha_a[1] ~ normal(0,5);
+		sum(alpha_a[1]) ~ normal(0, 0.001 * ct_in_nodes[2]) ;
+		if(A > 1)	for(a in 2:A)	alpha_a[a] ~ normal (0 , 1);
+  }
+	if(lv == 2 && !do_regression) for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | rep_vector(num_elements(prop_a[1]) * 5, num_elements(prop_a[1])));
 	if(lv > 2)  for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | prop_a_prior[q]);
 
-	if(lv == 3) for(q in 1:Q) target += dirichlet_lpdf(prop_b[q] | rep_vector(num_elements(prop_b[1]) * 5, num_elements(prop_b[1])));
-	if(lv == 3) for(q in 1:Q) target += dirichlet_lpdf(prop_c[q] | rep_vector(num_elements(prop_c[1]) * 5, num_elements(prop_c[1])));
-	if(lv == 3) for(q in 1:Q) target += dirichlet_lpdf(prop_d[q] | rep_vector(num_elements(prop_d[1]) * 5, num_elements(prop_d[1])));
-	if(lv == 3) for(q in 1:Q) target += dirichlet_lpdf(prop_e[q] | rep_vector(num_elements(prop_e[1]) * 5, num_elements(prop_e[1])));
+	// lv 3
+  if(lv == 3 && do_regression) for(q in 1:Q) {
+  	 target += dirichlet_lpdf(prop_b[q] | softmax( to_vector( X[q] * alpha_b ) ) * inv(sqrt(phi[3])) + 1);
+  	 target += dirichlet_lpdf(prop_c[q] | softmax( to_vector( X[q] * alpha_c ) ) * inv(sqrt(phi[4])) + 1);
+  	 target += dirichlet_lpdf(prop_d[q] | softmax( to_vector( X[q] * alpha_d ) ) * inv(sqrt(phi[5])) + 1);
+  	 target += dirichlet_lpdf(prop_e[q] | softmax( to_vector( X[q] * alpha_e ) ) * inv(sqrt(phi[6])) + 1);
 
-	if(lv == 4) for(q in 1:Q) target += dirichlet_lpdf(prop_f[q] | rep_vector(num_elements(prop_f[1]) * 5, num_elements(prop_f[1])));
-	if(lv == 4) for(q in 1:Q) target += dirichlet_lpdf(prop_g[q] | rep_vector(num_elements(prop_g[1]) * 5, num_elements(prop_g[1])));
-	if(lv == 4) for(q in 1:Q) target += dirichlet_lpdf(prop_h[q] | rep_vector(num_elements(prop_h[1]) * 5, num_elements(prop_h[1])));
-	if(lv == 4) for(q in 1:Q) target += dirichlet_lpdf(prop_i[q] | rep_vector(num_elements(prop_i[1]) * 5, num_elements(prop_i[1])));
+  	alpha_b[1] ~ normal(0,5);
+		sum(alpha_b[1]) ~ normal(0, 0.001 * ct_in_nodes[3]) ;
+		if(A > 1)	for(a in 2:A)	alpha_b[a] ~ normal (0 , 1);
+
+		alpha_c[1] ~ normal(0,5);
+		sum(alpha_c[1]) ~ normal(0, 0.001 * ct_in_nodes[4]) ;
+		if(A > 1)	for(a in 2:A)	alpha_c[a] ~ normal (0 , 1);
+
+		alpha_d[1] ~ normal(0,5);
+		sum(alpha_d[1]) ~ normal(0, 0.001 * ct_in_nodes[5]) ;
+		if(A > 1)	for(a in 2:A)	alpha_d[a] ~ normal (0 , 1);
+
+		alpha_e[1] ~ normal(0,5);
+		sum(alpha_e[1]) ~ normal(0, 0.001 * ct_in_nodes[6]) ;
+		if(A > 1)	for(a in 2:A)	alpha_e[a] ~ normal (0 , 1);
+  }
+  if(lv == 3 && !do_regression) for(q in 1:Q){
+  	 target += dirichlet_lpdf(prop_b[q] | rep_vector(num_elements(prop_b[1]) * 5, num_elements(prop_b[1])));
+		 target += dirichlet_lpdf(prop_c[q] | rep_vector(num_elements(prop_c[1]) * 5, num_elements(prop_c[1])));
+		 target += dirichlet_lpdf(prop_d[q] | rep_vector(num_elements(prop_d[1]) * 5, num_elements(prop_d[1])));
+		 target += dirichlet_lpdf(prop_e[q] | rep_vector(num_elements(prop_e[1]) * 5, num_elements(prop_e[1])));
+  }
+
+	// lv 4
+	if(lv == 4) for(q in 1:Q) {
+		target += dirichlet_lpdf(prop_f[q] | rep_vector(num_elements(prop_f[1]) * 5, num_elements(prop_f[1])));
+		target += dirichlet_lpdf(prop_g[q] | rep_vector(num_elements(prop_g[1]) * 5, num_elements(prop_g[1])));
+		target += dirichlet_lpdf(prop_h[q] | rep_vector(num_elements(prop_h[1]) * 5, num_elements(prop_h[1])));
+		target += dirichlet_lpdf(prop_i[q] | rep_vector(num_elements(prop_i[1]) * 5, num_elements(prop_i[1])));
+	}
 
 
 	pack_r_1 = package_vector_parameters(
@@ -873,6 +951,11 @@ model {
 		pack_R_1,
 		int_package
 	));
+
+	// Dirichlet regression
+	phi ~ normal(0,1);
+
+
 }
 
 
