@@ -1123,7 +1123,7 @@ run_model = function(reference_filtered,
 	# fileConn<-file("~/.R/Makevars")
 	# writeLines(c( "CXX14FLAGS += -O2","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
 	# close(fileConn)
-	# ARMET_tc_model = stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc.stan")
+	# #  = stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc.stan")
 	# ARMET_tc_model = rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix.stan", auto_write = F)
 
 	exposure_rate_init = switch(
