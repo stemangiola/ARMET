@@ -1141,8 +1141,6 @@ run_model = function(reference_filtered,
 
 	Sys.setenv("STAN_NUM_THREADS" = shards)
 
-	browser()
-
 	list(df,
 			 switch(
 			 	approximate_posterior %>% sum(1),
