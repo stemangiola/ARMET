@@ -778,7 +778,7 @@ parameters {
   simplex[ct_in_nodes[9]]  prop_h[Q * (lv >= 4)]; // CD4
   simplex[ct_in_nodes[10]] prop_i[Q * (lv >= 4)]; // CD8
 
-	// Direch regression
+	// Dirichlet regression
   // lv1
   matrix[A * (lv == 1) * do_regression,ct_in_nodes[1]]  alpha_1; // Root
 
@@ -924,10 +924,10 @@ model {
 
 	// lv 4
 	if(lv == 4) for(q in 1:Q) {
-		target += dirichlet_lpdf(prop_f[q] | rep_vector(num_elements(prop_f[1]) * 5, num_elements(prop_f[1])));
-		target += dirichlet_lpdf(prop_g[q] | rep_vector(num_elements(prop_g[1]) * 5, num_elements(prop_g[1])));
-		target += dirichlet_lpdf(prop_h[q] | rep_vector(num_elements(prop_h[1]) * 5, num_elements(prop_h[1])));
-		target += dirichlet_lpdf(prop_i[q] | rep_vector(num_elements(prop_i[1]) * 5, num_elements(prop_i[1])));
+		target += dirichlet_lpdf(prop_f[q] | rep_vector(num_elements(prop_f[1]), num_elements(prop_f[1])));
+		target += dirichlet_lpdf(prop_g[q] | rep_vector(num_elements(prop_g[1]), num_elements(prop_g[1])));
+		target += dirichlet_lpdf(prop_h[q] | rep_vector(num_elements(prop_h[1]), num_elements(prop_h[1])));
+		target += dirichlet_lpdf(prop_i[q] | rep_vector(num_elements(prop_i[1]), num_elements(prop_i[1])));
 	}
 
 

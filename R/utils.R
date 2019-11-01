@@ -124,7 +124,7 @@ format_for_MPI_from_linear_GM = function(df) {
 
 }
 
-format_for_MPI_from_linear_dec = function(df) {
+format_for_MPI_from_linear_dec = function(df, lv) {
 	shards = df %>% arrange(shards %>% desc) %>% slice(1) %>% pull(shards)
 	if (shards %>% length %>% equals(0))
 		shards = 1
@@ -137,11 +137,11 @@ format_for_MPI_from_linear_dec = function(df) {
 								mutate(idx_MPI = head(
 									rep(1:shards, (.) %>% nrow %>% `/` (shards) %>% ceiling), n = (.) %>% nrow
 								))) %>%
-		arrange(idx_MPI, GM, C) %>%
+		arrange(idx_MPI, GM, !!as.symbol(sprintf("C%s", lv))) %>%
 
 		# Add counts MPI rows indexes
 		group_by(idx_MPI) %>%
-		arrange(GM, C) %>%
+		arrange(GM, !!as.symbol(sprintf("C%s", lv))) %>%
 		do((.) %>% rowid_to_column("read count MPI row")) %>%
 		ungroup
 
@@ -925,9 +925,15 @@ get_MPI_df = function(counts_baseline_to_linear,
 
 		G_linear_MPI =
 			counts_baseline %>% filter(level == lv) %>%
-			distinct(G, GM, C, level) %>%
+
+			# I have fixed this for right order
+			select(level, G, GM, sprintf("C%s", lv)) %>%
+			distinct() %>%
+			arrange(GM, !!as.symbol(sprintf("C%s", lv))) %>%
+
+			#distinct(G, GM, C, level) %>%
 			left_join(tibble(level = lv, shards = shards_in_levels)) %>%
-			format_for_MPI_from_linear_dec() %>%
+			format_for_MPI_from_linear_dec(lv) %>%
 			distinct(idx_MPI, G, `read count MPI row`) %>%
 			spread(idx_MPI,  G) %>%
 			select(-`read count MPI row`) %>%
@@ -936,9 +942,14 @@ get_MPI_df = function(counts_baseline_to_linear,
 
 		size_G_linear_MPI =
 			counts_baseline %>% filter(level == lv) %>%
-			distinct(G, GM, C, level) %>%
+			# I have fixed this for right order
+			select(level, G, GM, sprintf("C%s", lv)) %>%
+			distinct() %>%
+			arrange(GM, !!as.symbol(sprintf("C%s", lv))) %>%
+
+			#distinct(G, GM, C, level) %>%
 			left_join(tibble(level = lv, shards = shards_in_levels)) %>%
-			format_for_MPI_from_linear_dec() %>%
+			format_for_MPI_from_linear_dec(lv) %>%
 			distinct(idx_MPI, G, `read count MPI row`)   %>%
 			count(idx_MPI) %>%
 			pull(n) %>%
@@ -1091,7 +1102,7 @@ run_model = function(reference_filtered,
 	CL_lv = counts_idx_lv %>% length
 
 	# Deconvolution, get G only for markers of each level. Exclude house keeping
-	G_lv_linear = counts_baseline %>% filter(level == lv) %>% distinct(G, GM, C) %>% arrange(GM, C) %>% pull(G)
+	G_lv_linear = counts_baseline %>% filter(level == lv) %>% select(G, GM, sprintf("C%s", lv)) %>% distinct() %>% arrange(GM, !!as.symbol(sprintf("C%s", lv))) %>% pull(G)
 	G_lv = G_lv_linear %>% length
 
 	# Observed mix counts
@@ -1154,14 +1165,9 @@ run_model = function(reference_filtered,
 			 		iter = iterations,
 			 		warmup = iterations - sampling_iterations,
 			 		data = MPI_data %>% c(prop_posterior),
-			 		#control = list(stepsize = 0.05, adapt_delta = 0.99),
-			 		#include = F, pars=c("prop_a", "prop_b", "prop_c", "prop_d", "prop_e"),
-			 		#pars=c("prop_1", "prop_2", "prop_3", "prop_4", "exposure_rate", "lambda_log", "sigma_inv_log", "sigma_intercept_dec"),
-			 		#,
-			 		init = function ()
-			 			init_list
-			 		#save_warmup = FALSE,
-			 		#pars = c("prop_1", "prop_2", "prop_3", "exposure_rate") #, "nb_sum") #,"mu_sum", "phi_sum"),
+			 		pars=c("prop_1", "prop_a", "prop_b", "prop_c", "prop_d", "prop_e", "alpha_1", sprintf("alpha_%s", letters[1:9]), "exposure_rate"),
+			 		init = function ()	init_list,
+			 		save_warmup = FALSE
 			 	) %>%
 			 		{
 			 			(.)  %>% rstan::summary() %$% summary %>% as_tibble(rownames = "par") %>% arrange(Rhat %>% desc) %>% print
@@ -1194,7 +1200,7 @@ run_model = function(reference_filtered,
 
 }
 
-get_prop = function(fit, approximate_posterior, df) {
+get_prop = function(fit, approximate_posterior, df, tree) {
 	fit %>%
 
 		# If MCMC is used check divergencies as well

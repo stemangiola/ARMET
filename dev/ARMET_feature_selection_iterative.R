@@ -651,119 +651,119 @@ do_iterate(mix_source, n_mark_df, full_bayesian, levels, iteration, out_dir)
 # res_dir = "dev/feature_selection_fifth_iterative_run_fix_skylake_1/"
 # res_dir = "dev/feature_selection_fifth_iterative_run_fix_skylake_2/"
 # res_dir = "dev/feature_selection_sixth_iterative_run_fix_skylake_2//"
-# res_dir = "dev/feature_selection_sixth_iterative_run_fix_skylake_3//"
-#
-#
-# res =
-# 	dir(res_dir, full.names = T) %>%
-# 	map_dfr(
-# 		~ .x %>%
-# 			readRDS() %$%
-# 			proportions %>%
-# 			mutate(n_markers = .x)
-# 	) %>%
-# 	separate(sample, c("run", "pair"), sep="_", extra="merge") %>%
-# 	separate(pair, c("ct1", "ct2"), sep=" ") %>%
-# 	#filter(`Cell type category` == ct1 | `Cell type category` == ct2) %>%
-# 	mutate(truth = ifelse(`Cell type category` == ct1 | `Cell type category` == ct2, 0.5, 0)) %>%
-# 	mutate(error =  .value - truth ) %>%
-# 	rowwise()%>%
-# 	mutate(error = ifelse(dplyr::between(truth, .lower, .upper), 0, error)) %>%
-# 	ungroup() %>%
-# 	separate(n_markers, c("path", "iteration"), sep="markers_") %>%
-# 	separate(iteration, c("iteration", "dummy"), sep="\\.") %>%
-# 	mutate(iteration = iteration %>% as.integer) %>%
-# 	mutate(CI = .upper - .lower)
-#
-# res %>%
-# 	left_join(
-# 		tree %>%
-# 			data.tree::ToDataFrameTree("name", "level") %>%
-# 			as_tibble %>%
-# 			select(name, level) %>%
-# 			mutate(level = level-1) %>%
-# 			rename(`Cell type category` = name, level_tree = level)
-# 	) %>%
-# 	filter(level == level_tree) %>%
-# left_join(
-# 	tree %>%
-# 		data.tree::ToDataFrameTree("name", "level") %>%
-# 		as_tibble %>%
-# 		select(name, level) %>%
-# 		mutate(level = level-1) %>%
-# 		rename(ct1 = name, level_pair = level)
-# ) %>%
-# filter(level_pair == level_tree) %>%
-# 	group_by(run,   ct1 ,  ct2, iteration)  %>%
-# 	do({
-#
-# 		(.) %>%
-# 			left_join(
-# 				(.) %>%
-# 					distinct(`Cell type category`, error) %>%
-# 					ttBulk::as_matrix(rownames=`Cell type category`) %>%
-# 					dist() %>%
-# 					as.matrix()%>%
-# 					as_tibble(rownames="Cell type category") %>%
-# 					gather(`other ct`, `dist`, -`Cell type category`) %>%
-# 					group_by(`Cell type category`) %>%
-# 					arrange(dist %>% desc) %>%
-# 					slice(1) %>%
-# 					ungroup(),
-# 				by = "Cell type category"
-# 			)
-# 	}) %>%
-# 	filter(truth == 0.5 & error < 0) %>% select(`Cell type category`, run,   ct1  , ct2  , iteration, truth,   error, `other ct`) %>%
-# 	group_by(iteration, `Cell type category`, `other ct`) %>%
-# 	summarise(error %>% mean) %>%
-#
-# 	# add marker size
-# 	left_join(
-# 		dir(res_dir, full.names = T) %>%
-# 			map_dfr(
-# 				~ .x %>%
-# 					readRDS() %$%
-# 					input %$%
-# 					n_markers %>%
-# 					setNames(c( "Cell type category", "other ct", "n markers")) %>%
-# 					mutate(iteration = .x %>% strsplit("markers_") %>% unlist %>% `[` (2) %>% strsplit("\\.") %>% unlist %>% `[` (1) %>% as.integer)
-# 			)
-# 	) %>%
-#
-# 	arrange(iteration, `error %>% mean`) %>% ungroup() %>%
-# 	ggplot(aes(x=iteration, y=`error %>% mean`, color=interaction(`Cell type category`, `other ct`))) +
-# 	stat_summary(aes(y =  `error %>% mean`), fun.y=mean, geom="line", size=3) +
-# 	geom_point(aes(size=`n markers`), color="black")
-#
-# # geom_jitter(alpha=0.3, width = 0.7) +
-# # stat_smooth(method = "lm", formula = y ~ x + I(x^2), size = 1, se = F)
-#
-#
-# (res %>%
-# 		filter(truth == 0.5) %>%
-# 		filter(error <= 0) %>%
-# 		#mutate(error = error %>% abs) %>%
-# 		rowwise()%>%
-# 		mutate(error = ifelse(dplyr::between(truth, .lower, .upper), 0, error)) %>%
-# 		ungroup() %>%
-# 		left_join(
-# 			tree %>%
-# 				data.tree::ToDataFrameTree("name", "level") %>%
-# 				as_tibble %>%
-# 				select(name, level) %>%
-# 				mutate(level = level-1) %>%
-# 				rename(`Cell type category` = name, level_tree = level)
-# 		) %>%
-# 		filter(level == level_tree) %>%
-# 		#filter(level ==2) %>%
-# 		ggplot(aes(x=(iteration), y=error, color=interaction(ct1, ct2), size=CI, Q=Q, C=C)) +
-# 		#geom_violin() +
-# 		geom_jitter(alpha=0.3, width = 0.1) +
-# 		#	stat_smooth(method = "lm", formula = y ~ x + I(x^2), size = 1, se = F)
-# 		stat_summary(aes(y = error), fun.y=mean, geom="line", size=3) +
-# 		facet_wrap(~level) +
-# 		my_theme
-# ) %>% plotly::ggplotly()
+res_dir = "dev/feature_selection_seventh_iterative_run_fix_skylake_3/"
+
+
+res =
+	dir(res_dir, full.names = T) %>%
+	map_dfr(
+		~ .x %>%
+			readRDS() %$%
+			proportions %>%
+			mutate(n_markers = .x)
+	) %>%
+	separate(sample, c("run", "pair"), sep="_", extra="merge") %>%
+	separate(pair, c("ct1", "ct2"), sep=" ") %>%
+	#filter(`Cell type category` == ct1 | `Cell type category` == ct2) %>%
+	mutate(truth = ifelse(`Cell type category` == ct1 | `Cell type category` == ct2, 0.5, 0)) %>%
+	mutate(error =  .value - truth ) %>%
+	rowwise()%>%
+	mutate(error = ifelse(dplyr::between(truth, .lower, .upper), 0, error)) %>%
+	ungroup() %>%
+	separate(n_markers, c("path", "iteration"), sep="markers_") %>%
+	separate(iteration, c("iteration", "dummy"), sep="\\.") %>%
+	mutate(iteration = iteration %>% as.integer) %>%
+	mutate(CI = .upper - .lower)
+
+(res %>%
+	left_join(
+		tree %>%
+			data.tree::ToDataFrameTree("name", "level") %>%
+			as_tibble %>%
+			select(name, level) %>%
+			mutate(level = level-1) %>%
+			rename(`Cell type category` = name, level_tree = level)
+	) %>%
+	filter(level == level_tree) %>%
+left_join(
+	tree %>%
+		data.tree::ToDataFrameTree("name", "level") %>%
+		as_tibble %>%
+		select(name, level) %>%
+		mutate(level = level-1) %>%
+		rename(ct1 = name, level_pair = level)
+) %>%
+filter(level_pair == level_tree) %>%
+	group_by(run,   ct1 ,  ct2, iteration)  %>%
+	do({
+
+		(.) %>%
+			left_join(
+				(.) %>%
+					distinct(`Cell type category`, error) %>%
+					ttBulk::as_matrix(rownames=`Cell type category`) %>%
+					dist() %>%
+					as.matrix()%>%
+					as_tibble(rownames="Cell type category") %>%
+					gather(`other ct`, `dist`, -`Cell type category`) %>%
+					group_by(`Cell type category`) %>%
+					arrange(dist %>% desc) %>%
+					slice(1) %>%
+					ungroup(),
+				by = "Cell type category"
+			)
+	}) %>%
+	filter(truth == 0.5 & error < 0) %>% select(`Cell type category`, run,   ct1  , ct2  , iteration, truth,   error, `other ct`) %>%
+	group_by(iteration, `Cell type category`, `other ct`) %>%
+	summarise(error %>% mean) %>%
+
+	# add marker size
+	left_join(
+		dir(res_dir, full.names = T) %>%
+			map_dfr(
+				~ .x %>%
+					readRDS() %$%
+					input %$%
+					n_markers %>%
+					setNames(c( "Cell type category", "other ct", "n markers")) %>%
+					mutate(iteration = .x %>% strsplit("markers_") %>% unlist %>% `[` (2) %>% strsplit("\\.") %>% unlist %>% `[` (1) %>% as.integer)
+			)
+	) %>%
+
+	arrange(iteration, `error %>% mean`) %>% ungroup() %>%
+	ggplot(aes(x=iteration, y=`error %>% mean`, color=interaction(`Cell type category`, `other ct`))) +
+	stat_summary(aes(y =  `error %>% mean`), fun.y=mean, geom="line", size=3) +
+	geom_point(aes(size=`n markers`), color="black"))%>% plotly::ggplotly()
+
+# geom_jitter(alpha=0.3, width = 0.7) +
+# stat_smooth(method = "lm", formula = y ~ x + I(x^2), size = 1, se = F)
+
+
+(res %>%
+		filter(truth == 0.5) %>%
+		filter(error <= 0) %>%
+		#mutate(error = error %>% abs) %>%
+		rowwise()%>%
+		mutate(error = ifelse(dplyr::between(truth, .lower, .upper), 0, error)) %>%
+		ungroup() %>%
+		left_join(
+			tree %>%
+				data.tree::ToDataFrameTree("name", "level") %>%
+				as_tibble %>%
+				select(name, level) %>%
+				mutate(level = level-1) %>%
+				rename(`Cell type category` = name, level_tree = level)
+		) %>%
+		filter(level == level_tree) %>%
+		#filter(level ==2) %>%
+		ggplot(aes(x=(iteration), y=error, color=interaction(ct1, ct2), size=CI, Q=Q, C=C)) +
+		#geom_violin() +
+		geom_jitter(alpha=0.3, width = 0.1) +
+		#	stat_smooth(method = "lm", formula = y ~ x + I(x^2), size = 1, se = F)
+		stat_summary(aes(y = error), fun.y=mean, geom="line", size=3) +
+		facet_wrap(~level) +
+		my_theme
+) %>% plotly::ggplotly()
 
 #
 # rrr = readRDS("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/feature_selection_first_iterative_run_fix_skylake_1/markers_10.RData")

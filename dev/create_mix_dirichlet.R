@@ -44,18 +44,6 @@ X = matrix(
 	ncol = 2
 )
 
-X %*% t(alpha) %>%
-	apply(1, softmax) %>%
-	`*` (40) %>%
-	as.data.frame() %>%
-	as_tibble() %>%
-	setNames(1:ncol(.)) %>%
-	mutate(sample = 1:n()) %>%
-	gather(C, alpha, -sample)
-
-
-
-
 # Choose samples
 foreach(r = 1:S, .combine = bind_rows) %do% {
 	mix_base %>%
@@ -68,9 +56,16 @@ foreach(r = 1:S, .combine = bind_rows) %do% {
 
 # Choose proportions
 	left_join(
-		mix_base %>%
-			distinct(`Cell type category`) %>%
-			mutate(alpha = alpha)
+
+		X %*% t(alpha) %>%
+			apply(1, softmax) %>%
+			t %>%
+			`*` (40) %>%
+			as.data.frame() %>%
+			as_tibble() %>%
+			setNames( mix_base %>% distinct(`Cell type category`) %>% pull(1) ) %>%
+			mutate(run = 1:n()) %>%
+			gather(`Cell type category`, alpha, -run)
 	) %>%
 	group_by(run) %>%
 	mutate(p = gtools::rdirichlet(1, alpha)) %>%
@@ -80,8 +75,6 @@ foreach(r = 1:S, .combine = bind_rows) %do% {
 	left_join(mix_base, by=c("Cell type category", "sample")) %>%
 	write_csv("dev/mix_dirichlet_source.csv")
 
-
-
 # make mix
 read_csv("dev/mix_dirichlet_source.csv") %>%
 	mutate(c = `read count normalised bayes` * p) %>%
@@ -90,3 +83,4 @@ read_csv("dev/mix_dirichlet_source.csv") %>%
 	ungroup %>%
 	write_csv("dev/mix_dirichlet.csv")
 
+save(X, file="dev/mix_dirichlet_X.rda")
