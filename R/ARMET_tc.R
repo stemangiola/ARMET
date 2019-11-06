@@ -250,7 +250,38 @@ ARMET_tc = function(
 	alpha = alpha_1
 }
 
-	prop_1 = get_prop(fit1, approximate_posterior, df1, tree)
+	prop_1 =
+		fit1 %>%
+
+		# If MCMC is used check divergencies as well
+		ifelse_pipe(
+			!approximate_posterior,
+			~ .x %>% parse_summary_check_divergence(),
+			~ .x %>% parse_summary() %>% rename(.value = mean)
+		) %>%
+
+		# Parse
+		separate(.variable, c(".variable", "level"), convert = T) %>%
+
+		# Add tree information
+		left_join(
+			tree %>% data.tree::ToDataFrameTree("name", "C1", "C2", "C3", "C4") %>%
+				as_tibble %>%
+				select(-1) %>%
+				rename(`Cell type category` = name) %>%
+				gather(level, C,-`Cell type category`) %>%
+				mutate(level = gsub("C", "", level)) %>%
+				drop_na %>%
+				mutate(C = C %>% as.integer, level = level %>% as.integer)
+		) %>%
+
+		# Add sample information
+		left_join(df1 %>%
+								filter(`query`) %>%
+								distinct(Q, sample)) %>%
+
+		# Add relative proportions
+		mutate(.value_relative = .value)
 
 	prop = prop_1
 	fit = list(fit1)
@@ -296,6 +327,7 @@ ARMET_tc = function(
 				`Cell type category` = tree$Get("C2") %>% na.omit %>% names
 			) %>%
 			ungroup() %>%
+			mutate(.value_relative = .value2) %>%
 			mutate(
 				.value2 = ifelse(.value2 %>% is.na, .value, .value * .value2)
 			)
@@ -337,7 +369,8 @@ ARMET_tc = function(
 
 		prop_2 =
 			draws_2 %>%
-			select(.chain, .iteration, .draw,     Q,     C2 , `Cell type category`,   .value2 ) %>%
+			select(.chain, .iteration, .draw,     Q,     C2 , `Cell type category`,   .value2, .value_relative ) %>%
+
 			rename(C = C2, .value = .value2) %>%
 			mutate(.variable = "prop_2") %>%
 			group_by(.variable,  Q,  C, `Cell type category`) %>%
@@ -345,6 +378,8 @@ ARMET_tc = function(
 			ungroup() %>%
 			mutate(level=2) %>%
 			left_join(df2 %>% distinct(Q, sample))
+
+		# Eliminate
 
 		prop = bind_rows(prop, prop_2)
 		fit = fit %>% c(list(fit2))
@@ -384,6 +419,7 @@ ARMET_tc = function(
 				`Cell type category` = tree$Get("C3") %>% na.omit %>% names
 			) %>%
 			ungroup() %>%
+			mutate(.value_relative = .value3) %>%
 			mutate(
 				.value3 = ifelse(.value3 %>% is.na, .value2, .value2 * .value3)
 			)
@@ -434,7 +470,7 @@ ARMET_tc = function(
 }
 		prop_3 =
 			draws_3 %>%
-			select(.chain, .iteration, .draw,     Q,     C3 , `Cell type category`,   .value3 ) %>%
+			select(.chain, .iteration, .draw,     Q,     C3 , `Cell type category`,   .value3, .value_relative ) %>%
 			rename(C = C3, .value = .value3) %>%
 			mutate(.variable = "prop_3") %>%
 			group_by(.variable,  Q,  C, `Cell type category`) %>%
