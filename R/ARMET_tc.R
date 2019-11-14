@@ -214,7 +214,8 @@ ARMET_tc = function(
 		fit1 %>%
 		tidybayes::gather_draws(prop_1[Q, C1]) %>%
 		ungroup() %>%
-		select(-.variable)
+		select(-.variable) %>%
+		mutate(.value_relative = .value)
 
 	if(do_regression) {
 		alpha_1 =
@@ -252,6 +253,27 @@ ARMET_tc = function(
 
 	prop_1 =
 		fit1 %>%
+		tidybayes::gather_draws(`prop_[1]`[Q, C], regex = T) %>%
+		drop_na  %>%
+
+		# Add relative proportions
+		mutate(.value_relative = .value) %>%
+
+		# Add tree information
+		left_join(
+			tree %>% data.tree::ToDataFrameTree("name", "C1", "C2", "C3", "C4") %>%
+				as_tibble %>%
+				select(-1) %>%
+				rename(`Cell type category` = name) %>%
+				gather(level, C,-`Cell type category`) %>%
+				mutate(level = gsub("C", "", level)) %>%
+				filter(level ==1) %>%
+				drop_na %>%
+				mutate(C = C %>% as.integer, level = level %>% as.integer)
+		) %>%
+
+		# add sample annotation
+		left_join(df1 %>% distinct(Q, sample), by="Q")	%>%
 
 		# If MCMC is used check divergencies as well
 		ifelse_pipe(
@@ -263,25 +285,12 @@ ARMET_tc = function(
 		# Parse
 		separate(.variable, c(".variable", "level"), convert = T) %>%
 
-		# Add tree information
-		left_join(
-			tree %>% data.tree::ToDataFrameTree("name", "C1", "C2", "C3", "C4") %>%
-				as_tibble %>%
-				select(-1) %>%
-				rename(`Cell type category` = name) %>%
-				gather(level, C,-`Cell type category`) %>%
-				mutate(level = gsub("C", "", level)) %>%
-				drop_na %>%
-				mutate(C = C %>% as.integer, level = level %>% as.integer)
-		) %>%
+
 
 		# Add sample information
 		left_join(df1 %>%
 								filter(`query`) %>%
-								distinct(Q, sample)) %>%
-
-		# Add relative proportions
-		mutate(.value_relative = .value)
+								distinct(Q, sample))
 
 	prop = prop_1
 	fit = list(fit1)
@@ -373,14 +382,19 @@ ARMET_tc = function(
 
 			rename(C = C2, .value = .value2) %>%
 			mutate(.variable = "prop_2") %>%
-			group_by(.variable,  Q,  C, `Cell type category`) %>%
-			tidybayes::median_qi() %>%
-			ungroup() %>%
 			mutate(level=2) %>%
-			left_join(df2 %>% distinct(Q, sample))
+
+			# add sample annotation
+			left_join(df2 %>% distinct(Q, sample), by="Q")	%>%
+
+			# If MCMC is used check divergencies as well
+			ifelse_pipe(
+				!approximate_posterior,
+				~ .x %>% parse_summary_check_divergence(),
+				~ .x %>% parse_summary() %>% rename(.value = mean)
+			)
 
 		# Eliminate
-
 		prop = bind_rows(prop, prop_2)
 		fit = fit %>% c(list(fit2))
 		df = df %>% c(list(df2))
@@ -473,10 +487,18 @@ ARMET_tc = function(
 			select(.chain, .iteration, .draw,     Q,     C3 , `Cell type category`,   .value3, .value_relative ) %>%
 			rename(C = C3, .value = .value3) %>%
 			mutate(.variable = "prop_3") %>%
-			group_by(.variable,  Q,  C, `Cell type category`) %>%
-			tidybayes::median_qi() %>%
-			ungroup() %>%
 			mutate(level=3) %>%
+
+			# add sample annotation
+			left_join(df3 %>% distinct(Q, sample), by="Q")	%>%
+
+			# If MCMC is used check divergencies as well
+			ifelse_pipe(
+				!approximate_posterior,
+				~ .x %>% parse_summary_check_divergence(),
+				~ .x %>% parse_summary() %>% rename(.value = mean)
+			) %>%
+
 			left_join(df3 %>% distinct(Q, sample))
 
 		prop = bind_rows(prop, prop_3)

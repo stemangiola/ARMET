@@ -511,17 +511,32 @@ parse_summary = function(fit) {
 		mutate(C = C %>% as.integer, Q = Q %>% as.integer)
 }
 
+median_qi_nest_draws = function(d){
+	# Anonymous function to add the draws to the summary
+
+		left_join(
+			d %>%
+				#group_by(.variable,  Q,  C) %>%
+				tidybayes::median_qi() %>%
+				ungroup(),
+			# Reattach draws as nested
+			d %>%
+				ungroup() %>%
+				nest(.draws = c(.chain, .iteration, .draw , .value, .value_relative)),
+			by = c(".variable", "Q", "sample", "C", "Cell type category", "level")
+		)
+}
+
 #' parse_summary_check_divergence
 #'
 #' @description Parse the stan fit object and check for divergencies
-parse_summary_check_divergence = function(fit) {
-	fit %>%
-		tidybayes::gather_draws(`prop_[1234]`[Q, C], regex = T) %>%
-		filter(.variable %in% c("prop_1", "prop_2", "prop_3", "prop_4")) %>%
-		drop_na %>%
+parse_summary_check_divergence = function(draws) {
+	draws %>%
+
+		group_by(level, .variable,  Q, sample,  C, `Cell type category`) %>%
 
 		# If not converged choose the majority chains
-		mutate(converged = diptest::dip.test(`.value`) %$%	`p.value` > 0.05) %>%
+		mutate(converged = diptest::dip.test(`.value_relative`) %$%	`p.value` > 0.05) %>%
 
 		# If some proportions have not converged chose the most populated one
 		do(
@@ -537,8 +552,9 @@ parse_summary_check_divergence = function(fit) {
 		# output: tibble
 		{
 			left_join(
-				(.) %>% select(-converged) %>% tidybayes::median_qi(),
-				(.) %>% distinct(converged)
+				(.) %>% select(-converged) %>% median_qi_nest_draws(),
+				(.) %>% distinct(converged),
+				by = c("level", ".variable", "Q", "sample", "C", "Cell type category")
 			)
 		} %>%
 		ungroup()
@@ -1165,7 +1181,10 @@ run_model = function(reference_filtered,
 			 		iter = iterations,
 			 		warmup = iterations - sampling_iterations,
 			 		data = MPI_data %>% c(prop_posterior),
-			 		pars=c("prop_1", "prop_a", "prop_b", "prop_c", "prop_d", "prop_e", "alpha_1", sprintf("alpha_%s", letters[1:9]), "exposure_rate"),
+			 		pars=
+			 			c("prop_1", "prop_2", "prop_3", sprintf("prop_%s", letters[1:9])) %>%
+			 			c("alpha_1", sprintf("alpha_%s", letters[1:9])) %>%
+			 			c("exposure_rate"),
 			 		init = function ()	init_list,
 			 		save_warmup = FALSE
 			 	) %>%
@@ -1369,7 +1388,7 @@ plot_markers = function(.data, n_markers, mix, ct1, ct2, n = 10, level) {
 
 tbl_to_plot = function(	tt_tbl,
 	size_geom_text = 3.5,
-	my_breaks=c(0, 0.01, 0.03, 0.05, 0.1,0.3,0.5,0.7,1),
+	my_breaks=c(0, 0.01, 0.03, 0.05, 0.1, 0.3, 0.5, 0.7, 1),
 	prop_filter = 0.005,
 	barwidth = 0.5,
 	barheight = 2,
