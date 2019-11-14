@@ -1664,3 +1664,81 @@ ARMET_plotPolar = function(
 
 
 }
+
+sum_NB = function(lambda_mat, sigma_mat, prop){
+
+	prop_mat = matrix(prop, ncol=1)
+	lambda_mat = matrix(lambda, nrow = 1)
+	sigma_mat = matrix(sigma, nrow = 1)
+
+	lambda_sum = prop_mat %*% lambda_mat;
+	sigma_sum =
+		square(lambda_sum) /
+			(
+				square(prop_mat) %*%
+					(
+						square(lambda_mat) /
+							sigma_mat
+					)
+			) ;
+
+
+	list(lambda_sum, sigma_sum)
+
+}
+
+
+
+
+result$signatures[[1]] %>% filter(!query & !`house keeping`) %>% distinct(`Cell type category`, C, level, G, GM, symbol, lambda) %>% left_join(
+	ARMET::ARMET_ref %>% distinct(symbol, ct1, ct2, level)
+) %>%
+
+	# Add proportions
+	left_join(
+		result$proportions %>% select(level, Q, sample, .draws, `Cell type category`) %>% unnest(.draws)
+	) %>%
+
+	# add expsure
+	left_join(
+		result$fit[[1]] %>% tidybayes::spread_draws(exposure_rate[S]) %>% ungroup() %>% rename(Q = S)
+	) %>%
+
+	# put weights of transcription
+	mutate(lambda_exp = lambda %>% exp) %>%
+	mutate(lambda_weight = lambda_exp * .value) %>%
+
+	# normalise
+	mutate(lambda_weight_norm = lambda_weight * exp(exposure_rate)) %>%
+
+	select(`Cell type category`, level, symbol, ct1, ct2, sample, .chain ,.iteration, .draw , lambda_weight_norm ) %>%
+	group_by(level, symbol ,ct1    ,     ct2   ,     sample   ,                .chain, .iteration ,.draw  ) %>%
+
+	summarise(counts_inferred = lambda_weight_norm %>% sum) %>%
+
+	group_by(level, symbol, ct1, ct2, sample) %>%
+
+	summarize(.mean = mean(counts_inferred),
+						.sd = sd(counts_inferred),
+						.q025 = quantile(counts_inferred, probs = .025),
+						.q25 = quantile(counts_inferred, probs = .25),
+						.q50 = quantile(counts_inferred, probs = .5),
+						.q75 = quantile(counts_inferred, probs = .75),
+						.q97.5 = quantile(counts_inferred, probs = .975)
+	) %>%
+
+
+	# Add counts
+	left_join(
+		res$input$mix %>% slice(1) %>%
+			gather(symbol, count, -sample)
+	) %>%
+	ggplot(aes(x = count+1, y=.mean+1, color=ct1)) +
+	geom_abline() +
+	geom_errorbar(aes(ymin = .q025 + 1, ymax=.q97.5 + 1)) +
+	geom_point() +
+	scale_y_log10() +
+	scale_x_log10()
+
+
+
