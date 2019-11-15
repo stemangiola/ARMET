@@ -1665,31 +1665,30 @@ ARMET_plotPolar = function(
 
 }
 
+#' This is a generalisation of ifelse that acceots an object and return an objects
+#'
+#' @import dplyr
+#' @importFrom purrr as_mapper
+#'
+#' @param .x A tibble
+#' @param .p A boolean
+#' @param .f1 A function
+#' @param .f2 A function
+#'
+#'
+#' @return A tibble
+ifelse_pipe = function(.x, .p, .f1, .f2 = NULL) {
+	switch(.p %>% `!` %>% sum(1),
+				 as_mapper(.f1)(.x),
+				 if (.f2 %>% is.null %>% `!`)
+				 	as_mapper(.f2)(.x)
+				 else
+				 	.x)
 
+}
 
-level_to_plot_inferred_vs_observed  = function(result, level){
+level_to_plot_inferred_vs_observed  = function(result, level, cores = 20){
 
-	sum_NB = function(lambda, sigma, prop){
-
-		prop_mat = matrix(prop, nrow=1)
-		lambda_mat = matrix(lambda, ncol = 1)
-		sigma_mat = matrix(sigma, ncol = 1)
-
-		lambda_sum = prop_mat %*% lambda_mat;
-		sigma_sum =
-			lambda_sum^2 /
-			(
-				prop_mat^2 %*%
-					(
-						lambda_mat^2 /
-							sigma_mat
-					)
-			) ;
-
-
-		c(lambda_sum, sigma_sum)
-
-	}
 
 
 
@@ -1745,17 +1744,53 @@ level_to_plot_inferred_vs_observed  = function(result, level){
 			lambda_exp = lambda %>% exp,
 			sigma_exp = 1 / exp(sigma_raw)
 		) %>%
-		nest(data_for_sum = -c(level, symbol ,ct1    ,     ct2   ,     sample   ,   exposure_rate,   .chain, .iteration ,.draw )) %>%
-		mutate(.sum = map(
-			data_for_sum,
-			~
-				sum_NB(.x$lambda_exp, .x$sigma_exp, .x$.value) %>%
-				as.matrix %>%
-				t %>%
-				as_tibble() %>%
-				setNames(c("lambda_sum", "sigma_sum"))
 
-		)) %>%
+
+		do_parallel_start(cores, "symbol") %>%
+		do({
+
+			`%>%` = magrittr::`%>%`
+
+			sum_NB = function(lambda, sigma, prop){
+
+				prop_mat = matrix(prop, nrow=1)
+				lambda_mat = matrix(lambda, ncol = 1)
+				sigma_mat = matrix(sigma, ncol = 1)
+
+				lambda_sum = prop_mat %*% lambda_mat;
+				sigma_sum =
+					lambda_sum^2 /
+					(
+						prop_mat^2 %*%
+							(
+								lambda_mat^2 /
+									sigma_mat
+							)
+					) ;
+
+
+				c(lambda_sum, sigma_sum)
+
+			}
+
+
+			(.) %>%
+				tidyr::nest(data_for_sum = -c(level, symbol ,ct1    ,     ct2   ,     sample   ,   exposure_rate,   .chain, .iteration ,.draw )) %>%
+				dplyr::mutate(.sum = purrr::map(
+					data_for_sum,
+					~
+						sum_NB(.x$lambda_exp, .x$sigma_exp, .x$.value) %>%
+						as.matrix %>%
+						t %>%
+						tibble::as_tibble() %>%
+						setNames(c("lambda_sum", "sigma_sum"))
+
+				))
+
+		}) %>%
+		do_parallel_end() %>%
+
+
 		select(-data_for_sum) %>%
 		unnest(.sum) %>%
 
@@ -1781,7 +1816,7 @@ level_to_plot_inferred_vs_observed  = function(result, level){
 			res$input$mix %>% slice(1) %>%
 				gather(symbol, count, -sample)
 		) %>%
-		ggplot(aes(x = count+1, y=.mean+1, color=ct1)) +
+		ggplot(aes(x = count+1, y=.q50+1, color=ct1)) +
 		geom_abline() +
 		geom_errorbar(aes(ymin = .q025 + 1, ymax=.q97.5 + 1), alpha=0.5) +
 		geom_point() +
@@ -1791,6 +1826,6 @@ level_to_plot_inferred_vs_observed  = function(result, level){
 		my_theme
 }
 
-level_to_plot_inferred_vs_observed(result, 2)
+level_to_plot_inferred_vs_observed(result, 3)
 
 
