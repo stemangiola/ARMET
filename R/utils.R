@@ -1665,80 +1665,132 @@ ARMET_plotPolar = function(
 
 }
 
-sum_NB = function(lambda_mat, sigma_mat, prop){
 
-	prop_mat = matrix(prop, ncol=1)
-	lambda_mat = matrix(lambda, nrow = 1)
-	sigma_mat = matrix(sigma, nrow = 1)
 
-	lambda_sum = prop_mat %*% lambda_mat;
-	sigma_sum =
-		square(lambda_sum) /
+level_to_plot_inferred_vs_observed  = function(result, level){
+
+	sum_NB = function(lambda, sigma, prop){
+
+		prop_mat = matrix(prop, nrow=1)
+		lambda_mat = matrix(lambda, ncol = 1)
+		sigma_mat = matrix(sigma, ncol = 1)
+
+		lambda_sum = prop_mat %*% lambda_mat;
+		sigma_sum =
+			lambda_sum^2 /
 			(
-				square(prop_mat) %*%
+				prop_mat^2 %*%
 					(
-						square(lambda_mat) /
+						lambda_mat^2 /
 							sigma_mat
 					)
 			) ;
 
 
-	list(lambda_sum, sigma_sum)
+		c(lambda_sum, sigma_sum)
 
+	}
+
+
+
+	my_theme =
+		theme_bw() +
+		theme(
+			panel.border = element_blank(),
+			axis.line = element_line(),
+			panel.grid.major = element_line(size = 0.2),
+			panel.grid.minor = element_line(size = 0.1),
+			text = element_text(size = 12),
+			legend.position = "bottom",
+			aspect.ratio = 1,
+			axis.text.x = element_text(
+				angle = 90,
+				hjust = 1,
+				vjust = 0.5
+			),
+			strip.background = element_blank(),
+			axis.title.x  = element_text(margin = margin(
+				t = 10,
+				r = 10,
+				b = 10,
+				l = 10
+			)),
+			axis.title.y  = element_text(margin = margin(
+				t = 10,
+				r = 10,
+				b = 10,
+				l = 10
+			))
+		)
+
+	result$signatures[[level]] %>%
+		filter(!query & !`house keeping`) %>%
+		distinct(`Cell type category`, C, level, G, GM, symbol, lambda, sigma_raw) %>%
+		left_join(
+			ARMET::ARMET_ref %>% distinct(symbol, ct1, ct2, level)
+		) %>%
+
+		# Add proportions
+		left_join(
+			result$proportions %>% select(level, Q, sample, .draws, `Cell type category`) %>% unnest(.draws)
+		) %>%
+
+		# add expsure
+		left_join(
+			result$fit[[level]] %>% tidybayes::spread_draws(exposure_rate[S]) %>% ungroup() %>% rename(Q = S)
+		) %>%
+
+		# Calculate sum
+		mutate(
+			lambda_exp = lambda %>% exp,
+			sigma_exp = 1 / exp(sigma_raw)
+		) %>%
+		nest(data_for_sum = -c(level, symbol ,ct1    ,     ct2   ,     sample   ,   exposure_rate,   .chain, .iteration ,.draw )) %>%
+		mutate(.sum = map(
+			data_for_sum,
+			~
+				sum_NB(.x$lambda_exp, .x$sigma_exp, .x$.value) %>%
+				as.matrix %>%
+				t %>%
+				as_tibble() %>%
+				setNames(c("lambda_sum", "sigma_sum"))
+
+		)) %>%
+		select(-data_for_sum) %>%
+		unnest(.sum) %>%
+
+		# normalise
+		mutate(lambda_sum = lambda_sum * exp(exposure_rate)) %>%
+
+		# Calculate generated quantities
+		mutate(counts_inferred = rnbinom(n(), mu = lambda_sum, size = sigma_sum)) %>%
+
+		# Summarise
+		group_by(level, symbol, ct1, ct2, sample, .chain) %>%
+		summarize(.mean = mean(counts_inferred),
+							.sd = sd(counts_inferred),
+							.q025 = quantile(counts_inferred, probs = .025),
+							.q25 = quantile(counts_inferred, probs = .25),
+							.q50 = quantile(counts_inferred, probs = .5),
+							.q75 = quantile(counts_inferred, probs = .75),
+							.q97.5 = quantile(counts_inferred, probs = .975)
+		) %>%
+
+		# Add counts
+		left_join(
+			res$input$mix %>% slice(1) %>%
+				gather(symbol, count, -sample)
+		) %>%
+		ggplot(aes(x = count+1, y=.mean+1, color=ct1)) +
+		geom_abline() +
+		geom_errorbar(aes(ymin = .q025 + 1, ymax=.q97.5 + 1), alpha=0.5) +
+		geom_point() +
+		scale_y_log10() +
+		scale_x_log10() +
+		facet_grid(~.chain) +
+		my_theme
 }
 
-
-
-
-result$signatures[[1]] %>% filter(!query & !`house keeping`) %>% distinct(`Cell type category`, C, level, G, GM, symbol, lambda) %>% left_join(
-	ARMET::ARMET_ref %>% distinct(symbol, ct1, ct2, level)
-) %>%
-
-	# Add proportions
-	left_join(
-		result$proportions %>% select(level, Q, sample, .draws, `Cell type category`) %>% unnest(.draws)
-	) %>%
-
-	# add expsure
-	left_join(
-		result$fit[[1]] %>% tidybayes::spread_draws(exposure_rate[S]) %>% ungroup() %>% rename(Q = S)
-	) %>%
-
-	# put weights of transcription
-	mutate(lambda_exp = lambda %>% exp) %>%
-	mutate(lambda_weight = lambda_exp * .value) %>%
-
-	# normalise
-	mutate(lambda_weight_norm = lambda_weight * exp(exposure_rate)) %>%
-
-	select(`Cell type category`, level, symbol, ct1, ct2, sample, .chain ,.iteration, .draw , lambda_weight_norm ) %>%
-	group_by(level, symbol ,ct1    ,     ct2   ,     sample   ,                .chain, .iteration ,.draw  ) %>%
-
-	summarise(counts_inferred = lambda_weight_norm %>% sum) %>%
-
-	group_by(level, symbol, ct1, ct2, sample) %>%
-
-	summarize(.mean = mean(counts_inferred),
-						.sd = sd(counts_inferred),
-						.q025 = quantile(counts_inferred, probs = .025),
-						.q25 = quantile(counts_inferred, probs = .25),
-						.q50 = quantile(counts_inferred, probs = .5),
-						.q75 = quantile(counts_inferred, probs = .75),
-						.q97.5 = quantile(counts_inferred, probs = .975)
-	) %>%
-
-
-	# Add counts
-	left_join(
-		res$input$mix %>% slice(1) %>%
-			gather(symbol, count, -sample)
-	) %>%
-	ggplot(aes(x = count+1, y=.mean+1, color=ct1)) +
-	geom_abline() +
-	geom_errorbar(aes(ymin = .q025 + 1, ymax=.q97.5 + 1)) +
-	geom_point() +
-	scale_y_log10() +
-	scale_x_log10()
-
+level_to_plot_inferred_vs_observed(result, 2)
 
 
