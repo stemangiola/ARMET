@@ -1144,7 +1144,13 @@ run_model = function(reference_filtered,
 
 	model  = switch(full_bayesian %>% `!` %>% sum(1),
 									stanmodels$ARMET_tc,
-									stanmodels$ARMET_tc_fix)
+									stanmodels$ARMET_tc_fix
+								)
+
+	additional_par_to_save  = switch(full_bayesian %>% `!` %>% sum(1),
+									c("lambda_log","sigma_inv_log"),
+									c()
+								)
 
 	# library(rstan)
 	# fileConn<-file("~/.R/Makevars")
@@ -1166,6 +1172,7 @@ run_model = function(reference_filtered,
 		ifelse_pipe(!full_bayesian,
 								~ .x %>% c(list(exposure_rate = exposure_rate_init)))
 
+
 	Sys.setenv("STAN_NUM_THREADS" = shards)
 
 	list(df,
@@ -1184,7 +1191,8 @@ run_model = function(reference_filtered,
 			 		pars=
 			 			c("prop_1", "prop_2", "prop_3", sprintf("prop_%s", letters[1:9])) %>%
 			 			c("alpha_1", sprintf("alpha_%s", letters[1:9])) %>%
-			 			c("exposure_rate"),
+			 			c("exposure_rate") %>%
+			 			c(additional_par_to_save),
 			 		init = function ()	init_list,
 			 		save_warmup = FALSE
 			 	) %>%
@@ -1687,9 +1695,11 @@ ifelse_pipe = function(.x, .p, .f1, .f2 = NULL) {
 
 }
 
-level_to_plot_inferred_vs_observed  = function(result, level, cores = 20){
-
-
+#' This is a generalisation of ifelse that acceots an object and return an objects
+#'
+#' @import ggplot2
+#'
+level_to_plot_inferred_vs_observed  = function(result, level, S = NULL, cores = 20){
 
 
 	my_theme =
@@ -1722,9 +1732,21 @@ level_to_plot_inferred_vs_observed  = function(result, level, cores = 20){
 			))
 		)
 
+
 	result$signatures[[level]] %>%
 		filter(!query & !`house keeping`) %>%
 		distinct(`Cell type category`, C, level, G, GM, symbol, lambda, sigma_raw) %>%
+
+		# If inferred replace lambda and sigma_raw
+		ifelse_pipe(
+			result$input$full_bayesian,
+			~ .x %>% select(-lambda, -sigma_raw) %>%
+				left_join(
+					result$fit[[level]] %>% tidybayes::spread_draws(lambda_log[G], sigma_inv_log[G]) %>% ungroup() %>%
+						rename(lambda = lambda_log,sigma_raw = sigma_inv_log)
+				)
+		) %>%
+
 		left_join(
 			ARMET::ARMET_ref %>% distinct(symbol, ct1, ct2, level)
 		) %>%
@@ -1738,6 +1760,12 @@ level_to_plot_inferred_vs_observed  = function(result, level, cores = 20){
 		left_join(
 			result$fit[[level]] %>% tidybayes::spread_draws(exposure_rate[S]) %>% ungroup() %>% rename(Q = S)
 		) %>%
+
+		# Filter by sample
+		ifelse_pipe(
+			S %>% is.null %>% `!`,
+			~ .x %>% filter(Q == S)
+		)	 %>%
 
 		# Calculate sum
 		mutate(
@@ -1826,6 +1854,6 @@ level_to_plot_inferred_vs_observed  = function(result, level, cores = 20){
 		my_theme
 }
 
-level_to_plot_inferred_vs_observed(result, 3)
+# level_to_plot_inferred_vs_observed(result, 3)
 
 
