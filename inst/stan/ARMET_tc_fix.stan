@@ -137,7 +137,6 @@ vector rep_vector_by_array(vector v, int[] reps){
 	return(v_rep);
 }
 
-
 int[] get_elements_per_shard(int lenth_v, int shards){
 
 	// Returned integer(max_size, last_element_size)
