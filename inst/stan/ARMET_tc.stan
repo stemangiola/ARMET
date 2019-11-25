@@ -538,18 +538,8 @@ if(dim_4[1] > 0) {
       to_matrix(prop_1, Q, C)
     );
 
-
-
-
     lambda_log_deconvoluted_1 = log(sumNB[1]);
     sigma_deconvoluted_1 = sumNB[2];
-
-
-// print(mix_counts);
-// print(lambda_log_deconvoluted_1);
-// print(mix_exposure_rate);
-// print(sigma_deconvoluted_1);
-
 
 		// Reference
 		lp = neg_binomial_2_log_lpmf( ref_counts |	ref_lambda_log_redundant_normalised, 1.0 ./ exp( ref_sigma_inv_log_redundant )		);

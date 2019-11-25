@@ -511,17 +511,32 @@ parse_summary = function(fit) {
 		mutate(C = C %>% as.integer, Q = Q %>% as.integer)
 }
 
+median_qi_nest_draws = function(d){
+	# Anonymous function to add the draws to the summary
+
+		left_join(
+			d %>%
+				#group_by(.variable,  Q,  C) %>%
+				tidybayes::median_qi() %>%
+				ungroup(),
+			# Reattach draws as nested
+			d %>%
+				ungroup() %>%
+				nest(.draws = c(.chain, .iteration, .draw , .value, .value_relative)),
+			by = c(".variable", "Q", "sample", "C", "Cell type category", "level")
+		)
+}
+
 #' parse_summary_check_divergence
 #'
 #' @description Parse the stan fit object and check for divergencies
-parse_summary_check_divergence = function(fit) {
-	fit %>%
-		tidybayes::gather_draws(`prop_[1234]`[Q, C], regex = T) %>%
-		filter(.variable %in% c("prop_1", "prop_2", "prop_3", "prop_4")) %>%
-		drop_na %>%
+parse_summary_check_divergence = function(draws) {
+	draws %>%
+
+		group_by(level, .variable,  Q, sample,  C, `Cell type category`) %>%
 
 		# If not converged choose the majority chains
-		mutate(converged = diptest::dip.test(`.value`) %$%	`p.value` > 0.05) %>%
+		mutate(converged = diptest::dip.test(`.value_relative`) %$%	`p.value` > 0.05) %>%
 
 		# If some proportions have not converged chose the most populated one
 		do(
@@ -537,8 +552,9 @@ parse_summary_check_divergence = function(fit) {
 		# output: tibble
 		{
 			left_join(
-				(.) %>% select(-converged) %>% tidybayes::median_qi(),
-				(.) %>% distinct(converged)
+				(.) %>% select(-converged) %>% median_qi_nest_draws(),
+				(.) %>% distinct(converged),
+				by = c("level", ".variable", "Q", "sample", "C", "Cell type category")
 			)
 		} %>%
 		ungroup()
@@ -633,9 +649,9 @@ as_matrix = function(tbl, rownames = NULL) {
 #' @description Extension of data.tree package. It converts the tree into data frame
 #'
 #' @export
-ToDataFrameTypeColFull = function(tree, ...) {
+ToDataFrameTypeColFull = function(tree, fill = T, ...) {
 	tree %>%
-		Clone() %>%
+		data.tree::Clone() %>%
 		{
 			t = (.)
 			foreach(l = 1:(t %$% Get("level") %>% max), .combine = bind_rows) %do% {
@@ -650,30 +666,34 @@ ToDataFrameTypeColFull = function(tree, ...) {
 			}
 		} %>%
 		distinct() %>%
-		{
-			if ("level_3" %in% ((.) %>% colnames))
-				(.) %>% mutate(level_3 = ifelse(level_3 %>% is.na, level_2, level_3))
-			else
-				(.)
-		} %>%
-		{
-			if ("level_4" %in% ((.) %>% colnames))
-				(.) %>% mutate(level_4 = ifelse(level_4 %>% is.na, level_3, level_4))
-			else
-				(.)
-		} %>%
-		{
-			if ("level_5" %in% ((.) %>% colnames))
-				(.) %>% mutate(level_5 = ifelse(level_5 %>% is.na, level_4, level_5))
-			else
-				(.)
-		} %>%
-		{
-			if ("level_6" %in% ((.) %>% colnames))
-				(.) %>% mutate(level_6 = ifelse(level_6 %>% is.na, level_5, level_6))
-			else
-				(.)
-		} %>%
+		ifelse_pipe(
+			fill,
+			~ .x %>%
+				{
+					if ("level_3" %in% ((.) %>% colnames))
+						(.) %>% mutate(level_3 = ifelse(level_3 %>% is.na, level_2, level_3))
+					else
+						(.)
+				} %>%
+				{
+					if ("level_4" %in% ((.) %>% colnames))
+						(.) %>% mutate(level_4 = ifelse(level_4 %>% is.na, level_3, level_4))
+					else
+						(.)
+				} %>%
+				{
+					if ("level_5" %in% ((.) %>% colnames))
+						(.) %>% mutate(level_5 = ifelse(level_5 %>% is.na, level_4, level_5))
+					else
+						(.)
+				} %>%
+				{
+					if ("level_6" %in% ((.) %>% colnames))
+						(.) %>% mutate(level_6 = ifelse(level_6 %>% is.na, level_5, level_6))
+					else
+						(.)
+				}
+			) %>%
 		select(..., everything())
 }
 
@@ -1128,7 +1148,13 @@ run_model = function(reference_filtered,
 
 	model  = switch(full_bayesian %>% `!` %>% sum(1),
 									stanmodels$ARMET_tc,
-									stanmodels$ARMET_tc_fix)
+									stanmodels$ARMET_tc_fix
+								)
+
+	additional_par_to_save  = switch(full_bayesian %>% `!` %>% sum(1),
+									c("lambda_log","sigma_inv_log"),
+									c()
+								)
 
 	# library(rstan)
 	# fileConn<-file("~/.R/Makevars")
@@ -1150,6 +1176,7 @@ run_model = function(reference_filtered,
 		ifelse_pipe(!full_bayesian,
 								~ .x %>% c(list(exposure_rate = exposure_rate_init)))
 
+
 	Sys.setenv("STAN_NUM_THREADS" = shards)
 
 	list(df,
@@ -1165,7 +1192,11 @@ run_model = function(reference_filtered,
 			 		iter = iterations,
 			 		warmup = iterations - sampling_iterations,
 			 		data = MPI_data %>% c(prop_posterior),
-			 		pars=c("prop_1", "prop_a", "prop_b", "prop_c", "prop_d", "prop_e", "alpha_1", sprintf("alpha_%s", letters[1:9]), "exposure_rate"),
+			 		pars=
+			 			c("prop_1", "prop_2", "prop_3", sprintf("prop_%s", letters[1:9])) %>%
+			 			c("alpha_1", sprintf("alpha_%s", letters[1:9])) %>%
+			 			c("exposure_rate") %>%
+			 			c(additional_par_to_save),
 			 		init = function ()	init_list,
 			 		save_warmup = FALSE
 			 	) %>%
@@ -1369,7 +1400,7 @@ plot_markers = function(.data, n_markers, mix, ct1, ct2, n = 10, level) {
 
 tbl_to_plot = function(	tt_tbl,
 	size_geom_text = 3.5,
-	my_breaks=c(0, 0.01, 0.03, 0.05, 0.1,0.3,0.5,0.7,1),
+	my_breaks=c(0, 0.01, 0.03, 0.05, 0.1, 0.3, 0.5, 0.7, 1),
 	prop_filter = 0.005,
 	barwidth = 0.5,
 	barheight = 2,
@@ -1645,3 +1676,208 @@ ARMET_plotPolar = function(
 
 
 }
+
+#' This is a generalisation of ifelse that acceots an object and return an objects
+#'
+#' @import dplyr
+#' @importFrom purrr as_mapper
+#'
+#' @param .x A tibble
+#' @param .p A boolean
+#' @param .f1 A function
+#' @param .f2 A function
+#'
+#'
+#' @return A tibble
+ifelse_pipe = function(.x, .p, .f1, .f2 = NULL) {
+	switch(.p %>% `!` %>% sum(1),
+				 as_mapper(.f1)(.x),
+				 if (.f2 %>% is.null %>% `!`)
+				 	as_mapper(.f2)(.x)
+				 else
+				 	.x)
+
+}
+
+#' This is a generalisation of ifelse that acceots an object and return an objects
+#'
+#' @import ggplot2
+#'
+level_to_plot_inferred_vs_observed  = function(result, level, S = NULL, cores = 20){
+
+	library(multidplyr)
+
+	my_theme =
+		theme_bw() +
+		theme(
+			panel.border = element_blank(),
+			axis.line = element_line(),
+			panel.grid.major = element_line(size = 0.2),
+			panel.grid.minor = element_line(size = 0.1),
+			text = element_text(size = 12),
+			legend.position = "bottom",
+			aspect.ratio = 1,
+			axis.text.x = element_text(
+				angle = 90,
+				hjust = 1,
+				vjust = 0.5
+			),
+			strip.background = element_blank(),
+			axis.title.x  = element_text(margin = margin(
+				t = 10,
+				r = 10,
+				b = 10,
+				l = 10
+			)),
+			axis.title.y  = element_text(margin = margin(
+				t = 10,
+				r = 10,
+				b = 10,
+				l = 10
+			))
+		)
+
+	result$signatures[[level]] %>%
+		filter(!query & !`house keeping`) %>%
+		distinct(`Cell type category`, C, level, G, GM, symbol, lambda, sigma_raw) %>%
+		{ print(1); Sys.time(); (.) } %>%
+
+		# Add divergence
+		left_join(
+			result$fit[[level]] %>% rstan::summary() %$% summary %>% as_tibble(rownames = "par") %>% filter(Rhat > 1.6) %>%
+				filter(grepl("^lambda_log", par)) %>%
+				separate(par, c("par", "G"), sep="\\[|\\]", extra = "drop") %>%
+				distinct(G) %>% mutate(G = G %>% as.integer) %>%
+				mutate(converged = F)
+		) %>%
+		mutate(converged = ifelse(converged %>% is.na, T, converged)) %>%
+		{ print(2); Sys.time(); (.) } %>%
+
+		# If inferred replace lambda and sigma_raw
+		ifelse_pipe(
+			result$input$full_bayesian,
+			~ .x %>% select(-lambda, -sigma_raw) %>%
+				left_join(
+					result$fit[[level]] %>% tidybayes::spread_draws(lambda_log[G], sigma_inv_log[G]) %>% ungroup() %>%
+						rename(lambda = lambda_log,sigma_raw = sigma_inv_log)
+				)
+		) %>%
+		{ print(3); Sys.time(); (.) } %>%
+
+		left_join(
+			ARMET::ARMET_ref %>% distinct(symbol, ct1, ct2, level)
+		) %>%
+
+		# Add proportions
+		left_join(
+			result$proportions %>% select(level, Q, sample, .draws, `Cell type category`) %>% unnest(.draws)
+		) %>%
+
+		# add expsure
+		left_join(
+			result$fit[[level]] %>% tidybayes::spread_draws(exposure_rate[S]) %>% ungroup() %>% rename(Q = S)
+		) %>%
+
+		# Filter by sample
+		ifelse_pipe(
+			S %>% is.null %>% `!`,
+			~ .x %>% filter(Q == S)
+		)	 %>%
+
+		# Calculate sum
+		mutate(
+			lambda_exp = lambda %>% exp,
+			sigma_exp = 1 / exp(sigma_raw)
+		) %>%
+
+		{ print(4); Sys.time(); (.) } %>%
+
+		# Filter just first 30 draws
+		inner_join( (.) %>% distinct(.draw) %>% sample_n(30) ) %>%
+
+		do_parallel_start(cores, "symbol") %>%
+		do({
+
+			`%>%` = magrittr::`%>%`
+
+			sum_NB = function(lambda, sigma, prop){
+
+				prop_mat = matrix(prop, nrow=1)
+				lambda_mat = matrix(lambda, ncol = 1)
+				sigma_mat = matrix(sigma, ncol = 1)
+
+				lambda_sum = prop_mat %*% lambda_mat;
+				sigma_sum =
+					lambda_sum^2 /
+					(
+						prop_mat^2 %*%
+							(
+								lambda_mat^2 /
+									sigma_mat
+							)
+					) ;
+
+
+				c(lambda_sum, sigma_sum)
+
+			}
+
+			(.) %>%
+				tidyr::nest(data_for_sum = -c(level, symbol, GM, converged, ct1    ,     ct2   ,     sample   ,   exposure_rate,   .chain, .iteration ,.draw )) %>%
+				dplyr::mutate(.sum = purrr::map(
+					data_for_sum,
+					~
+						sum_NB(.x$lambda_exp, .x$sigma_exp, .x$.value) %>%
+						as.matrix %>%
+						t %>%
+						tibble::as_tibble() %>%
+						setNames(c("lambda_sum", "sigma_sum"))
+
+				))
+
+		}) %>%
+		do_parallel_end() %>%
+
+		{ print(5); Sys.time(); (.) } %>%
+
+		select(-data_for_sum) %>%
+		unnest(.sum) %>%
+		{ print(6); Sys.time(); (.) } %>%
+
+		# normalise
+		mutate(lambda_sum = lambda_sum * exp(exposure_rate)) %>%
+
+		# Calculate generated quantities
+		mutate(counts_inferred = rnbinom(n(), mu = lambda_sum, size = sigma_sum)) %>%
+		{ print(7); Sys.time(); (.) } %>%
+
+		# Summarise
+		group_by(level, symbol, GM, converged, ct1, ct2, sample, .chain) %>%
+		summarize(.mean = mean(counts_inferred),
+							.sd = sd(counts_inferred),
+							.q025 = quantile(counts_inferred, probs = .025),
+							.q25 = quantile(counts_inferred, probs = .25),
+							.q50 = quantile(counts_inferred, probs = .5),
+							.q75 = quantile(counts_inferred, probs = .75),
+							.q97.5 = quantile(counts_inferred, probs = .975)
+		) %>%
+		{ print(8); Sys.time(); (.) } %>%
+
+		# Add counts
+		left_join(	result$input$mix %>%	gather(symbol, count, -sample) ) %>%
+		{ print(9); Sys.time(); (.) } %>%
+
+	 { (.) %>%	ggplot(aes(x = count+1, y=.q50+1, color=ct1, shape = converged, GM = GM)) +
+		geom_abline() +
+		geom_errorbar(aes(ymin = .q025 + 1, ymax=.q97.5 + 1), alpha=0.5) +
+		geom_point() +
+		scale_y_log10() +
+		scale_x_log10() +
+		facet_grid(converged ~.chain) +
+		my_theme
+	 } %>% plotly::ggplotly()
+}
+
+# level_to_plot_inferred_vs_observed(result, 3)
+
+
