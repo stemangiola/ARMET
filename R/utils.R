@@ -649,9 +649,9 @@ as_matrix = function(tbl, rownames = NULL) {
 #' @description Extension of data.tree package. It converts the tree into data frame
 #'
 #' @export
-ToDataFrameTypeColFull = function(tree, ...) {
+ToDataFrameTypeColFull = function(tree, fill = T, ...) {
 	tree %>%
-		Clone() %>%
+		data.tree::Clone() %>%
 		{
 			t = (.)
 			foreach(l = 1:(t %$% Get("level") %>% max), .combine = bind_rows) %do% {
@@ -666,30 +666,34 @@ ToDataFrameTypeColFull = function(tree, ...) {
 			}
 		} %>%
 		distinct() %>%
-		{
-			if ("level_3" %in% ((.) %>% colnames))
-				(.) %>% mutate(level_3 = ifelse(level_3 %>% is.na, level_2, level_3))
-			else
-				(.)
-		} %>%
-		{
-			if ("level_4" %in% ((.) %>% colnames))
-				(.) %>% mutate(level_4 = ifelse(level_4 %>% is.na, level_3, level_4))
-			else
-				(.)
-		} %>%
-		{
-			if ("level_5" %in% ((.) %>% colnames))
-				(.) %>% mutate(level_5 = ifelse(level_5 %>% is.na, level_4, level_5))
-			else
-				(.)
-		} %>%
-		{
-			if ("level_6" %in% ((.) %>% colnames))
-				(.) %>% mutate(level_6 = ifelse(level_6 %>% is.na, level_5, level_6))
-			else
-				(.)
-		} %>%
+		ifelse_pipe(
+			fill,
+			~ .x %>%
+				{
+					if ("level_3" %in% ((.) %>% colnames))
+						(.) %>% mutate(level_3 = ifelse(level_3 %>% is.na, level_2, level_3))
+					else
+						(.)
+				} %>%
+				{
+					if ("level_4" %in% ((.) %>% colnames))
+						(.) %>% mutate(level_4 = ifelse(level_4 %>% is.na, level_3, level_4))
+					else
+						(.)
+				} %>%
+				{
+					if ("level_5" %in% ((.) %>% colnames))
+						(.) %>% mutate(level_5 = ifelse(level_5 %>% is.na, level_4, level_5))
+					else
+						(.)
+				} %>%
+				{
+					if ("level_6" %in% ((.) %>% colnames))
+						(.) %>% mutate(level_6 = ifelse(level_6 %>% is.na, level_5, level_6))
+					else
+						(.)
+				}
+			) %>%
 		select(..., everything())
 }
 
@@ -1701,6 +1705,7 @@ ifelse_pipe = function(.x, .p, .f1, .f2 = NULL) {
 #'
 level_to_plot_inferred_vs_observed  = function(result, level, S = NULL, cores = 20){
 
+	library(multidplyr)
 
 	my_theme =
 		theme_bw() +
@@ -1732,10 +1737,21 @@ level_to_plot_inferred_vs_observed  = function(result, level, S = NULL, cores = 
 			))
 		)
 
-
 	result$signatures[[level]] %>%
 		filter(!query & !`house keeping`) %>%
 		distinct(`Cell type category`, C, level, G, GM, symbol, lambda, sigma_raw) %>%
+		{ print(1); Sys.time(); (.) } %>%
+
+		# Add divergence
+		left_join(
+			result$fit[[level]] %>% rstan::summary() %$% summary %>% as_tibble(rownames = "par") %>% filter(Rhat > 1.6) %>%
+				filter(grepl("^lambda_log", par)) %>%
+				separate(par, c("par", "G"), sep="\\[|\\]", extra = "drop") %>%
+				distinct(G) %>% mutate(G = G %>% as.integer) %>%
+				mutate(converged = F)
+		) %>%
+		mutate(converged = ifelse(converged %>% is.na, T, converged)) %>%
+		{ print(2); Sys.time(); (.) } %>%
 
 		# If inferred replace lambda and sigma_raw
 		ifelse_pipe(
@@ -1746,6 +1762,7 @@ level_to_plot_inferred_vs_observed  = function(result, level, S = NULL, cores = 
 						rename(lambda = lambda_log,sigma_raw = sigma_inv_log)
 				)
 		) %>%
+		{ print(3); Sys.time(); (.) } %>%
 
 		left_join(
 			ARMET::ARMET_ref %>% distinct(symbol, ct1, ct2, level)
@@ -1773,6 +1790,10 @@ level_to_plot_inferred_vs_observed  = function(result, level, S = NULL, cores = 
 			sigma_exp = 1 / exp(sigma_raw)
 		) %>%
 
+		{ print(4); Sys.time(); (.) } %>%
+
+		# Filter just first 30 draws
+		inner_join( (.) %>% distinct(.draw) %>% sample_n(30) ) %>%
 
 		do_parallel_start(cores, "symbol") %>%
 		do({
@@ -1801,9 +1822,8 @@ level_to_plot_inferred_vs_observed  = function(result, level, S = NULL, cores = 
 
 			}
 
-
 			(.) %>%
-				tidyr::nest(data_for_sum = -c(level, symbol ,ct1    ,     ct2   ,     sample   ,   exposure_rate,   .chain, .iteration ,.draw )) %>%
+				tidyr::nest(data_for_sum = -c(level, symbol, GM, converged, ct1    ,     ct2   ,     sample   ,   exposure_rate,   .chain, .iteration ,.draw )) %>%
 				dplyr::mutate(.sum = purrr::map(
 					data_for_sum,
 					~
@@ -1818,18 +1838,21 @@ level_to_plot_inferred_vs_observed  = function(result, level, S = NULL, cores = 
 		}) %>%
 		do_parallel_end() %>%
 
+		{ print(5); Sys.time(); (.) } %>%
 
 		select(-data_for_sum) %>%
 		unnest(.sum) %>%
+		{ print(6); Sys.time(); (.) } %>%
 
 		# normalise
 		mutate(lambda_sum = lambda_sum * exp(exposure_rate)) %>%
 
 		# Calculate generated quantities
 		mutate(counts_inferred = rnbinom(n(), mu = lambda_sum, size = sigma_sum)) %>%
+		{ print(7); Sys.time(); (.) } %>%
 
 		# Summarise
-		group_by(level, symbol, ct1, ct2, sample, .chain) %>%
+		group_by(level, symbol, GM, converged, ct1, ct2, sample, .chain) %>%
 		summarize(.mean = mean(counts_inferred),
 							.sd = sd(counts_inferred),
 							.q025 = quantile(counts_inferred, probs = .025),
@@ -1838,20 +1861,21 @@ level_to_plot_inferred_vs_observed  = function(result, level, S = NULL, cores = 
 							.q75 = quantile(counts_inferred, probs = .75),
 							.q97.5 = quantile(counts_inferred, probs = .975)
 		) %>%
+		{ print(8); Sys.time(); (.) } %>%
 
 		# Add counts
-		left_join(
-			res$input$mix %>% slice(1) %>%
-				gather(symbol, count, -sample)
-		) %>%
-		ggplot(aes(x = count+1, y=.q50+1, color=ct1)) +
+		left_join(	result$input$mix %>%	gather(symbol, count, -sample) ) %>%
+		{ print(9); Sys.time(); (.) } %>%
+
+	 { (.) %>%	ggplot(aes(x = count+1, y=.q50+1, color=ct1, shape = converged, GM = GM)) +
 		geom_abline() +
 		geom_errorbar(aes(ymin = .q025 + 1, ymax=.q97.5 + 1), alpha=0.5) +
 		geom_point() +
 		scale_y_log10() +
 		scale_x_log10() +
-		facet_grid(~.chain) +
+		facet_grid(converged ~.chain) +
 		my_theme
+	 } %>% plotly::ggplotly()
 }
 
 # level_to_plot_inferred_vs_observed(result, 3)
