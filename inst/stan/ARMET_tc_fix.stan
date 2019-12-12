@@ -1,5 +1,26 @@
 functions{
 
+  real waring_lpmf(int y_vec, real mu, real phi, real tau_unnormalised) {
+
+  		real pathological_wall_adjustment = (1.03659 * mu)/ phi;
+
+  		real tau = tau_unnormalised * mu / phi + pathological_wall_adjustment;
+
+      real k = (tau + 1)*phi;
+      real rho = (phi + 1) / tau + phi + 2;
+      real a = mu .* (rho - 1) ./ k;
+      //vector[size(y)] y_vec = to_vector(y);
+
+      return (lgamma(a + rho) + lgamma(k + rho)
+                - lgamma(rho) - lgamma(a + k + rho)
+                + lgamma(a + y_vec) - lgamma(a)
+                + lgamma(k + y_vec) - lgamma(k)
+                - lgamma(a + k + rho + y_vec) + lgamma(a + k + rho)
+                - lgamma(y_vec + 1)
+                );
+
+    }
+
 int[] rep_int(int x, int n){
 	int out_int[n];
 
@@ -501,7 +522,7 @@ if(dim_4[1] > 0) {
 
 	vector lp_reduce( vector global_parameters , vector local_parameters , real[] real_data , int[] int_data ) {
 
-		real lp;
+		real lp = 0;
 		real threshold = -999;
 
 		// int unpacking
@@ -539,11 +560,14 @@ if(dim_4[1] > 0) {
     sigma_deconvoluted_1 = sumNB[2];
 
 		// deconvolution
-		lp = neg_binomial_2_log_lpmf(mix_counts |
-			lambda_log_deconvoluted_1 + mix_exposure_rate,
-			sigma_deconvoluted_1
-		);
-
+		for(i in 1:(size_G_linear_MPI/C * Q)){
+			#if(mix_counts[i] >6)
+			  lp += waring_lpmf(mix_counts[i] |
+				  exp(lambda_log_deconvoluted_1[i] + mix_exposure_rate[i]),
+				  sigma_deconvoluted_1[i],
+				  5.0
+			  );
+}
 
 	 return [lp]';
 

@@ -32,5 +32,5 @@ do_parallel_end = function(.){
 		dplyr::ungroup() %>%
 
 		# Only if cores > 1
-		dplyr::select(-`.part`)
+		dplyr::select(-one_of(".part"))
 }

@@ -1054,7 +1054,12 @@ run_model = function(reference_filtered,
 										 iterations = 250,
 										 sampling_iterations = 100,
 										 X,
-										 do_regression) {
+										 do_regression,
+										 robustness) {
+
+	# Set tau
+	tau = robustness
+
 	# Filter on level considered
 	reference_filtered = reference_filtered %>% filter(level %in% lv)
 
@@ -1156,12 +1161,12 @@ run_model = function(reference_filtered,
 									c()
 								)
 
-	# library(rstan)
-	# fileConn<-file("~/.R/Makevars")
-	# writeLines(c( "CXX14FLAGS += -O2","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
-	# close(fileConn)
-	# #  = stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc.stan")
-	# ARMET_tc_model = rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix.stan", auto_write = F)
+	library(rstan)
+	fileConn<-file("~/.R/Makevars")
+	writeLines(c( "CXX14FLAGS += -O3","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
+	close(fileConn)
+	#  = stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc.stan")
+	ARMET_tc_model = rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix_old.stan", auto_write = F)
 
 	exposure_rate_init = switch(
 		(lv > 1) %>% `!` %>% as.numeric %>% sum(1),
@@ -1178,15 +1183,16 @@ run_model = function(reference_filtered,
 
 
 	Sys.setenv("STAN_NUM_THREADS" = shards)
-
+#browser()
 	list(df,
 			 switch(
 			 	approximate_posterior %>% sum(1),
 
 			 	# HMC
 			 	sampling(
-			 		model,
-			 		#ARMET_tc_model, #,
+			 		#model,
+			 		ARMET_tc_model, #,
+			 		#stanmodels$ARMET_tc_fix_old,
 			 		chains = 3,
 			 		cores = 3,
 			 		iter = iterations,
@@ -1685,7 +1691,6 @@ ARMET_plotPolar = function(
 #' @param .x A tibble
 #' @param .p A boolean
 #' @param .f1 A function
-#' @param .f2 A function
 #'
 #'
 #' @return A tibble
@@ -1703,6 +1708,7 @@ ifelse_pipe = function(.x, .p, .f1, .f2 = NULL) {
 #'
 #' @import ggplot2
 #'
+#' @export
 level_to_plot_inferred_vs_observed  = function(result, level, S = NULL, cores = 20){
 
 	library(multidplyr)

@@ -59,8 +59,19 @@ ARMET_tc = function(
 	levels = 1:4,
 	n_markers = my_n_markers ,
 	X = matrix(rep(1, nrow(mix))),
-	do_regression = F
+	do_regression = F,
+	robustness = 6
 ){
+
+	# # Filter really lowly transcribed genes because noisy
+	# mix =
+	# 	mix %>%
+	# 	gather(transcript, count, -sample) %>%
+	# 	group_by(transcript) %>%
+	# 	mutate(m = count %>% median) %>%
+	# 	filter(m > 20) %>%
+	# 	select(-m) %>%
+	# 	spread(transcript, count)
 
 	input = c(as.list(environment()))
 
@@ -202,7 +213,7 @@ ARMET_tc = function(
 
 	######################################
 
-	res1 = run_model(	reference_filtered, mix, shards,	1,	full_bayesian, approximate_posterior, prop_posterior, iterations = iterations,	sampling_iterations = sampling_iterations, X = X, do_regression = do_regression	)
+	res1 = run_model(	reference_filtered, mix, shards,	1,	full_bayesian, approximate_posterior, prop_posterior, iterations = iterations,	sampling_iterations = sampling_iterations, X = X, do_regression = do_regression, robustness = robustness	)
 
 	df1 = res1[[1]]
 	fit1 = res1[[2]]
@@ -299,7 +310,7 @@ ARMET_tc = function(
 	######################################
 
 	if(levels >1){
-		res2 = run_model(	reference_filtered, mix, shards,	2,	full_bayesian, approximate_posterior, prop_posterior, draws_to_exposure(fit1)	, iterations = iterations,	sampling_iterations = sampling_iterations, X = X, do_regression = do_regression	)
+		res2 = run_model(	reference_filtered, mix, shards,	2,	full_bayesian, approximate_posterior, prop_posterior, draws_to_exposure(fit1)	, iterations = iterations,	sampling_iterations = sampling_iterations, X = X, do_regression = do_regression, robustness = robustness	)
 
 		df2 = res2[[1]]
 		fit2 = res2[[2]]
@@ -404,7 +415,7 @@ ARMET_tc = function(
 
 	if(levels > 2){
 
-		res3 = run_model(	reference_filtered, mix, shards,	3,	full_bayesian, approximate_posterior, prop_posterior, draws_to_exposure(fit2), iterations = iterations,	sampling_iterations = sampling_iterations	, X = X, do_regression = do_regression	)
+		res3 = run_model(	reference_filtered, mix, shards,	3,	full_bayesian, approximate_posterior, prop_posterior, draws_to_exposure(fit2), iterations = iterations,	sampling_iterations = sampling_iterations	, X = X, do_regression = do_regression, robustness = robustness	)
 
 		df3 = res3[[1]]
 		fit3 = res3[[2]]
