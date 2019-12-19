@@ -1196,6 +1196,7 @@ run_model = function(reference_filtered,
 			 			c("prop_1", "prop_2", "prop_3", sprintf("prop_%s", letters[1:9])) %>%
 			 			c("alpha_1", sprintf("alpha_%s", letters[1:9])) %>%
 			 			c("exposure_rate") %>%
+			 			c("lambda_UFO") %>%
 			 			c(additional_par_to_save),
 			 		init = function ()	init_list,
 			 		save_warmup = FALSE
@@ -1875,7 +1876,7 @@ level_to_plot_inferred_vs_observed  = function(result, level, S = NULL, cores = 
 		scale_x_log10() +
 		facet_grid(converged ~.chain) +
 		my_theme
-	 } %>% plotly::ggplotly()
+	 }
 }
 
 # level_to_plot_inferred_vs_observed(result, 3)

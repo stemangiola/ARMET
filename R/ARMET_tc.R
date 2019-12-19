@@ -170,7 +170,12 @@ ARMET_tc = function(
 		filter(`Cell type category` %>% is.na %>% `!`) %>%
 		group_by(level) %>%
 		do(
-			(.) %>% inner_join( (.) %>% distinct(symbol, `Cell type category`) %>% count(symbol) %>% filter(n == max(n)) )
+			(.) %>% inner_join(
+				(.) %>%
+					distinct(symbol, `Cell type category`) %>%
+					count(symbol) %>%
+					filter(n == max(n))
+			)
 		) %>%
 		ungroup() %>%
 

@@ -412,7 +412,8 @@ if(dim_4[1] > 0) {
 		int[] size_y_linear_S_MPI,
 		int[,] y_linear_S_MPI,
 		vector exposure_rate,
-		vector[] prop_1
+		vector[] prop_1,
+		vector[] lambda_UFO
 	){
 		real threshold = -999;
 
@@ -433,6 +434,9 @@ if(dim_4[1] > 0) {
 					// The exposure of the mix query samples
 					exposure_rate[y_linear_S_MPI[i, 1:size_y_linear_S_MPI[i]]],
 
+					// lambda UFO
+					lambda_UFO[i],
+
 					// Buffer
 					rep_vector(threshold, max_col-real_col)
 				});
@@ -444,6 +448,7 @@ if(dim_4[1] > 0) {
 
 	real[,] package_real_data(
 		int shards,
+		vector sigma_prior,
 		int[] size_G_linear_MPI,
 		int[,] G_linear_MPI,
 		vector lambda_log,
@@ -461,6 +466,9 @@ if(dim_4[1] > 0) {
 
 			real_pack[i] =
 				concatenate_real_array({
+
+					// Sigma prior for the UFO lambdas
+					to_array_1d(sigma_prior),
 
 					// The estimated of ref to de convolved together
 					to_array_1d(lambda_log[G_linear_MPI[i, 1:size_G_linear_MPI[i]]]),
@@ -516,34 +524,59 @@ if(dim_4[1] > 0) {
 
 		int mix_counts[size_y_linear_MPI] = int_data[dim_indices+1 : dim_indices+ size_y_linear_MPI];
 
-		// real unpacking
+		// real parameters unpacking
 		vector[C*Q] prop_1 = local_parameters[1 : (C*Q)];
 		vector[size_y_linear_S_MPI] mix_exposure_rate = local_parameters[(C*Q)+1 : (C*Q)+size_y_linear_S_MPI];
+		vector[size_G_linear_MPI/C] lambda_UFO = local_parameters[ (C*Q)+size_y_linear_S_MPI + 1 : (C*Q)+size_y_linear_S_MPI + (size_G_linear_MPI/C)];
 
 		// real data unpacking
-		vector[size_G_linear_MPI] ref_lambda_log = to_vector(real_data[1 :size_G_linear_MPI]);
-		vector[size_G_linear_MPI] ref_sigma_inv_log = to_vector(real_data[size_G_linear_MPI+1 : size_G_linear_MPI + size_G_linear_MPI]);
+		vector[2] sigma_prior = to_vector(real_data[1:2]);
+		vector[size_G_linear_MPI] ref_lambda_log = to_vector(real_data[2 + 1 : 2 + size_G_linear_MPI]);
+		vector[size_G_linear_MPI] ref_sigma_inv_log = to_vector(real_data[2 + size_G_linear_MPI+1 : 2 + size_G_linear_MPI + size_G_linear_MPI]);
 
 		// Deconvoluted means
 		vector[size_G_linear_MPI/C*Q] lambda_log_deconvoluted_1;
     vector[size_G_linear_MPI/C*Q] sigma_deconvoluted_1;
 
-		// Calculate convoluted
+		// Calculate convoluted // Add UFO
     vector[size_G_linear_MPI/C * Q] sumNB[2] = sum_NB_MPI(
-      to_matrix(exp(ref_lambda_log), C, size_G_linear_MPI/C),
-      to_matrix(1.0 ./ exp( ref_sigma_inv_log ), C, size_G_linear_MPI/C),
-      to_matrix(prop_1, Q, C)
+
+      append_row(
+      	to_matrix(exp(ref_lambda_log), C, size_G_linear_MPI/C),
+      	to_row_vector(exp(lambda_UFO)) // add UFO
+      ),
+
+      append_row(
+      	to_matrix(1.0 ./ exp( ref_sigma_inv_log ), C, size_G_linear_MPI/C),
+      	to_row_vector(1.0 ./ exp(sigma_prior[1] + lambda_UFO * sigma_prior[2])) // add UFO
+      ),
+
+      append_col(
+      	to_matrix(prop_1, Q, C),
+      	rep_vector(1.0,Q) // add UFO
+      )
+
     );
+
+		//print(ref_lambda_log[1:10]);
 
     lambda_log_deconvoluted_1 = log(sumNB[1]);
     sigma_deconvoluted_1 = sumNB[2];
 
 		// deconvolution
-		lp = neg_binomial_2_log_lpmf(mix_counts |
-			lambda_log_deconvoluted_1 + mix_exposure_rate,
+		lp = neg_binomial_2_lpmf(mix_counts |
+			exp(lambda_log_deconvoluted_1 + mix_exposure_rate),
 			sigma_deconvoluted_1
 		);
 
+		// Ignore lowly transcribed genes
+		for(i in 1:size_y_linear_MPI){
+			if(mix_counts[i]<10)
+				lp -= neg_binomial_2_lpmf(mix_counts[i] |
+					exp(lambda_log_deconvoluted_1[i] + mix_exposure_rate[i]),
+					sigma_deconvoluted_1[i]
+				);
+		}
 
 	 return [lp]';
 
@@ -712,12 +745,14 @@ data {
 	int A; // factors of interest
 	matrix[Q,A] X;
 	int do_regression;
+
+
 }
 transformed data{
 
 	real real_data[shards, 0];
 
-	real pack_R_1[shards, max(size_G_linear_MPI) +	max(size_G_linear_MPI)];
+	real pack_R_1[shards, 2 + max(size_G_linear_MPI) +	max(size_G_linear_MPI)];
 
 	int dim_indices = 6;
 
@@ -740,6 +775,7 @@ transformed data{
 
 	pack_R_1 = package_real_data(
 		shards,
+		[sigma_intercept, sigma_slope]',
 		size_G_linear_MPI,
 		G_linear_MPI,
 		lambda_log,
@@ -798,6 +834,9 @@ parameters {
 
 	real phi[10];
 
+	// Unknown population
+	vector<lower=0, upper = log(max(counts_linear))>[max(size_G_linear_MPI)/ct_in_levels[lv]] lambda_UFO[shards];
+
 }
 transformed parameters{
 
@@ -854,7 +893,7 @@ model {
 	vector[Y_lv] sigma_deconvoluted_1;
 
  	vector[ct_in_levels[lv]] prop_lv[Q] = which(lv, prop_1, prop_2, prop_3, prop_4);
-	vector[(ct_in_levels[lv] * Q) + max(size_y_linear_S_MPI)] pack_r_1[shards];
+	vector[(ct_in_levels[lv] * Q) + max(size_y_linear_S_MPI) + (max(size_G_linear_MPI)/ct_in_levels[lv])] pack_r_1[shards];
 
 	// Exposure
 	exposure_rate ~ normal(0,1);
@@ -937,7 +976,8 @@ model {
 		size_y_linear_S_MPI,
 		y_linear_S_MPI,
 		lv == 1 ? exposure_rate : to_vector(exposure_posterior[,1]),
-		prop_lv
+		prop_lv,
+		lambda_UFO
 	);
 
 	target += sum(map_rect(
@@ -950,6 +990,9 @@ model {
 
 	// Dirichlet regression
 	phi ~ normal(0,1);
+
+	// lambda UFO
+	for(i in 1:shards) lambda_UFO[i] ~ normal(0, 1);
 
 
 }
