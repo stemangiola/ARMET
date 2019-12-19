@@ -177,8 +177,7 @@ create_ref = function(ref, markers) {
 		filter(`house keeping` | rank %>% is.na %>% `!`) %>%
 
 		# Filter out symbol if present both in markers and house keeping (strange but happens)
-		anti_join((.) %>% filter(`house keeping` &
-														 	(ct1 %>% is.na %>% `!`)) %>% distinct(symbol)) %>%
+		anti_join((.) %>% filter(`house keeping` & (ct1 %>% is.na %>% `!`)) %>% distinct(symbol)) %>%
 
 		select(-contains("idx")) %>%
 		mutate(`read count` = `read count` %>% as.integer)
@@ -243,7 +242,7 @@ sample_blacklist = c(
 )
 
 ref =
-	read_csv("dev/ref_1_2_3_4_updated.csv") %>%
+	read_csv("dev/ref_1_2_3_4.csv") %>%
 	filter(level != 3) %>%
 	bind_rows(read_csv("dev/fit_level3.csv") %>% mutate(level =3)) %>%
 	inner_join((.) %>%
@@ -266,7 +265,19 @@ ref =
 	do(
 		(.) %>% inner_join( (.) %>% distinct(symbol, `Cell type category`) %>% count(symbol) %>% filter(n == max(n)) )
 	) %>%
-	ungroup()
+	ungroup() %>%
+
+	# Eliminate house keeping that are not in all levels
+	inner_join(
+		bind_rows(
+			(.) %>% filter(!`house keeping`),
+			(.) %>% filter(`house keeping`) %>%
+				distinct(symbol, level) %>%
+				count(symbol) %>%
+				filter(n == max(n))
+		) %>%
+			distinct(symbol)
+	)
 
 ref_2 =
 	ref %>%
@@ -459,5 +470,18 @@ ref_3 =
 # 		geom_jitter() + facet_wrap(~symbol ) + scale_y_log10() ) %>% plotly::ggplotly()
 
 ARMET_ref = ref_3 %>% mutate_if(is.character, as.factor) %>% mutate(`read count normalised bayes` = `read count normalised bayes` %>% as.integer)
+
+# Select correct columns
+columns = c(  "level"     ,                  "sample"    ,                  "symbol"    ,
+	  "Cell type formatted"    ,     "read count"   ,               "read count normalised bayes",
+	  "Data base"          ,         "lambda"        ,              "sigma_raw"    ,
+	  "sd lambda"    ,               "sd sigma_raw"      ,          "CI_low"   ,
+	  "CI_high"     ,                "gene error mean"     ,        "house keeping"    ,
+	  "Cell type category"  ,        "n"                   ,        "predicted_NB" ,
+	  "a"            ,               "b"                  ,         "regression"  ,
+	  "bimodality_NB"   ,            "bimodality_NB_diff"  ,        "marker too noisy"    ,
+	  "symbol too noisy"   ,         "ct1"             ,            "ct2"  ,
+	  "rank" )
+ARMET_ref = ARMET_ref %>% select(!!columns)
 
 save(ARMET_ref, file="data/ARMET_ref.RData", compress = "xz")

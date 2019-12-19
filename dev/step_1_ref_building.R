@@ -715,9 +715,34 @@ options(future.globals.maxSize= (20000)*1024^2)
 (1:5) %>%
 	map(~ process_fit(.x)) %>%
 	do.call(bind_rows, .) %>%
-	write_csv(sprintf("dev/fit_level%s.csv", my_level))
 
+	mutate(level = !!my_level) %>%
 
+	# Replace the category house_keeping
+	mutate(`house keeping` = `Cell type category` == "house_keeping") %>%
+	rename(temp = `Cell type category`) %>%
+	left_join(
+		(.) %>%
+			filter(temp != "house_keeping") %>%
+			distinct(sample, temp, level) %>%
+			rename(`Cell type category` = temp)
+	) %>%
+	select(-temp) %>%
+	filter(`Cell type category` %>% is.null %>% `!`) %>%
 
+	# Keep one copy lambda sd of house keeping genes
+	bind_rows(
+		x %>% filter(!`house keeping`),
+		x %>% filter(`house keeping`) %>%
+			group_by(symbol) %>%
+			mutate(
+				lambda = lambda %>% mean,
+				sigma_raw = sigma_raw %>% mean,
+				exposure = exposure %>% mean,
+				`gene error mean` = `gene error mean` %>% mean,
+			) %>%
+			ungroup
+	) %>%
 
-
+		# Save
+		write_csv(sprintf("dev/fit_level%s.csv", my_level))
