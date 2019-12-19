@@ -534,6 +534,9 @@ if(dim_4[1] > 0) {
 		vector[size_G_linear_MPI] ref_lambda_log = to_vector(real_data[2 + 1 : 2 + size_G_linear_MPI]);
 		vector[size_G_linear_MPI] ref_sigma_inv_log = to_vector(real_data[2 + size_G_linear_MPI+1 : 2 + size_G_linear_MPI + size_G_linear_MPI]);
 
+		// global par unpacking
+		real prop_UFO = global_parameters[1];
+
 		// Deconvoluted means
 		vector[size_G_linear_MPI/C*Q] lambda_log_deconvoluted_1;
     vector[size_G_linear_MPI/C*Q] sigma_deconvoluted_1;
@@ -552,8 +555,8 @@ if(dim_4[1] > 0) {
       ),
 
       append_col(
-      	to_matrix(prop_1, Q, C),
-      	rep_vector(1.0,Q) // add UFO
+      	to_matrix(prop_1, Q, C) * (1-prop_UFO),
+      	rep_vector(prop_UFO,Q) // add UFO
       )
 
     );
@@ -566,17 +569,17 @@ if(dim_4[1] > 0) {
 		// deconvolution
 		lp = neg_binomial_2_lpmf(mix_counts |
 			exp(lambda_log_deconvoluted_1 + mix_exposure_rate),
-			sigma_deconvoluted_1
+			1 ./ exp( lambda_log_deconvoluted_1  * -0.3386389 + 1.6)
 		);
 
-		// Ignore lowly transcribed genes
-		for(i in 1:size_y_linear_MPI){
-			if(mix_counts[i]<10)
-				lp -= neg_binomial_2_lpmf(mix_counts[i] |
-					exp(lambda_log_deconvoluted_1[i] + mix_exposure_rate[i]),
-					sigma_deconvoluted_1[i]
-				);
-		}
+		// // Ignore lowly transcribed genes
+		// for(i in 1:size_y_linear_MPI){
+		// 	if(mix_counts[i]<10)
+		// 		lp -= neg_binomial_2_lpmf(mix_counts[i] |
+		// 			exp(lambda_log_deconvoluted_1[i] + mix_exposure_rate[i]),
+		// 			sigma_deconvoluted_1[i]
+		// 		);
+		// }
 
 	 return [lp]';
 
@@ -836,6 +839,7 @@ parameters {
 
 	// Unknown population
 	vector<lower=0, upper = log(max(counts_linear))>[max(size_G_linear_MPI)/ct_in_levels[lv]] lambda_UFO[shards];
+	real<lower=0, upper=0.5> prop_UFO;
 
 }
 transformed parameters{
@@ -982,7 +986,7 @@ model {
 
 	target += sum(map_rect(
 		lp_reduce ,
-		[sigma_intercept_dec, sigma_slope]' ,
+		[prop_UFO]' ,
 		pack_r_1,
 		pack_R_1,
 		int_package
@@ -992,7 +996,7 @@ model {
 	phi ~ normal(0,1);
 
 	// lambda UFO
-	for(i in 1:shards) lambda_UFO[i] ~ normal(0, 1);
-
+	for(i in 1:shards) lambda_UFO[i] ~ normal(0,1);
+	prop_UFO ~ beta(1.001, 20);
 
 }

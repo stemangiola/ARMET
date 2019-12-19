@@ -1058,6 +1058,10 @@ run_model = function(reference_filtered,
 	# Filter on level considered
 	reference_filtered = reference_filtered %>% filter(level %in% lv)
 
+	#
+
+
+
 	df = ref_mix_format(reference_filtered, mix)
 
 	G = df %>% filter(!`query`) %>% distinct(G) %>% nrow()
@@ -1197,6 +1201,7 @@ run_model = function(reference_filtered,
 			 			c("alpha_1", sprintf("alpha_%s", letters[1:9])) %>%
 			 			c("exposure_rate") %>%
 			 			c("lambda_UFO") %>%
+			 			c("prop_UFO") %>%
 			 			c(additional_par_to_save),
 			 		init = function ()	init_list,
 			 		save_warmup = FALSE

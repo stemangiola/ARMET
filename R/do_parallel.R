@@ -1,5 +1,3 @@
-
-
 do_parallel_start = function(df, cores, partition_by){
 
 	# Only if cores > 1
