@@ -74,3 +74,4 @@ last.dump.rda
 src/ARMET.so
 src/stanExports_ARMET_tc.h
 dev/OLD*
+dev/*Rdata
