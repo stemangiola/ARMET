@@ -6,10 +6,13 @@ library(ARMET)
 # library(foreach)
 # library(magrittr)
 
+
+# Test dataset
+
 res = readRDS(
 	"/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/feature_selection_fifth_iterative_run_fix_skylake_2/markers_17.RData"
 )
-load("dev/mix_dirichlet_X.rda")
+load("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/mix_dirichlet_X.rda")
 
 
 # result =
@@ -47,7 +50,7 @@ result_fix =
 
 result_dirichlet_fix =
 	ARMET_tc(
-		read_csv("dev/mix_dirichlet.csv") %>%
+		read_csv("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/mix_dirichlet.csv") %>%
 			rename(sample = run) %>%
 			mutate(`count mix` = `count mix` %>% as.integer) %>%
 			spread(symbol, `count mix`) %>%
@@ -60,12 +63,14 @@ result_dirichlet_fix =
 		levels = 3
 	)
 
+# N52
+
 N52_ARMET_T =
 	ARMET_tc(
 		spread(
 			select(
 				filter(
-					readRDS("dev/N52.rds"),
+					readRDS("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/N52.rds"),
 					 ct == "T"
 					),
 					sample, symbol, count
@@ -85,10 +90,10 @@ expect_gt(
 
 expect_gt(
 	N52_ARMET_T$proportions %>% filter(`Cell type category` == "t_cell") %>% summarise(.value %>% min),
-	0.85
+	0.83
 )
 
-expect_gt(
+expect_equal(
 	N52_ARMET_T$proportions %>% filter(!converged) %>% nrow,
 	0
 )
@@ -98,7 +103,7 @@ N52_ARMET_E =
 		spread(
 			select(
 				filter(
-					readRDS("dev/N52.rds"),
+					readRDS("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/N52.rds"),
 					ct == "E"
 				),
 				sample, symbol, count
@@ -116,7 +121,23 @@ expect_gt(
 	0.95
 )
 
-expect_gt(
+expect_equal(
 	N52_ARMET_E$proportions %>% filter(!converged) %>% nrow,
+	0
+)
+
+# Melanoma
+
+mela =
+	readRDS("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/melanoma_2_samples.rds") %>%
+	ARMET_tc(
+		full_bayesian  = F,
+		do_regression = T,
+		cores = 30,
+		levels = 3
+	)
+
+expect_equal(
+	mela$proportions %>% filter(!converged) %>% nrow,
 	0
 )
