@@ -1007,6 +1007,8 @@ ref_mix_format = function(ref, mix) {
 
 		# Add house keeping into Cell type label
 		mutate(`Cell type category` = ifelse(`house keeping`, "house_keeping", `Cell type category`)) %>%
+
+		# Still needed?
 		anti_join(
 			(.) %>%
 				filter(`house keeping` & !`query`) %>%
@@ -1058,9 +1060,9 @@ run_model = function(reference_filtered,
 	# Filter on level considered
 	reference_filtered = reference_filtered %>% filter(level %in% lv)
 
-	#
-
-
+	# Check if there are not house keeping
+	if(reference_filtered %>% filter(`house keeping`) %>% nrow %>% equals(0))
+		stop("No house keeping genes in your reference data frame")
 
 	df = ref_mix_format(reference_filtered, mix)
 
@@ -1183,7 +1185,7 @@ run_model = function(reference_filtered,
 
 	Sys.setenv("STAN_NUM_THREADS" = shards)
 
-	#browser()
+	browser()
 
 	list(df,
 			 switch(
