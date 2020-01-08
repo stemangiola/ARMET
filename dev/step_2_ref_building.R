@@ -242,9 +242,12 @@ sample_blacklist = c(
 )
 
 ref =
-	read_csv("dev/ref_1_2_3_4.csv") %>%
-	filter(level != 3) %>%
-	bind_rows(read_csv("dev/fit_level3.csv") %>% mutate(level =3)) %>%
+	list(
+		read_csv("dev/fit_level1.csv") %>% mutate(level =1),
+		read_csv("dev/fit_level2.csv") %>% mutate(level =2),
+		read_csv("dev/fit_level3.csv") %>% mutate(level =3)
+	) %>%
+	map_dfr( ~ .x) %>%
 	inner_join((.) %>%
 						 	distinct(sample) %>%
 						 	filter(!grepl(
@@ -460,7 +463,7 @@ ref_3 =
 		give_rank_to_ref(ref_2 %>% filter(level == 1), 1) %>%
 			rbind(give_rank_to_ref(ref_2 %>% filter(level == 2), 2)) %>%
 			rbind(give_rank_to_ref(ref_2 %>% filter(level == 3), 3)) %>%
-			rbind(give_rank_to_ref(ref_2 %>% filter(level == 4), 4)) %>%
+			#rbind(give_rank_to_ref(ref_2 %>% filter(level == 4), 4)) %>%
 			separate(pair, c("ct1", "ct2"), sep = " ", remove = F)
 	)
 
@@ -484,4 +487,39 @@ columns = c(  "level"     ,                  "sample"    ,                  "sym
 	  "rank" )
 ARMET_ref = ARMET_ref %>% select(!!columns)
 
+# Adjust too little noise to avoid overfitting
+ARMET_ref =
+	ARMET_ref %>%
+	mutate(rigma_raw_intercept = 1.52, sigma_raw_slope = -0.4, sigma_raw_sigma = 1.2) %>%
+	mutate(sigma_raw_regressed = ( rigma_raw_intercept + lambda * sigma_raw_slope) ) %>%
+	mutate(sigma_raw_minimum =  sigma_raw_regressed - sigma_raw_sigma)
+
 save(ARMET_ref, file="data/ARMET_ref.RData", compress = "xz")
+
+
+# ARMET_ref %>%
+# 	distinct(level, symbol, `Cell type category`, lambda, sigma_raw) %>%
+# 	ggplot(aes(x = lambda, y = sigma_raw, color=`Cell type category`)) +
+# 	geom_point() + facet_wrap(~level) +
+# 	geom_smooth(method="lm") +
+# 	geom_abline(intercept = 1.52, slope=-0.4) +
+# 	geom_abline(intercept = 1.52 - 1.2, slope=-0.4)
+#
+# N52_ARMET_T$signatures %>%
+# 	map_dfr(~ .x) %>%
+# 	filter(!query & !`house keeping`) %>%
+# 	filter(level ==1) %>%
+# 	distinct(symbol, `Cell type category`, lambda, sigma_raw) %>%
+# 	stan_glm(sigma_raw ~ lambda, data = .)
+#
+# N52_ARMET_T$signatures %>%
+# 	map_dfr(~ .x) %>%
+# 	filter(!query & !`house keeping`) %>%
+# 	filter(level ==1) %>%
+# 	distinct(symbol, `Cell type category`, lambda, sigma_raw) %>%
+# 	brm(data = .,
+# 			bf(family = student,
+# 		sigma_raw ~ lambda,
+# 		nu = 4
+# 			)
+# 	)

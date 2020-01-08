@@ -79,248 +79,6 @@ ifelse_pipe = function(.x, .p, .f1, .f2 = NULL) {
 tree =
 	yaml:: yaml.load_file("/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/data/tree.yaml") %>%
 	data.tree::as.Node()
-#
-# sample_blacklist = c(
-# 	"666CRI",
-# 	"972UYG",
-# 	"344KCP",
-# 	"555QVG",
-# 	"370KKZ",
-# 	"511TST",
-# 	"13816.11933",
-# 	"13819.11936",
-# 	"13817.11934",
-# 	"13818.11935",
-# 	"096DQV",
-# 	"711SNV",
-# 	"counts.Ciliary%20Epithelial%20Cells%2c%20donor3.CNhs12009.11399-118D4"   ,
-# 	"counts.Iris%20Pigment%20Epithelial%20Cells%2c%20donor1.CNhs12596.11530-119I9",
-# 	"ENCFF890DJO"
-# )
-
-# ct_to_correlation_threshold =
-#
-# 	tree %>%
-# 	data.tree::ToDataFrameTree("name", "level") %>%
-# 	mutate(level = level -1 ) %>%
-# 	rename(`Cell type category` =  name) %>%
-# 	as_tibble %>%
-# 	left_join(
-# 		tibble(level=1:6, threshold=c(0.9, 0.975, 0.99, 0.99, 0.99, 0.99))
-# 	)
-
-
-# if(0){
-# Get data
-# counts =
-# 	foreach(
-# 		f = dir(
-# 			path = "/wehisan/bioinf/bioinf-data/Papenfuss_lab/projects/mangiola.s/PostDoc/RNAseq-noise-model/big_data/tibble_cellType_files",
-# 			pattern="cellTypes_",
-# 			full.names = T
-# 		),
-# 		.combine = bind_rows
-# 	) %dopar% {
-# 		read_csv(f) %>%
-# 			mutate_at(vars(one_of('sample')), as.character) %>%
-# 			mutate_at(vars(one_of('isoform')), as.character)
-# 	} %>%
-#
-# 	filter((symbol %>% is.na %>% `!`) & (symbol != "")) %>%
-# 	filter(`Cell type formatted` %>% is.na %>% `!`) %>%
-#
-# 	# Filter out FANTOM 5
-# 	filter(`Data base` != "FANTOM5") %>%
-#
-# 	# Filter out black list
-# 	filter(!grepl(
-# 		sample_blacklist %>% paste(collapse = "|"), sample
-# 	)) %>%
-#
-# 	# Filter dendritic that look too much like monocytes
-# 	filter(!(
-# 		(`Cell type formatted` == "dendritic_myeloid" & `Data base` == "Immune Singapoor") |
-# 			(`Cell type formatted` == "dendritic_myeloid" & `Data base` == "bloodRNA")
-# 	)) %>%
-#
-# 	# Setup Cell type category names
-# 	left_join(
-# 		tree %>%
-# 			Clone %>%
-# 			ToDataFrameTypeColFull("name")  %>%
-#
-# 			# Filter parents that are out of the level (e.g., immune_cells if we are analysisng b_cells)
-# 			filter(
-# 				(!!as.name(sprintf("level_%s", my_level+1))) %in%
-# 				(
-# 					tree %>%
-# 					Clone %>%
-# 					{	Prune(., function(x) x$level <= my_level + 1); .	} %>%
-# 					{ .$Get("name", filterFun = isLeaf)}
-# 				)
-# 			) %>%
-# 			select(name, contains(sprintf("level_%s", my_level+1))) %>%
-# 			setNames(c("Cell type formatted", "Cell type category"))
-#
-# 	) %>%
-#
-# 	filter(`Cell type category` %>% is.na %>% `!`) %>%
-#
-# 	mutate(level = !!my_level) %>%
-#
-# 	# Eliminate genes that are not in all cell types
-# 	inner_join( (.) %>% distinct(symbol, `Cell type category`) %>% count(symbol) %>% filter(n == max(n)) ) %>%
-#
-# 	# Setup house keeping genes
-# 	mutate(`Cell type category` = ifelse(symbol %in% (read_csv("dev/hk_600.txt", col_names = FALSE) %>% pull(1)), "house_keeping", `Cell type category`)) %>%
-#
-# 	# Median redundant
-# 	do_parallel_start(n_cores, "symbol") %>%
-# 	do({
-# 		`%>%` = magrittr::`%>%`
-# 		library(tidyverse)
-# 		library(magrittr)
-#
-# 		(.) %>%
-# 			group_by(sample, symbol, `Cell type`, `Cell type category`, `Cell type formatted`,  `Data base`) %>%
-# 			summarise(`read count` = `read count` %>% median(na.rm = T)) %>%
-# 			ungroup()
-# 	}) %>%
-# 	do_parallel_end() %>%
-#
-# 	# Normalise
-# 	ttBulk::scale_abundance(sample, symbol, `read count`) %>%
-#
-# 	mutate(`read count normalised` = `read count normalised` %>% as.integer) %>%
-# 	mutate(`read count normalised log` = `read count normalised` %>% `+` (1) %>% log) %>%
-#
-# 	# mutate symbol
-# 	mutate(`symbol original` = symbol) %>%
-# 	unite(symbol, c("Cell type category", "symbol"), remove = F) %>%
-#
-# 	# # Mark the bimodal distributions
-# 	# do_parallel_start(n_cores, "symbol") %>%
-# 	# do({
-# 	# 	`%>%` = magrittr::`%>%`
-# 	# 	library(tidyverse)
-# 	# 	library(magrittr)
-# 	#
-# 	# 	(.) %>%
-# 	# 		group_by(symbol) %>%
-# 	# 		do(
-# 	# 			(.) %>%
-# 	# 				mutate(
-# 	# 					`bimodal p-value` =
-# 	# 						(.) %>%
-# 	# 						pull(`read count normalised log`) %>%
-# 	# 						diptest::dip.test() %$%
-# 	# 						`p.value`,
-# 	#
-# 	# 					`bimodal coefficient` =
-# 	# 						(.) %>%
-# 	# 						pull(`read count normalised log`) %>%
-# 	# 						modes::bimodality_coefficient(),
-# 	#
-# 	# 					`anova p-value` =
-# 	# 						ifelse(
-# 	# 							(.) %>% distinct(`Data base`) %>% nrow > 1 & (.) %>% distinct(`Cell type formatted`) %>% nrow > 1 ,
-# 	# 							(.) %>% aov(`read count normalised log` ~ `Cell type formatted` + `Data base`, .) %>% anova %$% `Pr(>F)` %>% `[` (1),
-# 	# 							ifelse(
-# 	# 								(.) %>% distinct(`Data base`) %>% nrow > 1,
-# 	# 								(.) %>% aov(`read count normalised log` ~ `Data base`, .) %>% anova %$% `Pr(>F)` %>% `[` (1),
-# 	# 								ifelse(
-# 	# 									(.) %>% distinct(`Cell type formatted`) %>% nrow > 1,
-# 	# 									(.) %>% aov(`read count normalised log` ~ `Cell type formatted`, .) %>% anova %$% `Pr(>F)` %>% `[` (1),
-# 	# 									NA
-# 	# 								)
-# 	# 							)
-# 	#
-# 	# 						)
-# 	# 				)
-# 	# 		) %>%
-# 	# 		ungroup()
-# 	#
-# 	# }) %>%
-# 	# do_parallel_end() %>%
-# 	# mutate(
-# 	# 	`anova p-value` = ifelse(`anova p-value` == "NaN", 1, `anova p-value`),
-# 	# 	`bimodal coefficient` = ifelse(`bimodal coefficient` == "NaN", 0, `bimodal coefficient`)
-# 	# ) %>%
-# 	# mutate(
-# 	# 	`hard bimodality` =
-# 	# 		(`bimodal p-value` < 0.05) +
-# 	# 		(`bimodal coefficient` > 0.6666667) +
-# 	# 		(`anova p-value` < 0.05 ) >= 2
-# 	# ) %>%
-# 	# mutate(`soft bimodality` = `anova p-value` < 0.0001) %>%
-#
-# 	# Remove redundant samples
-# 	{
-#
-# 		nr =
-# 			(.) %>%
-# 			filter(`Cell type category` != "house_keeping") %>%
-# 			group_by(`Cell type category`) %>%
-# 			do({
-#
-# 				threshold = (.) %>% distinct(`Cell type category`) %>% left_join( ct_to_correlation_threshold ) %>% pull(threshold)
-#
-#
-# 				# Remove redundant samples
-# 				(.) %>%
-# 					anti_join(
-# 					(.) %>%
-# 						distinct(symbol, sample, `read count`) %>%
-# 						spread(sample, `read count`) %>%
-# 						drop_na %>%
-# 						gather(sample, `read count`, -symbol) %>%
-# 						rename(rc = `read count`) %>%
-# 						mutate_if(is.factor, as.character) %>%
-# 						widyr::pairwise_cor(sample, symbol, rc, sort=T, diag = FALSE, upper = F) %>%
-# 						filter(correlation > threshold) %>%
-# 						distinct(item1) %>%
-# 						rename(sample = item1)
-# 				) %>%
-#
-# 				# Sample homogeneous population
-# 				mutate( `threshold contribution` = (.) %>%  distinct(sample, `Cell type formatted`) %>% count(`Cell type formatted`) %>% pull(n) %>% quantile(0.8) %>% floor) %>%
-# 				group_by(`Cell type formatted`) %>%
-# 				inner_join( (.) %>% distinct(sample, `threshold contribution`) %>%  filter(row_number(sample) <= `threshold contribution`)) %>%
-# 				ungroup() %>%
-# 				select(- `threshold contribution`)
-#
-# 			}) %>%
-# 			ungroup
-#
-# 		(.) %>%
-# 			filter(`Cell type category` == "house_keeping") %>%
-# 			inner_join( nr %>% distinct(sample)) %>%
-# 			bind_rows( nr )
-#
-# 	} %>%
-#
-# 	mutate(symbol = symbol %>% as.factor) %>%
-# 	mutate(sample = sample %>% as.factor)
-# saveRDS(counts, file="counts_infer_NB.rds")
-
-
-# study whole dataset
-# counts.plus =
-# 	counts %>%
-# 	mutate(`read count` = `read count` %>% as.integer) %>%
-# 	aggregate_duplicated_gene_symbols(sample_column = "sample", gene_column = "symbol", value_column = "read count") %>%
-# 	eliminate_redundant_clusters_with_correlation(cluster_by_column = "sample", replicates_column = "symbol", value_column = "read count", correlation_threshold = 0.9 ) %>%
-# 	counts.minus.minus %>% add_normalised_counts(sample_column = "sample", gene_column = "symbol", value_column = "read count") %>%
-# 	add_MDS_components(replicates_column = "sample", cluster_by_column = "symbol", value_column = "read count normalised")
-#
-# counts.plus %>%
-# 	select(-contains("Dimension")) %>%
-# 	filter(symbol %in% (read_csv("dev/hk_600.txt", col_names = FALSE) %>% pull(1))) %>%
-# 	inner_join((.) %>% distinct(symbol) %>% head(n=300)) %>%
-# 	add_MDS_components(replicates_column = "symbol", cluster_by_column = "sample", value_column = "read count normalised") %>%
-# 	rotate_MDS_components(rotation_degrees = -50) %>%
-# 	distinct(sample, `Dimension 1`,`Dimension 2`, `Cell type formatted`, `Data base`) %>%
-# 	ggplot(aes(x=`Dimension 1`, y=`Dimension 2`, color=`Data base`, label=`Cell type formatted` )) + geom_point()
 
 
 # MPI
@@ -333,6 +91,29 @@ do_inference = function(counts, my_run){
 		# select run and HKG
 		filter(grepl("house_keeping", symbol) | run == my_run)
 		#filter(run == my_run)
+
+
+	res =
+		counts %>%
+		mutate(do_check = `Cell type category` == "house keeping") %>%
+		mutate(PValue = ifelse(do_check, 0, 1)) %>%
+		mutate(`count` = `count` %>% as.integer) %>%
+		inner_join((.) %>% distinct(symbol) %>% sample_frac(0.1)) %>%
+
+		ppcSeq::ppc_seq(
+			significance_column = PValue,
+			do_check_column = do_check,
+			value_column = `count`,
+			sample_column = sample,
+			gene_column = symbol,
+			pass_fit = T,
+			just_discovery = T,
+			approximate_posterior_inference = T,
+			approximate_posterior_analysis = T,
+			cores = 30,
+			additional_parameters_to_save = c("intercept", "sigma_raw", "sigma_intercept", "sigma_slope", "sigma_sigma")
+		)
+
 
 counts_stan_MPI =
 
@@ -347,10 +128,11 @@ counts_stan_MPI =
 
 	mutate(sample_idx = as.integer(sample)) %>%
 
-	left_join(
+	dplyr::left_join(
 		(.) %>%
 			distinct(symbol) %>%
-			mutate( idx_MPI = head( rep(1:shards, (.) %>% nrow %>% `/` (shards) %>% ceiling ), n=(.) %>% nrow) )
+			mutate( idx_MPI = head( rep(1:shards, (.) %>% nrow %>% `/` (shards) %>% ceiling ), n=(.) %>% nrow) ),
+		by="symbol"
 	) %>%
 	arrange(idx_MPI, symbol) %>%
 
@@ -358,13 +140,14 @@ counts_stan_MPI =
 	group_by(idx_MPI) %>%
 	do(
 		(.) %>%
-			left_join(
+			dplyr::left_join(
 				(.) %>%
 					distinct(idx_MPI, sample, symbol) %>%
 					arrange(idx_MPI, symbol) %>%
 					count(idx_MPI, symbol) %>%
 					mutate(end = cumsum(n)) %>%
-					mutate(start = c(1, .$end %>% rev() %>% `[` (-1) %>% rev %>% `+` (1)))
+					mutate(start = c(1, .$end %>% rev() %>% `[` (-1) %>% rev %>% `+` (1))),
+				by=c("symbol", "idx_MPI")
 			)
 	) %>%
 	ungroup()
@@ -385,7 +168,7 @@ data_for_stan_MPI = list(
 		foreach(idx = counts_stan_MPI %>% distinct(idx_MPI) %>% pull(idx_MPI), .combine = full_join) %do% {
 			counts_stan_MPI %>%
 				filter(idx_MPI == idx) %>%
-				select(`read count`) %>%
+				select(`count`) %>%
 				setNames(idx) %>%
 				mutate(i = 1:n())
 		} %>%
@@ -485,17 +268,14 @@ Sys.time()
 
 }
 
-
-
-counts = readRDS(file="counts_infer_NB.rds")
+counts = readRDS(file="dev/counts_infer_NB.rds") %>% dplyr::filter(level == my_level)
 
 counts_run = counts %>% left_join( (.) %>% distinct(symbol) %>% mutate(run = sample(1:5, n(), replace = T)))
 
+process_fit = function(my_level, run) {
 
-process_fit = function(run) {
-
-	load(sprintf("dev/fit_MPI_level3_%s.RData", run))
-	load(sprintf("dev/level_3_input_%s.RData", run))
+	load(sprintf("dev/fit_MPI_level%s_%s.RData", my_level,  run))
+	load(sprintf("dev/level_%s_input_%s.RData", my_level,  run))
 
 	# Parse fit and ave data
 	fit_MPI %>%
@@ -513,6 +293,16 @@ process_fit = function(run) {
 		) %>%
 		left_join( counts_stan_MPI %>% distinct(symbol, `Cell type category`)  ) %>%
 
+		# Convert to gamma
+		mutate(
+			shape = nb_to_gamma(lambda %>% exp, 1/exp(sigma_raw)) %$% shape,
+			rate  = nb_to_gamma(lambda %>% exp, 1/exp(sigma_raw)) %$% rate
+		) %>%
+
+		# Calculate confidence interval
+		mutate(CI_low = qgamma(0.025, shape = shape, rate = rate)) %>%
+		mutate(CI_high = qgamma(0.975, shape = shape, rate = rate)) %>%
+
 		# QQ plots
 
 		left_join(counts) %>%
@@ -527,11 +317,11 @@ process_fit = function(run) {
 				group_by(symbol) %>%
 				do(
 					(.) %>%
-						arrange(`read count normalised`) %>%
+						arrange(`count normalised`) %>%
 						mutate(
 							predicted_NB =
 								qnbinom(
-									ppoints(`read count normalised`),
+									ppoints(`count normalised`),
 									size=.$sigma_raw %>% unique %>% exp %>% `^` (-1),
 									mu=.$lambda %>% unique %>% exp
 								)
@@ -540,9 +330,9 @@ process_fit = function(run) {
 				ungroup()
 		}) %>%
 		#do_parallel_end() %>%
-		mutate(`log of error` = (`read count normalised` - predicted_NB) %>% abs %>% `+` (1) %>% log) %>%
-		mutate(`error of log` = (log(`read count normalised` + 1) - log(predicted_NB + 1)) ) %>%
-		mutate(`error scaled` =  ((`read count normalised` - predicted_NB) / (`read count normalised` + 1) )) %>%
+		mutate(`log of error` = (`count normalised` - predicted_NB) %>% abs %>% `+` (1) %>% log) %>%
+		mutate(`error of log` = (log(`count normalised` + 1) - log(predicted_NB + 1)) ) %>%
+		mutate(`error scaled` =  ((`count normalised` - predicted_NB) / (`count normalised` + 1) )) %>%
 		left_join(
 			(.) %>%
 				group_by(symbol) %>%
@@ -580,125 +370,19 @@ process_fit = function(run) {
 				)
 		) %>%
 
-		# Recalculate `read count normalised`
-		mutate(`read count normalised bayes` = `read count` / exp(exposure))
+		# Recalculate `count normalised`
+		mutate(`count normalised bayes` = `count` / exp(exposure)) %>%
+
+		mutate(stan_run = !!run)
 
 }
 
-get_fit_df = function(fit_MPI, data_for_stan_MPI, counts_stan_MPI, level){
-	library(data.tree)
-	fit_MPI %>%
-		summary() %$% summary %>%
-		as_tibble(rownames="par") %>%
-		filter(grepl("lambda|sigma", par)) %>%
-		separate(par, c("par", "G"), sep="\\[|\\]") %>%
-		filter(par %in% c("lambda", "sigma_raw")) %>%
-		select(par, G, mean, sd) %>%
-		pivot_wider(names_from = par, values_from = c(mean, sd), names_sep = " ") %>%
-		rename(lambda = `mean lambda`, sigma_raw = `mean sigma_raw`) %>%
-		mutate(G = G %>% as.integer) %>%
-		left_join(
-			data_for_stan_MPI$symbols %>%
-				gather(idx_MPI, symbol) %>%
-				drop_na() %>% mutate(G=1:n())
-		) %>%
-		left_join( counts_stan_MPI %>% distinct(symbol, `Cell type category`)  ) %>%
-
-		# Filter if cell types are not in tree for temporary bug
-		filter(
-			`Cell type category` %in%
-				(
-					yaml:: yaml.load_file("data/tree.yaml") %>%
-						data.tree::as.Node() %>%
-						{	data.tree::Prune(., function(x) x$level <= level + 1); . } %>%
-						{ .$Get("name", filterFun = data.tree::isLeaf) } %>% c("house_keeping")
-				)
-		) %>%
-
-		# Add stan normalisation constants
-		left_join(counts) %>%
-		left_join(
-			fit_MPI %>%
-				summary() %$% summary %>%
-				as_tibble(rownames="par") %>%
-				filter(grepl("exposure", par)) %>%
-				separate(par, c("par", "S"), sep="\\[|\\]") %>%
-				select(par, S, "50%") %>%
-				rename(exposure = `50%`) %>%
-				select(-par) %>%
-				left_join(
-					counts_stan_MPI %>%
-						distinct(sample, sample_idx) %>%
-						rename(S = sample_idx) %>%
-						mutate_if(is.integer, as.character)
-				)
-		) %>%
-
-		# Recalculate `read count normalised`
-		mutate(`read count normalised bayes` = `read count` / exp(exposure))	%>%
-
-		# QQ plots
-		do_parallel_start(40, "symbol") %>%
-		do({
-
-			`%>%` = magrittr::`%>%`
-			library(tidyverse)
-			library(magrittr)
-
-			(.) %>%
-				group_by(symbol) %>%
-				do(
-					(.) %>%
-						arrange(`read count normalised bayes`) %>%
-						mutate(
-							predicted_NB =
-
-								qnbinom(
-
-									# If 1 sample, just use median
-									switch(	((.) %>% nrow>1) %>% `!` %>% `+` (1), ppoints(`read count normalised bayes`), 0.5	),
-									size=.$sigma_raw %>% unique %>% exp %>% `^` (-1),
-									mu=.$lambda %>% unique %>% exp
-								)
-
-						)
-				) %>%
-				ungroup()
-		}) %>%
-		do_parallel_end() %>%
-		mutate(`log of error` = (`read count normalised bayes` - predicted_NB) %>% abs %>% `+` (1) %>% log) %>%
-		mutate(`error of log` = (log(`read count normalised bayes` + 1) - log(predicted_NB + 1)) ) %>%
-		mutate(`error scaled` =  ((`read count normalised bayes` - predicted_NB) / (`read count normalised bayes` + 1) )) %>%
-		left_join(
-			(.) %>%
-				group_by(symbol) %>%
-				summarise(`gene error mean` = `error of log` %>% abs %>% mean)
-		) %>%
-
-		mutate(
-			symbol =
-				gsub(
-					(.) %>%
-						distinct(`Cell type category`) %>%
-						pull(1) %>%
-						paste("_", sep="") %>%
-						paste(collapse="|") ,
-					"",
-					symbol
-				)
-		) %>%
-
-		# Convert to gamma
-		mutate(
-			shape = nb_to_gamma(lambda %>% exp, 1/exp(sigma_raw)) %$% shape,
-			rate  = nb_to_gamma(lambda %>% exp, 1/exp(sigma_raw)) %$% rate
-		) %>%
-
-		# Calculate confidence interval
-		mutate(CI_low = qgamma(0.025, shape = shape, rate = rate)) %>%
-		mutate(CI_high = qgamma(0.975, shape = shape, rate = rate))
+nb_to_gamma = function(mu, phi){
+	list(
+		"shape" = (mu*phi)/(mu+phi),
+		"rate" = phi/(mu+phi)
+	)
 }
-
 
 # Execute fit
 calculate =
@@ -713,7 +397,7 @@ calculate =
 options(future.globals.maxSize= (20000)*1024^2)
 
 (1:5) %>%
-	map(~ process_fit(.x)) %>%
+	map(~ process_fit(my_level, .x)) %>%
 	do.call(bind_rows, .) %>%
 
 	mutate(level = !!my_level) %>%
@@ -730,19 +414,24 @@ options(future.globals.maxSize= (20000)*1024^2)
 	select(-temp) %>%
 	filter(`Cell type category` %>% is.null %>% `!`) %>%
 
-	# Keep one copy lambda sd of house keeping genes
-	bind_rows(
-		x %>% filter(!`house keeping`),
-		x %>% filter(`house keeping`) %>%
-			group_by(symbol) %>%
-			mutate(
-				lambda = lambda %>% mean,
-				sigma_raw = sigma_raw %>% mean,
-				exposure = exposure %>% mean,
-				`gene error mean` = `gene error mean` %>% mean,
-			) %>%
-			ungroup
-	) %>%
+	# Keep one HKG per stan_sun
+	filter((!`house keeping`) | stan_run==1) %>%
+
+	# # Keep one copy lambda sd of house keeping genes
+	# {
+	# bind_rows(
+	# 	(.) %>% filter(!`house keeping`),
+	# 	(.) %>% filter(`house keeping`) %>%
+	# 		group_by(symbol) %>%
+	# 		mutate(
+	# 			lambda = lambda %>% mean,
+	# 			sigma_raw = sigma_raw %>% mean,
+	# 			exposure = exposure %>% mean,
+	# 			`gene error mean` = `gene error mean` %>% mean,
+	# 		) %>%
+	# 		ungroup
+	# )
+	# 	} %>%
 
 		# Save
 		write_csv(sprintf("dev/fit_level%s.csv", my_level))
