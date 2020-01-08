@@ -1183,6 +1183,8 @@ run_model = function(reference_filtered,
 
 	Sys.setenv("STAN_NUM_THREADS" = shards)
 
+	#browser()
+
 	list(df,
 			 switch(
 			 	approximate_posterior %>% sum(1),
@@ -1816,7 +1818,7 @@ level_to_plot_inferred_vs_observed  = function(result, level, S = NULL, cores = 
 				sigma_sum =
 					lambda_sum^2 /
 					(
-						prop_mat^2 %*%
+						prop_mat %*%
 							(
 								lambda_mat^2 /
 									sigma_mat

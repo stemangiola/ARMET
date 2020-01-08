@@ -492,7 +492,7 @@ if(dim_4[1] > 0) {
 		matrix[rows(prop_mat), cols(sigma_mat)] sigma_sum =                          //Q rows, G columns
 			square(lambda_sum) ./
 			(
-				square(prop_mat) *
+				(prop_mat) *
 				(
 					square(lambda_mat) ./
 					sigma_mat
@@ -536,6 +536,7 @@ if(dim_4[1] > 0) {
 
 		// global par unpacking
 		real prop_UFO = global_parameters[1];
+		real sigma_intercept = global_parameters[2];
 
 		// Deconvoluted means
 		vector[size_G_linear_MPI/C*Q] lambda_log_deconvoluted_1;
@@ -551,7 +552,7 @@ if(dim_4[1] > 0) {
 
       append_row(
       	to_matrix(1.0 ./ exp( ref_sigma_inv_log ), C, size_G_linear_MPI/C),
-      	to_row_vector(1.0 ./ exp(sigma_prior[1] + lambda_UFO * sigma_prior[2])) // add UFO
+      	to_row_vector(1.0 ./ exp(lambda_UFO * -0.4 + 1.52 )) // add UFO
       ),
 
       append_col(
@@ -561,25 +562,21 @@ if(dim_4[1] > 0) {
 
     );
 
-		//print(ref_lambda_log[1:10]);
-
     lambda_log_deconvoluted_1 = log(sumNB[1]);
     sigma_deconvoluted_1 = sumNB[2];
+
+
+		// print(sigma_deconvoluted_1);
+		// print(1 ./ exp( lambda_log_deconvoluted_1  * -0.4 + 1.52));
+		// print(lambda_log_deconvoluted_1);
 
 		// deconvolution
 		lp = neg_binomial_2_lpmf(mix_counts |
 			exp(lambda_log_deconvoluted_1 + mix_exposure_rate),
-			1 ./ exp( lambda_log_deconvoluted_1  * -0.3386389 + 1.6)
+			#sigma_deconvoluted_1
+			1.0 ./ exp( lambda_log_deconvoluted_1  * -0.4 + sigma_intercept)
 		);
 
-		// // Ignore lowly transcribed genes
-		// for(i in 1:size_y_linear_MPI){
-		// 	if(mix_counts[i]<10)
-		// 		lp -= neg_binomial_2_lpmf(mix_counts[i] |
-		// 			exp(lambda_log_deconvoluted_1[i] + mix_exposure_rate[i]),
-		// 			sigma_deconvoluted_1[i]
-		// 		);
-		// }
 
 	 return [lp]';
 
@@ -984,13 +981,20 @@ model {
 		lambda_UFO
 	);
 
-	target += sum(map_rect(
-		lp_reduce ,
-		[prop_UFO]' ,
-		pack_r_1,
-		pack_R_1,
-		int_package
-	));
+	// target += sum(map_rect(
+	// 	lp_reduce ,
+	// 	[prop_UFO]' ,
+	// 	pack_r_1,
+	// 	pack_R_1,
+	// 	int_package
+	// ));
+
+	target += lp_reduce(
+		[prop_UFO, sigma_intercept_dec]' ,
+		pack_r_1[1],
+		pack_R_1[1],
+		int_package[1]
+	);
 
 	// Dirichlet regression
 	phi ~ normal(0,1);

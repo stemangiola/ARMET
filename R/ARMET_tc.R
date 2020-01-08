@@ -203,6 +203,13 @@ ARMET_tc = function(
 				distinct(symbol)
 		})
 
+	# # CAP THE SIGMA TO AVOID OVERFITTING
+	# reference_filtered = reference_filtered %>%
+	# 	#mutate(sigma_raw_capped = ifelse(sigma_raw > sigma_raw_minimum, sigma_raw, sigma_raw_minimum)) %>%
+	# 	mutate(sigma_raw_capped = ifelse(sigma_raw > sigma_raw_regressed, sigma_raw, sigma_raw_regressed)) %>%
+	# 	mutate(sigma_raw = sigma_raw_capped)
+
+
 	prop_posterior = get_null_prop_posterior(ct_in_nodes)
 
 	######################################

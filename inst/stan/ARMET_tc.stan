@@ -546,9 +546,10 @@ if(dim_4[1] > 0) {
 		//if(sum(to_matrix(prop_1, S, C)[1,]) !=1.0 ) stop("Mpi fucked");
 
 		// deconvolution
-		lp += neg_binomial_2_log_lpmf(mix_counts |
-			lambda_log_deconvoluted_1 + mix_exposure_rate,
-			sigma_deconvoluted_1 //(1.0 ./ exp( ( sigma_slope * lambda_log_deconvoluted_1 + sigma_intercept_dec ) ))
+		lp += neg_binomial_2_lpmf(mix_counts |
+			exp(lambda_log_deconvoluted_1 + mix_exposure_rate),
+			#sigma_deconvoluted_1 //(1.0 ./ exp( ( sigma_slope * lambda_log_deconvoluted_1 + sigma_intercept_dec ) ))
+			1.0 ./ exp( lambda_log_deconvoluted_1  * -0.4 + sigma_intercept_dec)
 		);
 
 
@@ -816,6 +817,10 @@ parameters {
 
 	real phi[10];
 
+		// Unknown population
+	vector<lower=0, upper = log(max(counts_linear))>[max(size_G_linear_MPI)/ct_in_levels[lv]] lambda_UFO[shards];
+	real<lower=0, upper=0.5> prop_UFO;
+
 }
 transformed parameters{
 
@@ -1001,5 +1006,9 @@ model {
 
 	// Dirichlet regression
 	phi ~ normal(0,1);
+
+	// lambda UFO
+	for(i in 1:shards) lambda_UFO[i] ~ normal(0,1);
+	prop_UFO ~ beta(1.001, 20);
 
 }
