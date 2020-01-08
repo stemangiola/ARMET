@@ -74,15 +74,15 @@ get_markers_number = function(pass, res, num_markers_previous_level, min_n_sampl
 		{
 			{ (.) %>%
 					ggplot(aes(y=`.value`, x=sample, color=`Cell type category`)) +
-					geom_errorbar(aes(ymin = `.lower`, ymax=`.upper`), width=0) + facet_wrap(~level + pair + real) +
+					geom_errorbar(aes(ymin = `.value.lower`, ymax=`.value.upper`), width=0) + facet_wrap(~level + pair + real) +
 					theme(strip.text.x = element_text(size = 5)) } %>%
 				ggsave(.,filename = sprintf("%s/pass_%s_test_CI.png", out_dir, pass), device = "png")
 			(.)
 		} %>%
 
 		rowwise %>%
-		mutate(is_outside = ifelse(real %>% between( .lower ,  .upper), 0, 1)) %>%
-		mutate(error = min(abs(.lower - real), abs(.upper - real)) * is_outside) %>%
+		mutate(is_outside = ifelse(real %>% between( .value.lower ,  .value.upper), 0, 1)) %>%
+		mutate(error = min(abs(.value.lower - real), abs(.value.upper  - real)) * is_outside) %>%
 		ungroup() %>%
 
 		# Penalise divergent
@@ -531,8 +531,8 @@ s = sample(size = 1, 1:99999999)
 # 		try(
 
 if(levels==1) n_mark_df = ARMET::ARMET_ref %>% distinct(ct1, ct2) %>% mutate(`n markers` = n_markers)
-if(levels==2) n_mark_df = readRDS("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/feature_selection_fifth_iterative_run_fix_skylake_1/markers_50.RData")$input$n_markers
-if(levels==3) n_mark_df = readRDS("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/feature_selection_fifth_iterative_run_fix_skylake_2/markers_17.RData")$input$n_markers
+if(levels==2) n_mark_df = readRDS("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/feature_selection_eight_iterative_run_fix_1/markers_50.RData")$input$n_markers
+if(levels==3) n_mark_df = readRDS("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/feature_selection_eight_iterative_run_fix_2/markers_25.RData")$input$n_markers
 
 mix_source = readRDS("dev/mix_source_30_reps.rds")
 #mix_source = readRDS("dev/mix_source.rds")
@@ -569,11 +569,11 @@ do_iterate = function(mix_source, n_mark_df, full_bayesian, levels, iteration, o
 		mutate(truth = ifelse(`Cell type category` == ct1 | `Cell type category` == ct2, 0.5, 0)) %>%
 		mutate(error =  .value - truth ) %>%
 		rowwise()%>%
-		mutate(error = ifelse(dplyr::between(truth, .lower, .upper), 0, error)) %>%
+		mutate(error = ifelse(dplyr::between(truth, .value.lower, .value.upper), 0, error)) %>%
 		ungroup() %>%
 		# separate(n_markers, c("path", "n_markers"), sep="markers_") %>%
 		# separate(n_markers, c("n_markers", "dummy"), sep="_") %>%
-		mutate(CI = .upper - .lower) %>%
+		mutate(CI = .value.upper - .value.lower) %>%
 		left_join(
 			tree %>%
 				data.tree::ToDataFrameTree("name", "level") %>%
@@ -651,7 +651,9 @@ do_iterate(mix_source, n_mark_df, full_bayesian, levels, iteration, out_dir)
 # res_dir = "dev/feature_selection_fifth_iterative_run_fix_skylake_1/"
 # res_dir = "dev/feature_selection_fifth_iterative_run_fix_skylake_2/"
 # res_dir = "dev/feature_selection_sixth_iterative_run_fix_skylake_2//"
-res_dir = "dev/feature_selection_seventh_iterative_run_fix_skylake_3/"
+#res_dir = "dev/feature_selection_seventh_iterative_run_fix_skylake_3/"
+res_dir = "dev/feature_selection_eight_iterative_run_fix_1/"
+res_dir = "dev/feature_selection_eight_iterative_run_fix_2/"
 
 
 res =
@@ -668,12 +670,12 @@ res =
 	mutate(truth = ifelse(`Cell type category` == ct1 | `Cell type category` == ct2, 0.5, 0)) %>%
 	mutate(error =  .value - truth ) %>%
 	rowwise()%>%
-	mutate(error = ifelse(dplyr::between(truth, .lower, .upper), 0, error)) %>%
+	mutate(error = ifelse(dplyr::between(truth, .value.lower, .value.upper), 0, error)) %>%
 	ungroup() %>%
 	separate(n_markers, c("path", "iteration"), sep="markers_") %>%
 	separate(iteration, c("iteration", "dummy"), sep="\\.") %>%
 	mutate(iteration = iteration %>% as.integer) %>%
-	mutate(CI = .upper - .lower)
+	mutate(CI = .value.upper - .value.lower)
 
 (res %>%
 	left_join(
