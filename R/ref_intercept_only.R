@@ -108,9 +108,12 @@ ref_intercept_only = function(
 	# Set up tree structure
 	levels_in_the_tree = 1:4
 
-	tree = 	data.tree::Clone(ARMET::tree) %>%	{
+	tree = create_tree_object(reference)
+
+	tree = 	data.tree::Clone(tree) %>%	{
 		# Filter selected levels
-		data.tree::Prune(., function(x) x$level <= max(levels_in_the_tree) + 1)
+		data.tree::Prune(., function(x)
+			x$level <= max(levels_in_the_tree) + 1)
 
 		# Filter if not in referenc
 		#data.tree::Prune(., function(x) ( x$name %in% (ARMET::ARMET_ref %>% distinct(`Cell type category`) %>% pull(1) %>% as.character) ))
