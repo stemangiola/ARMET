@@ -186,7 +186,7 @@ get_MPI_deconv = function(y_source, shards, my_level, tree) {
 
 		# Add universal cell type rank
 		left_join(tree %>%
-								ToDataFrameTree("name", sprintf("C%s", my_level)) %>%
+								data.tree::ToDataFrameTree("name", sprintf("C%s", my_level)) %>%
 								select(-1) %>%
 								setNames(c("Cell type category" , "ct_rank"))) %>%
 
@@ -470,19 +470,19 @@ filter_reference = function(reference, mix) {
 #'
 get_idx_level = function(tree, my_level) {
 	left_join(
-		tree %>% ToDataFrameTree("name") %>% as_tibble,
-		Clone(tree) %>%
+		tree %>% data.tree::ToDataFrameTree("name") %>% as_tibble,
+		data.tree::Clone(tree) %>%
 			{
-				Prune(., function(x)
+				data.tree::Prune(., function(x)
 					x$level <= my_level + 1)
 				.
 			} %>%
-			ToDataFrameTree("level", "C", "isLeaf", "name") %>%
+			data.tree::ToDataFrameTree("level", "C", "isLeaf", "name") %>%
 			as_tibble %>%
 			filter(isLeaf) %>%
 			left_join(
 				tree %>%
-					ToDataFrameTree("name", "level", "isLeaf") %>%
+					data.tree::ToDataFrameTree("name", "level", "isLeaf") %>%
 					as_tibble %>%
 					filter(level <= my_level & isLeaf) %>%
 					mutate(isAncestorLeaf = !isLeaf) %>%
@@ -563,18 +563,20 @@ parse_summary_check_divergence = function(draws) {
 #' create_tree_object
 #'
 #' @description create tree object that is in data directory
-create_tree_object = function() {
+create_tree_object = function(my_ref = ARMET::ARMET_ref) {
 	#yaml:: yaml.load_file("~/PhD/deconvolution/ARMET/data/tree.yaml") %>%
 	yaml::yaml.load_file("data/tree.yaml") %>%
 		data.tree::as.Node() %>%
 
 		{
 
+			my_ct = my_ref %>% distinct(`Cell type category`) %>% pull(1) %>% as.character
+
 			# Filter if not in referenc
-			data.tree::Prune(., function(x) ( x$name %in% (ARMET::ARMET_ref %>% distinct(`Cell type category`) %>% pull(1) %>% as.character) ))
+			data.tree::Prune(., pruneFun = function(x) ( x$name %in% my_ct ))
 
 			# Sort tree by name
-			Sort(., "name")
+			data.tree::Sort(., "name")
 
 			# Add C indexes
 			.$Set(C =
@@ -714,6 +716,7 @@ vb_iterative = function(model,
 												output_samples,
 												iter,
 												tol_rel_obj,
+												algorithm = "fullrank",
 												...) {
 	res = NULL
 	i = 0
@@ -724,6 +727,7 @@ vb_iterative = function(model,
 				output_samples = output_samples,
 				iter = iter,
 				tol_rel_obj = tol_rel_obj,
+				algorithm = algorithm,
 				...
 				#, pars=c("counts_rng", "exposure_rate", additional_parameters_to_save)
 			)
@@ -1060,9 +1064,9 @@ run_model = function(reference_filtered,
 	# Filter on level considered
 	reference_filtered = reference_filtered %>% filter(level %in% lv)
 
-	# Check if there are not house keeping
-	if(reference_filtered %>% filter(`house keeping`) %>% nrow %>% equals(0))
-		stop("No house keeping genes in your reference data frame")
+	#
+
+
 
 	df = ref_mix_format(reference_filtered, mix)
 
@@ -1185,7 +1189,7 @@ run_model = function(reference_filtered,
 
 	Sys.setenv("STAN_NUM_THREADS" = shards)
 
-	browser()
+	#browser()
 
 	list(df,
 			 switch(
