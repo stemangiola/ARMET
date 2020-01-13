@@ -1,4 +1,5 @@
 
+
 #' ref_intercept_only
 #'
 #' @description This function calls the stan model.
@@ -44,17 +45,15 @@
 #'
 #' @export
 #'
-ref_intercept_only = function(
-	reference,
-	level,
-	cores = 8
-){
-
+ref_intercept_only = function(reference,
+															level,
+															cores = 8,
+															approximate_posterior = F
+) {
 	# Former parameters
 	X = matrix(rep(1, 1))
 	do_regression = F
 	full_bayesian = T
-	approximate_posterior = F
 	omit_regression =                   T
 	save_fit =                          T
 	seed =                              NULL
@@ -63,31 +62,12 @@ ref_intercept_only = function(
 	levels = 1:4
 
 
-	mix = reference %>% group_by(symbol) %>%
-		summarise(count = `read count` %>% median(na.rm = T) %>% as.integer) %>%
-		mutate(sample = "dummy") %>%
-		spread(symbol, count)
+
 
 	# Add fake lambda, sigma
 	reference =
 		reference %>%
 		mutate(lambda = 1, sigma_raw = 1)
-
-	my_theme =
-		theme_bw() +
-		theme(
-			panel.border = element_blank(),
-			axis.line = element_line(),
-			panel.grid.major = element_line(size = 0.2),
-			panel.grid.minor = element_line(size = 0.1),
-			text = element_text(size=12),
-			legend.position="bottom",
-			#aspect.ratio=1,
-			axis.text.x = element_text(angle = 30, hjust = 1),
-			strip.background = element_blank(),
-			axis.title.x  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10)),
-			axis.title.y  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10))
-		)
 
 	shards = cores #* 2
 	is_level_in = shards %>% `>` (0) %>% as.integer
@@ -101,9 +81,9 @@ ref_intercept_only = function(
 
 	# Non centered
 	lambda_mu_prior = c(6.2, 1)
-	lambda_sigma_prior =  c( log(3.3) , 1)
-	lambda_skew_prior =  c( -2.7, 1)
-	sigma_intercept_prior = c( 1.9 , 0.1)
+	lambda_sigma_prior =  c(log(3.3) , 1)
+	lambda_skew_prior =  c(-2.7, 1)
+	sigma_intercept_prior = c(1.9 , 0.1)
 
 	# Set up tree structure
 	levels_in_the_tree = 1:4
@@ -129,13 +109,15 @@ ref_intercept_only = function(
 		pull(count)
 
 	# Get the number of leafs for every level
-	ct_in_levels = foreach(l=levels_in_the_tree+1, .combine = c) %do% {
-
+	ct_in_levels = foreach(l = levels_in_the_tree + 1, .combine = c) %do% {
 		data.tree::Clone(tree) %>%
-			ifelse_pipe(
-				(.) %>% data.tree::ToDataFrameTree("level") %>% pull(2) %>% max %>% `>` (l),
-				~ {.x;  data.tree::Prune(.x, function(x) x$level <= l);	.x 	}
-			)  %>%
+			ifelse_pipe((.) %>% data.tree::ToDataFrameTree("level") %>% pull(2) %>% max %>% `>` (l),
+									~ {
+										.x
+										data.tree::Prune(.x, function(x)
+											x$level <= l)
+										.x
+									})  %>%
 			data.tree::Traverse(., filterFun = isLeaf) %>%
 			length()
 	}
@@ -159,19 +141,21 @@ ref_intercept_only = function(
 	PLV4 = length(parents_lv4)
 
 
-	# Print overlap descriptive stats
-	#get_overlap_descriptive_stats(mix %>% slice(1) %>% gather(`symbol`, `read count`, -sample), reference)
-
 	# Prepare data frames -
-	# For Q query first
 	# For G house keeing first
-	# For GM level 1 first
-
-	Q = mix %>% nrow
 
 	reference_filtered =
 		reference %>%
-		select(level, sample, symbol, `Cell type category`, `read count`, lambda, sigma_raw, `house keeping`) %>%
+		select(
+			level,
+			sample,
+			symbol,
+			`Cell type category`,
+			`read count`,
+			lambda,
+			sigma_raw,
+			`house keeping`
+		) %>%
 
 		# Bug after I deleted FANTOM5 I have to rerun infer NB. Some genes are not in all cell types anynore
 		# Other bug
@@ -179,14 +163,12 @@ ref_intercept_only = function(
 
 		# Check if this is still important
 		group_by(level) %>%
-		do(
-			(.) %>% inner_join(
-				(.) %>%
-					distinct(symbol, `Cell type category`) %>%
-					count(symbol) %>%
-					filter(n == max(n))
-			)
-		) %>%
+		do((.) %>% inner_join(
+			(.) %>%
+				distinct(symbol, `Cell type category`) %>%
+				count(symbol) %>%
+				filter(n == max(n))
+		)) %>%
 		ungroup() %>%
 
 
@@ -204,45 +186,376 @@ ref_intercept_only = function(
 
 		)
 
-	# # CAP THE SIGMA TO AVOID OVERFITTING
-	# reference_filtered = reference_filtered %>%
-	# 	#mutate(sigma_raw_capped = ifelse(sigma_raw > sigma_raw_minimum, sigma_raw, sigma_raw_minimum)) %>%
-	# 	mutate(sigma_raw_capped = ifelse(sigma_raw > sigma_raw_regressed, sigma_raw, sigma_raw_regressed)) %>%
-	# 	mutate(sigma_raw = sigma_raw_capped)
-
-
-	prop_posterior = get_null_prop_posterior(ct_in_nodes)
-
-	######################################
-
-	res1 = run_model(
+	res1 = run_model_ref(
 		reference_filtered,
-		mix,
 		shards,
 		level,
 		T,
 		approximate_posterior,
-		prop_posterior,
 		iterations = iterations,
-		sampling_iterations = sampling_iterations,
-		X = X, do_regression = do_regression
+		sampling_iterations = sampling_iterations
 	)
 
-	res1[[1]] %>% filter(!query) %>% distinct(symbol, `Cell type category`, G) %>%
+	res1[[1]] %>% filter(!query) %>% distinct(symbol, `Cell type category`, G, S, sample) %>%
+
+		# Attach lambda sigma
 		left_join(
 			res1[[2]] %>% rstan::summary(c("lambda_log", "sigma_inv_log")) %$% summary %>%
-		as_tibble(rownames="par") %>%
-		separate(par, c("par", "G"), sep="\\[|\\]", extra = "drop") %>%
-		mutate(G = G %>% as.integer) %>%
-		select(par, G, mean) %>%
-		spread(par, mean),
-		by = c("G")
-	)
+				as_tibble(rownames = "par") %>%
+				separate(par, c("par", "G"), sep = "\\[|\\]", extra = "drop") %>%
+				mutate(G = G %>% as.integer) %>%
+				select(par, G, "50%") %>%
+				spread(par, `50%`),
+			by = c("G")
+		) %>%
+
+		# Attach exposure
+		left_join(
+			res1[[2]] %>%	rstan::summary("exposure_rate") %$% summary %>%
+				as_tibble(rownames="par") %>%
+				separate(par, c("par", "S"), sep="\\[|\\]", extra = "drop") %>%
+				mutate(S = S %>% as.integer) %>%
+				select(par, S, "50%") %>%
+				rename(exposure = `50%`) %>%
+				select(-par)
+		)
+
+		# attach fit
+		add_attr(res1[[2]], "fit")
+}
+
+#' Add attribute to abject
+#'
+#'
+#' @param var A tibble
+#' @param attribute An object
+#' @param name A character name of the attribute
+#'
+#' @return A tibble with an additional attribute
+add_attr = function(var, attribute, name) {
+	attr(var, name) <- attribute
+	var
 }
 
 
+#' @export
+#'
+run_model_ref = function(reference_filtered,
+												 shards,
+												 lv,
+												 full_bayesian,
+												 approximate_posterior,
+												 exposure_posterior = tibble(.mean = 0, .sd = 0)[0,],
+												 iterations = 250,
+												 sampling_iterations = 100) {
+	# Filter on level considered
+	reference_filtered = reference_filtered %>% filter(level %in% lv)
+
+	# Check if there are not house keeping
+	if (reference_filtered %>% filter(`house keeping`) %>% nrow %>% equals(0))
+		stop("No house keeping genes in your reference data frame")
+
+	df = ref_format(reference_filtered)
+
+	G = df %>% filter(!`query`) %>% distinct(G) %>% nrow()
+	GM = df %>% filter(!`house keeping`) %>% distinct(symbol) %>% nrow()
+
+	# For  reference MPI inference
+	counts_baseline =
+		df %>%
+
+		# Eliminate the query part, not the house keeping of the query
+		filter(!`query` | `house keeping`)  %>%
+
+		format_for_MPI(shards)
+
+	S = counts_baseline %>% distinct(sample) %>% nrow()
+	N = counts_baseline %>% distinct(idx_MPI, `read count`, `read count MPI row`) %>%  count(idx_MPI) %>% summarise(max(n)) %>% pull(1)
+	M = counts_baseline %>% distinct(start, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
+
+	lambda_log = 	  counts_baseline %>% filter(!query) %>% distinct(G, lambda) %>% arrange(G) %>% pull(lambda)
+	sigma_inv_log = counts_baseline %>% filter(!query) %>% distinct(G, sigma_raw) %>% arrange(G) %>% pull(sigma_raw)
+
+	counts_baseline_to_linear =
+		counts_baseline %>%
+		filter_house_keeping_query_if_fixed(full_bayesian) %>%
+		arrange(G, S) %>%
+		mutate(counts_idx = 1:n()) %>%
+		mutate(S = S %>% as.factor %>% as.integer)
+
+	counts_linear = counts_baseline_to_linear %>%  pull(`read count`)
+	G_to_counts_linear = counts_baseline_to_linear %>% pull(G)
+	G_linear = G_to_counts_linear
+	S_linear = counts_baseline_to_linear %>% pull(S)
+
+	CL = length(counts_linear)
+	S = counts_baseline_to_linear %>% distinct(S) %>% nrow
 
 
+	MPI_data = get_MPI_df_ref(counts_baseline_to_linear,
+														counts_baseline,
+														shards,
+														lv)
+
+	additional_par_to_save  = switch(full_bayesian %>% `!` %>% sum(1),
+																	 c("lambda_log", "sigma_inv_log"),
+																	 c())
+
+	# library(rstan)
+	# fileConn<-file("~/.R/Makevars")
+	# writeLines(c( "CXX14FLAGS += -O2","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
+	# close(fileConn)
+	# ARMET_tc_model = rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_ref.stan", auto_write = F)
+
+	exposure_rate_init = switch(
+		(lv > 1) %>% `!` %>% as.numeric %>% sum(1),
+		exposure_posterior %>% pull(1),
+		runif(S, -0.5, 0.5)
+	) %>% as.array
+
+	exposure_rate_multiplier = sd(exposure_rate_init) %>% ifelse_pipe((.) %>% is.na, ~ 0.1)
+
+	init_list = list(lambda_log = lambda_log,
+									 sigma_inv_log = sigma_inv_log) %>%
+		ifelse_pipe(!full_bayesian,
+								~ .x %>% c(list(exposure_rate = exposure_rate_init)))
 
 
+	Sys.setenv("STAN_NUM_THREADS" = shards)
 
+	list(df,
+			 switch(
+			 	approximate_posterior %>% sum(1),
+
+			 	# HMC
+			 	sampling(
+			 		stanmodels$ARMET_ref,
+			 		#ARMET_tc_model, #,
+			 		chains = 3,
+			 		cores = 3,
+			 		iter = iterations,
+			 		warmup = iterations - sampling_iterations,
+			 		data = MPI_data,
+			 		#pars=
+			 		# c("prop_1", "prop_2", "prop_3", sprintf("prop_%s", letters[1:9])) %>%
+			 		# c("alpha_1", sprintf("alpha_%s", letters[1:9])) %>%
+			 		# c("exposure_rate") %>%
+			 		# c("lambda_UFO") %>%
+			 		# c("prop_UFO") %>%
+			 		# c(additional_par_to_save),
+			 		init = function ()
+			 			init_list
+			 		# ,
+			 		# save_warmup = FALSE
+			 	) %>%
+			 		{
+			 			(.)  %>% rstan::summary() %$% summary %>% as_tibble(rownames = "par") %>% arrange(Rhat %>% desc) %>% print
+			 			(.)
+			 		},
+
+			 	vb_iterative(
+			 		stanmodels$ARMET_ref,
+			 		output_samples = 100,
+			 		iter = 50000,
+			 		tol_rel_obj = 0.005,
+			 		algorithm = "meanfield",
+			 		data = MPI_data,
+			 		# pars = c(
+			 		# 	"prop_1",
+			 		# 	"prop_2",
+			 		# 	"prop_3",
+			 		# 	"prop_4",
+			 		# 	"exposure_rate",
+			 		# 	"lambda_log",
+			 		# 	"sigma_inv_log",
+			 		# 	"sigma_intercept_dec"
+			 		# ),
+			 		# #,
+			 		init = function ()
+			 			list(lambda_log = lambda_log, sigma_inv_log = sigma_inv_log) # runif(G,  lambda_log - 1, lambda_log + 1)	)
+
+			 	)
+			 ))
+
+}
+
+#' @export
+#'
+get_MPI_df_ref = function(counts_baseline_to_linear,
+													counts_baseline,
+													shards_in_levels,
+													lv) {
+	list(
+		counts_idx_lv_MPI =
+			counts_baseline_to_linear %>%
+			parse_baseline(shards_in_levels, lv)  %>%
+			distinct(idx_MPI, counts_idx, `read count MPI row`) %>%
+			spread(idx_MPI,  counts_idx) %>%
+			select(-`read count MPI row`) %>%
+			replace(is.na(.),-999 %>% as.integer) %>%
+			as_matrix() %>% t %>% 		as.data.frame,
+
+		size_counts_idx_lv_MPI =
+			counts_baseline_to_linear %>%
+			parse_baseline(shards_in_levels, lv)   %>%
+			distinct(idx_MPI, counts_idx, `read count MPI row`) %>%
+			count(idx_MPI) %>%
+			pull(n) %>%
+			ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array,
+
+		# Count indexes
+		counts_G_lv_MPI =
+			counts_baseline_to_linear %>%
+			parse_baseline(shards_in_levels, lv)   %>%
+			distinct(idx_MPI, G, `read count MPI row`)  %>%
+			spread(idx_MPI,  G) %>%
+			select(-`read count MPI row`) %>%
+			replace(is.na(.),-999 %>% as.integer) %>%
+			as_matrix() %>% t %>% 		as.data.frame,
+
+		size_counts_G_lv_MPI =
+			counts_baseline_to_linear %>%
+			parse_baseline(shards_in_levels, lv)   %>%
+			distinct(idx_MPI, G, `read count MPI row`)  %>%
+			count(idx_MPI) %>%
+			pull(n) %>%
+			ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array,
+
+		counts_G_lv_MPI_non_redundant =
+			counts_baseline_to_linear %>%
+			parse_baseline(shards_in_levels, lv)   %>%
+			distinct(idx_MPI, G)  %>%
+			group_by(idx_MPI) %>% do((.) %>% rowid_to_column("read count MPI row")) %>% ungroup() %>%
+			spread(idx_MPI,  G) %>%
+			select(-`read count MPI row`) %>%
+			replace(is.na(.),-999 %>% as.integer) %>%
+			as_matrix() %>% t %>% 		as.data.frame,
+
+		size_counts_G_lv_MPI_non_redundant =
+			counts_baseline_to_linear %>%
+			parse_baseline(shards_in_levels, lv)   %>%
+			distinct(idx_MPI, G)  %>%
+			count(idx_MPI) %>%
+			pull(n) %>%
+			ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array,
+
+		counts_G_lv_MPI_non_redundant_reps =
+			counts_baseline_to_linear %>%
+			parse_baseline(shards_in_levels, lv)   %>%
+			distinct(idx_MPI, G, `read count MPI row`)  %>%
+			left_join((.) %>% count(idx_MPI, G)) %>%
+			distinct(idx_MPI, G, n) %>%
+			group_by(idx_MPI) %>% do((.) %>% rowid_to_column("read count MPI row")) %>% ungroup() %>%
+			distinct(idx_MPI, n, `read count MPI row`) %>%
+			spread(idx_MPI,  n) %>%
+			select(-`read count MPI row`) %>%
+			replace(is.na(.),-999 %>% as.integer) %>%
+			as_matrix() %>% t %>% 		as.data.frame,
+
+		# Count indexes
+		counts_S_lv_MPI =
+			counts_baseline_to_linear %>%
+			parse_baseline(shards_in_levels, lv) %>%
+			distinct(idx_MPI, S, `read count MPI row`)  %>%
+			spread(idx_MPI,  S) %>%
+			select(-`read count MPI row`) %>%
+			replace(is.na(.),-999 %>% as.integer) %>%
+			as_matrix() %>% t %>% 		as.data.frame,
+
+		size_counts_S_lv_MPI =
+			counts_baseline_to_linear %>%
+			parse_baseline(shards_in_levels, lv) %>%
+			distinct(idx_MPI, S, `read count MPI row`)   %>%
+			count(idx_MPI) %>%
+			pull(n) %>%
+			ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array,
+
+
+		G_linear_MPI =
+			counts_baseline %>% filter(level == lv) %>%
+
+			# I have fixed this for right order
+			select(level, G, GM, sprintf("C%s", lv)) %>%
+			distinct() %>%
+			arrange(GM,!!as.symbol(sprintf("C%s", lv))) %>%
+
+			#distinct(G, GM, C, level) %>%
+			left_join(tibble(level = lv, shards = shards_in_levels)) %>%
+			format_for_MPI_from_linear_dec(lv) %>%
+			distinct(idx_MPI, G, `read count MPI row`) %>%
+			spread(idx_MPI,  G) %>%
+			select(-`read count MPI row`) %>%
+			replace(is.na(.),-999 %>% as.integer) %>%
+			as_matrix() %>% t %>% 		as.data.frame,
+
+		size_G_linear_MPI =
+			counts_baseline %>% filter(level == lv) %>%
+			# I have fixed this for right order
+			select(level, G, GM, sprintf("C%s", lv)) %>%
+			distinct() %>%
+			arrange(GM,!!as.symbol(sprintf("C%s", lv))) %>%
+
+			#distinct(G, GM, C, level) %>%
+			left_join(tibble(level = lv, shards = shards_in_levels)) %>%
+			format_for_MPI_from_linear_dec(lv) %>%
+			distinct(idx_MPI, G, `read count MPI row`)   %>%
+			count(idx_MPI) %>%
+			pull(n) %>%
+			ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
+	)
+}
+
+#' @export
+#'
+ref_format = function(ref) {
+	# Get reference based on mix genes
+	ref %>% mutate(`query` = FALSE)	%>%
+
+		# Add marker symbol indeces
+		left_join((.) %>%
+								filter(!`house keeping`) %>%
+								distinct(`symbol`) %>%
+								mutate(M = 1:n())) %>%
+
+		# Add sample indeces
+		arrange(!`query`) %>% # query first
+		mutate(S = factor(sample, levels = .$sample %>% unique) %>% as.integer) %>%
+
+		# Add house keeping into Cell type label
+		mutate(`Cell type category` = ifelse(`house keeping`, "house_keeping", `Cell type category`)) %>%
+
+		# Still needed?
+		anti_join(
+			(.) %>%
+				filter(`house keeping` & !`query`) %>%
+				distinct(symbol, level) %>%
+				group_by(symbol) %>%
+				arrange(level) %>%
+				slice(2:max(n(), 2)) %>% # take away house keeping from level 2 above
+				ungroup()
+		) %>%
+
+		# If house keeping delete level infomation
+		mutate(level = ifelse(`house keeping`, NA, level)) %>%
+
+		# Create unique symbol ID
+		unite(ct_symbol, c("Cell type category", "symbol"), remove = F) %>%
+
+		# Add gene idx
+		left_join(
+			(.) %>%
+				filter(!`query`) %>%
+				distinct(`Cell type category`, ct_symbol, `house keeping`) %>%
+				arrange(!`house keeping`, ct_symbol) %>% # House keeping first
+				mutate(G = 1:n())
+		) %>%
+		left_join(
+			(.) %>%
+				filter(!`house keeping` & !`query`) %>%
+				distinct(level, symbol) %>%
+				arrange(level, symbol) %>%
+				mutate(GM = 1:n()) %>%
+				select(-level)
+		)
+
+}
