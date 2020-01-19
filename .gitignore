@@ -75,3 +75,5 @@ src/ARMET.so
 src/stanExports_ARMET_tc.h
 dev/OLD*
 dev/*Rdata
+dev/*.rda
+dev/*.csv
