@@ -56,7 +56,7 @@ ARMET_tc = function(
 	cores = 14,
 	iterations = 250,
 	sampling_iterations = 100,
-	levels = 1:4,
+	levels = 3,
 	n_markers = my_n_markers ,
 	X = matrix(rep(1, nrow(mix))),
 	do_regression = F
@@ -312,7 +312,9 @@ ARMET_tc = function(
 			draws_1 %>%
 			left_join(
 				fit2 %>%
+					######## ALTERED WITH TREE
 					tidybayes::gather_draws(`prop_[a]`[Q, C], regex = T) %>%
+					###########################
 					drop_na %>%
 					ungroup() %>%
 					left_join(
@@ -445,7 +447,10 @@ ARMET_tc = function(
 		if(do_regression) {
 		alpha_3 =
 			fit3 %>%
-			tidybayes::gather_draws(`alpha_[b|c|d|e]`[A, C], regex = T) %>%
+			######## ALTERED WITH TREE
+			tidybayes::gather_draws(`alpha_[b|c|d|e|f]`[A, C], regex = T) %>%
+			######## ALTERED WITH TREE
+
 			ungroup() %>%
 			drop_na() %>%
 			arrange(.variable) %>%
