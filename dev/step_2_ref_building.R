@@ -6,7 +6,7 @@ library(data.tree)
 library(foreach)
 library(ARMET)
 library(SIBERG)
-source("~/PostDoc/ppcSeq/R/do_parallel.R")
+source("../../../PostDoc/ppcSeq/R/do_parallel.R")
 
 ifelse_pipe = function(.x, .p, .f1, .f2 = NULL) {
 	switch(.p %>% `!` %>% sum(1),
@@ -124,6 +124,9 @@ give_rank_to_ref = function(fit_df, level, tree, lambda_threshold = 5) {
 		arrange(delta) %>%
 		mutate(rank = 1:n()) %>%
 		ungroup() %>%
+
+		separate(pair, c("ct1", "ct2"), sep = " ", remove = F) %>%
+		distinct(symbol, ct1, ct2, rank) %>%
 		mutate(level = !!level)
 }
 
@@ -131,7 +134,7 @@ create_ref = function(ref, markers) {
 	ref %>%
 
 		# Get house keeping and markwrs
-		left_join(markers %>% distinct(level, symbol, ct1, ct2, rank) %>% filter(rank < 500)) %>%
+		left_join(markers %>% filter(rank < 500)) %>%
 		filter(`house keeping` | rank %>% is.na %>% `!`) %>%
 
 		# Filter out symbol if present both in markers and house keeping (strange but happens)
@@ -181,7 +184,6 @@ regression_coefficient = function(x){
 	lm(a ~  b + I(b ^ 2), data = mdf)$coefficients[3]
 }
 
-
 ref =
 	list(
 		read_csv("dev/fit_level1.csv"),
@@ -193,11 +195,11 @@ ref =
 	# Bug after I deleted FANTOM5 I have to rerun infer NB. Some genes are not in all cell types anynore
 	# Other bug
 	filter(`Cell type category` %>% is.na %>% `!`) %>%
-	group_by(level) %>%
-	do(
-		(.) %>% inner_join( (.) %>% distinct(symbol, `Cell type category`) %>% count(symbol) %>% filter(n == max(n)), by="symbol" )
-	) %>%
-	ungroup() %>%
+	# group_by(level) %>%
+	# do(
+	# 	(.) %>% inner_join( (.) %>% distinct(symbol, `Cell type category`) %>% count(symbol) %>% filter(n == max(n)), by="symbol" )
+	# ) %>%
+	# ungroup() %>%
 
 	# Eliminate house keeping that are not in all levels
 	inner_join(
@@ -296,8 +298,6 @@ ref_2 =
 			))
 		}
 
-
-
 		(.) %>%
 			group_by(`Cell type category`, symbol, level) %>%
 			do({
@@ -335,8 +335,10 @@ ref_2 =
 			summarise(`symbol too noisy` = sum(`marker too noisy`))
 	)
 
-saveRDS(ref_2, file='dev/ref_2.rds')
 
+	saveRDS(ref_2, file='dev/ref_2.rds')
+
+	# ref_2 = readRDS(file='dev/ref_2.rds')
 # Some plots
 # ref_2 %>%
 # 	distinct(
@@ -394,9 +396,9 @@ ref_3 =
 		ref_2,
 		give_rank_to_ref(ref_2 %>% filter(level == 1), 1, my_tree) %>%
 			rbind(give_rank_to_ref(ref_2 %>% filter(level == 2), 2, my_tree)) %>%
-			rbind(give_rank_to_ref(ref_2 %>% filter(level == 3), 3, my_tree)) %>%
+			rbind(give_rank_to_ref(ref_2 %>% filter(level == 3), 3, my_tree))
 			#rbind(give_rank_to_ref(ref_2 %>% filter(level == 4), 4, my_tree)) %>%
-			separate(pair, c("ct1", "ct2"), sep = " ", remove = F)
+
 	)
 
 # (ref_3 %>% filter(ct1 == "epithelial" & ct2 == "endothelial" & level ==1) %>%
@@ -417,7 +419,9 @@ columns = c(  "level"     ,                  "sample"    ,                  "sym
 	  "bimodality_NB"   ,            "bimodality_NB_diff"  ,        "marker too noisy"    ,
 	  "symbol too noisy"   ,         "ct1"             ,            "ct2"  ,
 	  "rank" )
-ARMET_ref = ARMET_ref %>% select(!!columns)
+ARMET_ref =
+	ARMET_ref %>%
+	distinct(level, sample, symbol, `Cell type formatted`, `Cell type category`, count, `count normalised bayes`, `Data base`, lambda_log, sigma_inv_log, `house keeping`, ct1, ct2, rank)
 
 # # Adjust too little noise to avoid overfitting
 # ARMET_ref =
@@ -426,7 +430,7 @@ ARMET_ref = ARMET_ref %>% select(!!columns)
 # 	mutate(sigma_inv_log_regressed = ( rigma_raw_intercept + lambda_log * sigma_inv_log_slope) ) %>%
 # 	mutate(sigma_inv_log_minimum =  sigma_inv_log_regressed - sigma_inv_log_sigma)
 
-save(ARMET_ref, file="data/ARMET_ref.RData", compress = "xz")
+save(ARMET_ref, file="data/ARMET_ref.RData", compress = "gzip")
 
 
 # ARMET_ref %>%

@@ -17,6 +17,9 @@ library(ttBulk)
 library(ARMET)
 library(furrr)
 library(purrr)
+plan(multiprocess)
+options(future.globals.maxSize= (20000)*1024^2)
+
 
 # Get level
 args <- commandArgs(TRUE)
@@ -30,32 +33,13 @@ my_level = args[1] %>% as.integer
 #
 # n_cores = system("nproc", intern = TRUE) %>% as.integer %>% sum(-4)
 
-# # Tools
-# source("../../../PostDoc/ppcSeq/R/do_parallel.R")
-# source("https://gist.githubusercontent.com/stemangiola/9d2ba5d599b7ac80404c753cdee04a01/raw/26e5b48fde0cd4f5b0fd7cbf2fde6081a5f63e7f/tidy_data_tree.R")
-
 # MPI
 do_inference = function(counts, my_level, my_run, approximate_posterior = F){
 
 	counts =
 		counts %>%
 		filter(`Cell type category` == "house_keeping" | run == my_run) %>%
-		mutate(symbol = `symbol original`)
-
-	counts_fit =
-		counts %>%
-
-		# inner_join(
-		# 	bind_rows(
-		# 		(.) %>% distinct(symbol) %>% sample_n(100),
-		# 		(.) %>% filter(`Cell type category` == "house_keeping") %>% distinct(symbol) %>% slice(1:100)
-		# 	) %>%
-		# 		distinct
-		#
-		# ) %>%
-
-		select(sample, symbol, count, `Cell type category`, level) %>%
-		rename(`read count` = count) %>%
+		mutate(symbol = `symbol original`) %>%
 
 		# Replace the category house_keeping
 		mutate(`house keeping` = `Cell type category` == "house_keeping") %>%
@@ -67,7 +51,26 @@ do_inference = function(counts, my_level, my_run, approximate_posterior = F){
 				rename(`Cell type category` = temp)
 		) %>%
 		select(-temp) %>%
-		filter(`Cell type category` %>% is.null %>% `!`) %>%
+		filter(`Cell type category` %>% is.null %>% `!`)
+
+	counts_fit =
+		counts %>%
+
+		# Adapt it as input
+		select(sample, symbol, count, `Cell type category`, level, `count normalised`, `house keeping`) %>%
+		rename(`read count` = count) %>%
+
+		# #############################
+		# # Subsample for TEST
+		# inner_join(
+		# 	bind_rows(
+		# 		(.) %>% distinct(symbol) %>% sample_n(100),
+		# 		(.) %>% filter(`Cell type category` == "house_keeping") %>% distinct(symbol) %>% slice(1:100)
+		# 	) %>%
+		# 		distinct
+		# ) %>%
+		# #############################
+		# #############################
 
 		ARMET::ref_intercept_only(my_level, cores = ceiling(24/5), approximate_posterior = approximate_posterior)
 
@@ -148,17 +151,8 @@ counts_run =
 	readRDS(file="dev/counts_infer_NB.rds") %>%
 	left_join( (.) %>% distinct(`symbol original`) %>% mutate(run = sample(1:5, n(), replace = T)))
 
-
-# Execute fit
-plan(multiprocess)
-options(future.globals.maxSize= (20000)*1024^2)
-
 # Fit
-calculate =
-	1:5 %>%
-	future_map(
-		~ do_inference(	counts_run,	my_level,	.x ,	T	)
-	)
+1:5 %>% future_map(	~ do_inference(	counts_run,	my_level,	.x ,	T	))
 
 # Process fit
 (1:5) %>%
@@ -166,18 +160,6 @@ calculate =
 
 	# Add level information
 	mutate(level = !!my_level) %>%
-
-	# Replace the category house_keeping
-	mutate(`house keeping` = `Cell type category` == "house_keeping") %>%
-	rename(temp = `Cell type category`) %>%
-	left_join(
-		(.) %>%
-			filter(temp != "house_keeping") %>%
-			distinct(sample, temp, level) %>%
-			rename(`Cell type category` = temp)
-	) %>%
-	select(-temp) %>%
-	filter(`Cell type category` %>% is.null %>% `!`) %>%
 
 	# Keep one HKG per stan_sun
 	filter((!`house keeping`) | stan_run==1) %>%

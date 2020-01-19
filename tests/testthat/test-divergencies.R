@@ -7,17 +7,52 @@ library(ARMET)
 # library(magrittr)
 
 
-# Test dataset
-
-res = readRDS(
-	"/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/feature_selection_fifth_iterative_run_fix_skylake_2/markers_17.RData"
+# Test fo anylvel that all gnes are in all cel tpes
+expect_lte(
+	ARMET::ARMET_ref %>%
+		distinct(level, symbol, `Cell type category`) %>%
+		count(level, symbol) %>%
+		distinct(level, n) %>%
+		nrow,
+	3
 )
-load("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/mix_dirichlet_X.rda")
 
+# Test dataset house keeping should be in all levels
+expect_equal(
+	ARMET::ARMET_ref %>% distinct(`house keeping`, level) %>% nrow,
+	6
+)
+
+# Test dataset house keeping should be in all samples
+expect_equal(
+	ARMET::ARMET_ref %>% distinct(`house keeping`, sample) %>% count(`house keeping`) %>% distinct(n) %>% nrow,
+	1
+)
+
+# there should be howse keeping
+expect_equal(
+	ARMET::ARMET_ref %>% distinct(`house keeping`) %>% nrow,
+	2
+)
+
+# there should be howse keeping
+expect_equal(
+	ARMET::ARMET_ref %>% filter(level==3) %>% pull(`Cell type category`) %>% unique %>% intersect(c("endothelial", "epithelial", "fibroblast")) %>% length,
+	3
+)
+
+# test if any count is NA
+expect_equal(
+	ARMET::ARMET_ref %>% filter(count %>% is.na) %>% nrow,
+	0
+)
+
+
+my_mix = ARMET_ref %>% inner_join( (.) %>% distinct(sample) %>% slice(1)) %>% distinct(sample, symbol, count) %>% spread(symbol, count)
 
 # result =
 # 	ARMET_tc(
-# 		res$input$mix %>% slice(1),
+# 		my_mix,
 # 		iterations = 50,
 # 		sampling_iterations = 5,
 # 		n_markers = res$input$n_markers,
@@ -27,7 +62,7 @@ load("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/mix_
 
 result_fix =
 	ARMET_tc(
-		res$input$mix %>% slice(1),
+		my_mix,
 		iterations = 50,
 		sampling_iterations = 5,
 		full_bayesian  = F,
@@ -35,6 +70,15 @@ result_fix =
 		levels = 3
 	)
 
+result_fix =
+	ARMET_tc(
+		my_mix,
+		iterations = 50,
+		sampling_iterations = 5,
+		full_bayesian  = T,
+		cores = 2,
+		levels = 1
+	)
 
 # result_dirichlet =
 # 	ARMET_tc(

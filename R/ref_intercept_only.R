@@ -88,16 +88,13 @@ ref_intercept_only = function(reference,
 	# Set up tree structure
 	levels_in_the_tree = 1:4
 
-	tree = create_tree_object(reference)
-
-	tree = 	data.tree::Clone(tree) %>%	{
+	tree =
+		create_tree_object(reference) %>%
+		data.tree::Clone() %>%	{
 		# Filter selected levels
 		data.tree::Prune(., function(x)
 			x$level <= max(levels_in_the_tree) + 1)
-
-		# Filter if not in referenc
-		#data.tree::Prune(., function(x) ( x$name %in% (ARMET::ARMET_ref %>% distinct(`Cell type category`) %>% pull(1) %>% as.character) ))
-		.
+			.
 	}
 
 	ct_in_nodes =
@@ -187,6 +184,7 @@ ref_intercept_only = function(reference,
 		)
 
 	res1 = run_model_ref(
+		tree,
 		reference_filtered,
 		shards,
 		level,
@@ -218,7 +216,18 @@ ref_intercept_only = function(reference,
 				select(par, S, "50%") %>%
 				rename(exposure = `50%`) %>%
 				select(-par)
-		)
+		) %>%
+
+		# Replace the category house_keeping
+		mutate(`house keeping` = `Cell type category` == "house_keeping") %>%
+		rename(temp = `Cell type category`) %>%
+		left_join(
+			(.) %>%
+				filter(temp != "house_keeping") %>%
+				distinct(sample, S, temp) %>%
+				rename(`Cell type category` = temp)
+		) %>%
+		select(-temp) %>%
 
 		# attach fit
 		add_attr(res1[[2]], "fit")
@@ -240,7 +249,8 @@ add_attr = function(var, attribute, name) {
 
 #' @export
 #'
-run_model_ref = function(reference_filtered,
+run_model_ref = function(tree,
+												 reference_filtered,
 												 shards,
 												 lv,
 												 full_bayesian,
@@ -248,14 +258,32 @@ run_model_ref = function(reference_filtered,
 												 exposure_posterior = tibble(.mean = 0, .sd = 0)[0,],
 												 iterations = 250,
 												 sampling_iterations = 100) {
-	# Filter on level considered
-	reference_filtered = reference_filtered %>% filter(level %in% lv)
+
+
+	reference_filtered =
+		reference_filtered %>%
+		inner_join(
+			# Filter on level considered
+			tree %>%
+				data.tree::Clone() %>%
+				{
+					# Filter selected levels
+					data.tree::Prune(., function(x)
+						x$level <= lv + 1)
+					.
+				} %>%
+				{
+					.$Get("name", filterFun  = isLeaf)
+				} %>%
+				as_tibble() %>%
+				setNames("Cell type category")
+		)
 
 	# Check if there are not house keeping
 	if (reference_filtered %>% filter(`house keeping`) %>% nrow %>% equals(0))
 		stop("No house keeping genes in your reference data frame")
 
-	df = ref_format(reference_filtered)
+	df = ref_format(reference_filtered) %>% distinct()
 
 	G = df %>% filter(!`query`) %>% distinct(G) %>% nrow()
 	GM = df %>% filter(!`house keeping`) %>% distinct(symbol) %>% nrow()
@@ -297,29 +325,11 @@ run_model_ref = function(reference_filtered,
 														shards,
 														lv)
 
-	additional_par_to_save  = switch(full_bayesian %>% `!` %>% sum(1),
-																	 c("lambda_log", "sigma_inv_log"),
-																	 c())
-
 	# library(rstan)
 	# fileConn<-file("~/.R/Makevars")
 	# writeLines(c( "CXX14FLAGS += -O2","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
 	# close(fileConn)
 	# ARMET_tc_model = rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_ref.stan", auto_write = F)
-
-	exposure_rate_init = switch(
-		(lv > 1) %>% `!` %>% as.numeric %>% sum(1),
-		exposure_posterior %>% pull(1),
-		runif(S, -0.5, 0.5)
-	) %>% as.array
-
-	exposure_rate_multiplier = sd(exposure_rate_init) %>% ifelse_pipe((.) %>% is.na, ~ 0.1)
-
-	init_list = list(lambda_log = lambda_log,
-									 sigma_inv_log = sigma_inv_log) %>%
-		ifelse_pipe(!full_bayesian,
-								~ .x %>% c(list(exposure_rate = exposure_rate_init)))
-
 
 	Sys.setenv("STAN_NUM_THREADS" = shards)
 
@@ -343,10 +353,7 @@ run_model_ref = function(reference_filtered,
 			 		# c("lambda_UFO") %>%
 			 		# c("prop_UFO") %>%
 			 		# c(additional_par_to_save),
-			 		init = function ()
-			 			init_list
-			 		# ,
-			 		# save_warmup = FALSE
+			 		save_warmup = FALSE
 			 	) %>%
 			 		{
 			 			(.)  %>% rstan::summary() %$% summary %>% as_tibble(rownames = "par") %>% arrange(Rhat %>% desc) %>% print
@@ -355,7 +362,7 @@ run_model_ref = function(reference_filtered,
 
 			 	vb_iterative(
 			 		stanmodels$ARMET_ref,
-			 		output_samples = 100,
+			 		output_samples = 500,
 			 		iter = 50000,
 			 		tol_rel_obj = 0.005,
 			 		algorithm = "meanfield",
@@ -524,16 +531,16 @@ ref_format = function(ref) {
 		# Add house keeping into Cell type label
 		mutate(`Cell type category` = ifelse(`house keeping`, "house_keeping", `Cell type category`)) %>%
 
-		# Still needed?
-		anti_join(
-			(.) %>%
-				filter(`house keeping` & !`query`) %>%
-				distinct(symbol, level) %>%
-				group_by(symbol) %>%
-				arrange(level) %>%
-				slice(2:max(n(), 2)) %>% # take away house keeping from level 2 above
-				ungroup()
-		) %>%
+		# # Still needed? NOT because I have sample, ct unique, no redundancy
+		# anti_join(
+		# 	(.) %>%
+		# 		filter(`house keeping` & !`query`) %>%
+		# 		distinct(symbol, level) %>%
+		# 		group_by(symbol) %>%
+		# 		arrange(level) %>%
+		# 		slice(2:max(n(), 2)) %>% # take away house keeping from level 2 above
+		# 		ungroup()
+		# ) %>%
 
 		# If house keeping delete level infomation
 		mutate(level = ifelse(`house keeping`, NA, level)) %>%
