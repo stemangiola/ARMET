@@ -60,6 +60,19 @@ my_mix = ARMET_ref %>% inner_join( (.) %>% distinct(sample) %>% slice(1)) %>% di
 # 		cores = 2, levels = 2
 # 	)
 
+my_mix = ARMET_ref %>% inner_join( (.) %>% filter(`Cell type category` == "nk_primed") %>% distinct(sample) %>% slice(1)) %>% distinct(sample, symbol, count) %>% spread(symbol, count)
+
+
+result_nk_fix =
+	ARMET_tc(
+		my_mix,
+		full_bayesian  = F,
+		cores = 2,
+		levels = 3
+	)$proportions %>%
+	filter(level==3) %>%
+	filter(`Cell type category` == "nk_primed")
+
 result_fix =
 	ARMET_tc(
 		my_mix,
