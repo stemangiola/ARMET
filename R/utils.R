@@ -264,7 +264,7 @@ get_MPI_deconv = function(y_source, shards, my_level, tree) {
 #'
 #' @description  Plot differences between inferred and observed transcription abundances
 plot_differences_in_lambda = function() {
-	# Plot differences in lambda
+	# Plot differences in lambda_log
 	(
 		fit %>%
 			tidybayes::gather_draws(lambda_log[G]) %>%
@@ -275,8 +275,8 @@ plot_differences_in_lambda = function() {
 			) %>%
 			left_join(
 				reference_filtered %>%
-					distinct(symbol, lambda, `Cell type category`) %>%
-					rename(`lambda_log` = lambda)
+					distinct(symbol, lambda_log, `Cell type category`) %>%
+					rename(`lambda_log` = lambda_log)
 			) %>%
 			ggplot(aes(
 				x = lambda_log, y = .value, label = G
@@ -296,7 +296,7 @@ plot_differences_in_lambda = function() {
 					"lambda_sigma",
 					"exposure_rate",
 					"lambda_log",
-					"sigma_raw",
+					"sigma_inv_log",
 					"prop"
 				)
 			) %>%
@@ -421,9 +421,19 @@ choose_chains_majority_roule = function(fit_parsed) {
 #' filter_reference
 #'
 #' @description Filter the reference
-filter_reference = function(reference, mix) {
+filter_reference = function(reference, mix, n_markers) {
+
+	# Check if all cell types in ref are in n_markers
+	if( reference %>% filter(!ct1 %in% n_markers$ct1) %>% nrow %>% `>` (0) )
+		stop(
+			sprintf(
+				"The cell types %s are present in reference but not in n_markers dataset",
+				reference %>% filter(!ct1 %in% n_markers$ct1) %>% distinct(ct1) %>% pull(1) %>% paste(collapse=", ")
+				)
+		)
+
 	reference %>%
-		filter(symbol %in% (mix %>% colnames %>% `[` (-1))) %>%
+		filter(symbol %in% (mix %>% colnames)) %>%
 		{
 			bind_rows(
 				# Get markers based on common genes with mix
@@ -563,6 +573,8 @@ parse_summary_check_divergence = function(draws) {
 #' create_tree_object
 #'
 #' @description create tree object that is in data directory
+#'
+#' @export
 create_tree_object = function(my_ref = ARMET::ARMET_ref) {
 	#yaml:: yaml.load_file("~/PhD/deconvolution/ARMET/data/tree.yaml") %>%
 	yaml::yaml.load_file("data/tree.yaml") %>%
@@ -774,8 +786,8 @@ get_NB_qq_values = function(input.df, transcript_column) {
 								ppoints(`read count normalised bayes`),
 								0.5
 							),
-							size = .$sigma_raw %>% unique %>% exp %>% `^` (-1),
-							mu = .$lambda %>% unique %>% exp
+							size = .$sigma_inv_log %>% unique %>% exp %>% `^` (-1),
+							mu = .$lambda_log %>% unique %>% exp
 						)
 
 				)
@@ -1045,203 +1057,6 @@ ref_mix_format = function(ref, mix) {
 				mutate(GM = 1:n()) %>%
 				select(-level)
 		)
-
-}
-
-#' @export
-run_model = function(reference_filtered,
-										 mix,
-										 shards,
-										 lv,
-										 full_bayesian,
-										 approximate_posterior,
-										 prop_posterior,
-										 exposure_posterior = tibble(.mean = 0, .sd = 0)[0, ],
-										 iterations = 250,
-										 sampling_iterations = 100,
-										 X,
-										 do_regression) {
-	# Filter on level considered
-	reference_filtered = reference_filtered %>% filter(level %in% lv)
-
-	#
-
-
-
-	df = ref_mix_format(reference_filtered, mix)
-
-	G = df %>% filter(!`query`) %>% distinct(G) %>% nrow()
-	GM = df %>% filter(!`house keeping`) %>% distinct(symbol) %>% nrow()
-
-	# For  reference MPI inference
-	counts_baseline =
-		df %>%
-
-		# Eliminate the query part, not the house keeping of the query
-		filter(!`query` | `house keeping`)  %>%
-
-		format_for_MPI(shards)
-
-	S = counts_baseline %>% distinct(sample) %>% nrow()
-	N = counts_baseline %>% distinct(idx_MPI, `read count`, `read count MPI row`) %>%  count(idx_MPI) %>% summarise(max(n)) %>% pull(1)
-	M = counts_baseline %>% distinct(start, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
-
-	lambda_log = 	  counts_baseline %>% filter(!query) %>% distinct(G, lambda) %>% arrange(G) %>% pull(lambda)
-	sigma_inv_log = counts_baseline %>% filter(!query) %>% distinct(G, sigma_raw) %>% arrange(G) %>% pull(sigma_raw)
-
-	y_source =
-		df %>%
-		filter(`query` & !`house keeping`) %>%
-		select(S, Q, `symbol`, `read count`, GM, sample) %>%
-		left_join(
-			df %>% filter(!query) %>% distinct(
-				`symbol`,
-				G,
-				`Cell type category`,
-				level,
-				lambda,
-				sigma_raw,
-				GM,
-				C
-			)
-		) %>%
-		arrange(C, Q, symbol) %>%
-		mutate(`Cell type category` = factor(`Cell type category`, unique(`Cell type category`)))
-
-	counts_baseline_to_linear =
-		counts_baseline %>%
-		filter_house_keeping_query_if_fixed(full_bayesian) %>%
-		arrange(G, S) %>%
-		mutate(counts_idx = 1:n()) %>%
-		mutate(S = S %>% as.factor %>% as.integer)
-
-	counts_linear = counts_baseline_to_linear %>%  pull(`read count`)
-	G_to_counts_linear = counts_baseline_to_linear %>% pull(G)
-	G_linear = G_to_counts_linear
-	S_linear = counts_baseline_to_linear %>% pull(S)
-
-	CL = length(counts_linear)
-	S = counts_baseline_to_linear %>% distinct(S) %>% nrow
-
-	# Counts idx for each level for each level
-	counts_idx_lv_NA = counts_baseline_to_linear %>% filter(level %>% is.na) %>% pull(counts_idx)
-	CL_NA = counts_idx_lv_NA %>% length
-
-	# Level specific
-	counts_idx_lv = counts_baseline_to_linear %>% filter(level == lv) %>% pull(counts_idx)
-	CL_lv = counts_idx_lv %>% length
-
-	# Deconvolution, get G only for markers of each level. Exclude house keeping
-	G_lv_linear = counts_baseline %>% filter(level == lv) %>% select(G, GM, sprintf("C%s", lv)) %>% distinct() %>% arrange(GM, !!as.symbol(sprintf("C%s", lv))) %>% pull(G)
-	G_lv = G_lv_linear %>% length
-
-	# Observed mix counts
-	y_linear_lv = y_source %>% filter(level == lv) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
-
-	# Observed mix samples indexes
-	y_linear_S_lv = y_source %>% filter(level == lv) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
-
-	# Lengths indexes
-	Y_lv = y_linear_lv %>% length
-
-
-	MPI_data = get_MPI_df(counts_baseline_to_linear,
-												y_source,
-												counts_baseline,
-												shards,
-												lv)
-
-	# Dirichlet regression
-	A = X %>% ncol
-
-
-
-	model  = switch(full_bayesian %>% `!` %>% sum(1),
-									stanmodels$ARMET_tc,
-									stanmodels$ARMET_tc_fix
-								)
-
-	additional_par_to_save  = switch(full_bayesian %>% `!` %>% sum(1),
-									c("lambda_log","sigma_inv_log"),
-									c()
-								)
-
-	# library(rstan)
-	# fileConn<-file("~/.R/Makevars")
-	# writeLines(c( "CXX14FLAGS += -O2","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
-	# close(fileConn)
-	# #  = stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc.stan")
-	# ARMET_tc_model = rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix.stan", auto_write = F)
-
-	exposure_rate_init = switch(
-		(lv > 1) %>% `!` %>% as.numeric %>% sum(1),
-		exposure_posterior %>% pull(1),
-		runif(S,-0.5, 0.5)
-	) %>% as.array
-
-	exposure_rate_multiplier = sd(exposure_rate_init) %>% ifelse_pipe((.) %>% is.na, ~ 0.1)
-
-	init_list = list(lambda_log = lambda_log,
-									 sigma_inv_log = sigma_inv_log) %>%
-		ifelse_pipe(!full_bayesian,
-								~ .x %>% c(list(exposure_rate = exposure_rate_init)))
-
-
-	Sys.setenv("STAN_NUM_THREADS" = shards)
-
-	#browser()
-
-	list(df,
-			 switch(
-			 	approximate_posterior %>% sum(1),
-
-			 	# HMC
-			 	sampling(
-			 		model,
-			 		#ARMET_tc_model, #,
-			 		chains = 3,
-			 		cores = 3,
-			 		iter = iterations,
-			 		warmup = iterations - sampling_iterations,
-			 		data = MPI_data %>% c(prop_posterior),
-			 		pars=
-			 			c("prop_1", "prop_2", "prop_3", sprintf("prop_%s", letters[1:9])) %>%
-			 			c("alpha_1", sprintf("alpha_%s", letters[1:9])) %>%
-			 			c("exposure_rate") %>%
-			 			c("lambda_UFO") %>%
-			 			c("prop_UFO") %>%
-			 			c(additional_par_to_save),
-			 		init = function ()	init_list,
-			 		save_warmup = FALSE
-			 	) %>%
-			 		{
-			 			(.)  %>% rstan::summary() %$% summary %>% as_tibble(rownames = "par") %>% arrange(Rhat %>% desc) %>% print
-			 			(.)
-			 		},
-
-			 	vb_iterative(
-			 		model,
-			 		#ARMET_tc_model,
-			 		output_samples = 100,
-			 		iter = 50000,
-			 		tol_rel_obj = 0.01,
-			 		data = MPI_data,
-			 		pars = c(
-			 			"prop_1",
-			 			"prop_2",
-			 			"prop_3",
-			 			"prop_4",
-			 			"exposure_rate",
-			 			"lambda_log",
-			 			"sigma_inv_log",
-			 			"sigma_intercept_dec"
-			 		),
-			 		#,
-			 		init = function ()
-			 			list(lambda_log = lambda_log, sigma_inv_log = sigma_inv_log) # runif(G,  lambda_log - 1, lambda_log + 1)	)
-
-			 	)
-			 ))
 
 }
 
@@ -1717,6 +1532,7 @@ ifelse_pipe = function(.x, .p, .f1, .f2 = NULL) {
 #'
 #' @import ggplot2
 #'
+#' @export
 level_to_plot_inferred_vs_observed  = function(result, level, S = NULL, cores = 20){
 
 	library(multidplyr)
@@ -1753,7 +1569,7 @@ level_to_plot_inferred_vs_observed  = function(result, level, S = NULL, cores = 
 
 	result$signatures[[level]] %>%
 		filter(!query & !`house keeping`) %>%
-		distinct(`Cell type category`, C, level, G, GM, symbol, lambda, sigma_raw) %>%
+		distinct(`Cell type category`, C, level, G, GM, symbol, lambda_log, sigma_inv_log) %>%
 		{ print(1); Sys.time(); (.) } %>%
 
 		# Add divergence
@@ -1767,13 +1583,13 @@ level_to_plot_inferred_vs_observed  = function(result, level, S = NULL, cores = 
 		mutate(converged = ifelse(converged %>% is.na, T, converged)) %>%
 		{ print(2); Sys.time(); (.) } %>%
 
-		# If inferred replace lambda and sigma_raw
+		# If inferred replace lambda_log and sigma_inv_log
 		ifelse_pipe(
 			result$input$full_bayesian,
-			~ .x %>% select(-lambda, -sigma_raw) %>%
+			~ .x %>% select(-lambda_log, -sigma_inv_log) %>%
 				left_join(
 					result$fit[[level]] %>% tidybayes::spread_draws(lambda_log[G], sigma_inv_log[G]) %>% ungroup() %>%
-						rename(lambda = lambda_log,sigma_raw = sigma_inv_log)
+						rename(lambda_log = lambda_log,sigma_inv_log = sigma_inv_log)
 				)
 		) %>%
 		{ print(3); Sys.time(); (.) } %>%
@@ -1800,8 +1616,8 @@ level_to_plot_inferred_vs_observed  = function(result, level, S = NULL, cores = 
 
 		# Calculate sum
 		mutate(
-			lambda_exp = lambda %>% exp,
-			sigma_exp = 1 / exp(sigma_raw)
+			lambda_exp = lambda_log %>% exp,
+			sigma_exp = 1 / exp(sigma_inv_log)
 		) %>%
 
 		{ print(4); Sys.time(); (.) } %>%

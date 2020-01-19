@@ -775,7 +775,7 @@ parameters {
   // Local properties of the data
   vector[G] lambda_log;
   vector[G] sigma_inv_log;
-  vector[S] exposure_rate;
+  vector[S-1] exposure_rate_minus_1;
 
   // Proportions
   // lv1
@@ -824,6 +824,8 @@ parameters {
 }
 transformed parameters{
 
+	vector[S] exposure_rate = append_row(exposure_rate_minus_1, -sum(exposure_rate_minus_1));
+
 	vector[ct_in_levels[2]] prop_2[Q * (lv >= 2)];
 	vector[ct_in_levels[3]] prop_3[Q * (lv >= 3)];
 	vector[ct_in_levels[4]] prop_4[Q * (lv >= 4)];
@@ -870,6 +872,8 @@ transformed parameters{
 			)
 		);
 
+
+
 }
 model {
 
@@ -899,8 +903,7 @@ model {
 	lambda_skew ~ normal(lambda_skew_prior[1],lambda_skew_prior[2]);
 
 	// Exposure
-	exposure_rate ~ normal(0,1);
-	sum(exposure_rate) ~ normal(0, 0.001 * S);
+	exposure_rate_minus_1 ~ normal(0,1);
 
 	// Means overdispersion reference
 	lambda_log ~ skew_normal(lambda_mu, exp(lambda_sigma), lambda_skew);

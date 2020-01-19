@@ -570,6 +570,10 @@ if(dim_4[1] > 0) {
 		// print(1 ./ exp( lambda_log_deconvoluted_1  * -0.4 + 1.52));
 		// print(lambda_log_deconvoluted_1);
 
+		// Overwrite parameter
+		sigma_intercept = 1.3420415;
+
+
 		// deconvolution
 		lp = neg_binomial_2_lpmf(mix_counts |
 			exp(lambda_log_deconvoluted_1 + mix_exposure_rate),
@@ -799,19 +803,20 @@ parameters {
   simplex[ct_in_nodes[1]]  prop_1[Q * (lv >= 1)]; // Root
 
   // lv2
-  simplex[ct_in_nodes[2]]  prop_a[Q * (lv >= 2)]; // Immune cells
+  simplex[ct_in_nodes[2]]  prop_a[Q * (lv >= 2)]; // Immune cells childrens
 
   // lv3
-  simplex[ct_in_nodes[3]]  prop_b[Q * (lv >= 3)]; // b cells
-  simplex[ct_in_nodes[4]]  prop_c[Q * (lv >= 3)]; // granulocyte
-  simplex[ct_in_nodes[5]]  prop_d[Q * (lv >= 3)]; // mono_derived
-  simplex[ct_in_nodes[6]]  prop_e[Q * (lv >= 3)]; // t_cell
+  simplex[ct_in_nodes[3]]  prop_b[Q * (lv >= 3)]; // b cells childrens
+  simplex[ct_in_nodes[4]]  prop_c[Q * (lv >= 3)]; // granulocyte childrens
+  simplex[ct_in_nodes[5]]  prop_d[Q * (lv >= 3)]; // mono_derived childrens
+  simplex[ct_in_nodes[6]]  prop_e[Q * (lv >= 3)]; // natural_killer childrens
+  simplex[ct_in_nodes[7]]  prop_f[Q * (lv >= 3)]; // t_cell childrens
 
 	// lv4
-  simplex[ct_in_nodes[7]]  prop_f[Q * (lv >= 4)]; // dendritic myeloid
-  simplex[ct_in_nodes[8]]  prop_g[Q * (lv >= 4)]; // macrophage
-  simplex[ct_in_nodes[9]]  prop_h[Q * (lv >= 4)]; // CD4
-  simplex[ct_in_nodes[10]] prop_i[Q * (lv >= 4)]; // CD8
+  simplex[ct_in_nodes[8]]  prop_g[Q * (lv >= 4)]; // dendritic myeloid childrens
+  simplex[ct_in_nodes[9]]  prop_h[Q * (lv >= 4)]; // macrophage childrens
+  simplex[ct_in_nodes[10]] prop_i[Q * (lv >= 4)]; // CD4 childrens
+  simplex[ct_in_nodes[11]] prop_l[Q * (lv >= 4)]; // CD8 childrens
 
 	// Dirichlet regression
   // lv1
@@ -824,15 +829,16 @@ parameters {
   matrix[A * (lv == 3) * do_regression,ct_in_nodes[3]]  alpha_b; // b cells
   matrix[A * (lv == 3) * do_regression,ct_in_nodes[4]]  alpha_c; // granulocyte
   matrix[A * (lv == 3) * do_regression,ct_in_nodes[5]]  alpha_d; // mono_derived
-  matrix[A * (lv == 3) * do_regression,ct_in_nodes[6]]  alpha_e; // t_cell
+  matrix[A * (lv == 3) * do_regression,ct_in_nodes[6]]  alpha_e; // natural_killer
+  matrix[A * (lv == 3) * do_regression,ct_in_nodes[7]]  alpha_f; // t_cell
 
 	// lv4
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[7]]  alpha_f; // dendritic myeloid
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[8]]  alpha_g; // macrophage
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[9]]  alpha_h; // CD4
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[10]] alpha_i; // CD8
+  matrix[A * (lv == 4) * do_regression,ct_in_nodes[8]]  alpha_g; // dendritic myeloid
+  matrix[A * (lv == 4) * do_regression,ct_in_nodes[9]]  alpha_h; // macrophage
+  matrix[A * (lv == 4) * do_regression,ct_in_nodes[10]]  alpha_i; // CD4
+  matrix[A * (lv == 4) * do_regression,ct_in_nodes[11]] alpha_l; // CD8
 
-	real phi[10];
+	real phi[11];
 
 	// Unknown population
 	vector<lower=0, upper = log(max(counts_linear))>[max(size_G_linear_MPI)/ct_in_levels[lv]] lambda_UFO[shards];
@@ -864,7 +870,10 @@ transformed parameters{
 					multiply_by_column(prop_c, prop_2[,parents_lv3[2]]),
 					append_vector_array(
 						multiply_by_column(prop_d, prop_2[,parents_lv3[3]]),
-						multiply_by_column(prop_e, prop_2[,parents_lv3[4]])
+						append_vector_array(
+							multiply_by_column(prop_e, prop_2[,parents_lv3[4]]),
+							multiply_by_column(prop_f, prop_2[,parents_lv3[5]])
+						)
 					)
 				)
 			)
@@ -876,12 +885,12 @@ transformed parameters{
 		append_vector_array(
 			prop_3[,singles_lv4],
 			append_vector_array(
-				multiply_by_column(prop_f, prop_3[,parents_lv4[1]]),
+				multiply_by_column(prop_g, prop_3[,parents_lv4[1]]),
 				append_vector_array(
-					multiply_by_column(prop_g, prop_3[,parents_lv4[2]]),
+					multiply_by_column(prop_h, prop_3[,parents_lv4[2]]),
 					append_vector_array(
-						multiply_by_column(prop_h, prop_3[,parents_lv4[3]]),
-						multiply_by_column(prop_i, prop_3[,parents_lv4[4]])
+						multiply_by_column(prop_i, prop_3[,parents_lv4[3]]),
+						multiply_by_column(prop_l, prop_3[,parents_lv4[4]])
 					)
 				)
 			)
@@ -900,7 +909,7 @@ model {
 	exposure_rate ~ normal(0,1);
 
 	// Deconvolution
-	sigma_intercept_dec ~ student_t(3, 0, 2);
+	sigma_intercept_dec ~ normal(0,1);
 
 	// Level NA - Mix house keeing /////////////////////
 
@@ -953,6 +962,9 @@ model {
   	for(q in 1:Q) prop_e[q] ~ dirichlet_regression( X[q], alpha_e, phi[6] );
   	to_vector( alpha_e ) ~ normal(0,1);
 
+  	for(q in 1:Q) prop_f[q] ~ dirichlet_regression( X[q], alpha_f, phi[7] );
+  	to_vector( alpha_f ) ~ normal(0,1);
+
   }
   if(lv == 3 && !do_regression) for(q in 1:Q){
   	 target += dirichlet_lpdf(prop_b[q] | rep_vector(num_elements(prop_b[1]), num_elements(prop_b[1])));
@@ -981,26 +993,26 @@ model {
 		lambda_UFO
 	);
 
-	// target += sum(map_rect(
-	// 	lp_reduce ,
-	// 	[prop_UFO]' ,
-	// 	pack_r_1,
-	// 	pack_R_1,
-	// 	int_package
-	// ));
-
-	target += lp_reduce(
+	target += sum(map_rect(
+		lp_reduce ,
 		[prop_UFO, sigma_intercept_dec]' ,
-		pack_r_1[1],
-		pack_R_1[1],
-		int_package[1]
-	);
+		pack_r_1,
+		pack_R_1,
+		int_package
+	));
+
+	// target += lp_reduce(
+	// 	[prop_UFO, sigma_intercept_dec]' ,
+	// 	pack_r_1[1],
+	// 	pack_R_1[1],
+	// 	int_package[1]
+	// );
 
 	// Dirichlet regression
 	phi ~ normal(0,1);
 
 	// lambda UFO
-	for(i in 1:shards) lambda_UFO[i] ~ normal(0,1);
+	for(i in 1:shards) lambda_UFO[i] ~ skew_normal(6.2, 3.3, -2.7);
 	prop_UFO ~ beta(1.001, 20);
 
 }

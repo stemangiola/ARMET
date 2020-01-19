@@ -67,25 +67,23 @@ ARMET_tc = function(
 	library(tidyverse)
 	library(magrittr)
 
-	my_theme =
-		theme_bw() +
-		theme(
-			panel.border = element_blank(),
-			axis.line = element_line(),
-			panel.grid.major = element_line(size = 0.2),
-			panel.grid.minor = element_line(size = 0.1),
-			text = element_text(size=12),
-			legend.position="bottom",
-			#aspect.ratio=1,
-			axis.text.x = element_text(angle = 30, hjust = 1),
-			strip.background = element_blank(),
-			axis.title.x  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10)),
-			axis.title.y  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10))
-		)
+	# my_theme =
+	# 	theme_bw() +
+	# 	theme(
+	# 		panel.border = element_blank(),
+	# 		axis.line = element_line(),
+	# 		panel.grid.major = element_line(size = 0.2),
+	# 		panel.grid.minor = element_line(size = 0.1),
+	# 		text = element_text(size=12),
+	# 		legend.position="bottom",
+	# 		#aspect.ratio=1,
+	# 		axis.text.x = element_text(angle = 30, hjust = 1),
+	# 		strip.background = element_blank(),
+	# 		axis.title.x  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10)),
+	# 		axis.title.y  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10))
+	# 	)
 
 	shards = cores #* 2
-	shards = cores = 8
-	shards = shards
 	is_level_in = shards %>% `>` (0) %>% as.integer
 
 	# Global properties - derived by previous analyses of the whole reference dataset
@@ -97,7 +95,7 @@ ARMET_tc = function(
 
 	# Non centered
 	lambda_mu_prior = c(6.2, 1)
-	lambda_sigma_prior =  c( log(3.3) , 1)
+	lambda_sigma_prior =  c( 3.3 , 1)
 	lambda_skew_prior =  c( -2.7, 1)
 	sigma_intercept_prior = c( 1.9 , 0.1)
 
@@ -165,23 +163,8 @@ ARMET_tc = function(
 	reference_filtered =
 		ARMET::ARMET_ref %>%
 
-		# Bug after I deleted FANTOM5 I have to rerun infer NB. Some genes are not in all cell types anynore
-		# Other bug
-		filter(`Cell type category` %>% is.na %>% `!`) %>%
-		group_by(level) %>%
-		do(
-			(.) %>% inner_join(
-				(.) %>%
-					distinct(symbol, `Cell type category`) %>%
-					count(symbol) %>%
-					filter(n == max(n))
-			)
-		) %>%
-		ungroup() %>%
-
-
 		left_join(n_markers, by=c("ct1", "ct2")) %>%
-		filter_reference(mix) %>%
+		filter_reference(mix, n_markers) %>%
 		select(-ct1, -ct2, -rank, -`n markers`) %>%
 		distinct %>%
 
@@ -267,6 +250,7 @@ ARMET_tc = function(
 		fit1 %>%
 		tidybayes::gather_draws(`prop_[1]`[Q, C], regex = T) %>%
 		drop_na  %>%
+		ungroup() %>%
 
 		# Add relative proportions
 		mutate(.value_relative = .value) %>%
@@ -332,10 +316,12 @@ ARMET_tc = function(
 					drop_na %>%
 					ungroup() %>%
 					left_join(
+						######## ALTERED WITH TREE
 						tibble(
 							.variable = c("prop_a"),
 							C1 = parents_lv2
 						)
+						##########################
 					) %>%
 					select(-.variable) %>%
 					rename(.value2 = .value, C2 = C),
@@ -356,7 +342,9 @@ ARMET_tc = function(
 		if(do_regression) {
 		alpha_2 =
 			fit2 %>%
+			######## ALTERED WITH TREE
 			tidybayes::gather_draws(`alpha_[a]`[A, C], regex = T) %>%
+			##########################
 			ungroup() %>%
 			# rebuild the last component sum-to-zero
 			{
@@ -425,14 +413,18 @@ ARMET_tc = function(
 			draws_2 %>%
 			left_join(
 				fit3 %>%
-					tidybayes::gather_draws(`prop_[b, c, d, e]`[Q, C], regex = T) %>%
+					######## ALTERED WITH TREE
+					tidybayes::gather_draws(`prop_[b, c, d, e, f]`[Q, C], regex = T) %>%
+					#########################
 					drop_na %>%
 					ungroup() %>%
 					left_join(
+						######## ALTERED WITH TREE
 						tibble(
-							.variable = c("prop_b", "prop_c", "prop_d", "prop_e"),
+							.variable = c("prop_b", "prop_c", "prop_d", "prop_e", "prop_f"),
 							C2 = parents_lv3
 						)
+						#########################
 					) %>%
 					select(-.variable) %>%
 					rename(.value3 = .value, C3 = C),
@@ -552,4 +544,194 @@ ARMET_tc = function(
 }
 
 
+#' @export
+run_model = function(reference_filtered,
+										 mix,
+										 shards,
+										 lv,
+										 full_bayesian,
+										 approximate_posterior,
+										 prop_posterior,
+										 exposure_posterior = tibble(.mean = 0, .sd = 0)[0, ],
+										 iterations = 250,
+										 sampling_iterations = 100,
+										 X,
+										 do_regression) {
+	# Filter on level considered
+	reference_filtered = reference_filtered %>% filter(level %in% lv)
 
+	df = ref_mix_format(reference_filtered, mix)
+
+	G = df %>% filter(!`query`) %>% distinct(G) %>% nrow()
+	GM = df %>% filter(!`house keeping`) %>% distinct(symbol) %>% nrow()
+
+	# For  reference MPI inference
+	counts_baseline =
+		df %>%
+
+		# Eliminate the query part, not the house keeping of the query
+		filter(!`query` | `house keeping`)  %>%
+
+		format_for_MPI(shards)
+
+	S = counts_baseline %>% distinct(sample) %>% nrow()
+	N = counts_baseline %>% distinct(idx_MPI, `read count`, `read count MPI row`) %>%  count(idx_MPI) %>% summarise(max(n)) %>% pull(1)
+	M = counts_baseline %>% distinct(start, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
+
+	lambda_log = 	  counts_baseline %>% filter(!query) %>% distinct(G, lambda_log) %>% arrange(G) %>% pull(lambda_log)
+	sigma_inv_log = counts_baseline %>% filter(!query) %>% distinct(G, sigma_inv_log) %>% arrange(G) %>% pull(sigma_inv_log)
+
+	y_source =
+		df %>%
+		filter(`query` & !`house keeping`) %>%
+		select(S, Q, `symbol`, `read count`, GM, sample) %>%
+		left_join(
+			df %>% filter(!query) %>% distinct(
+				`symbol`,
+				G,
+				`Cell type category`,
+				level,
+				lambda_log,
+				sigma_inv_log,
+				GM,
+				C
+			)
+		) %>%
+		arrange(C, Q, symbol) %>%
+		mutate(`Cell type category` = factor(`Cell type category`, unique(`Cell type category`)))
+
+	counts_baseline_to_linear =
+		counts_baseline %>%
+		filter_house_keeping_query_if_fixed(full_bayesian) %>%
+		arrange(G, S) %>%
+		mutate(counts_idx = 1:n()) %>%
+		mutate(S = S %>% as.factor %>% as.integer)
+
+	counts_linear = counts_baseline_to_linear %>%  pull(`read count`)
+	G_to_counts_linear = counts_baseline_to_linear %>% pull(G)
+	G_linear = G_to_counts_linear
+	S_linear = counts_baseline_to_linear %>% pull(S)
+
+	CL = length(counts_linear)
+	S = counts_baseline_to_linear %>% distinct(S) %>% nrow
+
+	# Counts idx for each level for each level
+	counts_idx_lv_NA = counts_baseline_to_linear %>% filter(level %>% is.na) %>% pull(counts_idx)
+	CL_NA = counts_idx_lv_NA %>% length
+
+	# Level specific
+	counts_idx_lv = counts_baseline_to_linear %>% filter(level == lv) %>% pull(counts_idx)
+	CL_lv = counts_idx_lv %>% length
+
+	# Deconvolution, get G only for markers of each level. Exclude house keeping
+	G_lv_linear = counts_baseline %>% filter(level == lv) %>% select(G, GM, sprintf("C%s", lv)) %>% distinct() %>% arrange(GM, !!as.symbol(sprintf("C%s", lv))) %>% pull(G)
+	G_lv = G_lv_linear %>% length
+
+	# Observed mix counts
+	y_linear_lv = y_source %>% filter(level == lv) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
+
+	# Observed mix samples indexes
+	y_linear_S_lv = y_source %>% filter(level == lv) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
+
+	# Lengths indexes
+	Y_lv = y_linear_lv %>% length
+
+
+	MPI_data = get_MPI_df(counts_baseline_to_linear,
+												y_source,
+												counts_baseline,
+												shards,
+												lv)
+
+	# Dirichlet regression
+	A = X %>% ncol
+
+
+
+	model  = switch(full_bayesian %>% `!` %>% sum(1),
+									stanmodels$ARMET_tc,
+									stanmodels$ARMET_tc_fix
+	)
+
+	additional_par_to_save  = switch(full_bayesian %>% `!` %>% sum(1),
+																	 c("lambda_log","sigma_inv_log"),
+																	 c()
+	)
+
+	# library(rstan)
+	# fileConn<-file("~/.R/Makevars")
+	# writeLines(c( "CXX14FLAGS += -O2","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
+	# close(fileConn)
+	# ARMET_tc_model = rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix.stan", auto_write = F)
+
+	exposure_rate_init = switch(
+		(lv > 1) %>% `!` %>% as.numeric %>% sum(1),
+		exposure_posterior %>% pull(1),
+		runif(S,-0.5, 0.5)
+	) %>% as.array
+
+	exposure_rate_multiplier = sd(exposure_rate_init) %>% ifelse_pipe((.) %>% is.na, ~ 0.1)
+
+	init_list = list(lambda_log = lambda_log,
+									 sigma_inv_log = sigma_inv_log) %>%
+		ifelse_pipe(!full_bayesian,
+								~ .x %>% c(list(exposure_rate = exposure_rate_init)))
+
+
+	Sys.setenv("STAN_NUM_THREADS" = shards)
+
+	#if(lv == 3) browser()
+
+	list(df,
+			 switch(
+			 	approximate_posterior %>% sum(1),
+
+			 	# HMC
+			 	sampling(
+			 		model,
+			 		#ARMET_tc_model, #,
+			 		chains = 3,
+			 		cores = 3,
+			 		iter = iterations,
+			 		warmup = iterations - sampling_iterations,
+			 		data = MPI_data %>% c(prop_posterior),
+			 		# pars=
+			 		# 	c("prop_1", "prop_2", "prop_3", sprintf("prop_%s", letters[1:9])) %>%
+			 		# 	c("alpha_1", sprintf("alpha_%s", letters[1:9])) %>%
+			 		# 	c("exposure_rate") %>%
+			 		# 	c("lambda_UFO") %>%
+			 		# 	c("prop_UFO") %>%
+			 		# 	c(additional_par_to_save),
+			 		init = function ()	init_list,
+			 		save_warmup = FALSE
+			 	) %>%
+			 		{
+			 			(.)  %>% rstan::summary() %$% summary %>% as_tibble(rownames = "par") %>% arrange(Rhat %>% desc) %>% print
+			 			(.)
+			 		},
+
+			 	vb_iterative(
+			 		model,
+			 		#ARMET_tc_model,
+			 		output_samples = 100,
+			 		iter = 50000,
+			 		tol_rel_obj = 0.01,
+			 		data = MPI_data,
+			 		pars = c(
+			 			"prop_1",
+			 			"prop_2",
+			 			"prop_3",
+			 			"prop_4",
+			 			"exposure_rate",
+			 			"lambda_log",
+			 			"sigma_inv_log",
+			 			"sigma_intercept_dec"
+			 		),
+			 		#,
+			 		init = function ()
+			 			list(lambda_log = lambda_log, sigma_inv_log = sigma_inv_log) # runif(G,  lambda_log - 1, lambda_log + 1)	)
+
+			 	)
+			 ))
+
+}
