@@ -4,7 +4,7 @@
 \alias{filter_reference}
 \title{filter_reference}
 \usage{
-filter_reference(reference, mix)
+filter_reference(reference, mix, n_markers)
 }
 \description{
 Filter the reference

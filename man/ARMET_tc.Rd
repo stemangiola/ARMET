@@ -4,11 +4,23 @@
 \alias{ARMET_tc}
 \title{ARMET-tc main}
 \usage{
-ARMET_tc(mix, reference = NULL, full_bayesian = T,
-  approximate_posterior = F, verbose = F, omit_regression = F,
-  save_fit = F, seed = NULL, cores = 14, iterations = 250,
-  sampling_iterations = 100, levels = 1:4, n_markers = my_n_markers,
-  X = matrix(rep(1, nrow(mix))), do_regression = F)
+ARMET_tc(
+  mix,
+  reference = NULL,
+  full_bayesian = T,
+  approximate_posterior = F,
+  verbose = F,
+  omit_regression = F,
+  save_fit = F,
+  seed = NULL,
+  cores = 14,
+  iterations = 250,
+  sampling_iterations = 100,
+  levels = 3,
+  n_markers = my_n_markers,
+  X = matrix(rep(1, nrow(mix))),
+  do_regression = F
+)
 }
 \arguments{
 \item{mix}{A matrix}
