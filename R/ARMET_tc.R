@@ -46,8 +46,9 @@
 #'
 ARMET_tc = function(
 	mix,
+	formula = ~ 1,
 	reference = NULL,
-	full_bayesian = T,
+	full_bayesian = F,
 	approximate_posterior = F,
 	verbose =                           F,
 	omit_regression =                   F,
@@ -58,7 +59,6 @@ ARMET_tc = function(
 	sampling_iterations = 100,
 	levels = 3,
 	n_markers = my_n_markers ,
-	X = matrix(rep(1, nrow(mix))),
 	do_regression = F
 ){
 
@@ -82,6 +82,9 @@ ARMET_tc = function(
 	# 		axis.title.x  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10)),
 	# 		axis.title.y  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10))
 	# 	)
+
+	# Create design matrix
+	X = create_design_matrix(mix, formula, sample)
 
 	shards = cores #* 2
 	is_level_in = shards %>% `>` (0) %>% as.integer

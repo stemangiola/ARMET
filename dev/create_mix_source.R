@@ -22,24 +22,6 @@ ifelse_pipe = function(.x, .p, .f1, .f2 = NULL) {
 
 }
 
-sample_blacklist = c(
-	"666CRI",
-	"972UYG",
-	"344KCP",
-	"555QVG",
-	"370KKZ",
-	"511TST",
-	"13816.11933",
-	"13819.11936",
-	"13817.11934",
-	"13818.11935",
-	"096DQV",
-	"711SNV",
-	"counts.Ciliary%20Epithelial%20Cells%2c%20donor3.CNhs12009.11399-118D4"   ,
-	"counts.Iris%20Pigment%20Epithelial%20Cells%2c%20donor1.CNhs12596.11530-119I9",
-	"ENCFF890DJO"
-)
-
 ToDataFrameTypeColFull = function(tree, ...){
 	tree %>%
 		Clone() %>%
@@ -60,21 +42,7 @@ ToDataFrameTypeColFull = function(tree, ...){
 		select(..., everything())
 }
 
-
-ref =
-	read_csv("dev/ref_1_2_3_4.csv") %>%
-	inner_join(
-		(.) %>%
-			distinct(sample) %>%
-			filter( !grepl(sample_blacklist %>% paste(collapse="|"), sample))
-	) %>%
-	filter(`Data base` != "FANTOM5")  %>%
-
-	# Filter dendritic that look too much like monocytes
-	filter(!(
-		(`Cell type formatted` == "dendritic_myeloid" & `Data base` == "Immune Singapoor") |
-			(`Cell type formatted` == "dendritic_myeloid" & `Data base` == "bloodRNA")
-	))
+ref =	ARMET::ARMET_ref
 
 all_genes =
 	ref %>%
@@ -87,22 +55,22 @@ ref2 = ref %>% filter(symbol %in% all_genes)
 mix_base =
 	tree %>% ToDataFrameTypeColFull() %>% select(-level_6, -level_1) %>% rename(`Cell type category` = level_5) %>%
 	left_join(
-		ref2 %>% distinct(`Cell type category`, level, symbol, `read count normalised bayes`, sample) %>%
-			spread(symbol, `read count normalised bayes`) %>%
-			gather(symbol, `read count normalised bayes`, -c(1:3))
+		ref2 %>% distinct(`Cell type category`, level, symbol, `count normalised bayes`, sample) %>%
+			spread(symbol, `count normalised bayes`) %>%
+			gather(symbol, `count normalised bayes`, -c(1:3))
 	) %>%
 
 	# Level 5
 
 	# do_parallel_start(
 	# 	.f = ~ {
-	# 		values = .x %>% drop_na() %>% pull(`read count normalised bayes`)
+	# 		values = .x %>% drop_na() %>% pull(`count normalised bayes`)
 	# 		if(length(values) > 0)
 	#
 	# 			bind_rows(
-	# 				.x %>% filter(`read count normalised bayes` %>% is.na %>% `!`),
-	# 				.x %>% filter(`read count normalised bayes` %>% is.na ) %>%
-# 					mutate(`read count normalised bayes` = sample(values, size = n(), replace = T))
+	# 				.x %>% filter(`count normalised bayes` %>% is.na %>% `!`),
+	# 				.x %>% filter(`count normalised bayes` %>% is.na ) %>%
+# 					mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
 # 			)
 #
 # 		else (.)
@@ -120,13 +88,13 @@ do_parallel_start(n_cores, "Cell type category") %>%
 		(.) %>%
 			group_by(`Cell type category`, symbol) %>%
 			do({
-				values = (.) %>% drop_na() %>% pull(`read count normalised bayes`)
+				values = (.) %>% drop_na() %>% pull(`count normalised bayes`)
 				if(length(values) > 0)
 
 					bind_rows(
-						(.) %>% filter(`read count normalised bayes` %>% is.na %>% `!`),
-						(.) %>% filter(`read count normalised bayes` %>% is.na ) %>%
-							mutate(`read count normalised bayes` = sample(values, size = n(), replace = T))
+						(.) %>% filter(`count normalised bayes` %>% is.na %>% `!`),
+						(.) %>% filter(`count normalised bayes` %>% is.na ) %>%
+							mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
 					)
 
 				else (.)
@@ -139,13 +107,13 @@ do_parallel_start(n_cores, "Cell type category") %>%
 
 	# do_parallel_start(
 	# 	.f = ~ {
-	# 		values = .x %>% drop_na() %>% pull(`read count normalised bayes`)
+	# 		values = .x %>% drop_na() %>% pull(`count normalised bayes`)
 	# 		if(length(values) > 0)
 	#
 	# 			bind_rows(
-	# 				.x %>% filter(`read count normalised bayes` %>% is.na %>% `!`),
-	# 				.x %>% filter(`read count normalised bayes` %>% is.na ) %>%
-# 					mutate(`read count normalised bayes` = sample(values, size = n(), replace = T))
+	# 				.x %>% filter(`count normalised bayes` %>% is.na %>% `!`),
+	# 				.x %>% filter(`count normalised bayes` %>% is.na ) %>%
+# 					mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
 # 			)
 #
 # 		else (.)
@@ -164,13 +132,13 @@ do_parallel_start(n_cores, "level_4") %>%
 		(.) %>%
 			group_by(`level_4`, symbol) %>%
 			do({
-				values = (.) %>% drop_na() %>% pull(`read count normalised bayes`)
+				values = (.) %>% drop_na() %>% pull(`count normalised bayes`)
 				if(length(values) > 0)
 
 					bind_rows(
-						(.) %>% filter(`read count normalised bayes` %>% is.na %>% `!`),
-						(.) %>% filter(`read count normalised bayes` %>% is.na ) %>%
-							mutate(`read count normalised bayes` = sample(values, size = n(), replace = T))
+						(.) %>% filter(`count normalised bayes` %>% is.na %>% `!`),
+						(.) %>% filter(`count normalised bayes` %>% is.na ) %>%
+							mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
 					)
 
 				else (.)
@@ -183,13 +151,13 @@ do_parallel_start(n_cores, "level_4") %>%
 
 	# do_parallel_start(
 	# 	.f = ~ {
-	# 		values = .x %>% drop_na() %>% pull(`read count normalised bayes`)
+	# 		values = .x %>% drop_na() %>% pull(`count normalised bayes`)
 	# 		if(length(values) > 0)
 	#
 	# 			bind_rows(
-	# 				.x %>% filter(`read count normalised bayes` %>% is.na %>% `!`),
-	# 				.x %>% filter(`read count normalised bayes` %>% is.na ) %>%
-# 					mutate(`read count normalised bayes` = sample(values, size = n(), replace = T))
+	# 				.x %>% filter(`count normalised bayes` %>% is.na %>% `!`),
+	# 				.x %>% filter(`count normalised bayes` %>% is.na ) %>%
+# 					mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
 # 			)
 #
 # 		else (.)
@@ -207,13 +175,13 @@ do_parallel_start(n_cores, "level_3") %>%
 		(.) %>%
 			group_by(`level_3`, symbol) %>%
 			do({
-				values = (.) %>% drop_na() %>% pull(`read count normalised bayes`)
+				values = (.) %>% drop_na() %>% pull(`count normalised bayes`)
 				if(length(values) > 0)
 
 					bind_rows(
-						(.) %>% filter(`read count normalised bayes` %>% is.na %>% `!`),
-						(.) %>% filter(`read count normalised bayes` %>% is.na ) %>%
-							mutate(`read count normalised bayes` = sample(values, size = n(), replace = T))
+						(.) %>% filter(`count normalised bayes` %>% is.na %>% `!`),
+						(.) %>% filter(`count normalised bayes` %>% is.na ) %>%
+							mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
 					)
 
 				else (.)
@@ -226,13 +194,13 @@ do_parallel_start(n_cores, "level_3") %>%
 
 	# do_parallel_start(
 	# 	.f = ~ {
-	# 		values = .x %>% drop_na() %>% pull(`read count normalised bayes`)
+	# 		values = .x %>% drop_na() %>% pull(`count normalised bayes`)
 	# 		if(length(values) > 0)
 	#
 	# 			bind_rows(
-	# 				.x %>% filter(`read count normalised bayes` %>% is.na %>% `!`),
-	# 				.x %>% filter(`read count normalised bayes` %>% is.na ) %>%
-# 					mutate(`read count normalised bayes` = sample(values, size = n(), replace = T))
+	# 				.x %>% filter(`count normalised bayes` %>% is.na %>% `!`),
+	# 				.x %>% filter(`count normalised bayes` %>% is.na ) %>%
+# 					mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
 # 			)
 #
 # 		else (.)
@@ -250,13 +218,13 @@ do_parallel_start(n_cores, "level_2") %>%
 		(.) %>%
 			group_by(`level_2`, symbol) %>%
 			do({
-				values = (.) %>% drop_na() %>% pull(`read count normalised bayes`)
+				values = (.) %>% drop_na() %>% pull(`count normalised bayes`)
 				if(length(values) > 0)
 
 					bind_rows(
-						(.) %>% filter(`read count normalised bayes` %>% is.na %>% `!`),
-						(.) %>% filter(`read count normalised bayes` %>% is.na ) %>%
-							mutate(`read count normalised bayes` = sample(values, size = n(), replace = T))
+						(.) %>% filter(`count normalised bayes` %>% is.na %>% `!`),
+						(.) %>% filter(`count normalised bayes` %>% is.na ) %>%
+							mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
 					)
 
 				else (.)
