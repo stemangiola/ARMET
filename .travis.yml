@@ -48,4 +48,4 @@ after_success:
   - travis_wait 40 tar -C .. -xf $PKG_TARBALL
 
 after_failure:
-  - cat ARMET.Rcheck/00*
+- cat ARMET.Rcheck/00*
