@@ -1710,4 +1710,37 @@ level_to_plot_inferred_vs_observed  = function(result, level, S = NULL, cores = 
 
 # level_to_plot_inferred_vs_observed(result, 3)
 
+#' Create the design matrix
+#'
+#' @param input.df A tibble
+#' @param formula A formula
+#' @param sample_column A symbol
+#' @export
+create_design_matrix = function(input.df, formula, sample_column){
 
+	sample_column = enquo(sample_column)
+
+	model.matrix(
+		object = formula,
+		data =
+			input.df %>%
+			select(!!sample_column, one_of(parse_formula(formula))) %>%
+			distinct %>% arrange(!!sample_column)
+
+	)
+
+}
+
+#' Formula parser
+#'
+#' @param fm A formula
+#'
+#' @return A character vector
+#'
+#'
+parse_formula <- function(fm) {
+	if (attr(terms(fm), "response") == 1)
+		stop("The formula must be of the kind \"~ covariates\" ")
+	else
+		as.character(attr(terms(fm), "variables"))[-1]
+}
