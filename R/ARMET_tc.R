@@ -208,6 +208,23 @@ ARMET_tc = function(
 	prop_posterior[[1]] = fit1 %>% draws_to_alphas("prop_1") %>% `[[` (1)
 
 
+	rebuild_last_component_sum_to_zero = function(.){
+		(.) %>%
+		group_by(.variable) %>%
+			do({
+				max_c = (.) %>% pull(C) %>% max
+				bind_rows(
+					(.) %>% filter(C < max_c | A > 1),
+					(.) %>%
+						filter(C < max_c & A == 1) %>%
+						group_by(.chain, .iteration, .draw , A, .variable ) %>%
+						summarise(.value = -sum(.value)) %>%
+						mutate(C = max_c)
+				)
+			}) %>%
+			ungroup()
+	}
+
 	draws_1 =
 		fit1 %>%
 		tidybayes::gather_draws(prop_1[Q, C1]) %>%
@@ -220,18 +237,10 @@ ARMET_tc = function(
 			fit1 %>%
 			tidybayes::gather_draws(`alpha_[1]`[A, C], regex = T) %>%
 			ungroup() %>%
+
 			# rebuild the last component sum-to-zero
-			{
-				max_c = (.) %>% pull(C) %>% max
-				bind_rows(
-					(.) %>% filter(C < max(C)),
-					(.) %>%
-						filter(C < max(C)) %>%
-						group_by(.chain, .iteration, .draw , A, .variable ) %>%
-						summarise(.value = -sum(.value)) %>%
-						mutate(C = max_c)
-				)
-			} %>%
+			rebuild_last_component_sum_to_zero %>%
+
 			arrange(.chain, .iteration, .draw,     A ) %>%
 			group_by(A, C, .variable) %>%
 			tidybayes::mean_qi() %>%
@@ -351,18 +360,10 @@ ARMET_tc = function(
 			tidybayes::gather_draws(`alpha_[a]`[A, C], regex = T) %>%
 			##########################
 			ungroup() %>%
+
 			# rebuild the last component sum-to-zero
-			{
-				max_c = (.) %>% pull(C) %>% max
-				bind_rows(
-					(.) %>% filter(C < max(C)),
-					(.) %>%
-						filter(C < max(C)) %>%
-						group_by(.chain, .iteration, .draw , A, .variable ) %>%
-						summarise(.value = -sum(.value)) %>%
-						mutate(C = max_c)
-				)
-			} %>%
+			rebuild_last_component_sum_to_zero %>%
+
 			arrange(.chain, .iteration, .draw,     A ) %>%
 			group_by(A, C, .variable) %>%
 			tidybayes::mean_qi() %>%
@@ -457,20 +458,10 @@ ARMET_tc = function(
 			ungroup() %>%
 			drop_na() %>%
 			arrange(.variable) %>%
+
 			# rebuild the last component sum-to-zero
-			group_by(.variable) %>%
-			do({
-				max_c = (.) %>% pull(C) %>% max
-				bind_rows(
-					(.) %>% filter(C < max(C)),
-					(.) %>%
-						filter(C < max(C)) %>%
-						group_by(.chain, .iteration, .draw , A, .variable ) %>%
-						summarise(.value = -sum(.value)) %>%
-						mutate(C = max_c)
-				)
-			}) %>%
-			ungroup() %>%
+			rebuild_last_component_sum_to_zero %>%
+
 			arrange(.variable, .chain, .iteration, .draw,     A ) %>%
 			group_by(A, C, .variable) %>%
 			tidybayes::mean_qi() %>%
