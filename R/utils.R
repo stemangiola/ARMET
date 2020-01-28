@@ -1091,42 +1091,39 @@ get_prop = function(fit, approximate_posterior, df, tree) {
 								distinct(Q, sample))
 }
 
+
+
 #' @export
-draws_to_alphas = function(.data, pars) {
-	.data %>%
-		tidybayes::gather_draws(`prop_[1,a-z]`[Q, C], regex = T) %>%
+draws_to_mu_sigma = function(.data, pars) {
+
+		.data %>%
+		tidybayes::gather_draws(`rate_[1,a-z]`[Q, C], regex = T) %>%
 		ungroup() %>%
-		{
-			print((.))
-			(.)
-		} %>%
 		filter(.variable %in% pars) %>%
-		{
-			print((.))
-			(.)
-		} %>%
-		nest(data = -c(.variable, Q)) %>%
-		mutate(
-			alphas = map(
-				data,
-				~
-					.x %>%
-					spread(C, .value) %>%
-					select(-c(1:3)) %>%
-					as_matrix() %>%
-					sirt::dirichlet.mle() %$%
-					alpha %>%
-					as_tibble() %>%
-					rename(alpha = value) %>%
-					mutate(C = 1:n())
-			)
-		) %>%
+		group_by(.variable, Q, C) %>%
+		summarise(mean = mean(.value), sd = mad(.value)) %>%
+		nest(data = -.variable) %>%
+		mutate(mean = map(
+			data,
+			~ .x %>% select(Q, C, mean) %>% spread(C, mean) %>% arrange(Q) %>% as_matrix(rownames = "Q")
+		)) %>%
+		mutate(sd = map(
+			data,
+			~ .x %>% select(Q, C, sd) %>% spread(C, sd) %>% arrange(Q) %>% as_matrix(rownames = "Q")
+		)) %>%
+
+		# Create lists
 		select(-data) %>%
-		unnest(cols = alphas) %>%
-		spread(C, alpha) %>%
-		select(-Q) %>%
-		nest(alphas = -.variable) %>%
-		pull(alphas)
+		nest(data = -.variable) %>%
+		mutate(lst = map2(data, .variable ,
+											~ c(mean = .x$mean, sd = .x$sd)
+											# %>% setNames(sprintf(
+											# 	"%s_prior_%s", .y, c("mean", "sd")
+											# ))
+											)) %>%
+		pull(lst)
+
+
 }
 
 draws_to_exposure = function(.data) {
@@ -1137,14 +1134,44 @@ draws_to_exposure = function(.data) {
 		select(.mean , .sd)
 }
 
+# get_null_prop_posterior = function(ct_in_nodes) {
+# 	prop_posterior = list()
+# 	for (i in 1:(length(ct_in_nodes))) {
+# 		prop_posterior[[i]] =  matrix(ncol = ct_in_nodes[i]) %>% as_tibble() %>% setNames(c(1:ct_in_nodes[i])) %>% slice(0)
+# 	}
+# 	names(prop_posterior) = sprintf("rate_%s_prior", c(1, letters[1:(length(prop_posterior)-1)]))
+# 	prop_posterior
+# }
+
 get_null_prop_posterior = function(ct_in_nodes) {
-	prop_posterior = list()
-	for (i in 1:(length(ct_in_nodes))) {
-		prop_posterior[[i]] =  matrix(ncol = ct_in_nodes[i]) %>% as_tibble() %>% setNames(c(1:ct_in_nodes[i])) %>% slice(0)
-	}
-	names(prop_posterior) = sprintf("prop_%s_prior", c(1, letters[1:(length(prop_posterior)-1)]))
-	prop_posterior
+
+	my_df =
+		tibble(
+		n = ct_in_nodes %>%
+
+			# Subtract because now I have rates
+			`-` (1) ,
+		name = sprintf("rate_%s", c(1, letters[1:(length(ct_in_nodes)-1)]))
+	) %>%
+	mutate(
+		data = map2(n, name, ~ list(
+			mean =  matrix(ncol = .x) %>% as_tibble() %>% setNames(c(1:.x)) %>% slice(0),
+			sd =  matrix(ncol = .x) %>% as_tibble() %>% setNames(c(1:.x)) %>% slice(0)
+		)
+		# %>%
+		# 	setNames(sprintf(
+		# 		"%s_prior_%s", .y, c("mean", "sd")
+		# 	))
+		)
+	)
+
+	my_df %>%
+		pull(data) %>%
+		setNames(sprintf(	"%s_prior", my_df$name)		)
+
+
 }
+
 
 plot_boxplot = function(input.df, symbols) {
 	input.df %>%
@@ -1743,4 +1770,21 @@ parse_formula <- function(fm) {
 		stop("The formula must be of the kind \"~ covariates\" ")
 	else
 		as.character(attr(terms(fm), "variables"))[-1]
+}
+
+rebuild_last_component_sum_to_zero = function(.){
+	(.) %>%
+		group_by(.variable) %>%
+		do({
+			max_c = (.) %>% pull(C) %>% max
+			bind_rows(
+				(.) %>% filter(C < max_c | A > 1),
+				(.) %>%
+					filter(C < max_c & A == 1) %>%
+					group_by(.chain, .iteration, .draw , A, .variable ) %>%
+					summarise(.value = -sum(.value)) %>%
+					mutate(C = max_c)
+			)
+		}) %>%
+		ungroup()
 }

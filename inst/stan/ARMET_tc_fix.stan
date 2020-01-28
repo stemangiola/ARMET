@@ -212,7 +212,7 @@ real[,] get_real_MPI(vector v, int shards){
 
 int[,] append_int_MPI_arrays(int[,] lv1, int[,] lv2, int[,] lv3, int[,] lv4){
 
-	# This is for the BUG that dim(int empty_variable[0,0]) is not {0,0} but {0}
+	// This is for the BUG that dim(int empty_variable[0,0]) is not {0,0} but {0}
 	int dim_1[2] = size(dims(lv1)) == 2 ? dims(lv1) : rep_array(0,2);
 	int dim_2[2] = size(dims(lv2)) == 2 ? dims(lv2) : rep_array(0,2);
 	int dim_3[2] = size(dims(lv3)) == 2 ? dims(lv3) : rep_array(0,2);
@@ -577,7 +577,7 @@ if(dim_4[1] > 0) {
 		// deconvolution
 		lp = neg_binomial_2_lpmf(mix_counts |
 			exp(lambda_log_deconvoluted_1 + mix_exposure_rate),
-			#sigma_deconvoluted_1
+			//sigma_deconvoluted_1
 			1.0 ./ exp( lambda_log_deconvoluted_1  * -0.4 + sigma_intercept)
 		);
 
@@ -635,9 +635,11 @@ if(dim_4[1] > 0) {
 		else return(d);
 	}
 
-	real dirichlet_regression_lpdf(vector p, row_vector X, matrix alpha, real phi){
+	real student_t_glm_constrained_lpdf(vector p, row_vector X, matrix alpha, real phi, real nu){
 
 		// Build sum to zero variable
+		// Here an element of the parameter exist but des not count, it gets the value just based on the prior
+		// Only the intercept has to sum to zero
 		int c = cols(alpha);
 		int r = rows(alpha);
 		matrix[r, c]  alpha_ = alpha;
@@ -645,7 +647,46 @@ if(dim_4[1] > 0) {
 
 
 		// Calculate log prob
-		return (dirichlet_lpdf(p | softmax( to_vector(X * alpha_ ))  * exp(phi) + 1 ));
+		return student_t_lpdf(append_row(p, -sum(p)) | nu, to_vector(X * alpha_ ),  phi  );
+	}
+
+	vector softmax_constrain(vector v){
+
+		// This function takes a N - 1 unconstrained vector and tranform to a N simplex. The degree of freedom are the same
+		int is_empty = num_elements(v) == 0;
+
+		// Here from a v vector build a v+1 simplex
+		int c =  num_elements(v);
+		vector[c+1]  v_;
+
+		v_[1:c] = v;
+		v_[c+1] = -sum(v_[1:c]);
+
+		// Transform to simplex
+		return softmax(v_);
+	}
+
+	vector[] softmax_vec_array_constrain(vector[] v, int c){
+
+		// Here from a v vector build a v+1 simplex
+		int is_not_empty = num_elements(v) > 0;
+
+		// I have to setup the whole empty caze because stan is not robust to empty variables
+		vector[c]  v_empty[0];
+
+		// Build v_
+		int r = cols(to_row_vector(v[,1]));
+		vector[c]  v_[r * is_not_empty];
+
+		// If it is not empty
+		if(is_not_empty == 1)	{
+			for(i in 1:r) v_[i] = softmax_constrain(v[i]);
+			return v_;
+		}
+		else
+			return v_empty;
+
+
 	}
 }
 data {
@@ -730,16 +771,23 @@ data {
 
   // Proportions priors
   // lv1
-  vector[ct_in_nodes[1]]  prop_1_prior[Q * (lv > 1)]; // Root
+  vector[ct_in_nodes[1]-1]  rate_1_prior_mean[Q * (lv > 1)]; // Root
+  vector[ct_in_nodes[1]-1]  rate_1_prior_sd[Q * (lv > 1)]; // Root
 
   // lv2
-  vector[ct_in_nodes[2]]  prop_a_prior[Q * (lv > 2)]; // Immune cells
+  vector[ct_in_nodes[2]-1]  rate_a_prior_mean[Q * (lv > 2)]; // Immune cells
+  vector[ct_in_nodes[2]-1]  rate_a_prior_sd[Q * (lv > 2)]; // Immune cells
+
 
   // lv3
-  vector[ct_in_nodes[3]]  prop_b_prior[Q * (lv > 3)]; // b cells
-  vector[ct_in_nodes[4]]  prop_c_prior[Q * (lv > 3)]; // granulocyte
-  vector[ct_in_nodes[5]]  prop_d_prior[Q * (lv > 3)]; // mono_derived
-  vector[ct_in_nodes[6]]  prop_e_prior[Q * (lv > 3)]; // t_cell
+  vector[ct_in_nodes[3]-1]  rate_b_prior_mean[Q * (lv > 3)]; // b cells
+  vector[ct_in_nodes[3]-1]  rate_b_prior_sd[Q * (lv > 3)]; // b cells
+  vector[ct_in_nodes[4]-1]  rate_c_prior_mean[Q * (lv > 3)]; // granulocyte
+  vector[ct_in_nodes[4]-1]  rate_c_prior_sd[Q * (lv > 3)]; // granulocyte
+  vector[ct_in_nodes[5]-1]  rate_d_prior_mean[Q * (lv > 3)]; // mono_derived
+  vector[ct_in_nodes[5]-1]  rate_d_prior_sd[Q * (lv > 3)]; // mono_derived
+  vector[ct_in_nodes[6]-1]  rate_e_prior_mean[Q * (lv > 3)]; // t_cell
+  vector[ct_in_nodes[6]-1]  rate_e_prior_sd[Q * (lv > 3)]; // t_cell
 
 	// exposure posterior previous fit
 	vector[2] exposure_posterior[Q * (lv > 1)];
@@ -753,6 +801,8 @@ data {
 
 }
 transformed data{
+
+	real nu = 8.0;
 
 	real real_data[shards, 0];
 
@@ -800,23 +850,23 @@ parameters {
 
   // Proportions
   // lv1
-  simplex[ct_in_nodes[1]]  prop_1[Q * (lv >= 1)]; // Root
+  vector[ct_in_nodes[1]-1]  rate_1[Q * (lv >= 1)]; // Root
 
   // lv2
-  simplex[ct_in_nodes[2]]  prop_a[Q * (lv >= 2)]; // Immune cells childrens
+  vector[ct_in_nodes[2]-1]  rate_a[Q * (lv >= 2)]; // Immune cells childrens
 
   // lv3
-  simplex[ct_in_nodes[3]]  prop_b[Q * (lv >= 3)]; // b cells childrens
-  simplex[ct_in_nodes[4]]  prop_c[Q * (lv >= 3)]; // granulocyte childrens
-  simplex[ct_in_nodes[5]]  prop_d[Q * (lv >= 3)]; // mono_derived childrens
-  simplex[ct_in_nodes[6]]  prop_e[Q * (lv >= 3)]; // natural_killer childrens
-  simplex[ct_in_nodes[7]]  prop_f[Q * (lv >= 3)]; // t_cell childrens
+  vector[ct_in_nodes[3]-1]  rate_b[Q * (lv >= 3)]; // b cells childrens
+  vector[ct_in_nodes[4]-1]  rate_c[Q * (lv >= 3)]; // granulocyte childrens
+  vector[ct_in_nodes[5]-1]  rate_d[Q * (lv >= 3)]; // mono_derived childrens
+  vector[ct_in_nodes[6]-1]  rate_e[Q * (lv >= 3)]; // natural_killer childrens
+  vector[ct_in_nodes[7]-1]  rate_f[Q * (lv >= 3)]; // t_cell childrens
 
 	// lv4
-  simplex[ct_in_nodes[8]]  prop_g[Q * (lv >= 4)]; // dendritic myeloid childrens
-  simplex[ct_in_nodes[9]]  prop_h[Q * (lv >= 4)]; // macrophage childrens
-  simplex[ct_in_nodes[10]] prop_i[Q * (lv >= 4)]; // CD4 childrens
-  simplex[ct_in_nodes[11]] prop_l[Q * (lv >= 4)]; // CD8 childrens
+  vector[ct_in_nodes[8]-1]  rate_g[Q * (lv >= 4)]; // dendritic myeloid childrens
+  vector[ct_in_nodes[9]-1]  rate_h[Q * (lv >= 4)]; // macrophage childrens
+  vector[ct_in_nodes[10]-1] rate_i[Q * (lv >= 4)]; // CD4 childrens
+  vector[ct_in_nodes[11]-1] rate_l[Q * (lv >= 4)]; // CD8 childrens
 
 	// Dirichlet regression
   // lv1
@@ -838,7 +888,7 @@ parameters {
   matrix[A * (lv == 4) * do_regression,ct_in_nodes[10]]  alpha_i; // CD4
   matrix[A * (lv == 4) * do_regression,ct_in_nodes[11]] alpha_l; // CD8
 
-	real phi[11];
+	real<lower=0> phi[11];
 
 	// Unknown population
 	vector<lower=0, upper = log(max(counts_linear))>[max(size_G_linear_MPI)/ct_in_levels[lv]] lambda_UFO[shards];
@@ -847,6 +897,26 @@ parameters {
 }
 transformed parameters{
 
+  // lv1
+  simplex[ct_in_nodes[1]]  prop_1[Q * (lv >= 1)] = softmax_vec_array_constrain(rate_1, ct_in_nodes[1]); // Root
+
+  // lv2
+  simplex[ct_in_nodes[2]]  prop_a[Q * (lv >= 2)] = softmax_vec_array_constrain(rate_a, ct_in_nodes[2]); // Immune cells childrens
+
+  // lv3
+  simplex[ct_in_nodes[3]]  prop_b[Q * (lv >= 3)] = softmax_vec_array_constrain(rate_b, ct_in_nodes[3]); // b cells childrens
+  simplex[ct_in_nodes[4]]  prop_c[Q * (lv >= 3)] = softmax_vec_array_constrain(rate_c, ct_in_nodes[4]); // granulocyte childrens
+  simplex[ct_in_nodes[5]]  prop_d[Q * (lv >= 3)] = softmax_vec_array_constrain(rate_d, ct_in_nodes[5]); // mono_derived childrens
+  simplex[ct_in_nodes[6]]  prop_e[Q * (lv >= 3)] = softmax_vec_array_constrain(rate_e, ct_in_nodes[6]); // natural_killer childrens
+  simplex[ct_in_nodes[7]]  prop_f[Q * (lv >= 3)] = softmax_vec_array_constrain(rate_f, ct_in_nodes[7]); // t_cell childrens
+
+	// lv4
+  simplex[ct_in_nodes[8]]  prop_g[Q * (lv >= 4)] = softmax_vec_array_constrain(rate_g, ct_in_nodes[8]); // dendritic myeloid childrens
+  simplex[ct_in_nodes[9]]  prop_h[Q * (lv >= 4)] = softmax_vec_array_constrain(rate_h, ct_in_nodes[9]); // macrophage childrens
+  simplex[ct_in_nodes[10]] prop_i[Q * (lv >= 4)] = softmax_vec_array_constrain(rate_i, ct_in_nodes[10]); // CD4 childrens
+  simplex[ct_in_nodes[11]] prop_l[Q * (lv >= 4)] = softmax_vec_array_constrain(rate_l, ct_in_nodes[11]); // CD8 childrens
+
+	// Summarised proportions
 	vector[ct_in_levels[2]] prop_2[Q * (lv >= 2)];
 	vector[ct_in_levels[3]] prop_3[Q * (lv >= 3)];
 	vector[ct_in_levels[4]] prop_4[Q * (lv >= 4)];
@@ -930,55 +1000,56 @@ model {
 	// lv 1
   if(lv == 1 && do_regression) {
 
-  	for(q in 1:Q) prop_1[q] ~ dirichlet_regression( X[q], alpha_1, phi[1] );
+  	for(q in 1:Q) rate_1[q] ~ student_t_glm_constrained( X[q], alpha_1, phi[1], nu );
   	to_vector( alpha_1 ) ~ normal(0,1);
 
   }
-	if(lv == 1 && !do_regression) for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | rep_vector(num_elements(prop_1[1]), num_elements(prop_1[1])));
-	if(lv > 1)  for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | prop_1_prior[q]);
+	if(lv == 1 && !do_regression) for(q in 1:Q) target += student_t_lpdf(rate_1[q] | nu, 0, 1);
+	if(lv > 1)  for(q in 1:Q) target += normal_lpdf(rate_1[q] | rate_1_prior_mean[q], rate_1_prior_sd[q]); // Straighy from posteiror
 
 	// lv 2
   if(lv == 2 && do_regression) {
 
-  	for(q in 1:Q) prop_a[q] ~ dirichlet_regression( X[q], alpha_a, phi[2] );
+  	for(q in 1:Q) rate_a[q] ~ student_t_glm_constrained( X[q], alpha_a, phi[2], nu );
   	to_vector( alpha_a ) ~ normal(0,1);
 
   }
-	if(lv == 2 && !do_regression) for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | rep_vector(num_elements(prop_a[1]), num_elements(prop_a[1])));
-	if(lv > 2)  for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | prop_a_prior[q]);
+	if(lv == 2 && !do_regression) for(q in 1:Q) target += student_t_lpdf(rate_a[q] | nu, 0, 1);
+	if(lv > 2)  for(q in 1:Q) target += normal_lpdf(rate_a[q] | rate_a_prior_mean[q], rate_a_prior_sd[q]);
 
 	// lv 3
   if(lv == 3 && do_regression){
 
-  	for(q in 1:Q) prop_b[q] ~ dirichlet_regression( X[q], alpha_b, phi[3] );
-  	to_vector( alpha_b ) ~ normal(0,1);
+  	for(q in 1:Q) rate_b[q] ~ student_t_glm_constrained( X[q], alpha_b, phi[3], nu );
+   	to_vector( alpha_b ) ~ normal(0,1);
 
-  	for(q in 1:Q) prop_c[q] ~ dirichlet_regression( X[q], alpha_c, phi[4] );
+  	for(q in 1:Q) rate_c[q] ~ student_t_glm_constrained( X[q], alpha_c, phi[4], nu );
   	to_vector( alpha_c ) ~ normal(0,1);
 
-  	for(q in 1:Q) prop_d[q] ~ dirichlet_regression( X[q], alpha_d, phi[5] );
+  	for(q in 1:Q) rate_d[q] ~ student_t_glm_constrained( X[q], alpha_d, phi[5], nu );
   	to_vector( alpha_d ) ~ normal(0,1);
 
-  	for(q in 1:Q) prop_e[q] ~ dirichlet_regression( X[q], alpha_e, phi[6] );
+  	for(q in 1:Q) rate_e[q] ~ student_t_glm_constrained( X[q], alpha_e, phi[6], nu );
   	to_vector( alpha_e ) ~ normal(0,1);
 
-  	for(q in 1:Q) prop_f[q] ~ dirichlet_regression( X[q], alpha_f, phi[7] );
+  	for(q in 1:Q) rate_f[q] ~ student_t_glm_constrained( X[q], alpha_f, phi[7], nu );
   	to_vector( alpha_f ) ~ normal(0,1);
 
   }
   if(lv == 3 && !do_regression) for(q in 1:Q){
-  	 target += dirichlet_lpdf(prop_b[q] | rep_vector(num_elements(prop_b[1]), num_elements(prop_b[1])));
-		 target += dirichlet_lpdf(prop_c[q] | rep_vector(num_elements(prop_c[1]), num_elements(prop_c[1])));
-		 target += dirichlet_lpdf(prop_d[q] | rep_vector(num_elements(prop_d[1]), num_elements(prop_d[1])));
-		 target += dirichlet_lpdf(prop_e[q] | rep_vector(num_elements(prop_e[1]), num_elements(prop_e[1])));
+  	 target += student_t_lpdf(rate_b[q] | nu, 0, 1);
+		 target += student_t_lpdf(rate_c[q] | nu, 0, 1);
+		 target += student_t_lpdf(rate_d[q] | nu, 0, 1);
+		 target += student_t_lpdf(rate_e[q] | nu, 0, 1);
+		 target += student_t_lpdf(rate_f[q] | nu, 0, 1);
   }
 
 	// lv 4
 	if(lv == 4) for(q in 1:Q) {
-		target += dirichlet_lpdf(prop_f[q] | rep_vector(num_elements(prop_f[1]), num_elements(prop_f[1])));
-		target += dirichlet_lpdf(prop_g[q] | rep_vector(num_elements(prop_g[1]), num_elements(prop_g[1])));
-		target += dirichlet_lpdf(prop_h[q] | rep_vector(num_elements(prop_h[1]), num_elements(prop_h[1])));
-		target += dirichlet_lpdf(prop_i[q] | rep_vector(num_elements(prop_i[1]), num_elements(prop_i[1])));
+  	 target += student_t_lpdf(rate_g[q] | nu, 0, 1);
+		 target += student_t_lpdf(rate_h[q] | nu, 0, 1);
+		 target += student_t_lpdf(rate_i[q] | nu, 0, 1);
+		 target += student_t_lpdf(rate_l[q] | nu, 0, 1);
 	}
 
 

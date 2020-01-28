@@ -205,25 +205,7 @@ ARMET_tc = function(
 	df1 = res1[[1]]
 	fit1 = res1[[2]]
 
-	prop_posterior[[1]] = fit1 %>% draws_to_alphas("prop_1") %>% `[[` (1)
-
-
-	rebuild_last_component_sum_to_zero = function(.){
-		(.) %>%
-		group_by(.variable) %>%
-			do({
-				max_c = (.) %>% pull(C) %>% max
-				bind_rows(
-					(.) %>% filter(C < max_c | A > 1),
-					(.) %>%
-						filter(C < max_c & A == 1) %>%
-						group_by(.chain, .iteration, .draw , A, .variable ) %>%
-						summarise(.value = -sum(.value)) %>%
-						mutate(C = max_c)
-				)
-			}) %>%
-			ungroup()
-	}
+	prop_posterior[[1]] = fit1 %>% draws_to_mu_sigma("rate_1") %>% unlist(recursive = F)
 
 	draws_1 =
 		fit1 %>%
@@ -312,7 +294,7 @@ ARMET_tc = function(
 		df2 = res2[[1]]
 		fit2 = res2[[2]]
 
-		prop_posterior[[2]] = fit2 %>% draws_to_alphas(sprintf("prop_%s", "a")) %>% `[[` (1)
+		prop_posterior[[2]] = fit2 %>% draws_to_mu_sigma(sprintf("rate_%s", "a")) %>% unlist(recursive = F)
 
 		draws_a =
 			fit2 %>%
@@ -656,12 +638,12 @@ run_model = function(reference_filtered,
 																	 c("lambda_log","sigma_inv_log"),
 																	 c()
 	)
-
-	# library(rstan)
-	# fileConn<-file("~/.R/Makevars")
-	# writeLines(c( "CXX14FLAGS += -O2","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
-	# close(fileConn)
-	# ARMET_tc_model = rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix.stan", auto_write = F)
+#
+# 	library(rstan)
+# 	fileConn<-file("~/.R/Makevars")
+# 	writeLines(c( "CXX14FLAGS += -O2","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
+# 	close(fileConn)
+# 	ARMET_tc_model = rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix.stan", auto_write = F)
 
 	exposure_rate_init = switch(
 		(lv > 1) %>% `!` %>% as.numeric %>% sum(1),
@@ -679,8 +661,6 @@ run_model = function(reference_filtered,
 
 	Sys.setenv("STAN_NUM_THREADS" = shards)
 
-	#if(lv == 3) browser()
-
 	list(df,
 			 switch(
 			 	approximate_posterior %>% sum(1),
@@ -693,7 +673,9 @@ run_model = function(reference_filtered,
 			 		cores = 3,
 			 		iter = iterations,
 			 		warmup = iterations - sampling_iterations,
-			 		data = MPI_data %>% c(prop_posterior),
+			 		data = MPI_data %>% c(
+			 			prop_posterior %>% unlist(recursive = F) %>% setNames(gsub("\\.", "_", names(.)))
+			 		),
 			 		# pars=
 			 		# 	c("prop_1", "prop_2", "prop_3", sprintf("prop_%s", letters[1:9])) %>%
 			 		# 	c("alpha_1", sprintf("alpha_%s", letters[1:9])) %>%
