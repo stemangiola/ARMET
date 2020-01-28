@@ -442,7 +442,8 @@ get_NK_curated_yuhan = function(){
 
   read_csv("~/PhD/deconvolution/NK_yuhan/Ste_Alex_GEO_RNA_seq.csv") %>%
     rename(`Cell type formatted` = state, `Data base` = database, symbol = transcript) %>%
-    mutate(`Cell type formatted` = ifelse(`Cell type formatted` != "nk_resting", "nk_primed", `Cell type formatted`))
+    mutate(`Cell type formatted` = ifelse(`Cell type formatted` != "nk_resting", "nk_primed", `Cell type formatted`)) %>%
+		filter(`Data base` != "FANTOM5")
 
 
 }
@@ -490,7 +491,72 @@ get_mast_cell = function(){
 
 }
 
+get_melanocytes = function(){
+
+	dir(
+		path = "../melanocyte_GSE71747_cultured",
+		pattern="txt$",
+		full.names = T
+	) %>%
+		map_dfr(
+			~ .x %>%
+				read_delim("\t", escape_double = FALSE, trim_ws = TRUE) %>%
+				setNames(c("symbol", "count")) %>%
+				mutate_if(is.double, as.integer) %>%
+				mutate(file = .x)
+		) %>%
+		filter(!grepl("^N_", symbol)) %>%
+		separate(file, c("dummy", "sample"), sep="_cultured/") %>%
+		separate(sample, c("sample", "dummy"), sep="_L005") %>%
+		select(-dummy) %>%
+		mutate(methods = "cultured from tissue" %>% as.factor) %>%
+		mutate(`Data base` = "GSE71747") %>%
+		mutate(`Cell type formatted` = "melanocyte") %>%
+
+		# bind_rows(
+		# 	# GSE109245
+		# 	read_delim("../melanocyte_GSE109245_RAW//GSM2935823_mcf_quant.sf.txt", "\t", escape_double = FALSE, trim_ws = TRUE) %>%
+		# 		select(Name, NumReads) %>%
+		# 		mutate(sample ="GSM2935823") %>%
+		# 		annotate_symbol(Name) %>%
+		# 		rename(count = NumReads, symbol = transcript) %>%
+		# 		ttBulk(sample, symbol, count) %>%
+		# 		aggregate_duplicates() %>%
+		# 		select(-`merged transcripts`) %>%
+		# 		filter(!grepl("^N_", symbol)) %>%
+		# 		mutate(methods = "cultured from tissue" %>% as.factor) %>%
+		# 		mutate(`Data base` = "GSE109245") %>%
+		# 		mutate(`Cell type formatted` = "melanocyte")
+		#
+		# ) %>%
+
+		bind_rows(
+			# Other dataset
+
+			# GSE138412
+			# Download fastq pair enda
+			# cat SRR_Acc_List.txt | parallel --eta -j 10  '~/third_party_sofware/sratoolkit.2.9.6-1-centos_linux64/bin/fastq-dump --outdir fastq --gzip --skip-technical  --readids --read-filter pass --dumpbase --split-3 --clip {}'
+			# module load parallel; module load trimgalore; module load cutadapt; ls ./ | awk '{split($0,a,"_"); print a[1]}' | uniq | parallel --eta -j1 trim_galore --paired {}_pass_1.fastq.gz {}_pass_2.fastq.gz --fastqc > trim_galore.log
+			# mv fastq/*_val_* ./
+			# for i in $(ls *_val_*fq.gz | rev | cut -c 15- | rev | uniq); do qsub -l nodes=1:ppn=24,mem=41gb,walltime=120:00:00 STAR_HPC.sh -F "$i"; done
+
+
+			read_csv("../melanocyte_GSE138412/melanocyte_GSE138412.csv") %>%
+				rename(symbol = transcript) %>%
+				select(entrez ,sample , count , symbol, group) %>%
+				mutate(methods = "cultured from tissue" %>% as.factor) %>%
+				mutate(`Data base` = "GSE138412") %>%
+				mutate(`Cell type formatted` = "melanocyte") %>%
+				mutate(	sample = gsub("alignment.hg38.", "", sample, fixed = T)) %>%
+				mutate(	sample = gsub(".pass.Aligned.sortedByCoord.out.bam", "", sample, fixed = T))
+
+		)
+
+
+}
+
 # from here
+
 
 
 
@@ -528,40 +594,44 @@ get_monocytes_brain = function(){
 # Produce data sets
 
 ENCODE = get_ENCODE()
-save(ENCODE, file="big_data/tibble_cellType_files/ENCODE.RData", compress = "gzip")
+save(ENCODE, file="~/PostDoc/RNAseq-noise-model/big_data/tibble_cellType_files/ENCODE.RData", compress = "gzip")
 
 BLUEPRINT = get_BLUEPRINT()
-save(BLUEPRINT, file="big_data/tibble_cellType_files/BLUEPRINT.RData", compress = "gzip")
+save(BLUEPRINT, file="~/PostDoc/RNAseq-noise-model/big_data/tibble_cellType_files/BLUEPRINT.RData", compress = "gzip")
 
 # FANTOM5 = get_FANTOM5()
-# save(FANTOM5, file="big_data/tibble_cellType_files/FANTOM5.RData", compress = "gzip")
+# save(FANTOM5, file="~/PostDoc/RNAseq-noise-model/big_data/tibble_cellType_files/FANTOM5.RData", compress = "gzip")
 
 bloodRNA = get_bloodRNA()
-save(bloodRNA, file="big_data/tibble_cellType_files/bloodRNA.RData", compress = "gzip")
+save(bloodRNA, file="~/PostDoc/RNAseq-noise-model/big_data/tibble_cellType_files/bloodRNA.RData", compress = "gzip")
 
 immune_singapoor = get_immune_singapoor()
-save(immune_singapoor, file="big_data/tibble_cellType_files/immune_singapoor.RData", compress = "gzip")
+save(immune_singapoor, file="~/PostDoc/RNAseq-noise-model/big_data/tibble_cellType_files/immune_singapoor.RData", compress = "gzip")
 
 N52_TME = get_N52_TME()
-save(N52_TME, file="big_data/tibble_cellType_files/N52_TME.RData", compress = "gzip")
+save(N52_TME, file="~/PostDoc/RNAseq-noise-model/big_data/tibble_cellType_files/N52_TME.RData", compress = "gzip")
 
 # dendritic = get_dendritic()
 # save(dendritic, file="big_data/tibble_cellType_files/dendritic.RData")
 
 influenza_immune = get_influenza_immune()
-save(influenza_immune, file="big_data/tibble_cellType_files/influenza_immune.RData", compress = "gzip")
+save(influenza_immune, file="~/PostDoc/RNAseq-noise-model/big_data/tibble_cellType_files/influenza_immune.RData", compress = "gzip")
 
 immune_skin = get_immune_skin()
-save(immune_skin, file="big_data/tibble_cellType_files/immune_skin.RData", compress = "gzip")
+save(immune_skin, file="~/PostDoc/RNAseq-noise-model/big_data/tibble_cellType_files/immune_skin.RData", compress = "gzip")
 
 nk_yuhan = get_NK_curated_yuhan()
-save(nk_yuhan, file="big_data/tibble_cellType_files/nk_yuhan.RData", compress = "gzip")
+save(nk_yuhan, file="~/PostDoc/RNAseq-noise-model/big_data/tibble_cellType_files/nk_yuhan.RData", compress = "gzip")
 
 macro = get_macro()
-save(macro, file="big_data/tibble_cellType_files/macro.RData", compress = "gzip")
+save(macro, file="~/PostDoc/RNAseq-noise-model/big_data/tibble_cellType_files/macro.RData", compress = "gzip")
 
 mast = get_mast_cell()
 save(mast, file="~/PostDoc/RNAseq-noise-model/big_data/tibble_cellType_files/mast.RData", compress = "gzip")
+
+melanocyte = get_melanocytes()
+save(melanocyte, file="~/PostDoc/RNAseq-noise-model/big_data/tibble_cellType_files/melanocyte.RData", compress = "gzip")
+
 
 load("~/PostDoc/RNAseq-noise-model/big_data/tibble_cellType_files/ENCODE.RData")
 load("~/PostDoc/RNAseq-noise-model/big_data/tibble_cellType_files/BLUEPRINT.RData")
@@ -573,6 +643,7 @@ load("~/PostDoc/RNAseq-noise-model/big_data/tibble_cellType_files/immune_skin.RD
 load("~/PostDoc/RNAseq-noise-model/big_data/tibble_cellType_files/nk_yuhan.RData")
 load("~/PostDoc/RNAseq-noise-model/big_data/tibble_cellType_files/macro.RData")
 load("~/PostDoc/RNAseq-noise-model/big_data/tibble_cellType_files/mast.RData")
+load("~/PostDoc/RNAseq-noise-model/big_data/tibble_cellType_files/melanocyte.RData")
 
 all =
   ENCODE %>%
@@ -585,6 +656,7 @@ all =
   bind_rows(nk_yuhan) %>%
   bind_rows(macro) %>%
   bind_rows(mast) %>%
+	bind_rows(melanocyte) %>%
 
   #print statistics
   {
@@ -747,62 +819,6 @@ counts =
   # mutate symbol
   mutate(`symbol original` = symbol) %>%
   unite(symbol, c("Cell type category", "symbol"), remove = F) %>%
-
-  # # Mark the bimodal distributions
-  # do_parallel_start(n_cores, "symbol") %>%
-  # do({
-  # 	`%>%` = magrittr::`%>%`
-  # 	library(tidyverse)
-  # 	library(magrittr)
-  #
-  # 	(.) %>%
-  # 		group_by(symbol) %>%
-  # 		do(
-# 			(.) %>%
-# 				mutate(
-# 					`bimodal p-value` =
-# 						(.) %>%
-# 						pull(`read count normalised log`) %>%
-# 						diptest::dip.test() %$%
-# 						`p.value`,
-#
-# 					`bimodal coefficient` =
-# 						(.) %>%
-# 						pull(`read count normalised log`) %>%
-# 						modes::bimodality_coefficient(),
-#
-# 					`anova p-value` =
-# 						ifelse(
-# 							(.) %>% distinct(`Data base`) %>% nrow > 1 & (.) %>% distinct(`Cell type formatted`) %>% nrow > 1 ,
-# 							(.) %>% aov(`read count normalised log` ~ `Cell type formatted` + `Data base`, .) %>% anova %$% `Pr(>F)` %>% `[` (1),
-# 							ifelse(
-# 								(.) %>% distinct(`Data base`) %>% nrow > 1,
-# 								(.) %>% aov(`read count normalised log` ~ `Data base`, .) %>% anova %$% `Pr(>F)` %>% `[` (1),
-# 								ifelse(
-# 									(.) %>% distinct(`Cell type formatted`) %>% nrow > 1,
-# 									(.) %>% aov(`read count normalised log` ~ `Cell type formatted`, .) %>% anova %$% `Pr(>F)` %>% `[` (1),
-# 									NA
-# 								)
-# 							)
-#
-# 						)
-# 				)
-# 		) %>%
-# 		ungroup()
-#
-# }) %>%
-# do_parallel_end() %>%
-# mutate(
-# 	`anova p-value` = ifelse(`anova p-value` == "NaN", 1, `anova p-value`),
-# 	`bimodal coefficient` = ifelse(`bimodal coefficient` == "NaN", 0, `bimodal coefficient`)
-# ) %>%
-# mutate(
-# 	`hard bimodality` =
-# 		(`bimodal p-value` < 0.05) +
-# 		(`bimodal coefficient` > 0.6666667) +
-# 		(`anova p-value` < 0.05 ) >= 2
-# ) %>%
-# mutate(`soft bimodality` = `anova p-value` < 0.0001) %>%
 
 # Remove redundant samples
 group_by(level) %>%
