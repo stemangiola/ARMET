@@ -3,6 +3,7 @@
 export(ARMET_plotPolar)
 export(ARMET_tc)
 export(ToDataFrameTypeColFull)
+export(create_design_matrix)
 export(create_tree_object)
 export(draws_to_alphas)
 export(get_MPI_df_ref)
