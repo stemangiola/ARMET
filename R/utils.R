@@ -1744,3 +1744,20 @@ parse_formula <- function(fm) {
 	else
 		as.character(attr(terms(fm), "variables"))[-1]
 }
+
+rebuild_last_component_sum_to_zero = function(.){
+	(.) %>%
+		group_by(.variable) %>%
+		do({
+			max_c = (.) %>% pull(C) %>% max
+			bind_rows(
+				(.) %>% filter(C < max_c | A > 1),
+				(.) %>%
+					filter(C < max_c & A == 1) %>%
+					group_by(.chain, .iteration, .draw , A, .variable ) %>%
+					summarise(.value = -sum(.value)) %>%
+					mutate(C = max_c)
+			)
+		}) %>%
+		ungroup()
+}
