@@ -16,9 +16,10 @@ S = 30
 
 mix_base = readRDS("dev/mix_base.RDS") %>% filter(level == 3)
 
-intercept = c(	-0.9516997,	0.3748425,	0.2348878,	-0.4229247,	-0.9586268,	-3.1402425,	0.3323535,-0.7435126,	2.9877128,	-1.2978599,	4.3127303,	0.5863942,	0.3885436,	1.3248586, 0.3885436,	1.3248586)
+set.seed(342)
+intercept = rnorm(16)
 intercept = intercept - sum(intercept) / length(intercept)
-alpha = matrix(intercept %>%	 	c(0 , 0 , 0, 2, 0, 2, 0, 0, 2, 0, 0, 2, 0, 2, 0, 0), ncol = 2)
+alpha = matrix(intercept %>%	 	c(0 , 0 , 0, 2, 0, 2, 0, 2, 2, 0, 0, 2, 0, 2, 0, 0), ncol = 2)
 
 generate_mixture = function(.data, samples_per_condition, alpha) {
 	add_attr = function(var, attribute, name) {
@@ -105,7 +106,7 @@ generate_mixture = function(.data, samples_per_condition, alpha) {
 
 mix = mix_base %>% generate_mixture(15, alpha)
 
-rr3 =
+rr4 =
 	mix %>%
 	select(run, symbol, `count mix`, covariate_2) %>%
 	mutate(`count mix` = as.integer(`count mix`), run = as.character(run) ) %>%
@@ -117,7 +118,7 @@ mix %>% attr("proportions") %>%
 	ggplot(aes(x = covariate_2, y = p, color=factor(alpha_2))) + geom_point() + geom_smooth() + facet_wrap(~`Cell type category`)
 
 # See if result match
-rr2$proportions %>%
+rr4$proportions %>%
 	filter(level == 3) %>%
 	select(`Cell type category`, contains("alpha2")) %>%
 	distinct() %>%
