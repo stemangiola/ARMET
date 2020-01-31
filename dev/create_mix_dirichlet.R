@@ -105,7 +105,7 @@ generate_mixture = function(.data, samples_per_condition, alpha) {
 
 mix = mix_base %>% generate_mixture(15, alpha)
 
-rr2 =
+rr3 =
 	mix %>%
 	select(run, symbol, `count mix`, covariate_2) %>%
 	mutate(`count mix` = as.integer(`count mix`), run = as.character(run) ) %>%
@@ -119,7 +119,7 @@ mix %>% attr("proportions") %>%
 # See if result match
 rr2$proportions %>%
 	filter(level == 3) %>%
-	select(`Cell type category`, contains("value_alpha")) %>%
+	select(`Cell type category`, contains("alpha2")) %>%
 	distinct() %>%
 	left_join(mix %>% attr("proportions") %>% distinct(`Cell type category`, alpha_2) ) %>%
 	drop_na

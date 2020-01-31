@@ -391,7 +391,7 @@ ARMET_tc = function(
 	######################################
 
 	if(levels > 2){
-
+# browser()
 		res3 = run_model(	reference_filtered, mix, shards,	3,	full_bayesian, approximate_posterior, prop_posterior, draws_to_exposure(fit2), iterations = iterations,	sampling_iterations = sampling_iterations	, X = X, do_regression = do_regression	)
 
 		df3 = res3[[1]]
@@ -639,11 +639,11 @@ run_model = function(reference_filtered,
 																	 c()
 	)
 #
-# 	library(rstan)
-# 	fileConn<-file("~/.R/Makevars")
-# 	writeLines(c( "CXX14FLAGS += -O2","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
-# 	close(fileConn)
-# 	ARMET_tc_model = rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix.stan", auto_write = F)
+	# library(rstan)
+	# fileConn<-file("~/.R/Makevars")
+	# writeLines(c( "CXX14FLAGS += -O2","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
+	# close(fileConn)
+	# ARMET_tc_model = rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix.stan", auto_write = F)
 
 	exposure_rate_init = switch(
 		(lv > 1) %>% `!` %>% as.numeric %>% sum(1),
@@ -660,7 +660,7 @@ run_model = function(reference_filtered,
 
 
 	Sys.setenv("STAN_NUM_THREADS" = shards)
-
+#if(lv == 3) browser()
 	list(df,
 			 switch(
 			 	approximate_posterior %>% sum(1),

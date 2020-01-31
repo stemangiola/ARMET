@@ -640,14 +640,14 @@ if(dim_4[1] > 0) {
 		// Build sum to zero variable
 		// Here an element of the parameter exist but des not count, it gets the value just based on the prior
 		// Only the intercept has to sum to zero
-		int c = cols(alpha);
-		int r = rows(alpha);
-		matrix[r, c]  alpha_ = alpha;
-		alpha_[1,c] = -sum(alpha_[1, 1:(c-1)]);
+		// int c = cols(alpha);
+		// int r = rows(alpha);
+		// matrix[r, c]  alpha_ = alpha;
+		// alpha_[1,c] = -sum(alpha_[1, 1:(c-1)]);
 
 
 		// Calculate log prob
-		return student_t_lpdf(append_row(p, -sum(p)) | nu, to_vector(X * alpha_ ),  phi  );
+		return student_t_lpdf(p | nu, to_vector(X * alpha ),  phi  );
 	}
 
 	vector softmax_constrain(vector v){
@@ -870,23 +870,23 @@ parameters {
 
 	// Dirichlet regression
   // lv1
-  matrix[A * (lv == 1) * do_regression,ct_in_nodes[1]]  alpha_1; // Root
+  matrix[A * (lv == 1) * do_regression,ct_in_nodes[1]-1]  alpha_1; // Root
 
   // lv2
-  matrix[A * (lv == 2) * do_regression,ct_in_nodes[2]]  alpha_a; // Immune cells
+  matrix[A * (lv == 2) * do_regression,ct_in_nodes[2]-1]  alpha_a; // Immune cells
 
   // lv3
-  matrix[A * (lv == 3) * do_regression,ct_in_nodes[3]]  alpha_b; // b cells
-  matrix[A * (lv == 3) * do_regression,ct_in_nodes[4]]  alpha_c; // granulocyte
-  matrix[A * (lv == 3) * do_regression,ct_in_nodes[5]]  alpha_d; // mono_derived
-  matrix[A * (lv == 3) * do_regression,ct_in_nodes[6]]  alpha_e; // natural_killer
-  matrix[A * (lv == 3) * do_regression,ct_in_nodes[7]]  alpha_f; // t_cell
+  matrix[A * (lv == 3) * do_regression,ct_in_nodes[3]-1]  alpha_b; // b cells
+  matrix[A * (lv == 3) * do_regression,ct_in_nodes[4]-1]  alpha_c; // granulocyte
+  matrix[A * (lv == 3) * do_regression,ct_in_nodes[5]-1]  alpha_d; // mono_derived
+  matrix[A * (lv == 3) * do_regression,ct_in_nodes[6]-1]  alpha_e; // natural_killer
+  matrix[A * (lv == 3) * do_regression,ct_in_nodes[7]-1]  alpha_f; // t_cell
 
 	// lv4
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[8]]  alpha_g; // dendritic myeloid
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[9]]  alpha_h; // macrophage
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[10]]  alpha_i; // CD4
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[11]] alpha_l; // CD8
+  matrix[A * (lv == 4) * do_regression,ct_in_nodes[8]-1]  alpha_g; // dendritic myeloid
+  matrix[A * (lv == 4) * do_regression,ct_in_nodes[9]-1]  alpha_h; // macrophage
+  matrix[A * (lv == 4) * do_regression,ct_in_nodes[10]-1]  alpha_i; // CD4
+  matrix[A * (lv == 4) * do_regression,ct_in_nodes[11]-1]  alpha_l; // CD8
 
 	real<lower=0> phi[11];
 
@@ -1020,19 +1020,19 @@ model {
 	// lv 3
   if(lv == 3 && do_regression){
 
-  	for(q in 1:Q) rate_b[q] ~ student_t_glm_constrained( X[q], alpha_b, phi[3], nu );
-   	to_vector( alpha_b ) ~ normal(0,1);
+  	for(q in 1:Q){
+  		rate_b[q] ~ student_t_glm_constrained( X[q], alpha_b, phi[3], nu );
+  		rate_c[q] ~ student_t_glm_constrained( X[q], alpha_c, phi[4], nu );
+  		rate_d[q] ~ student_t_glm_constrained( X[q], alpha_d, phi[5], nu );
+			rate_e[q] ~ student_t_glm_constrained( X[q], alpha_e, phi[6], nu );
+			rate_f[q] ~ student_t_glm_constrained( X[q], alpha_f, phi[7], nu );
 
-  	for(q in 1:Q) rate_c[q] ~ student_t_glm_constrained( X[q], alpha_c, phi[4], nu );
+  }
+
+  	to_vector( alpha_b ) ~ normal(0,1);
   	to_vector( alpha_c ) ~ normal(0,1);
-
-  	for(q in 1:Q) rate_d[q] ~ student_t_glm_constrained( X[q], alpha_d, phi[5], nu );
   	to_vector( alpha_d ) ~ normal(0,1);
-
-  	for(q in 1:Q) rate_e[q] ~ student_t_glm_constrained( X[q], alpha_e, phi[6], nu );
   	to_vector( alpha_e ) ~ normal(0,1);
-
-  	for(q in 1:Q) rate_f[q] ~ student_t_glm_constrained( X[q], alpha_f, phi[7], nu );
   	to_vector( alpha_f ) ~ normal(0,1);
 
   }

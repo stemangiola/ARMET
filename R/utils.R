@@ -1778,12 +1778,11 @@ rebuild_last_component_sum_to_zero = function(.){
 		do({
 			max_c = (.) %>% pull(C) %>% max
 			bind_rows(
-				(.) %>% filter(C < max_c | A > 1),
+				(.),
 				(.) %>%
-					filter(C < max_c & A == 1) %>%
 					group_by(.chain, .iteration, .draw , A, .variable ) %>%
 					summarise(.value = -sum(.value)) %>%
-					mutate(C = max_c)
+					mutate(C = max_c + 1)
 			)
 		}) %>%
 		ungroup()
