@@ -7,6 +7,7 @@ library(furrr)
 library(data.tree)
 library(foreach)
 library(ARMET)
+library(gamlss)
 source("~/PhD/deconvolution/ARMET/R/utils.R")
 source("~/PostDoc/ppcSeq/R/do_parallel.R")
 n_cores = 20
@@ -144,11 +145,10 @@ which_is_up_down %>%
 
 res = readRDS("dev/test_student_noisless.rds")
 
-my_res = res[[1]]
-
-
-my_res$mix %>% attr("proportions") %>%
-	ggplot(aes(x = covariate_2, y = p, color=factor(alpha_2))) + geom_point() + geom_smooth() + facet_wrap(~`Cell type category`)
+# my_res = res[[1]]
+#
+# my_res$mix %>% attr("proportions") %>%
+# 	ggplot(aes(x = covariate_2, y = p, color=factor(alpha_2))) + geom_point() + geom_smooth() + facet_wrap(~`Cell type category`)
 
 # Calculate tpr
 res %>%
@@ -175,6 +175,7 @@ res %>%
 	geom_jitter() +
 	my_theme
 
+# Calculate fpr for regression
 res %>%
 	map_dfr(
 		~
@@ -206,3 +207,114 @@ comparison_truth %>%
 	geom_smooth(method = "lm") +
 	geom_point() +
 	geom_errorbar(aes(ymin=.value.lower, ymax=.value.upper))
+
+# Same run with Cibersort
+
+noiseles_test_cibersort = function(which_is_up_down, ref){
+	# intercept = rnorm(16)
+	intercept = rep(1, 16)
+	intercept = intercept - sum(intercept) / length(intercept)
+	slope = rep(0, 16)
+	slope[which_is_up_down[1]] = 2
+	slope[which_is_up_down[2]] = -2
+	alpha = matrix(intercept %>%	c(slope), ncol = 2)
+
+	mix =
+		mix_base %>% generate_mixture(15, alpha)
+
+	rr =
+		mix %>%
+		mutate(run = as.character(run)) %>%
+		ttBulk::deconvolve_cellularity(run, symbol, `count mix`, reference = ref) %>%
+		dplyr::select(run, covariate_2, contains("type")) %>%
+		distinct() %>%
+		pivot_longer(cols = contains("type"), names_to = "Cell type category", values_to = ".value",  names_prefix = "type: ") %>%
+
+		# perform test
+		nest(data = -c(`Cell type category`)) %>%
+		mutate(CI = data %>% map(~ .x %>% gamlss::gamlss(.value ~ covariate_2,  family = BEZI, data = ., trace = F) %>%
+											summary %>% `[` (2, 1:2) %>% as_tibble(rownames="rn") %>% spread(rn, value) %>%
+											rename(	alpha_2 = Estimate) %>%
+											mutate(
+												.lower_alpha2 = alpha_2 - `Std. Error`,
+												.upper_alpha2 = alpha_2 + `Std. Error`
+											) %>%
+											dplyr::select(-`Std. Error`))
+				) %>%
+		unnest(cols = c(data, CI))
+
+	list(mix = mix, result = rr)
+	#%>% saveRDS(sprintf("dev/test_student_noisless_%s", which_is_up_down %>% paste(collapse="_")))
+}
+
+# get reference from ARMET
+ref =
+	res[[1]]$result$signatures[[3]] %>%
+	filter(!`Cell type category` %in% c("house_keeping", "query")) %>%
+	distinct(`Cell type category`, symbol, lambda_log) %>%
+	mutate(count = exp(lambda_log)) %>%
+	dplyr::select(-lambda_log) %>%
+	spread(`Cell type category`, count) %>%
+	as_matrix(rownames="symbol")
+
+
+res_cibersort =
+	which_is_up_down %>%
+	map(~ .x %>% noiseles_test_cibersort(ref))
+
+res_cibersort[[1]]$mix %>% attr("proportions") %>%
+	mutate(run = run %>% as.character) %>%
+	dplyr::select(-contains("alpha")) %>%
+	left_join(res_cibersort[[1]]$result) %>%
+	ggplot(aes(x = p, y = .value, color=`Cell type category`)) +
+	geom_abline(intercept = 0 ,slope=1) +
+	geom_smooth(method = "lm") +
+	geom_point()
+
+# Calculate tpr
+res_cibersort %>%
+	map_dfr(
+		~
+			# Integrate
+			.x$result %>%
+			rename(run = sample) %>%
+			select(run, `Cell type category`, .value) %>%
+			left_join(
+				.x$mix %>% attr("proportions") %>% mutate(run = run %>% as.character)
+			) %>%
+
+			# Calculate
+			mutate(inside = p > .value.lower & p < .value.upper) %>%
+			count(`Cell type category`, inside) %>%
+			spread(inside, n) %>%
+			replace(., is.na(.), 0) %>%
+			mutate(tpr = `TRUE` / (`TRUE` + `FALSE`))
+	) %>%
+	ggplot(aes(tpr, x=`Cell type category`)) +
+	geom_boxplot(outlier.shape = NA) +
+	geom_jitter() +
+	my_theme
+
+# Calculate fpr for regression
+res_cibersort %>%
+	map_dfr(
+		~
+			# Integrate
+			.x$result %>%
+			dplyr::select(`Cell type category`, contains("alpha2")) %>%
+			distinct() %>%
+			left_join(.x$mix %>% attr("proportions") %>% distinct(`Cell type category`, alpha_2) ) %>%
+			drop_na  %>%
+
+			# Calculate
+			mutate(fp = alpha_2 == 0 & (.lower_alpha2 * .upper_alpha2 ) > 0) %>%
+			mutate(fn = alpha_2 != 0 & (.lower_alpha2 * .upper_alpha2 ) < 0)
+
+	) %>%
+	group_by(`Cell type category`) %>%
+	summarise(fpr = sum(fp) / n(), fnr = sum(fn) / n()) %>%
+	gather(which, rate, c("fpr","fnr")) %>%
+	ggplot(aes(y=rate, x=`Cell type category`)) +
+	geom_point() +
+	facet_wrap(~which) +
+	my_theme
