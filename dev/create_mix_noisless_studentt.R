@@ -20,16 +20,26 @@ my_theme =
 		axis.line = element_line(),
 		panel.grid.major = element_line(size = 0.2),
 		panel.grid.minor = element_line(size = 0.1),
-		text = element_text(size=12),
-		legend.position="bottom",
-		aspect.ratio=1,
+		text = element_text(size = 12),
+		legend.position = "bottom",
+		aspect.ratio = 1,
 		strip.background = element_blank(),
-		axis.title.x  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10)),
-		axis.title.y  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10)),
+		axis.title.x  = element_text(margin = margin(
+			t = 10,
+			r = 10,
+			b = 10,
+			l = 10
+		)),
+		axis.title.y  = element_text(margin = margin(
+			t = 10,
+			r = 10,
+			b = 10,
+			l = 10
+		)),
 		axis.text.x = element_text(angle = 90, hjust = 1)
 	)
 
-noiseles_test = function(which_is_up_down){
+noiseles_test = function(which_is_up_down) {
 	# intercept = rnorm(16)
 	intercept = rep(1, 16)
 	intercept = intercept - sum(intercept) / length(intercept)
@@ -43,10 +53,15 @@ noiseles_test = function(which_is_up_down){
 	rr =
 		mix %>%
 		select(run, symbol, `count mix`, covariate_2) %>%
-		mutate(`count mix` = as.integer(`count mix`), run = as.character(run) ) %>%
+		mutate(`count mix` = as.integer(`count mix`), run = as.character(run)) %>%
 		spread(symbol, `count mix`) %>%
 		rename(sample = run) %>%
-		ARMET_tc(~covariate_2, do_regression = T, iterations = 700, sampling_iterations = 200	)
+		ARMET_tc(
+			~ covariate_2,
+			do_regression = T,
+			iterations = 700,
+			sampling_iterations = 200
+		)
 
 	list(mix = mix, result = rr)
 	#%>% saveRDS(sprintf("dev/test_student_noisless_%s", which_is_up_down %>% paste(collapse="_")))
@@ -105,7 +120,7 @@ generate_mixture = function(.data, samples_per_condition, alpha) {
 				as_tibble() %>%
 				setNames(ct_names) %>%
 				mutate(run = 1:n()) %>%
-				gather(`Cell type category`, alpha,-run)
+				gather(`Cell type category`, alpha, -run)
 		) %>%
 
 		# Add X
@@ -130,17 +145,17 @@ generate_mixture = function(.data, samples_per_condition, alpha) {
 		summarise(`count mix` = c %>% sum) %>%
 		ungroup %>%
 
-		left_join(cell_type_proportions %>% distinct(run, covariate_2 )	) %>%
+		left_join(cell_type_proportions %>% distinct(run, covariate_2)) %>%
 
 		# Add proportions
 		add_attr(cell_type_proportions, "proportions")
 
 }
 
-which_is_up_down = 1:16 %>% map(~ c(.x, (.x + 4) %>% ifelse(. > 16, .- 16, .)))
+which_is_up_down = 1:16 %>% map( ~ c(.x, (.x + 4) %>% ifelse(. > 16, . - 16, .)))
 
 which_is_up_down %>%
-	map(~ .x %>% noiseles_test) %>%
+	map( ~ .x %>% noiseles_test) %>%
 	saveRDS("dev/test_student_noisless.rds")
 
 res = readRDS("dev/test_student_noisless.rds")
@@ -170,7 +185,7 @@ res %>%
 			replace(., is.na(.), 0) %>%
 			mutate(tpr = `TRUE` / (`TRUE` + `FALSE`))
 	) %>%
-	ggplot(aes(tpr, x=`Cell type category`)) +
+	ggplot(aes(tpr, x = `Cell type category`)) +
 	geom_boxplot(outlier.shape = NA) +
 	geom_jitter() +
 	my_theme
@@ -184,33 +199,36 @@ res %>%
 			filter(level == 3) %>%
 			select(`Cell type category`, contains("alpha2")) %>%
 			distinct() %>%
-			left_join(.x$mix %>% attr("proportions") %>% distinct(`Cell type category`, alpha_2) ) %>%
+			left_join(
+				.x$mix %>% attr("proportions") %>% distinct(`Cell type category`, alpha_2)
+			) %>%
 			drop_na  %>%
 
 			# Calculate
-			mutate(fp = alpha_2 == 0 & (.lower_alpha2 * .upper_alpha2 ) > 0) %>%
-			mutate(fn = alpha_2 != 0 & (.lower_alpha2 * .upper_alpha2 ) < 0)
+			mutate(fp = alpha_2 == 0 &
+						 	(.lower_alpha2 * .upper_alpha2) > 0) %>%
+			mutate(fn = alpha_2 != 0 & (.lower_alpha2 * .upper_alpha2) < 0)
 
 	) %>%
 	group_by(`Cell type category`) %>%
 	summarise(fpr = sum(fp) / n(), fnr = sum(fn) / n()) %>%
-	gather(which, rate, c("fpr","fnr")) %>%
-	ggplot(aes(y=rate, x=`Cell type category`)) +
+	gather(which, rate, c("fpr", "fnr")) %>%
+	ggplot(aes(y = rate, x = `Cell type category`)) +
 	geom_point() +
-	facet_wrap(~which) +
+	facet_wrap( ~ which) +
 	my_theme
 
 # Example of one run
 comparison_truth %>%
-	ggplot(aes(x = p, y = .value, color=`Cell type category`)) +
-	geom_abline(intercept = 0 ,slope=1) +
+	ggplot(aes(x = p, y = .value, color = `Cell type category`)) +
+	geom_abline(intercept = 0 , slope = 1) +
 	geom_smooth(method = "lm") +
 	geom_point() +
-	geom_errorbar(aes(ymin=.value.lower, ymax=.value.upper))
+	geom_errorbar(aes(ymin = .value.lower, ymax = .value.upper))
 
 # Same run with Cibersort
 
-noiseles_test_cibersort = function(which_is_up_down, ref){
+noiseles_test_cibersort = function(which_is_up_down, ref) {
 	# intercept = rnorm(16)
 	intercept = rep(1, 16)
 	intercept = intercept - sum(intercept) / length(intercept)
@@ -228,19 +246,32 @@ noiseles_test_cibersort = function(which_is_up_down, ref){
 		ttBulk::deconvolve_cellularity(run, symbol, `count mix`, reference = ref) %>%
 		dplyr::select(run, covariate_2, contains("type")) %>%
 		distinct() %>%
-		pivot_longer(cols = contains("type"), names_to = "Cell type category", values_to = ".value",  names_prefix = "type: ") %>%
+		pivot_longer(
+			cols = contains("type"),
+			names_to = "Cell type category",
+			values_to = ".value",
+			names_prefix = "type: "
+		) %>%
 
 		# perform test
 		nest(data = -c(`Cell type category`)) %>%
-		mutate(CI = data %>% map(~ .x %>% gamlss::gamlss(.value ~ covariate_2,  family = BEZI, data = ., trace = F) %>%
-											summary %>% `[` (2, 1:2) %>% as_tibble(rownames="rn") %>% spread(rn, value) %>%
-											rename(	alpha_2 = Estimate) %>%
-											mutate(
-												.lower_alpha2 = alpha_2 - `Std. Error`,
-												.upper_alpha2 = alpha_2 + `Std. Error`
-											) %>%
-											dplyr::select(-`Std. Error`))
+		mutate(
+			CI = data %>% map(
+				~ .x %>% gamlss::gamlss(
+					.value ~ covariate_2,
+					family = BEZI,
+					data = .,
+					trace = F
 				) %>%
+					summary %>% `[` (2, 1:2) %>% as_tibble(rownames = "rn") %>% spread(rn, value) %>%
+					rename(alpha_2 = Estimate) %>%
+					mutate(
+						.lower_alpha2 = alpha_2 - `Std. Error`,
+						.upper_alpha2 = alpha_2 + `Std. Error`
+					) %>%
+					dplyr::select(-`Std. Error`)
+			)
+		) %>%
 		unnest(cols = c(data, CI))
 
 	list(mix = mix, result = rr)
@@ -255,19 +286,19 @@ ref =
 	mutate(count = exp(lambda_log)) %>%
 	dplyr::select(-lambda_log) %>%
 	spread(`Cell type category`, count) %>%
-	as_matrix(rownames="symbol")
+	as_matrix(rownames = "symbol")
 
 
 res_cibersort =
 	which_is_up_down %>%
-	map(~ .x %>% noiseles_test_cibersort(ref))
+	map( ~ .x %>% noiseles_test_cibersort(ref))
 
 res_cibersort[[1]]$mix %>% attr("proportions") %>%
 	mutate(run = run %>% as.character) %>%
 	dplyr::select(-contains("alpha")) %>%
 	left_join(res_cibersort[[1]]$result) %>%
-	ggplot(aes(x = p, y = .value, color=`Cell type category`)) +
-	geom_abline(intercept = 0 ,slope=1) +
+	ggplot(aes(x = p, y = .value, color = `Cell type category`)) +
+	geom_abline(intercept = 0 , slope = 1) +
 	geom_smooth(method = "lm") +
 	geom_point()
 
@@ -290,7 +321,7 @@ res_cibersort %>%
 			replace(., is.na(.), 0) %>%
 			mutate(tpr = `TRUE` / (`TRUE` + `FALSE`))
 	) %>%
-	ggplot(aes(tpr, x=`Cell type category`)) +
+	ggplot(aes(tpr, x = `Cell type category`)) +
 	geom_boxplot(outlier.shape = NA) +
 	geom_jitter() +
 	my_theme
@@ -303,18 +334,21 @@ res_cibersort %>%
 			.x$result %>%
 			dplyr::select(`Cell type category`, contains("alpha2")) %>%
 			distinct() %>%
-			left_join(.x$mix %>% attr("proportions") %>% distinct(`Cell type category`, alpha_2) ) %>%
+			left_join(
+				.x$mix %>% attr("proportions") %>% distinct(`Cell type category`, alpha_2)
+			) %>%
 			drop_na  %>%
 
 			# Calculate
-			mutate(fp = alpha_2 == 0 & (.lower_alpha2 * .upper_alpha2 ) > 0) %>%
-			mutate(fn = alpha_2 != 0 & (.lower_alpha2 * .upper_alpha2 ) < 0)
+			mutate(fp = alpha_2 == 0 &
+						 	(.lower_alpha2 * .upper_alpha2) > 0) %>%
+			mutate(fn = alpha_2 != 0 & (.lower_alpha2 * .upper_alpha2) < 0)
 
 	) %>%
 	group_by(`Cell type category`) %>%
 	summarise(fpr = sum(fp) / n(), fnr = sum(fn) / n()) %>%
-	gather(which, rate, c("fpr","fnr")) %>%
-	ggplot(aes(y=rate, x=`Cell type category`)) +
+	gather(which, rate, c("fpr", "fnr")) %>%
+	ggplot(aes(y = rate, x = `Cell type category`)) +
 	geom_point() +
-	facet_wrap(~which) +
+	facet_wrap( ~ which) +
 	my_theme
