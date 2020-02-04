@@ -263,7 +263,7 @@ noiseles_test_cibersort = function(which_is_up_down, ref) {
 					data = .,
 					trace = F
 				) %>%
-					summary %>% `[` (2, 1:2) %>% as_tibble(rownames = "rn") %>% spread(rn, value) %>%
+					summary %>% `[` (2, c(1, 2, 4)) %>% as_tibble(rownames = "rn") %>% spread(rn, value) %>%
 					rename(alpha_2 = Estimate) %>%
 					mutate(
 						.lower_alpha2 = alpha_2 - `Std. Error`,
@@ -332,17 +332,18 @@ res_cibersort %>%
 		~
 			# Integrate
 			.x$result %>%
-			dplyr::select(`Cell type category`, contains("alpha2")) %>%
+			dplyr::select(`Cell type category`, contains("alpha2"), 	`Pr(>|t|)`) %>%
 			distinct() %>%
 			left_join(
-				.x$mix %>% attr("proportions") %>% distinct(`Cell type category`, alpha_2)
+				.x$mix %>% attr("proportions") %>% distinct(`Cell type category`, alpha_2),
+				by = "Cell type category"
 			) %>%
 			drop_na  %>%
 
 			# Calculate
 			mutate(fp = alpha_2 == 0 &
-						 	(.lower_alpha2 * .upper_alpha2) > 0) %>%
-			mutate(fn = alpha_2 != 0 & (.lower_alpha2 * .upper_alpha2) < 0)
+						 	`Pr(>|t|)` < 0.05) %>%
+			mutate(fn = alpha_2 != 0 & `Pr(>|t|)` > 0.05)
 
 	) %>%
 	group_by(`Cell type category`) %>%
