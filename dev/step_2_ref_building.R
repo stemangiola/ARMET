@@ -24,6 +24,12 @@ give_rank_to_ref = function(fit_df, level, tree, lambda_threshold = 5) {
 
 	n_ct = fit_df %>% distinct(`Cell type category`) %>% nrow
 
+	# Calculate the median of gene cell type
+	lambda_gene_ct =
+		fit_df %>%
+		distinct(symbol, `Cell type category`, lambda_log)
+
+
 	fit_df %>%
 		left_join(
 			tree %>%
@@ -119,8 +125,24 @@ give_rank_to_ref = function(fit_df, level, tree, lambda_threshold = 5) {
 		# ungroup() %>%
 		# filter(lambda_log > `mean lambda_log`) %>%
 
-
 		group_by(comparison, pair) %>%
+
+		# Add background transcription
+		do({
+			my_ct = (.) %>% distinct(`Cell type category`) %>% pull(1)
+			background_abundance =
+				lambda_gene_ct %>%
+				filter(!`Cell type category` %in% my_ct) %>%
+				group_by(symbol) %>%
+				summarise(med = median(lambda_log))
+
+			(.) %>% left_join(background_abundance)
+
+		}) %>%
+
+		# Filter if background too big
+		filter(lambda_log > (med + 1)) %>%
+
 		arrange(delta) %>%
 		mutate(rank = 1:n()) %>%
 		ungroup() %>%
