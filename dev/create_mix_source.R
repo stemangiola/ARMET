@@ -50,196 +50,217 @@ all_genes =
 	inner_join( (.) %>% distinct(symbol, `Cell type category`) %>% count(symbol) %>% filter(n == max(n)) ) %>%
 	distinct(symbol) %>% pull(1)
 
-ref2 = ref %>% filter(symbol %in% all_genes)
+mix_base_sparse = ref %>% filter(symbol %in% all_genes)
 
-mix_base =
+impute_missing = function(ref2, tree){
+
 	tree %>% ToDataFrameTypeColFull() %>% select(-level_6, -level_1) %>% rename(`Cell type category` = level_5) %>%
-	left_join(
-		ref2 %>% distinct(`Cell type category`, level, symbol, `count normalised bayes`, sample) %>%
-			spread(symbol, `count normalised bayes`) %>%
-			gather(symbol, `count normalised bayes`, -c(1:3))
-	) %>%
+		left_join(
+			ref2 %>% distinct(`Cell type category`, level, symbol, `count normalised bayes`, sample) %>%
+				spread(symbol, `count normalised bayes`) %>%
+				gather(symbol, `count normalised bayes`, -c(1:3))
+		) %>%
 
-	# Level 5
+		# Level 5
 
-	# do_parallel_start(
-	# 	.f = ~ {
-	# 		values = .x %>% drop_na() %>% pull(`count normalised bayes`)
-	# 		if(length(values) > 0)
+		# do_parallel_start(
+		# 	.f = ~ {
+		# 		values = .x %>% drop_na() %>% pull(`count normalised bayes`)
+		# 		if(length(values) > 0)
+		#
+		# 			bind_rows(
+		# 				.x %>% filter(`count normalised bayes` %>% is.na %>% `!`),
+		# 				.x %>% filter(`count normalised bayes` %>% is.na ) %>%
+	# 					mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
+	# 			)
 	#
-	# 			bind_rows(
-	# 				.x %>% filter(`count normalised bayes` %>% is.na %>% `!`),
-	# 				.x %>% filter(`count normalised bayes` %>% is.na ) %>%
-# 					mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
-# 			)
-#
-# 		else (.)
-#
-# 	} ,
-# 	`Cell type category`, symbol
-# ) %>%
-
-do_parallel_start(n_cores, "Cell type category") %>%
-	do({
-		`%>%` = magrittr::`%>%`
-		library(tidyverse)
-		library(magrittr)
-
-		(.) %>%
-			group_by(`Cell type category`, symbol) %>%
-			do({
-				values = (.) %>% drop_na() %>% pull(`count normalised bayes`)
-				if(length(values) > 0)
-
-					bind_rows(
-						(.) %>% filter(`count normalised bayes` %>% is.na %>% `!`),
-						(.) %>% filter(`count normalised bayes` %>% is.na ) %>%
-							mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
-					)
-
-				else (.)
-
-			})
-	}) %>%
-	do_parallel_end() %>%
-
-	# Level 4
-
-	# do_parallel_start(
-	# 	.f = ~ {
-	# 		values = .x %>% drop_na() %>% pull(`count normalised bayes`)
-	# 		if(length(values) > 0)
+	# 		else (.)
 	#
-	# 			bind_rows(
-	# 				.x %>% filter(`count normalised bayes` %>% is.na %>% `!`),
-	# 				.x %>% filter(`count normalised bayes` %>% is.na ) %>%
-# 					mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
-# 			)
-#
-# 		else (.)
-#
-# 	} ,
-# 	`level_4`, symbol
-# ) %>%
+	# 	} ,
+	# 	`Cell type category`, symbol
+	# ) %>%
 
+	do_parallel_start(n_cores, "Cell type category") %>%
+		do({
+			`%>%` = magrittr::`%>%`
+			library(tidyverse)
+			library(magrittr)
 
-do_parallel_start(n_cores, "level_4") %>%
-	do({
-		`%>%` = magrittr::`%>%`
-		library(tidyverse)
-		library(magrittr)
+			(.) %>%
+				group_by(`Cell type category`, symbol) %>%
+				do({
+					values = (.) %>% drop_na() %>% pull(`count normalised bayes`)
+					if(length(values) > 0)
 
-		(.) %>%
-			group_by(`level_4`, symbol) %>%
-			do({
-				values = (.) %>% drop_na() %>% pull(`count normalised bayes`)
-				if(length(values) > 0)
+						bind_rows(
+							(.) %>% filter(`count normalised bayes` %>% is.na %>% `!`),
+							(.) %>% filter(`count normalised bayes` %>% is.na ) %>%
+								mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
+						)
 
-					bind_rows(
-						(.) %>% filter(`count normalised bayes` %>% is.na %>% `!`),
-						(.) %>% filter(`count normalised bayes` %>% is.na ) %>%
-							mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
-					)
+					else (.)
 
-				else (.)
+				})
+		}) %>%
+		do_parallel_end() %>%
 
-			})
-	}) %>%
-	do_parallel_end() %>%
+		# Level 4
 
-	# Level 3
-
-	# do_parallel_start(
-	# 	.f = ~ {
-	# 		values = .x %>% drop_na() %>% pull(`count normalised bayes`)
-	# 		if(length(values) > 0)
+		# do_parallel_start(
+		# 	.f = ~ {
+		# 		values = .x %>% drop_na() %>% pull(`count normalised bayes`)
+		# 		if(length(values) > 0)
+		#
+		# 			bind_rows(
+		# 				.x %>% filter(`count normalised bayes` %>% is.na %>% `!`),
+		# 				.x %>% filter(`count normalised bayes` %>% is.na ) %>%
+	# 					mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
+	# 			)
 	#
-	# 			bind_rows(
-	# 				.x %>% filter(`count normalised bayes` %>% is.na %>% `!`),
-	# 				.x %>% filter(`count normalised bayes` %>% is.na ) %>%
-# 					mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
-# 			)
-#
-# 		else (.)
-#
-# 	} ,
-# 	`level_3`, symbol
-# ) %>%
-
-do_parallel_start(n_cores, "level_3") %>%
-	do({
-		`%>%` = magrittr::`%>%`
-		library(tidyverse)
-		library(magrittr)
-
-		(.) %>%
-			group_by(`level_3`, symbol) %>%
-			do({
-				values = (.) %>% drop_na() %>% pull(`count normalised bayes`)
-				if(length(values) > 0)
-
-					bind_rows(
-						(.) %>% filter(`count normalised bayes` %>% is.na %>% `!`),
-						(.) %>% filter(`count normalised bayes` %>% is.na ) %>%
-							mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
-					)
-
-				else (.)
-
-			})
-	}) %>%
-	do_parallel_end() %>%
-
-	# Level 2
-
-	# do_parallel_start(
-	# 	.f = ~ {
-	# 		values = .x %>% drop_na() %>% pull(`count normalised bayes`)
-	# 		if(length(values) > 0)
+	# 		else (.)
 	#
-	# 			bind_rows(
-	# 				.x %>% filter(`count normalised bayes` %>% is.na %>% `!`),
-	# 				.x %>% filter(`count normalised bayes` %>% is.na ) %>%
-# 					mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
-# 			)
-#
-# 		else (.)
-#
-# 	} ,
-# 	`level_2`, symbol
-# ) %>%
+	# 	} ,
+	# 	`level_4`, symbol
+	# ) %>%
 
-do_parallel_start(n_cores, "level_2") %>%
-	do({
-		`%>%` = magrittr::`%>%`
-		library(tidyverse)
-		library(magrittr)
 
-		(.) %>%
-			group_by(`level_2`, symbol) %>%
-			do({
-				values = (.) %>% drop_na() %>% pull(`count normalised bayes`)
-				if(length(values) > 0)
+	do_parallel_start(n_cores, "level_4") %>%
+		do({
+			`%>%` = magrittr::`%>%`
+			library(tidyverse)
+			library(magrittr)
 
-					bind_rows(
-						(.) %>% filter(`count normalised bayes` %>% is.na %>% `!`),
-						(.) %>% filter(`count normalised bayes` %>% is.na ) %>%
-							mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
-					)
+			(.) %>%
+				group_by(`level_4`, symbol) %>%
+				do({
+					values = (.) %>% drop_na() %>% pull(`count normalised bayes`)
+					if(length(values) > 0)
 
-				else (.)
+						bind_rows(
+							(.) %>% filter(`count normalised bayes` %>% is.na %>% `!`),
+							(.) %>% filter(`count normalised bayes` %>% is.na ) %>%
+								mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
+						)
 
-			})
-	}) %>%
-	do_parallel_end() %>%
+					else (.)
 
-	#attach further info
-	left_join(
-		ref %>%
-			distinct(`symbol`, `house keeping`)
-	) %>%
+				})
+		}) %>%
+		do_parallel_end() %>%
 
-	# there is redundancy I don't know why
-	group_by(sample, symbol, level) %>% slice(1) %>% ungroup()
+		# Level 3
 
+		# do_parallel_start(
+		# 	.f = ~ {
+		# 		values = .x %>% drop_na() %>% pull(`count normalised bayes`)
+		# 		if(length(values) > 0)
+		#
+		# 			bind_rows(
+		# 				.x %>% filter(`count normalised bayes` %>% is.na %>% `!`),
+		# 				.x %>% filter(`count normalised bayes` %>% is.na ) %>%
+	# 					mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
+	# 			)
+	#
+	# 		else (.)
+	#
+	# 	} ,
+	# 	`level_3`, symbol
+	# ) %>%
+
+	do_parallel_start(n_cores, "level_3") %>%
+		do({
+			`%>%` = magrittr::`%>%`
+			library(tidyverse)
+			library(magrittr)
+
+			(.) %>%
+				group_by(`level_3`, symbol) %>%
+				do({
+					values = (.) %>% drop_na() %>% pull(`count normalised bayes`)
+					if(length(values) > 0)
+
+						bind_rows(
+							(.) %>% filter(`count normalised bayes` %>% is.na %>% `!`),
+							(.) %>% filter(`count normalised bayes` %>% is.na ) %>%
+								mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
+						)
+
+					else (.)
+
+				})
+		}) %>%
+		do_parallel_end() %>%
+
+		# Level 2
+
+		# do_parallel_start(
+		# 	.f = ~ {
+		# 		values = .x %>% drop_na() %>% pull(`count normalised bayes`)
+		# 		if(length(values) > 0)
+		#
+		# 			bind_rows(
+		# 				.x %>% filter(`count normalised bayes` %>% is.na %>% `!`),
+		# 				.x %>% filter(`count normalised bayes` %>% is.na ) %>%
+	# 					mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
+	# 			)
+	#
+	# 		else (.)
+	#
+	# 	} ,
+	# 	`level_2`, symbol
+	# ) %>%
+
+	do_parallel_start(n_cores, "level_2") %>%
+		do({
+			`%>%` = magrittr::`%>%`
+			library(tidyverse)
+			library(magrittr)
+
+			(.) %>%
+				group_by(`level_2`, symbol) %>%
+				do({
+					values = (.) %>% drop_na() %>% pull(`count normalised bayes`)
+					if(length(values) > 0)
+
+						bind_rows(
+							(.) %>% filter(`count normalised bayes` %>% is.na %>% `!`),
+							(.) %>% filter(`count normalised bayes` %>% is.na ) %>%
+								mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
+						)
+
+					else (.)
+
+				})
+		}) %>%
+		do_parallel_end() %>%
+
+		#attach further info
+		left_join(
+			ref %>%
+				distinct(`symbol`, `house keeping`)
+		) %>%
+
+		# there is redundancy I don't know why
+		group_by(sample, symbol, level) %>% slice(1) %>% ungroup()
+
+}
+
+
+mix_base = impute_missing(mix_base_sparse, tree)
 saveRDS(mix_base, file="dev/mix_base.RDS")
+
+
+# Create noiless mix
+
+mix_base_noiseless = impute_missing(
+	mix_base_sparse %>%
+		distinct(
+			`Cell type category`,
+			level,
+			symbol,
+			`count normalised bayes` = exp( lambda_log),
+			sample = `Cell type category`
+		),
+	tree
+)
+saveRDS(mix_base_noiseless, file="dev/mix_base_noiseless.RDS", compress = "gzip")
