@@ -165,6 +165,14 @@ res = readRDS("dev/test_student_noisless.rds")
 # my_res$mix %>% attr("proportions") %>%
 # 	ggplot(aes(x = covariate_2, y = p, color=factor(alpha_2))) + geom_point() + geom_smooth() + facet_wrap(~`Cell type category`)
 
+# Example of one run
+comparison_truth %>%
+	ggplot(aes(x = p, y = .value, color = `Cell type category`)) +
+	geom_abline(intercept = 0 , slope = 1) +
+	geom_smooth(method = "lm") +
+	geom_point() +
+	geom_errorbar(aes(ymin = .value.lower, ymax = .value.upper))
+
 # Calculate tpr
 res %>%
 	map_dfr(
@@ -218,17 +226,18 @@ res %>%
 	facet_wrap( ~ which) +
 	my_theme
 
-# Example of one run
-comparison_truth %>%
-	ggplot(aes(x = p, y = .value, color = `Cell type category`)) +
-	geom_abline(intercept = 0 , slope = 1) +
-	geom_smooth(method = "lm") +
-	geom_point() +
-	geom_errorbar(aes(ymin = .value.lower, ymax = .value.upper))
 
-# Same run with Cibersort
+# get reference from ARMET
+ref =
+	res[[1]]$result$signatures[[3]] %>%
+	filter(!`Cell type category` %in% c("house_keeping", "query")) %>%
+	distinct(`Cell type category`, symbol, lambda_log) %>%
+	mutate(count = exp(lambda_log)) %>%
+	dplyr::select(-lambda_log) %>%
+	spread(`Cell type category`, count) %>%
+	ttBulk::as_matrix(rownames = "symbol")
 
-noiseles_test_cibersort = function(which_is_up_down, ref) {
+noiseles_test_ttBulk = function(which_is_up_down, ref, method = "cibersort") {
 	# intercept = rnorm(16)
 	intercept = rep(1, 16)
 	intercept = intercept - sum(intercept) / length(intercept)
@@ -243,14 +252,14 @@ noiseles_test_cibersort = function(which_is_up_down, ref) {
 	rr =
 		mix %>%
 		mutate(run = as.character(run)) %>%
-		ttBulk::deconvolve_cellularity(run, symbol, `count mix`, reference = ref) %>%
-		dplyr::select(run, covariate_2, contains("type")) %>%
+		ttBulk::deconvolve_cellularity(run, symbol, `count mix`, reference = ref, method = method) %>%
+		dplyr::select(run, covariate_2, contains(method)) %>%
 		distinct() %>%
 		pivot_longer(
-			cols = contains("type"),
+			cols = contains(method),
 			names_to = "Cell type category",
 			values_to = ".value",
-			names_prefix = "type: "
+			names_prefix = sprintf("%s: ", method)
 		) %>%
 
 		# perform test
@@ -278,20 +287,12 @@ noiseles_test_cibersort = function(which_is_up_down, ref) {
 	#%>% saveRDS(sprintf("dev/test_student_noisless_%s", which_is_up_down %>% paste(collapse="_")))
 }
 
-# get reference from ARMET
-ref =
-	res[[1]]$result$signatures[[3]] %>%
-	filter(!`Cell type category` %in% c("house_keeping", "query")) %>%
-	distinct(`Cell type category`, symbol, lambda_log) %>%
-	mutate(count = exp(lambda_log)) %>%
-	dplyr::select(-lambda_log) %>%
-	spread(`Cell type category`, count) %>%
-	as_matrix(rownames = "symbol")
 
+# Same run with CIBERSORT
 
 res_cibersort =
 	which_is_up_down %>%
-	map( ~ .x %>% noiseles_test_cibersort(ref))
+	map( ~ .x %>% noiseles_test_ttBulk(ref))
 
 res_cibersort[[1]]$mix %>% attr("proportions") %>%
 	mutate(run = run %>% as.character) %>%
@@ -353,3 +354,18 @@ res_cibersort %>%
 	geom_point() +
 	facet_wrap( ~ which) +
 	my_theme
+
+# Same run with LLSR
+
+res_llsr =
+	which_is_up_down %>%
+	map( ~ .x %>% noiseles_test_ttBulk(ref, method="llsr"))
+
+res_llsr[[1]]$mix %>% attr("proportions") %>%
+	mutate(run = run %>% as.character) %>%
+	dplyr::select(-contains("alpha")) %>%
+	left_join(res_llsr[[1]]$result) %>%
+	ggplot(aes(x = p, y = .value, color = `Cell type category`)) +
+	geom_abline(intercept = 0 , slope = 1) +
+	geom_smooth(method = "lm") +
+	geom_point()
