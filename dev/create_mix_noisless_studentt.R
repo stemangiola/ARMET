@@ -166,6 +166,15 @@ res = readRDS("dev/test_student_noisless.rds")
 # 	ggplot(aes(x = covariate_2, y = p, color=factor(alpha_2))) + geom_point() + geom_smooth() + facet_wrap(~`Cell type category`)
 
 # Example of one run
+res[[1]]$mix %>% attr("proportions") %>%
+	mutate(sample = run %>% as.character) %>%
+	dplyr::select(-contains("alpha")) %>%
+	left_join(res[[1]]$result$proportions) %>%
+	ggplot(aes(x = p, y = .value, color = `Cell type category`)) +
+	geom_abline(intercept = 0 , slope = 1) +
+	geom_smooth(method = "lm") +
+	geom_point()
+
 comparison_truth %>%
 	ggplot(aes(x = p, y = .value, color = `Cell type category`)) +
 	geom_abline(intercept = 0 , slope = 1) +
