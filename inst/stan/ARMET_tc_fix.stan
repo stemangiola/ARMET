@@ -802,7 +802,7 @@ data {
 }
 transformed data{
 
-	real nu = 8.0;
+	real nu = 20.0;
 
 	real real_data[shards, 0];
 
