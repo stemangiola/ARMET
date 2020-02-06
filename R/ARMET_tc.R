@@ -392,7 +392,7 @@ ARMET_tc = function(
 
 	if(levels > 2){
 # browser()
-		res3 = run_model(	reference_filtered, mix, shards,	3,	full_bayesian, approximate_posterior, prop_posterior, draws_to_exposure(fit2), iterations = iterations,	sampling_iterations = sampling_iterations	, X = X, do_regression = do_regression	)
+		res3 = run_model(	reference_filtered, mix, shards,	3,	full_bayesian, approximate_posterior, prop_posterior,  draws_to_exposure(fit1), iterations = iterations,	sampling_iterations = sampling_iterations	, X = X, do_regression = do_regression	)
 
 		df3 = res3[[1]]
 		fit3 = res3[[2]]
