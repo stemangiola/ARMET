@@ -212,7 +212,7 @@ real[,] get_real_MPI(vector v, int shards){
 
 int[,] append_int_MPI_arrays(int[,] lv1, int[,] lv2, int[,] lv3, int[,] lv4){
 
-	# This is for the BUG that dim(int empty_variable[0,0]) is not {0,0} but {0}
+	// This is for the BUG that dim(int empty_variable[0,0]) is not {0,0} but {0}
 	int dim_1[2] = size(dims(lv1)) == 2 ? dims(lv1) : rep_array(0,2);
 	int dim_2[2] = size(dims(lv2)) == 2 ? dims(lv2) : rep_array(0,2);
 	int dim_3[2] = size(dims(lv3)) == 2 ? dims(lv3) : rep_array(0,2);
@@ -509,7 +509,7 @@ if(dim_4[1] > 0) {
 
 	vector lp_reduce( vector global_parameters , vector local_parameters , real[] real_data , int[] int_data ) {
 
-		real lp;
+		real lp = 0;
 		real threshold = -999;
 
 		// int unpacking
@@ -536,14 +536,13 @@ if(dim_4[1] > 0) {
 
 		// global par unpacking
 		real prop_UFO = global_parameters[1];
-		real sigma_intercept = global_parameters[2];
+		real sigma_intercept = 1.3420415; // Overwrite parameter //global_parameters[2];
 
-		// Deconvoluted means
-		vector[size_G_linear_MPI/C*Q] lambda_log_deconvoluted_1;
-    vector[size_G_linear_MPI/C*Q] sigma_deconvoluted_1;
+		// Length vector
+		int length_counts = size_G_linear_MPI/C*Q;
 
 		// Calculate convoluted // Add UFO
-    vector[size_G_linear_MPI/C * Q] sumNB[2] = sum_NB_MPI(
+    vector[length_counts] sumNB[2] = sum_NB_MPI(
 
       append_row(
       	to_matrix(exp(ref_lambda_log), C, size_G_linear_MPI/C),
@@ -562,24 +561,20 @@ if(dim_4[1] > 0) {
 
     );
 
-    lambda_log_deconvoluted_1 = log(sumNB[1]);
-    sigma_deconvoluted_1 = sumNB[2];
+		// Deconvoluted means
+		vector[length_counts] lambda_log_deconvoluted_1 = log(sumNB[1]);
+    //vector[length_counts] sigma_deconvoluted_1  = sumNB[2];
 
+		vector[length_counts] lambda_convoluted = sumNB[1] .* exp(mix_exposure_rate);
 
-		// print(sigma_deconvoluted_1);
-		// print(1 ./ exp( lambda_log_deconvoluted_1  * -0.4 + 1.52));
-		// print(lambda_log_deconvoluted_1);
-
-		// Overwrite parameter
-		sigma_intercept = 1.3420415;
-
-
-		// deconvolution
-		lp = neg_binomial_2_lpmf(mix_counts |
-			exp(lambda_log_deconvoluted_1 + mix_exposure_rate),
-			#sigma_deconvoluted_1
-			1.0 ./ exp( lambda_log_deconvoluted_1  * -0.4 + sigma_intercept)
-		);
+		//vector[length_counts] epsilon_insensitive = rep_vector(1, length_counts);
+		for(i in 1:length_counts) if(fabs(mix_counts[i] - lambda_convoluted[i]) < 50)
+			// deconvolution
+			lp += neg_binomial_2_lpmf(mix_counts[i] |
+				lambda_convoluted[i],
+				//sigma_deconvoluted_1
+				1.0 ./ exp( lambda_log_deconvoluted_1[i]  * -0.4 + sigma_intercept)
+			) ;
 
 
 	 return [lp]';
