@@ -1699,14 +1699,16 @@ level_to_plot_inferred_vs_observed  = function(result, level, S = NULL, cores = 
 		left_join(	result$input$mix %>%	gather(symbol, count, -sample) ) %>%
 		{ print(9); Sys.time(); (.) } %>%
 
-	 { (.) %>%	ggplot(aes(x = count+1, y=.q50+1, color=ct1, shape = converged, GM = GM)) +
+	 { ((.) %>%	ggplot(aes(x = count+1, y=.q50+1, color=ct1, shape = converged, GM = GM)) +
 		geom_abline() +
 		geom_errorbar(aes(ymin = .q025 + 1, ymax=.q97.5 + 1), alpha=0.5) +
 		geom_point() +
 		scale_y_log10() +
 		scale_x_log10() +
 		facet_grid(converged ~.chain) +
-		my_theme
+		my_theme) %>% print
+
+	 	(.)
 	 }
 }
 
