@@ -67,22 +67,6 @@ ARMET_tc = function(
 	library(tidyverse)
 	library(magrittr)
 
-	# my_theme =
-	# 	theme_bw() +
-	# 	theme(
-	# 		panel.border = element_blank(),
-	# 		axis.line = element_line(),
-	# 		panel.grid.major = element_line(size = 0.2),
-	# 		panel.grid.minor = element_line(size = 0.1),
-	# 		text = element_text(size=12),
-	# 		legend.position="bottom",
-	# 		#aspect.ratio=1,
-	# 		axis.text.x = element_text(angle = 30, hjust = 1),
-	# 		strip.background = element_blank(),
-	# 		axis.title.x  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10)),
-	# 		axis.title.y  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10))
-	# 	)
-
 	# Create design matrix
 	X = create_design_matrix(mix, formula, sample)
 
@@ -392,7 +376,7 @@ ARMET_tc = function(
 
 	if(levels > 2){
 
-		res3 = run_model(	reference_filtered, mix, shards,	3,	full_bayesian, approximate_posterior, prop_posterior, draws_to_exposure(fit2), iterations = iterations,	sampling_iterations = sampling_iterations	, X = X, do_regression = do_regression	)
+		res3 = run_model(	reference_filtered, mix, shards,	3,	full_bayesian, approximate_posterior, prop_posterior, draws_to_exposure(fit1), iterations = iterations,	sampling_iterations = sampling_iterations	, X = X, do_regression = do_regression	)
 
 		df3 = res3[[1]]
 		fit3 = res3[[2]]
