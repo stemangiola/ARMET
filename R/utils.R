@@ -421,6 +421,8 @@ choose_chains_majority_roule = function(fit_parsed) {
 #' filter_reference
 #'
 #' @description Filter the reference
+#'
+#' @export
 filter_reference = function(reference, mix, n_markers) {
 
 	# Check if all cell types in ref are in n_markers
