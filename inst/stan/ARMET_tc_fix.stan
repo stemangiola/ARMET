@@ -565,11 +565,6 @@ if(dim_4[1] > 0) {
     lambda_log_deconvoluted_1 = log(sumNB[1]);
     sigma_deconvoluted_1 = sumNB[2];
 
-
-		// print(sigma_deconvoluted_1);
-		// print(1 ./ exp( lambda_log_deconvoluted_1  * -0.4 + 1.52));
-		// print(lambda_log_deconvoluted_1);
-
 		// Overwrite parameter
 		sigma_intercept = 1.3420415;
 
