@@ -358,16 +358,79 @@ res_cibersort %>%
 	my_theme
 
 # Same run with LLSR
-
 res_llsr =
 	which_is_up_down %>%
 	map( ~ .x %>% noise_test_ttBulk(ref, method="llsr"))
 
-res_llsr[[1]]$mix %>% attr("proportions") %>%
-	mutate(run = run %>% as.character) %>%
-	dplyr::select(-contains("alpha")) %>%
-	left_join(res_llsr[[1]]$result) %>%
-	ggplot(aes(x = p, y = .value, color = `Cell type category`)) +
-	geom_abline(intercept = 0 , slope = 1) +
-	geom_smooth(method = "lm") +
-	geom_point()
+# Create boxplot of errors
+all_results =
+	res_llsr %>%
+		map_dfr(
+			~ .x$mix %>% attr("proportions") %>%
+				mutate(run = run %>% as.character) %>%
+				dplyr::select(-contains("alpha")) %>%
+				left_join(.x$result, by = c("Cell type category", "run", "covariate_2"))
+		) %>%
+		mutate(.value = ifelse(.value == 0, min(.value[.value!=0]), .value)) %>%
+		mutate(model = "lm") %>%
+
+		# Cibersort
+		bind_rows(
+			res_cibersort %>%
+			map_dfr(
+				~ .x$mix %>% attr("proportions") %>%
+					mutate(run = run %>% as.character) %>%
+					dplyr::select(-contains("alpha")) %>%
+					left_join(.x$result, by = c("Cell type category", "run", "covariate_2"))
+			) %>%
+				mutate(.value = ifelse(.value == 0, min(.value[.value!=0]), .value)) %>%
+				mutate(model = "cibersort")
+		) %>%
+
+		# ARMET
+		bind_rows(
+			res %>%
+				map_dfr(
+					~ 	.x$mix %>% attr("proportions") %>%
+				mutate(sample = run %>% as.character) %>%
+				dplyr::select(-contains("alpha")) %>%
+				left_join(.x$result$proportions, by = c("Cell type category", "sample"))
+				)%>%
+				mutate(run = as.character(run)) %>%
+				mutate(model = "ARMET")
+		) %>%
+
+		# Add error
+		mutate(error_logit_space = abs(logit(p) - logit(.value))) %>%
+
+		# Add regression
+		nest(data = -c(run, `Cell type category`, model)) %>%
+		mutate(
+			fit = map(data, ~ lm(p ~ .value , data = .x)),
+			tidied = map(fit, tidy),
+			glanced = map(fit, glance)
+		)
+
+# Plot error
+all_results %>%
+	unnest(data) %>%
+	ggplot(aes(x = model, y = error_logit_space)) +
+	geom_boxplot() +
+	facet_wrap(~ `Cell type category`)
+
+# Plot fits to linear function R squared
+all_results %>%
+	unnest(glanced) %>%
+	ggplot(aes(x = model, y = adj.r.squared)) +
+	geom_boxplot() +
+	facet_wrap(~ `Cell type category`)
+
+# Plot fits to linear function standard error
+all_results %>%
+	unnest(tidied) %>%
+	filter(term ==".value") %>%
+	ggplot(aes(x = model, y = std.error)) +
+	geom_boxplot() +
+	facet_wrap(~ `Cell type category`) + scale_y_log10()
+
+
