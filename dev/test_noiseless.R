@@ -7,7 +7,7 @@ library(furrr)
 library(data.tree)
 library(foreach)
 library(ARMET)
-source("~/PhD/deconvolution/ARMET/R/utils.R")
+#source("~/PhD/deconvolution/ARMET/R/utils.R")
 source("~/PostDoc/ppcSeq/R/do_parallel.R")
 
 my_theme =
@@ -36,13 +36,15 @@ my_theme =
 		axis.text.x = element_text(angle = 90, hjust = 1)
 	)
 
-noiseles_test = function(which_is_up_down) {
+noiseles_test = function(which_is_up_down, do_regression = F) {
 	# intercept = rnorm(16)
 	intercept = rep(1, 16)
 	intercept = intercept - sum(intercept) / length(intercept)
 	slope = rep(0, 16)
 	slope[which_is_up_down[1]] = 2
-	slope[which_is_up_down[2]] = -2
+	slope[which_is_up_down[2]] = -4
+	slope[which_is_up_down[3]] = 1
+	slope[which_is_up_down[4]] = 0.5
 	alpha = matrix(intercept %>%	c(slope), ncol = 2)
 
 	mix = mix_base %>% generate_mixture(15, alpha)
@@ -55,7 +57,7 @@ noiseles_test = function(which_is_up_down) {
 		rename(sample = run) %>%
 		ARMET_tc(
 			~ covariate_2,
-			do_regression = F,
+			do_regression = do_regression,
 			iterations = 700,
 			sampling_iterations = 200
 		)
@@ -187,13 +189,25 @@ generate_mixture = function(.data, samples_per_condition, alpha) {
 
 }
 
-which_is_up_down = 1:16 %>% map( ~ c(.x, (.x + 4) %>% ifelse(. > 16, . - 16, .)))
+which_is_up_down = 1:16 %>% map( ~ c(
+	.x,
+	(.x + 4) %>% ifelse(. > 16, . - 16, .),
+	(.x + 8) %>% ifelse(. > 16, . - 16, .),
+	(.x + 12) %>% ifelse(. > 16, . - 16, .)
+))
 
 which_is_up_down %>%
 	map( ~ .x %>% noiseles_test) %>%
 	saveRDS("dev/test_student_noisless.rds")
 
+which_is_up_down %>%
+	map( ~ .x %>% noiseles_test(do_regression = T)) %>%
+	saveRDS("dev/test_student_noisless_regression.rds")
+
 res = readRDS("dev/test_student_noisless.rds")
+
+res_regression = readRDS("dev/test_student_noisless_regression.rds")
+
 
 # my_res = res[[1]]
 #
@@ -237,7 +251,8 @@ res %>%
 	my_theme
 
 # Calculate fpr for regression
-res %>%
+regression_ARMET =
+	res_regression %>%
 	map_dfr(
 		~
 			# Integrate
@@ -255,11 +270,13 @@ res %>%
 						 	(.lower_alpha2 * .upper_alpha2) > 0) %>%
 			mutate(fn = alpha_2 != 0 & (.lower_alpha2 * .upper_alpha2) < 0)
 
-	) %>%
-	group_by(`Cell type category`) %>%
+	)
+
+regression_ARMET %>%
+	group_by(`Cell type category`, alpha_2) %>%
 	summarise(fpr = sum(fp) / n(), fnr = sum(fn) / n()) %>%
 	gather(which, rate, c("fpr", "fnr")) %>%
-	ggplot(aes(y = rate, x = `Cell type category`)) +
+	ggplot(aes(y = rate, x = `Cell type category`, color = factor(alpha_2))) +
 	geom_point() +
 	facet_wrap( ~ which) +
 	my_theme
@@ -281,7 +298,9 @@ noiseles_test_ttBulk = function(which_is_up_down, ref, method = "cibersort") {
 	intercept = intercept - sum(intercept) / length(intercept)
 	slope = rep(0, 16)
 	slope[which_is_up_down[1]] = 2
-	slope[which_is_up_down[2]] = -2
+	slope[which_is_up_down[2]] = -4
+	slope[which_is_up_down[3]] = 1
+	slope[which_is_up_down[4]] = 0.5
 	alpha = matrix(intercept %>%	c(slope), ncol = 2)
 
 	mix =
@@ -366,7 +385,8 @@ res_cibersort %>%
 	my_theme
 
 # Calculate fpr for regression
-res_cibersort %>%
+regression_cibersort =
+	res_cibersort %>%
 	map_dfr(
 		~
 			# Integrate
@@ -381,14 +401,16 @@ res_cibersort %>%
 
 			# Calculate
 			mutate(fp = alpha_2 == 0 &
-						 	`Pr(>|t|)` < 0.05) %>%
-			mutate(fn = alpha_2 != 0 & `Pr(>|t|)` > 0.05)
+						 	`Pr(>|t|)` < 0.005) %>%
+			mutate(fn = alpha_2 != 0 & `Pr(>|t|)` > 0.005)
 
-	) %>%
-	group_by(`Cell type category`) %>%
+	)
+
+regression_cibersort %>%
+	group_by(`Cell type category`, alpha_2) %>%
 	summarise(fpr = sum(fp) / n(), fnr = sum(fn) / n()) %>%
 	gather(which, rate, c("fpr", "fnr")) %>%
-	ggplot(aes(y = rate, x = `Cell type category`)) +
+	ggplot(aes(y = rate, x = `Cell type category`, color = factor(alpha_2))) +
 	geom_point() +
 	facet_wrap( ~ which) +
 	my_theme
@@ -407,6 +429,36 @@ res_llsr[[1]]$mix %>% attr("proportions") %>%
 	geom_abline(intercept = 0 , slope = 1) +
 	geom_smooth(method = "lm") +
 	geom_point()
+
+regression_llsr =
+	res_cibersort %>%
+	map_dfr(
+		~
+			# Integrate
+			.x$result %>%
+			dplyr::select(`Cell type category`, contains("alpha2"), 	`Pr(>|t|)`) %>%
+			distinct() %>%
+			left_join(
+				.x$mix %>% attr("proportions") %>% distinct(`Cell type category`, alpha_2),
+				by = "Cell type category"
+			) %>%
+			drop_na  %>%
+
+			# Calculate
+			mutate(fp = alpha_2 == 0 &
+						 	`Pr(>|t|)` < 0.005) %>%
+			mutate(fn = alpha_2 != 0 & `Pr(>|t|)` > 0.005)
+
+	)
+
+regression_llsr %>%
+	group_by(`Cell type category`, alpha_2) %>%
+	summarise(fpr = sum(fp) / n(), fnr = sum(fn) / n()) %>%
+	gather(which, rate, c("fpr", "fnr")) %>%
+	ggplot(aes(y = rate, x = `Cell type category`, color = factor(alpha_2))) +
+	geom_point() +
+	facet_wrap( ~ which) +
+	my_theme
 
 # Create boxplot of errors
 library(broom)
@@ -479,3 +531,15 @@ all_results %>%
 	ggplot(aes(x = model, y = std.error)) +
 	geom_boxplot() +
 	facet_wrap(~ `Cell type category`) + scale_y_log10()
+
+# Regression accuracy
+regression_ARMET %>% mutate(algorithm="ARMET") %>%
+	bind_rows(	regression_cibersort %>% mutate(algorithm="cibersort")) %>%
+	bind_rows(	regression_llsr %>% mutate(algorithm="llsr")) %>%
+	group_by( alpha_2, algorithm) %>%
+	summarise(fpr = sum(fp) / n(), fnr = sum(fn) / n()) %>%
+	gather(which, rate, c("fpr", "fnr")) %>%
+	ggplot(aes(y = rate, x = algorithm, color = factor(alpha_2))) +
+	geom_point() +
+	facet_grid( ~ which) +
+	my_theme
