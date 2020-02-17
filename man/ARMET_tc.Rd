@@ -6,8 +6,9 @@
 \usage{
 ARMET_tc(
   mix,
+  formula = ~1,
   reference = NULL,
-  full_bayesian = T,
+  full_bayesian = F,
   approximate_posterior = F,
   verbose = F,
   omit_regression = F,
@@ -18,7 +19,6 @@ ARMET_tc(
   sampling_iterations = 100,
   levels = 3,
   n_markers = my_n_markers,
-  X = matrix(rep(1, nrow(mix))),
   do_regression = F
 )
 }

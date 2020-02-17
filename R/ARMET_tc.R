@@ -207,8 +207,11 @@ ARMET_tc = function(
 			# rebuild the last component sum-to-zero
 			rebuild_last_component_sum_to_zero %>%
 
+			# Calculate relative 0 because of dirichlet relativity
+			get_relative_zero %>%
+
 			arrange(.chain, .iteration, .draw,     A ) %>%
-			group_by(A, C, .variable) %>%
+			group_by(A, C, .variable, zero) %>%
 			tidybayes::mean_qi() %>%
 			ungroup() %>%
 			left_join(
@@ -221,7 +224,7 @@ ARMET_tc = function(
 					rename(`Cell type category` = name)
 			) %>%
 			pivot_wider(names_from = A, values_from = c(.value, .lower, .upper), names_prefix = "alpha")
-	alpha = alpha_1
+	alpha = alpha_1 %>% mutate(level =1)
 }
 
 	prop_1 =
@@ -320,31 +323,32 @@ ARMET_tc = function(
 			)
 
 		if(do_regression) {
-		alpha_2 =
-			fit2 %>%
-			######## ALTERED WITH TREE
-			tidybayes::gather_draws(`alpha_[a]`[A, C], regex = T) %>%
-			##########################
-			ungroup() %>%
+			alpha_2 =
+				fit2 %>%
+				tidybayes::gather_draws(`alpha_[2]`[A, C], regex = T) %>%
+				ungroup() %>%
 
-			# rebuild the last component sum-to-zero
-			rebuild_last_component_sum_to_zero %>%
+				# rebuild the last component sum-to-zero
+				rebuild_last_component_sum_to_zero %>%
 
-			arrange(.chain, .iteration, .draw,     A ) %>%
-			group_by(A, C, .variable) %>%
-			tidybayes::mean_qi() %>%
-			ungroup() %>%
-			left_join(
-				tree %>%
-					ToDataFrameTree("name", "level", sprintf("C%s", 2)) %>%
-					filter(level == 2+1) %>%
-					arrange(C2) %>%
-					mutate(C = 1:n()) %>%
-					select(name, C) %>%
-					rename(`Cell type category` = name)
-			) %>%
-			pivot_wider(names_from = A, values_from = c(.value, .lower, .upper), names_prefix = "alpha")
-		alpha = alpha %>% bind_rows(alpha_2)
+				# Calculate relative 0 because of dirichlet relativity
+				get_relative_zero %>%
+
+				arrange(.chain, .iteration, .draw,     A ) %>%
+				group_by(A, C, .variable, zero) %>%
+				tidybayes::mean_qi() %>%
+				ungroup() %>%
+				left_join(
+					tree %>%
+						ToDataFrameTree("name", "level", sprintf("C%s", 2)) %>%
+						arrange(C2) %>%
+						drop_na() %>%
+						select(name, C2) %>%
+						rename(`Cell type category` = name) %>%
+						rename(C = C2)
+				) %>%
+				pivot_wider(names_from = A, values_from = c(.value, .lower, .upper), names_prefix = "alpha")
+			alpha = alpha  %>% bind_rows(alpha_2 %>% mutate(level =2))
 
 		}
 
@@ -375,7 +379,7 @@ ARMET_tc = function(
 	######################################
 
 	if(levels > 2){
-
+# browser()
 		res3 = run_model(	reference_filtered, mix, shards,	3,	full_bayesian, approximate_posterior, prop_posterior, draws_to_exposure(fit1), iterations = iterations,	sampling_iterations = sampling_iterations	, X = X, do_regression = do_regression	)
 
 		df3 = res3[[1]]
@@ -415,40 +419,33 @@ ARMET_tc = function(
 			)
 
 		if(do_regression) {
-		alpha_3 =
-			fit3 %>%
-			######## ALTERED WITH TREE
-			tidybayes::gather_draws(`alpha_[b|c|d|e|f]`[A, C], regex = T) %>%
-			######## ALTERED WITH TREE
+			alpha_3 =
+				fit3 %>%
+				tidybayes::gather_draws(`alpha_[3]`[A, C], regex = T) %>%
+				ungroup() %>%
 
-			ungroup() %>%
-			drop_na() %>%
-			arrange(.variable) %>%
+				# rebuild the last component sum-to-zero
+				rebuild_last_component_sum_to_zero %>%
 
-			# rebuild the last component sum-to-zero
-			rebuild_last_component_sum_to_zero %>%
+				# Calculate relative 0 because of dirichlet relativity
+				get_relative_zero %>%
 
-			arrange(.variable, .chain, .iteration, .draw,     A ) %>%
-			group_by(A, C, .variable) %>%
-			tidybayes::mean_qi() %>%
-			ungroup() %>%
-			arrange(.variable, C) %>%
-			left_join(
-				(.) %>% distinct(.variable, C) %>% mutate(my_C = 1:n())
-			) %>%
-			select(-C) %>% rename(C = my_C) %>%
-			left_join(
-				tree %>%
-					ToDataFrameTree("name", "level", sprintf("C%s", 3)) %>%
-					filter(level == 3+1) %>%
-					arrange(C3) %>%
-					mutate(C = 1:n()) %>%
-					select(name, C) %>%
-					rename(`Cell type category` = name)
-			) %>%
-			pivot_wider(names_from = A, values_from = c(.value, .lower, .upper), names_prefix = "alpha")
+				arrange(.chain, .iteration, .draw,     A ) %>%
+				group_by(A, C, .variable, zero) %>%
+				tidybayes::mean_qi() %>%
+				ungroup() %>%
+				left_join(
+					tree %>%
+						ToDataFrameTree("name", "level", sprintf("C%s", 3)) %>%
+						arrange(C3) %>%
+						drop_na() %>%
+						select(name, C3) %>%
+						rename(`Cell type category` = name) %>%
+						rename(C = C3)
+				) %>%
+				pivot_wider(names_from = A, values_from = c(.value, .lower, .upper), names_prefix = "alpha")
 
-		alpha = alpha %>% bind_rows(alpha_3)
+		alpha = alpha  %>% bind_rows(alpha_3 %>% mutate(level =3))
 
 }
 		prop_3 =
@@ -489,9 +486,8 @@ ARMET_tc = function(
 				do_regression,
 				~ .x %>%
 					left_join(
-						alpha %>%
-							select(`Cell type category`, contains("alpha")),
-						by = "Cell type category"
+						alpha %>%	select(`Cell type category`, contains("alpha"), zero, level),
+						by = c("Cell type category", "level")
 					)
 			),
 

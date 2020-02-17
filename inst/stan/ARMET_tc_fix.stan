@@ -818,14 +818,17 @@ parameters {
   matrix[A * (lv == 1) * do_regression,ct_in_nodes[1]]  alpha_1; // Root
 
   // lv2
-  matrix[A * (lv == 2) * do_regression,ct_in_nodes[2]]  alpha_a; // Immune cells
+   matrix[A * (lv == 2) * do_regression,ct_in_levels[2]]  alpha_2; // Root
+  //matrix[A * (lv == 2) * do_regression,ct_in_nodes[2]]  alpha_a; // Immune cells
 
   // lv3
-  matrix[A * (lv == 3) * do_regression,ct_in_nodes[3]]  alpha_b; // b cells
-  matrix[A * (lv == 3) * do_regression,ct_in_nodes[4]]  alpha_c; // granulocyte
-  matrix[A * (lv == 3) * do_regression,ct_in_nodes[5]]  alpha_d; // mono_derived
-  matrix[A * (lv == 3) * do_regression,ct_in_nodes[6]]  alpha_e; // natural_killer
-  matrix[A * (lv == 3) * do_regression,ct_in_nodes[7]]  alpha_f; // t_cell
+  matrix[A * (lv == 3) * do_regression,ct_in_levels[3]]  alpha_3; // Root
+
+  // matrix[A * (lv == 3) * do_regression,ct_in_nodes[3]]  alpha_b; // b cells
+  // matrix[A * (lv == 3) * do_regression,ct_in_nodes[4]]  alpha_c; // granulocyte
+  // matrix[A * (lv == 3) * do_regression,ct_in_nodes[5]]  alpha_d; // mono_derived
+  // matrix[A * (lv == 3) * do_regression,ct_in_nodes[6]]  alpha_e; // natural_killer
+  // matrix[A * (lv == 3) * do_regression,ct_in_nodes[7]]  alpha_f; // t_cell
 
 	// lv4
   matrix[A * (lv == 4) * do_regression,ct_in_nodes[8]]  alpha_g; // dendritic myeloid
@@ -935,8 +938,8 @@ model {
 	// lv 2
   if(lv == 2 && do_regression) {
 
-  	for(q in 1:Q) prop_a[q] ~ dirichlet_regression( X[q], alpha_a, phi[2] );
-  	to_vector( alpha_a ) ~ normal(0,1);
+  	for(q in 1:Q) prop_2[q] ~ dirichlet_regression( X[q], alpha_2, phi[2] );
+  	to_vector( alpha_2 ) ~ normal(0,1);
 
   }
 	if(lv == 2 && !do_regression) for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | rep_vector(1, num_elements(prop_a[1])));
@@ -945,20 +948,8 @@ model {
 	// lv 3
   if(lv == 3 && do_regression){
 
-  	for(q in 1:Q) prop_b[q] ~ dirichlet_regression( X[q], alpha_b, phi[3] );
-  	to_vector( alpha_b ) ~ normal(0,1);
-
-  	for(q in 1:Q) prop_c[q] ~ dirichlet_regression( X[q], alpha_c, phi[4] );
-  	to_vector( alpha_c ) ~ normal(0,1);
-
-  	for(q in 1:Q) prop_d[q] ~ dirichlet_regression( X[q], alpha_d, phi[5] );
-  	to_vector( alpha_d ) ~ normal(0,1);
-
-  	for(q in 1:Q) prop_e[q] ~ dirichlet_regression( X[q], alpha_e, phi[6] );
-  	to_vector( alpha_e ) ~ normal(0,1);
-
-  	for(q in 1:Q) prop_f[q] ~ dirichlet_regression( X[q], alpha_f, phi[7] );
-  	to_vector( alpha_f ) ~ normal(0,1);
+  	for(q in 1:Q) prop_3[q] ~ dirichlet_regression( X[q], alpha_3, phi[3] );
+  	to_vector( alpha_3 ) ~ normal(0,1);
 
   }
   if(lv == 3 && !do_regression) for(q in 1:Q){

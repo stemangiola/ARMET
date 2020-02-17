@@ -1765,3 +1765,22 @@ rebuild_last_component_sum_to_zero = function(.){
 		}) %>%
 		ungroup()
 }
+
+get_relative_zero = function(fit_parsed){
+	# fit %>%
+	# 	tidybayes::gather_draws(`alpha_[1abcdefghi]`[A, C], regex = T) %>%
+	# 	ungroup() %>%
+	fit_parsed %>%
+		#filter(A == 2) %>%
+		nest(data = -.variable) %>%
+		mutate(zero = map(
+			data,
+			~ .x %>%
+				filter(A == 2) %>%
+				pull(.value) %>%
+				density(na.rm = T) %>%
+				{	tibble(x = (.)$x, y = (.)$y)	} %>%
+				arrange(y %>% desc) %>% slice(1) %>% select(zero = x)
+		)) %>%
+		unnest(cols = c(data, zero))
+}
