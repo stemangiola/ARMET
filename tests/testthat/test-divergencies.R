@@ -50,29 +50,6 @@ expect_equal(
 
 my_mix = ARMET_ref %>% inner_join( (.) %>% distinct(sample) %>% slice(1)) %>% distinct(sample, symbol, count) %>% spread(symbol, count)
 
-# result =
-# 	ARMET_tc(
-# 		my_mix,
-# 		iterations = 50,
-# 		sampling_iterations = 5,
-# 		n_markers = res$input$n_markers,
-# 		full_bayesian  = T,
-# 		cores = 2, levels = 2
-# 	)
-
-my_mix = ARMET_ref %>% inner_join( (.) %>% filter(`Cell type category` == "nk_primed") %>% distinct(sample) %>% slice(1)) %>% distinct(sample, symbol, count) %>% spread(symbol, count)
-
-
-result_nk_fix =
-	ARMET_tc(
-		my_mix,
-		full_bayesian  = F,
-		cores = 2,
-		levels = 3
-	)$proportions %>%
-	filter(level==3) %>%
-	filter(`Cell type category` == "nk_primed")
-
 result_fix =
 	ARMET_tc(
 		my_mix,
@@ -82,6 +59,21 @@ result_fix =
 		cores = 2,
 		levels = 3
 	)
+
+my_nk = ARMET_ref %>% inner_join( (.) %>% filter(`Cell type category` == "nk_primed") %>% distinct(sample) %>% slice(1)) %>% distinct(sample, symbol, count) %>% spread(symbol, count)
+
+
+result_nk_fix =
+	ARMET_tc(
+		my_nk,
+		full_bayesian  = F,
+		cores = 2,
+		levels = 3
+	)$proportions %>%
+	filter(level==3) %>%
+	filter(`Cell type category` == "nk_primed")
+
+
 
 result_fix =
 	ARMET_tc(
