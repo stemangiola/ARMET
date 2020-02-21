@@ -211,9 +211,9 @@ ARMET_tc = function(
 			get_relative_zero %>%
 
 			arrange(.chain, .iteration, .draw,     A ) %>%
-			group_by(A, C, .variable, zero) %>%
-			tidybayes::mean_qi() %>%
-			ungroup() %>%
+
+			nest(draws = -c(C, .variable, zero)) %>%
+
 			left_join(
 				tree %>%
 					ToDataFrameTree("name", "level", sprintf("C%s", 1)) %>%
@@ -222,8 +222,7 @@ ARMET_tc = function(
 					mutate(C = 1:n()) %>%
 					select(name, C)  %>%
 					rename(`Cell type category` = name)
-			) %>%
-			pivot_wider(names_from = A, values_from = c(.value, .lower, .upper), names_prefix = "alpha")
+			)
 	alpha = alpha_1 %>% mutate(level =1)
 }
 
@@ -335,9 +334,9 @@ ARMET_tc = function(
 				get_relative_zero %>%
 
 				arrange(.chain, .iteration, .draw,     A ) %>%
-				group_by(A, C, .variable, zero) %>%
-				tidybayes::mean_qi() %>%
-				ungroup() %>%
+
+				nest(draws = -c(C, .variable, zero)) %>%
+
 				left_join(
 					tree %>%
 						ToDataFrameTree("name", "level", sprintf("C%s", 2)) %>%
@@ -346,8 +345,7 @@ ARMET_tc = function(
 						select(name, C2) %>%
 						rename(`Cell type category` = name) %>%
 						rename(C = C2)
-				) %>%
-				pivot_wider(names_from = A, values_from = c(.value, .lower, .upper), names_prefix = "alpha")
+				)
 			alpha = alpha  %>% bind_rows(alpha_2 %>% mutate(level =2))
 
 		}
@@ -431,9 +429,9 @@ ARMET_tc = function(
 				get_relative_zero %>%
 
 				arrange(.chain, .iteration, .draw,     A ) %>%
-				group_by(A, C, .variable, zero) %>%
-				tidybayes::mean_qi() %>%
-				ungroup() %>%
+
+				nest(draws = -c(C, .variable, zero)) %>%
+
 				left_join(
 					tree %>%
 						ToDataFrameTree("name", "level", sprintf("C%s", 3)) %>%
@@ -442,8 +440,7 @@ ARMET_tc = function(
 						select(name, C3) %>%
 						rename(`Cell type category` = name) %>%
 						rename(C = C3)
-				) %>%
-				pivot_wider(names_from = A, values_from = c(.value, .lower, .upper), names_prefix = "alpha")
+				)
 
 		alpha = alpha  %>% bind_rows(alpha_3 %>% mutate(level =3))
 
@@ -485,8 +482,9 @@ ARMET_tc = function(
 			ifelse_pipe(
 				do_regression,
 				~ .x %>%
+					nest(proportions = -c(`Cell type category`, C, level)) %>%
 					left_join(
-						alpha %>%	select(`Cell type category`, contains("alpha"), zero, level),
+						alpha %>%	select(`Cell type category`, contains("alpha"), zero, level, draws),
 						by = c("Cell type category", "level")
 					)
 			),
@@ -695,4 +693,21 @@ run_model = function(reference_filtered,
 			 	)
 			 ))
 
+}
+
+#' @export
+test_differential_composition = function(.data, credible_interval = 0.95){
+	.data$proportions %>%
+		select(-proportions) %>%
+		unnest(draws) %>%
+		group_by(level,     C ,`Cell type category`,  zero, A) %>%
+		tidybayes::median_qi(.width = credible_interval) %>%
+		ungroup()  %>%
+		pivot_wider(names_from = A, values_from = c(.value, .lower, .upper), names_prefix = "alpha") %>%
+		mutate(
+			.value_alpha2 = .value_alpha2 - zero,
+			.lower_alpha2 = .lower_alpha2 - zero,
+			.upper_alpha2 = .upper_alpha2 - zero
+		) %>%
+		mutate(significant = (.lower_alpha2 * .upper_alpha2) > 0)
 }
