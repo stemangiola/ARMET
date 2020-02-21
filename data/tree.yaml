@@ -35,7 +35,10 @@ immune_cell:
     nk_resting:
       o:
     nk_primed:
-      o:
+      nk_primed_IL2_PDGFD:
+        o:
+      nk_primed_IL2:
+        o:
   t_cell:
     t_CD8:
       t_CD8_memory:
