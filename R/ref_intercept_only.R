@@ -91,11 +91,11 @@ ref_intercept_only = function(reference,
 	tree =
 		create_tree_object(reference) %>%
 		data.tree::Clone() %>%	{
-		# Filter selected levels
-		data.tree::Prune(., function(x)
-			x$level <= max(levels_in_the_tree) + 1)
+			# Filter selected levels
+			data.tree::Prune(., function(x)
+				x$level <= max(levels_in_the_tree) + 1)
 			.
-	}
+		}
 
 	ct_in_nodes =
 		tree %>%
@@ -177,7 +177,7 @@ ref_intercept_only = function(reference,
 		# Select cell types in hierarchy
 		inner_join(
 			tree %>%
-				data.tree::ToDataFrameTree("Cell type category", "C", "C1", "C2", "C3") %>%
+				data.tree::ToDataFrameTree("Cell type category", "C", "C1", "C2", "C3", "C4") %>%
 				as_tibble %>%
 				select(-1)
 
@@ -542,8 +542,8 @@ ref_format = function(ref) {
 		# 		ungroup()
 		# ) %>%
 
-		# If house keeping delete level infomation
-		mutate(level = ifelse(`house keeping`, NA, level)) %>%
+	# If house keeping delete level infomation
+	mutate(level = ifelse(`house keeping`, NA, level)) %>%
 
 		# Create unique symbol ID
 		unite(ct_symbol, c("Cell type category", "symbol"), remove = F) %>%
