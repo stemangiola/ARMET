@@ -1,4 +1,5 @@
 # Infer NB from Cell type category
+# Rscript dev/step_1_ref_building.R 4
 
 # Initialise
 #setwd("/wehisan/bioinf/bioinf-data/Papenfuss_lab/projects/mangiola.s/PostDoc/RNAseq-noise-model")
@@ -57,7 +58,7 @@ do_inference = function(counts, my_level, my_run, approximate_posterior = F){
 		counts %>%
 
 		# Adapt it as input
-		select(sample, symbol, count, `Cell type category`, level, `count normalised`, `house keeping`) %>%
+		select(sample, symbol, count, `Cell type category`, level, `count scaled`, `house keeping`) %>%
 		rename(`read count` = count) %>%
 
 		# #############################
@@ -111,11 +112,11 @@ process_fit = function(my_level, run) {
 				group_by(symbol) %>%
 				do(
 					(.) %>%
-						arrange(`count normalised`) %>%
+						arrange(`count scaled`) %>%
 						mutate(
 							predicted_NB =
 								qnbinom(
-									ppoints(`count normalised`),
+									ppoints(`count scaled`),
 									size=.$sigma_inv_log %>% unique %>% exp %>% `^` (-1),
 									mu=.$lambda_log %>% unique %>% exp
 								)
@@ -124,9 +125,9 @@ process_fit = function(my_level, run) {
 				ungroup()
 		}) %>%
 		#do_parallel_end() %>%
-		mutate(`log of error` = (`count normalised` - predicted_NB) %>% abs %>% `+` (1) %>% log) %>%
-		mutate(`error of log` = (log(`count normalised` + 1) - log(predicted_NB + 1)) ) %>%
-		mutate(`error scaled` =  ((`count normalised` - predicted_NB) / (`count normalised` + 1) )) %>%
+		mutate(`log of error` = (`count scaled` - predicted_NB) %>% abs %>% `+` (1) %>% log) %>%
+		mutate(`error of log` = (log(`count scaled` + 1) - log(predicted_NB + 1)) ) %>%
+		mutate(`error scaled` =  ((`count scaled` - predicted_NB) / (`count scaled` + 1) )) %>%
 		left_join(
 			(.) %>%
 				group_by(symbol) %>%
@@ -134,7 +135,7 @@ process_fit = function(my_level, run) {
 		) %>%
 
 		# Normalise
-		mutate(`count normalised bayes` = `count` / exp(exposure)) %>%
+		mutate(`count scaled bayes` = `count` / exp(exposure)) %>%
 
 		mutate(stan_run = !!run)
 

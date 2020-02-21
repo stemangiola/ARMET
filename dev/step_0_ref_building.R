@@ -88,7 +88,7 @@ get_BLUEPRINT = function(){
 
 
   # read_delim(
-  #   "/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/BLUEPRINT_db/blueprint_files.tsv",
+  #   "~/PhD/deconvolution/BLUEPRINT_db/blueprint_files.tsv",
   #   "\t",
   #   escape_double = FALSE,
   #   trim_ws = TRUE
@@ -144,14 +144,14 @@ get_BLUEPRINT = function(){
   # mutate(`Cell type formatted` = ifelse(grepl("regulatory T cell", `Cell type`, ignore.case=T), "t_reg", `Cell type formatted`)) %>%
 
   # Select info
-  read_csv("big_data/tibble_cellType_files/BLUEPRINT__annotation_cell_types.csv") %>%
+  read_csv("~/PostDoc/RNAseq-noise-model/big_data/tibble_cellType_files/BLUEPRINT__annotation_cell_types.csv") %>%
 
     # Add expression
     left_join(
 
       foreach(
         my_file = dir(
-          path="/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/BLUEPRINT_db/",
+          path="~/PhD/deconvolution/BLUEPRINT_db/",
           pattern="results",
           full.names=T
         ),
@@ -235,7 +235,7 @@ get_bloodRNA = function(){
 get_ENCODE = function(){
 
 
-  # read_delim("/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/ENCODE/metadata.tsv",  "\t", escape_double = FALSE, trim_ws = TRUE) %>%
+  # read_delim("~/PhD/deconvolution/ENCODE/metadata.tsv",  "\t", escape_double = FALSE, trim_ws = TRUE) %>%
   #   filter(`Output type` == "gene quantifications") %>%
   #   dplyr::mutate(sample = `File accession`) %>%
   #   mutate(`Cell type` = `Biosample term name`) %>%
@@ -269,13 +269,13 @@ get_ENCODE = function(){
   # metadata$`Cell type formatted`[grep("T-cell", metadata$`Biosample term name`, fixed=T) ] = "t_cell"
   # metadata = metadata[!is.na(metadata$`Cell type formatted`),]
 
-  read_csv("big_data/tibble_cellType_files/ENCODE__annotation_cell_types.csv") %>%
+  read_csv("~/PostDoc/RNAseq-noise-model/big_data/tibble_cellType_files/ENCODE__annotation_cell_types.csv") %>%
 
     left_join(
       # Get counts from files
       foreach(f = .$sample, .combine = bind_rows) %dopar% {
         read_delim(
-          sprintf("/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/ENCODE/%s.tsv", f),
+          sprintf("~/PhD/deconvolution/ENCODE/%s.tsv", f),
           "\t",
           escape_double = FALSE,
           trim_ws = TRUE
@@ -312,7 +312,7 @@ get_ENCODE = function(){
 }
 
 get_N52_TME = function(){
-  load("/wehisan/home/allstaff/m/mangiola.s/PhD/Mangiola_et_al_2019_TME/N52_plus_12_run/fastq/run_all/code_repository/input_parallel_TABI.RData")
+  load("~/PhD/TME_prostate_N52/N52_plus_12_run/fastq/run_all/code_repository/input_parallel_TABI.RData")
   ex %>% gather(sample, `count`, -symbol) %>%
     rename(count = `count`) %>%
     left_join(
@@ -333,7 +333,7 @@ get_N52_TME = function(){
 get_immune_singapoor = function(){
 
   # Emailed the author  GSE107011
-  load("/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/immune_singapoor/Genes_TPM_counts.RData")
+  load("~/PhD/deconvolution/immune_singapoor/Genes_TPM_counts.RData")
 
   kallisto_gene %$% counts %>%
     as_tibble(rownames = "gene_id") %>%
@@ -347,7 +347,7 @@ get_immune_singapoor = function(){
         rename(`Cell type` = group10) %>%
         mutate(`Cell type` = gsub('[\"]', '', `Cell type`) %>% trimws  ) %>%
         left_join(
-          read_csv("/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/immune_singapoor/cell_type_conversion.csv")
+          read_csv("~/PhD/deconvolution/immune_singapoor/cell_type_conversion.csv")
         )
     ) %>%
 
@@ -366,7 +366,7 @@ get_immune_singapoor = function(){
 }
 
 get_dendritic_STIMULATED_NOT_GOOD = function(){
-  read_csv("/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/mDC_database/GSE89442_Mathan_et_al_RNAseq_data_raw_values.csv") %>%
+  read_csv("~/PhD/deconvolution/mDC_database/GSE89442_Mathan_et_al_RNAseq_data_raw_values.csv") %>%
     gather(sample, `count`, -Symbol,-GeneID) %>%
     rename(symbol = Symbol) %>%
     filter(grepl("unstimulated", sample)) %>%
@@ -443,8 +443,11 @@ get_NK_curated_yuhan = function(){
   read_csv("~/PhD/deconvolution/NK_yuhan/Ste_Alex_GEO_RNA_seq.csv") %>%
     rename(`Cell type formatted` = state, `Data base` = database, symbol = transcript) %>%
     mutate(`Cell type formatted` = ifelse(`Cell type formatted` != "nk_resting", "nk_primed", `Cell type formatted`)) %>%
-		filter(`Data base` != "FANTOM5")
+		filter(`Data base` != "FANTOM5") %>%
 
+		# Add priming state
+		left_join( read_csv("~/PhD/deconvolution/NK_yuhan/priming_type.csv")) %>%
+		mutate(`Cell type formatted` = ifelse(state %>% is.na, `Cell type formatted`, state))
 
 }
 
@@ -556,9 +559,6 @@ get_melanocytes = function(){
 }
 
 # from here
-
-
-
 
 get_myeloid_differentiation = function(){
 
@@ -689,11 +689,11 @@ all %>%
 
   })
 
-# Create harmonised dataset bsed on myhierarchy
+# Create harmonised dataset based on myhierarchy
 
 # Setup table of name conversion
 tree =
-  yaml:: yaml.load_file("/wehisan/home/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/data/tree.yaml") %>%
+  yaml:: yaml.load_file("~/PhD/deconvolution/ARMET/data/tree.yaml") %>%
   data.tree::as.Node()
 
 sample_blacklist = c(
@@ -813,8 +813,8 @@ counts =
   collect() %>%
   ungroup %>%
 
-  mutate(`count normalised` = `count normalised` %>% as.integer) %>%
-  mutate(`count normalised log` = `count normalised` %>% `+` (1) %>% log) %>%
+  mutate(`count scaled` = `count scaled` %>% as.integer) %>%
+  mutate(`count scaled log` = `count scaled` %>% `+` (1) %>% log) %>%
 
   # mutate symbol
   mutate(`symbol original` = symbol) %>%
@@ -882,8 +882,8 @@ group_by(level) %>%
 #     distinct() %>%
 #     aggregate_duplicates() %>%
 #     ttBulk::scale_abundance() %>%
-#     distinct(`Data base`, sample, symbol, `Cell type formatted`, `count normalised`)  %>%
-#     reduce_dimensions(sample, symbol, `count normalised`, method = "tSNE", .dims=2) %>%
+#     distinct(`Data base`, sample, symbol, `Cell type formatted`, `count scaled`)  %>%
+#     reduce_dimensions(sample, symbol, `count scaled`, method = "tSNE", .dims=2) %>%
 #     select(contains("tSNE"), `Data base`, `Cell type formatted`) %>%
 #     distinct %>%
 #     ggplot(aes(x = `tSNE1`, y = `tSNE2`, color=`Cell type formatted`)) + geom_point(size=2) +
@@ -906,9 +906,9 @@ group_by(level) %>%
 # (
 #   ARMET::ARMET_ref %>%
 #     filter(level==3) %>%
-#     distinct(`Data base`, sample, symbol, `Cell type category`, `read count normalised bayes`)  %>%
+#     distinct(`Data base`, sample, symbol, `Cell type category`, `read count scaled bayes`)  %>%
 #      inner_join(rr$signatures[[3]] %>% distinct(symbol)) %>%
-#     reduce_dimensions(sample, symbol, `read count normalised bayes`, method = "tSNE", .dims=2) %>%
+#     reduce_dimensions(sample, symbol, `read count scaled bayes`, method = "tSNE", .dims=2) %>%
 #     select(contains("tSNE"), `Data base`, `Cell type category`) %>%
 #     distinct %>%
 #     ggplot(aes(x = `tSNE 1`, y = `tSNE 2`, color=`Cell type category`, shape=`Data base`)) + geom_point(size=2) +
@@ -937,7 +937,7 @@ group_by(level) %>%
 #     aggregate_duplicates() %>%
 #     scale_abundance() %>%
 #     #inner_join(rr$signatures[[3]] %>% distinct(symbol)) %>%
-#     reduce_dimensions(sample, symbol, `read count normalised`, method = "tSNE", .dims=2) %>%
+#     reduce_dimensions(sample, symbol, `read count scaled`, method = "tSNE", .dims=2) %>%
 #     select(contains("tSNE"), `Data base`, `Cell type formatted`) %>%
 #     distinct %>%
 #     ggplot(aes(x = `tSNE 1`, y = `tSNE 2`, color=`Cell type formatted`, shape=`Data base`)) + geom_point(size=2) +

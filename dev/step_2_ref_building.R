@@ -152,7 +152,7 @@ plot_trends = function(input.df, symbols) {
 		ggplot(
 			aes(
 				x = `predicted_NB` + 1,
-				y = `count normalised bayes` + 1,
+				y = `count scaled bayes` + 1,
 				label = symbol,
 				color = `regression`
 			)
@@ -178,7 +178,7 @@ regression_coefficient = function(x){
 
 	mdf = x %>%
 		get_NB_qq_values %>%
-		mutate(a = `count normalised bayes` %>% `+` (1) %>% log,
+		mutate(a = `count scaled bayes` %>% `+` (1) %>% log,
 					 b = predicted_NB %>% `+` (1) %>% log)
 
 	lm(a ~  b + I(b ^ 2), data = mdf)$coefficients[3]
@@ -188,9 +188,14 @@ ref =
 	list(
 		read_csv("dev/fit_level1.csv"),
 		read_csv("dev/fit_level2.csv"),
-		read_csv("dev/fit_level3.csv")
+		read_csv("dev/fit_level3.csv"),
+		read_csv("dev/fit_level4.csv")
 	) %>%
-	map_dfr( ~ .x) %>%
+	map_dfr( ~ .x %>%
+
+					 	# Change col names because now I use scaled for new data sets
+					 	setNames( (.) %>% colnames %>% gsub("count normalised", "count scaled", .))
+					) %>%
 
 	# Bug after I deleted FANTOM5 I have to rerun infer NB. Some genes are not in all cell types anynore
 	# Other bug
@@ -226,14 +231,14 @@ ref_2 =
 		library(magrittr)
 
 		get_NB_qq_values = function(input.df) {
-			input.df = input.df %>% arrange(`count normalised bayes`)
+			input.df = input.df %>% arrange(`count scaled bayes`)
 
 			my_predicted_NB =
 				qnbinom(
 					# If 1 sample, just use median
 					switch(
 						input.df %>% nrow %>% `>` (1) %>% `!` %>% sum(1),
-						ppoints(input.df$`count normalised bayes`),
+						ppoints(input.df$`count scaled bayes`),
 						0.5
 					),
 					size = input.df$sigma_inv_log %>% unique %>% exp %>% `^` (-1),
@@ -248,7 +253,7 @@ ref_2 =
 			do({
 				mdf = (.) %>%
 					get_NB_qq_values %>%
-					mutate(a = `count normalised bayes` %>% `+` (1) %>% log,
+					mutate(a = `count scaled bayes` %>% `+` (1) %>% log,
 								 b = predicted_NB %>% `+` (1) %>% log)
 
 				mdf %>%
@@ -259,7 +264,7 @@ ref_2 =
 	do_parallel_end() %>%
 
 	# Calculate bimodality
-	# mutate(bimodality = modes::bimodality_coefficient(`count normalised bayes` )) %>%
+	# mutate(bimodality = modes::bimodality_coefficient(`count scaled bayes` )) %>%
 	# ungroup %>%
 
 	# Calculate bimodality
@@ -301,7 +306,7 @@ ref_2 =
 		(.) %>%
 			group_by(`Cell type category`, symbol, level) %>%
 			do({
-				res = siberg_iterative((.) %>% pull(`count normalised bayes`) %>% as.integer)
+				res = siberg_iterative((.) %>% pull(`count scaled bayes`) %>% as.integer)
 				(.) %>% mutate(bimodality_NB = res[2], bimodality_NB_diff = res[1])
 
 			})
@@ -396,21 +401,22 @@ ref_3 =
 		ref_2,
 		give_rank_to_ref(ref_2 %>% filter(level == 1), 1, my_tree) %>%
 			rbind(give_rank_to_ref(ref_2 %>% filter(level == 2), 2, my_tree)) %>%
-			rbind(give_rank_to_ref(ref_2 %>% filter(level == 3), 3, my_tree))
+			rbind(give_rank_to_ref(ref_2 %>% filter(level == 3), 3, my_tree)) %>%
+			rbind(give_rank_to_ref(ref_2 %>% filter(level == 4), 4, my_tree))
 			#rbind(give_rank_to_ref(ref_2 %>% filter(level == 4), 4, my_tree)) %>%
 
 	)
 
 # (ref_3 %>% filter(ct1 == "epithelial" & ct2 == "endothelial" & level ==1) %>%
 # 		arrange(rank) %>% inner_join( (.) %>% distinct(symbol) %>% slice(1:50)) %>%
-# 		ggplot(aes(x=`Cell type category`, y=`count normalised bayes`+1, color=`marker too noisy`)) +
+# 		ggplot(aes(x=`Cell type category`, y=`count scaled bayes`+1, color=`marker too noisy`)) +
 # 		geom_jitter() + facet_wrap(~symbol ) + scale_y_log10() ) %>% plotly::ggplotly()
 
-ARMET_ref = ref_3 %>% mutate_if(is.character, as.factor) %>% mutate(`count normalised bayes` = `count normalised bayes` %>% as.integer)
+ARMET_ref = ref_3 %>% mutate_if(is.character, as.factor) %>% mutate(`count scaled bayes` = `count scaled bayes` %>% as.integer)
 
 # Select correct columns
 columns = c(  "level"     ,                  "sample"    ,                  "symbol"    ,
-	  "Cell type formatted"    ,     "count"   ,               "count normalised bayes",
+	  "Cell type formatted"    ,     "count"   ,               "count scaled bayes",
 	  "Data base"          ,         "lambda_log"        ,              "sigma_inv_log"    ,
 	          "CI_low"   ,
 	  "CI_high"     ,                "gene error mean"     ,        "house keeping"    ,
@@ -421,7 +427,7 @@ columns = c(  "level"     ,                  "sample"    ,                  "sym
 	  "rank" )
 ARMET_ref =
 	ARMET_ref %>%
-	distinct(level, sample, symbol, `Cell type formatted`, `Cell type category`, count, `count normalised bayes`, `Data base`, lambda_log, sigma_inv_log, `house keeping`, ct1, ct2, rank)
+	distinct(level, sample, symbol, `Cell type formatted`, `Cell type category`, count, `count scaled bayes`, `Data base`, lambda_log, sigma_inv_log, `house keeping`, ct1, ct2, rank)
 
 # # Adjust too little noise to avoid overfitting
 # ARMET_ref =
