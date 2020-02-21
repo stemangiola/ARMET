@@ -196,9 +196,9 @@ which_is_up_down = 1:16 %>% map( ~ c(
 	(.x + 12) %>% ifelse(. > 16, . - 16, .)
 ))
 
-which_is_up_down %>%
-	map( ~ .x %>% noiseles_test) %>%
-	saveRDS("dev/test_student_noisless.rds")
+# which_is_up_down %>%
+# 	map( ~ .x %>% noiseles_test) %>%
+# 	saveRDS("dev/test_student_noisless.rds")
 
 which_is_up_down %>%
 	map( ~ .x %>% noiseles_test(do_regression = T)) %>%
