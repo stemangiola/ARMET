@@ -8,10 +8,8 @@ ARMET_tc(
   mix,
   formula = ~1,
   reference = NULL,
-  full_bayesian = F,
   approximate_posterior = F,
   verbose = F,
-  omit_regression = F,
   save_fit = F,
   seed = NULL,
   cores = 14,
@@ -26,8 +24,6 @@ ARMET_tc(
 \item{mix}{A matrix}
 
 \item{verbose}{A boolean}
-
-\item{omit_regression}{A boolean}
 
 \item{save_fit}{A boolean}
 
@@ -52,6 +48,8 @@ ARMET_tc(
 \item{cell_type_root}{A character string}
 
 \item{choose_internal_ref}{A design matrix}
+
+\item{omit_regression}{A boolean}
 }
 \value{
 An ARMET object
