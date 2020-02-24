@@ -212,7 +212,7 @@ real[,] get_real_MPI(vector v, int shards){
 
 int[,] append_int_MPI_arrays(int[,] lv1, int[,] lv2, int[,] lv3, int[,] lv4){
 
-	# This is for the BUG that dim(int empty_variable[0,0]) is not {0,0} but {0}
+	// This is for the BUG that dim(int empty_variable[0,0]) is not {0,0} but {0}
 	int dim_1[2] = size(dims(lv1)) == 2 ? dims(lv1) : rep_array(0,2);
 	int dim_2[2] = size(dims(lv2)) == 2 ? dims(lv2) : rep_array(0,2);
 	int dim_3[2] = size(dims(lv3)) == 2 ? dims(lv3) : rep_array(0,2);
@@ -572,7 +572,7 @@ if(dim_4[1] > 0) {
 		// deconvolution
 		lp = neg_binomial_2_lpmf(mix_counts |
 			exp(lambda_log_deconvoluted_1 + mix_exposure_rate),
-			#sigma_deconvoluted_1
+			// sigma_deconvoluted_1
 			1.0 ./ exp( lambda_log_deconvoluted_1  * -0.4 + sigma_intercept)
 		);
 
