@@ -6,21 +6,22 @@ library(ARMET)
 # library(foreach)
 # library(magrittr)
 
+test_that("check data set",{
 
-# Test fo anylvel that all gnes are in all cel tpes
+	# Test fo anylvel that all gnes are in all cel tpes
 expect_lte(
 	ARMET::ARMET_ref %>%
 		distinct(level, symbol, `Cell type category`) %>%
 		count(level, symbol) %>%
 		distinct(level, n) %>%
 		nrow,
-	3
+	4
 )
 
 # Test dataset house keeping should be in all levels
 expect_equal(
 	ARMET::ARMET_ref %>% distinct(`house keeping`, level) %>% nrow,
-	6
+	8
 )
 
 # Test dataset house keeping should be in all samples
@@ -48,92 +49,82 @@ expect_equal(
 )
 
 
-my_mix = ARMET_ref %>% inner_join( (.) %>% distinct(sample) %>% slice(1)) %>% distinct(sample, symbol, count) %>% spread(symbol, count)
+
+})
+
+my_mix = ARMET_ref %>% inner_join( (.) %>% distinct(sample) %>% slice(1))
+
+
+test_that("check simple run",{
 
 result_fix =
 	ARMET_tc(
 		my_mix,
+		.sample = sample,
+		.transcript = symbol,
+		.abundance = count,
 		iterations = 50,
 		sampling_iterations = 5,
-		full_bayesian  = F,
 		cores = 2,
 		levels = 3
 	)
 
-my_nk = ARMET_ref %>% inner_join( (.) %>% filter(`Cell type category` == "nk_primed") %>% distinct(sample) %>% slice(1)) %>% distinct(sample, symbol, count) %>% spread(symbol, count)
+
+})
+
+test_that("check nk dataset run",{
+
+	`%$%` = magrittr::`%$%`
+
+	result_nk_fix =
+		ARMET_ref %>%
+		inner_join( (.) %>% filter(`Cell type category` == "nk_primed") %>% distinct(sample) %>% slice(1)) %>%
+		ARMET_tc(
+			.sample = sample,
+			.transcript = symbol,
+			.abundance = count,
+			cores = 2,
+			levels = 3
+		) %$%
+		proportions %>%
+		filter(level==3) %>%
+		filter(`Cell type category` == "nk_primed")
+
+	})
 
 
-result_nk_fix =
-	ARMET_tc(
-		my_nk,
-		full_bayesian  = F,
-		cores = 2,
-		levels = 3
-	)$proportions %>%
-	filter(level==3) %>%
-	filter(`Cell type category` == "nk_primed")
+test_that("Check accuracy N52",{
 
+	N52_ARMET_T =
+		filter(
+			readRDS("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/N52.rds"),
+			ct == "T"
+		) %>%
+		ARMET_tc(
+			.sample = sample,
+			.transcript = symbol,
+			.abundance = count,
+			cores = 20,
+			levels = 3, do_regression = T
+		)
 
-
-result_fix =
-	ARMET_tc(
-		my_mix,
-		iterations = 50,
-		sampling_iterations = 5,
-		full_bayesian  = T,
-		cores = 2,
-		levels = 1
+	expect_gt(
+		N52_ARMET_T$proportions %>% filter(`Cell type category` == "immune_cell") %>% summarise(.value %>% min),
+		0.95
 	)
 
-result_dirichlet_fix =
-	ARMET_tc(
-		read_csv("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/mix_dirichlet.csv") %>%
-			rename(sample = run) %>%
-			mutate(`count mix` = `count mix` %>% as.integer) %>%
-			spread(symbol, `count mix`) %>%
-			mutate(sample = sprintf("s%s", sample))	,
-		n_markers = res$input$n_markers,
-		full_bayesian  = F,
-		do_regression = T,
-		X = X,
-		cores = 10,
-		levels = 3
+	expect_gt(
+		N52_ARMET_T$proportions %>% filter(`Cell type category` == "t_cell") %>% summarise(.value %>% min),
+		0.7
 	)
 
-# N52
-
-N52_ARMET_T =
-	ARMET_tc(
-		spread(
-			select(
-				filter(
-					readRDS("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/N52.rds"),
-					 ct == "T"
-					),
-					sample, symbol, count
-			),
-		symbol, count
-		),
-		full_bayesian  = F,
-		do_regression = T,
-		cores = 20,
-		levels = 3
+	expect_lt(
+		N52_ARMET_T$proportions %>% filter(!converged) %>% nrow,
+		7
 	)
 
-expect_gt(
-	N52_ARMET_T$proportions %>% filter(`Cell type category` == "immune_cell") %>% summarise(.value %>% min),
-	0.95
-)
+})
 
-expect_gt(
-	N52_ARMET_T$proportions %>% filter(`Cell type category` == "t_cell") %>% summarise(.value %>% min),
-	0.83
-)
-
-expect_equal(
-	N52_ARMET_T$proportions %>% filter(!converged) %>% nrow,
-	0
-)
 
 N52_ARMET_E =
 	ARMET_tc(
@@ -148,7 +139,6 @@ N52_ARMET_E =
 			symbol, count
 		),
 		full_bayesian  = F,
-		do_regression = T,
 		cores = 20,
 		levels = 1
 	)
@@ -169,7 +159,6 @@ mela =
 	readRDS("dev/melanoma_2_samples.rds") %>%
 	ARMET_tc(
 		full_bayesian  = F,
-		do_regression = T,
 		cores = 30,
 		levels = 3
 	)
