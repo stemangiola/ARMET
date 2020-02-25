@@ -1507,3 +1507,55 @@ get_relative_zero = function(fit_parsed){
 		)) %>%
 		unnest(cols = c(data, zero))
 }
+
+#' Get column names either from user or from attributes
+#'
+#' @importFrom rlang quo_is_symbol
+#'
+#' @param .data A tibble
+#' @param .sample A character name of the sample column
+#' @param .transcript A character name of the transcript/gene column
+#' @param .abundance A character name of the read count column
+#'
+#' @return A list of column enquo or error
+get_sample_transcript_counts = function(.data, .sample, .transcript, .abundance){
+
+
+	my_stop = function() {
+		stop("
+        tidyBulk says: The fucntion does not know what your sample, transcript and counts columns are.\n
+        You have to either enter those as symbols (e.g., `sample`), \n
+        or use the funtion create_tt_from_tibble() to pass your column names that will be remembered.
+      ")
+	}
+
+	if( .sample %>% quo_is_symbol() ) .sample = .sample
+	else if(".sample" %in% (.data %>% get_tt_columns() %>% names))
+		.sample =  get_tt_columns(.data)$.sample
+	else my_stop()
+
+	if( .transcript %>% quo_is_symbol() ) .transcript = .transcript
+	else if(".transcript" %in% (.data %>% get_tt_columns() %>% names))
+		.transcript =  get_tt_columns(.data)$.transcript
+	else my_stop()
+
+	if( .abundance %>% quo_is_symbol() ) .abundance = .abundance
+	else if(".abundance" %in% (.data %>% get_tt_columns() %>% names))
+		.abundance = get_tt_columns(.data)$.abundance
+	else my_stop()
+
+	list(.sample = .sample, .transcript = .transcript, .abundance = .abundance)
+
+}
+
+eliminate_sparse_transcripts = function(.data, .transcript){
+	# Parse column names
+	.transcript = enquo(.transcript)
+
+	warning("Some transcripts have been omitted from the analysis because not present in every sample.")
+
+	.data %>%
+		add_count(!!.transcript, name = "my_n") %>%
+		filter(my_n == max(my_n)) %>%
+		select(-my_n)
+}

@@ -5,8 +5,11 @@
 \title{ARMET-tc main}
 \usage{
 ARMET_tc(
-  mix,
-  formula = ~1,
+  .data,
+  .formula = ~1,
+  .sample = NULL,
+  .transcript = NULL,
+  .abundance = NULL,
   reference = NULL,
   approximate_posterior = F,
   verbose = F,
@@ -21,13 +24,13 @@ ARMET_tc(
 )
 }
 \arguments{
-\item{mix}{A matrix}
-
 \item{verbose}{A boolean}
 
 \item{save_fit}{A boolean}
 
 \item{seed}{An integer}
+
+\item{mix}{A matrix}
 
 \item{my_design}{A matrix}
 
@@ -48,8 +51,6 @@ ARMET_tc(
 \item{cell_type_root}{A character string}
 
 \item{choose_internal_ref}{A design matrix}
-
-\item{omit_regression}{A boolean}
 }
 \value{
 An ARMET object

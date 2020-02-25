@@ -85,18 +85,6 @@ result_fix =
 		levels = 1
 	)
 
-# result_dirichlet =
-# 	ARMET_tc(
-# 		read_csv("dev/mix_dirichlet.csv") %>%
-# 			rename(sample = run) %>%
-# 			mutate(`count mix` = `count mix` %>% as.integer) %>%
-# 			spread(symbol, `count mix`) %>%
-# 			mutate(sample = sprintf("s%s", sample))	,
-# 		n_markers = res$input$n_markers,
-# 		full_bayesian  = T, do_regression = T,X = X,
-# 		cores = 10, levels = 3
-# 	)
-
 result_dirichlet_fix =
 	ARMET_tc(
 		read_csv("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/mix_dirichlet.csv") %>%
@@ -178,7 +166,7 @@ expect_equal(
 # Melanoma
 
 mela =
-	readRDS("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/melanoma_2_samples.rds") %>%
+	readRDS("dev/melanoma_2_samples.rds") %>%
 	ARMET_tc(
 		full_bayesian  = F,
 		do_regression = T,
@@ -190,3 +178,19 @@ expect_equal(
 	mela$proportions %>% filter(!converged) %>% nrow,
 	0
 )
+
+# Test regression noiseless
+res =
+	readRDS("dev/noiseless_mix.rds") %>%
+	gather(transcript, count, -sample, -covariate_2) %>%
+	ARMET_tc(
+		~ covariate_2,
+		sample,
+		transcript,
+		count,
+		do_regression = T,
+		iterations = 400,
+		sampling_iterations = 200
+	)
+
+res %>% test_differential_composition() %>% filter(significant) %>% pull(`Cell type category`) %>% unique %in% c("b_cell" ,  "mast_cell" , "b_memory",   "eosinophil")

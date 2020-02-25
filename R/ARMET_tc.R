@@ -7,11 +7,7 @@
 #'
 #' @importFrom tibble tibble
 #'
-#' @importFrom dplyr %>%
-#' @importFrom dplyr select
-#' @importFrom dplyr mutate
-#' @importFrom dplyr filter
-#' @importFrom dplyr mutate_if
+#' @import dplyr
 #'
 #' @importFrom tidyr spread
 #' @importFrom tidyr gather
@@ -44,8 +40,11 @@
 #'
 #' @export
 #'
-ARMET_tc = function(mix,
-										formula = ~ 1,
+ARMET_tc = function(.data,
+										.formula = ~ 1,
+										.sample = NULL,
+										.transcript = NULL,
+										.abundance = NULL,
 										reference = NULL,
 										approximate_posterior = F,
 										verbose =                           F,
@@ -63,8 +62,54 @@ ARMET_tc = function(mix,
 
 	input = c(as.list(environment()))
 
+	# Get column names
+	.sample = enquo(.sample)
+	.transcript = enquo(.transcript)
+	.abundance = enquo(.abundance)
+	col_names = get_sample_transcript_counts(.data, .sample, .transcript, .abundance)
+	.sample = col_names$.sample
+	.transcript = col_names$.transcript
+	.abundance = col_names$.abundance
+
+
+	# distinct_at is not released yet for dplyr, thus we have to use this trick
+	df_for_edgeR <- .data %>%
+
+		# Stop if any counts is NA
+		error_if_counts_is_na(!!.abundance) %>%
+
+		# Stop if there are duplicated transcripts
+		error_if_duplicated_genes(!!.sample,!!.transcript,!!.abundance) %>%
+
+		# Prepare the data frame
+		select(!!.transcript,
+					 !!.sample,
+					 !!.abundance,
+					 one_of(parse_formula(.formula))) %>%
+		distinct() %>%
+
+		# Check if data rectangular
+		ifelse_pipe(
+			(.) %>% check_if_data_rectangular(!!.sample,!!.transcript,!!.abundance, type = "soft") %>% `!` &
+				TRUE, #!fill_missing_values,
+			~ .x %>% eliminate_sparse_transcripts(!!.transcript)
+		)
+
 	# Create design matrix
-	X = create_design_matrix(mix, formula, sample)
+	X =
+		model.matrix(
+			object = .formula,
+			data = df_for_edgeR %>% select(!!.sample, one_of(parse_formula(.formula))) %>% distinct %>% arrange(!!.sample)
+		)
+
+	mix =
+		.data %>%
+		select(!!.sample,
+					 !!.transcript,
+					 !!.abundance,
+					 one_of(parse_formula(.formula))) %>%
+		distinct() %>%
+		spread(!!.transcript, !!.abundance)
 
 	shards = cores #* 2
 	is_level_in = shards %>% `>` (0) %>% as.integer
@@ -776,60 +821,6 @@ test_differential_composition = function(.data, credible_interval = 0.95) {
 #' @return a ggplot
 #'
 #' @export
-plot_polar_ = function(
-	obj,
-	size_geom_text = 3.5,
-	my_breaks=c(0, 0.01, 0.03, 0.05, 0.1,0.3,0.5,0.7,1),
-	prop_filter = 0.005,
-	barwidth = 0.5,
-	barheight = 2,
-	legend_justification = 0.67,
-	fill_direction = 1
-){
-
-	# Build phylo tree
-	tt = obj$stats
-	#tt_phylo = tt %>% data.tree::as.phylo.Node()
-
-	# Formatted names
-	ct_names_formatted =
-		data.tree::ToDataFrameTree(tt, "name") %>%
-		as_tibble %>% select(-levelName) %>%
-		bind_cols(`Cell type category` = c(
-			"Root",	"Epi", "Endo", "Fibro", "Immune", "Granulo", "Eosin", "Neutro", "Mono deriv", "Mono", "M0", "M1", "M2", "Dendr rest", "Drondr act", "Mast", "Activ", "Rest", "B", "Naive","Mem", "T", "CD8", "H1", "H2", "Follic", "γδ", "Reg", "M. cen", "M. act", "NK", "Activ", "Rest", "Plasma"
-		))
-
-	# Give formatted names
-	#tt_phylo$tip.label = ct_names_formatted %>% filter(name %in% tt_phylo$tip.label) %>% arrange(match(name, tt_phylo$tip.label)) %>% pull(`Cell type category`)
-	#tt_phylo$node.label = ct_names_formatted %>% filter(name %in% tt_phylo$node.label) %>% arrange(match(name, tt_phylo$node.label)) %>% pull(`Cell type category`)
-
-
-
-	.data =
-		data.tree::ToDataFrameTree(
-			tt,
-			"name",
-			"isLeaf", "level", "leafCount",
-			"Estimate",
-			"Sig",
-			"Cell type proportion",
-			"Driver"
-		) %>%
-		as_tibble() %>%
-
-		# BUG WITH EXCLUDED CELL TYOES
-		filter(.value_alpha1 %>% is.na %>% `!`) %>%
-
-		left_join(ct_names_formatted, by= "name")
-
-
-
-
-
-
-
-}
-
 plot_polar = function(	.data,
 												size_geom_text = 3.5,
 												my_breaks=c(0, 0.01, 0.03, 0.05, 0.1, 0.3, 0.5, 0.7, 1),
