@@ -248,7 +248,7 @@ ARMET_tc = function(.data,
 		select(-.variable) %>%
 		mutate(.value_relative = .value)
 
-	if (do_regression) {
+	if (do_regression && length(parse_formula(.formula)) >1 ) {
 		alpha_1 =
 			fit1 %>%
 			tidybayes::gather_draws(`alpha_[1]`[A, C], regex = T) %>%
@@ -382,7 +382,7 @@ ARMET_tc = function(.data,
 					mutate(.value_relative = .value2) %>%
 					mutate(.value2 = ifelse(.value2 %>% is.na, .value, .value * .value2))
 
-				if (do_regression) {
+				if (do_regression && length(parse_formula(.formula)) >1 ){
 					alpha_2 =
 						fit2 %>%
 						tidybayes::gather_draws(`alpha_[2]`[A, C], regex = T) %>%
@@ -495,7 +495,7 @@ ARMET_tc = function(.data,
 					mutate(.value_relative = .value3) %>%
 					mutate(.value3 = ifelse(.value3 %>% is.na, .value2, .value2 * .value3))
 
-				if (do_regression) {
+				if (do_regression && length(parse_formula(.formula)) >1 ){
 					alpha_3 =
 						fit3 %>%
 						tidybayes::gather_draws(`alpha_[3]`[A, C], regex = T) %>%
@@ -556,8 +556,6 @@ ARMET_tc = function(.data,
 
 	}
 
-	######################################
-
 	# Return
 	list(
 		# Matrix of proportions
@@ -565,7 +563,7 @@ ARMET_tc = function(.data,
 
 			# Attach alpha if regression
 			ifelse_pipe(
-				do_regression,
+				do_regression && length(parse_formula(.formula)) >1 ,
 				~ .x %>%
 					nest(proportions = -c(`Cell type category`, C, level)) %>%
 					left_join(
