@@ -5,13 +5,15 @@
 #' @description This function calls the stan model.
 #'
 #'
-#' @importFrom tibble tibble
+
 #'
 #' @import dplyr
 #'
 #' @importFrom tidyr spread
 #' @importFrom tidyr gather
 #' @importFrom tidyr drop_na
+#' @importFrom rlang enquo
+#' @importFrom tibble tibble
 #'
 #' @importFrom tidybayes gather_samples
 #' @importFrom tidybayes median_qi
