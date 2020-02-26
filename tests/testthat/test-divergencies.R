@@ -123,52 +123,29 @@ test_that("Check accuracy N52",{
 		7
 	)
 
-})
 
-
-N52_ARMET_E =
+	N52_ARMET_E =
 	ARMET_tc(
-		spread(
-			select(
-				filter(
-					readRDS("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/N52.rds"),
-					ct == "E"
-				),
-				sample, symbol, count
-			),
-			symbol, count
+		filter(
+			readRDS("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/N52.rds"),
+			ct == "E"
 		),
-		full_bayesian  = F,
+		.sample = sample,
+		.transcript = symbol,
+		.abundance = count,
 		cores = 20,
-		levels = 1
+		levels = 3, do_regression = T
 	)
 
 expect_gt(
 	N52_ARMET_E$proportions %>% filter(`Cell type category` == "epithelial") %>% summarise(.value %>% min),
-	0.95
+	0.94
 )
 
-expect_equal(
-	N52_ARMET_E$proportions %>% filter(!converged) %>% nrow,
-	0
-)
+})
 
-# Melanoma
+test_that("Simulated data",{
 
-mela =
-	readRDS("dev/melanoma_2_samples.rds") %>%
-	ARMET_tc(
-		full_bayesian  = F,
-		cores = 30,
-		levels = 3
-	)
-
-expect_equal(
-	mela$proportions %>% filter(!converged) %>% nrow,
-	0
-)
-
-# Test regression noiseless
 res =
 	readRDS("dev/noiseless_mix.rds") %>%
 	gather(transcript, count, -sample, -covariate_2) %>%
@@ -182,4 +159,34 @@ res =
 		sampling_iterations = 200
 	)
 
-res %>% test_differential_composition() %>% filter(significant) %>% pull(`Cell type category`) %>% unique %in% c("b_cell" ,  "mast_cell" , "b_memory",   "eosinophil")
+expect_equal(
+	res %>%
+		test_differential_composition() %>%
+		filter(significant) %>%
+		pull(`Cell type category`) %>%
+		unique %in%
+		c("b_cell" ,  "mast_cell" , "b_memory",   "eosinophil") %>%
+		all(),
+	TRUE
+)
+
+
+})
+
+
+# # Melanoma
+#
+# mela =
+# 	readRDS("dev/melanoma_2_samples.rds") %>%
+# 	ARMET_tc(
+# 		full_bayesian  = F,
+# 		cores = 30,
+# 		levels = 3
+# 	)
+#
+# expect_equal(
+# 	mela$proportions %>% filter(!converged) %>% nrow,
+# 	0
+# )
+
+# Test regression noiseless
