@@ -170,6 +170,10 @@ expect_equal(
 	TRUE
 )
 
+# Test plotting
+res %>%
+	test_differential_composition() %>%
+	plot_polar()
 
 })
 
