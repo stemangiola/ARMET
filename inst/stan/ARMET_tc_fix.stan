@@ -962,7 +962,8 @@ model {
 	// lv 2
   if(lv == 2 && do_regression) {
 
-  	for(q in 1:Q) prop_2[q] ~ dirichlet_regression( X[q], alpha_2, phi[2] );
+  	if(fam_dirichlet) for(q in 1:Q) prop_2[q] ~ dirichlet_regression( X[q], alpha_2, phi[2] );
+  	else  prop_2 ~ beta_regression(X, alpha_2, phi[2], cens);
   	to_vector( alpha_2 ) ~ normal(0,1);
 
   }
@@ -972,7 +973,8 @@ model {
 	// lv 3
   if(lv == 3 && do_regression){
 
-  	for(q in 1:Q) prop_3[q] ~ dirichlet_regression( X[q], alpha_3, phi[3] );
+  	if(fam_dirichlet) for(q in 1:Q) prop_3[q] ~ dirichlet_regression( X[q], alpha_3, phi[3] );
+  	 else  prop_3 ~ beta_regression(X, alpha_3, phi[3], cens);
   	to_vector( alpha_3 ) ~ normal(0,1);
 
   }
@@ -1020,7 +1022,9 @@ model {
 	// );
 
 	// Dirichlet regression
-	phi ~ normal(0,1);
+	if(fam_dirichlet) phi ~ normal(0,1);
+	// Beta regression
+	else phi ~ normal(0,2);
 
 	// lambda UFO
 	for(i in 1:shards) lambda_UFO[i] ~ skew_normal(6.2, 3.3, -2.7);
