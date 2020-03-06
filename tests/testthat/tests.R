@@ -144,6 +144,9 @@ expect_gt(
 
 })
 
+
+
+
 test_that("Simulated data",{
 
 res =
@@ -174,6 +177,41 @@ expect_equal(
 res %>%
 	test_differential_composition() %>%
 	plot_polar()
+
+})
+
+test_that("censoring",{
+
+	res =
+		readRDS("dev/noiseless_mix.rds") %>%
+		mutate(alive = sample(c(0,1), n(), replace=T)) %>%
+		gather(transcript, count, -sample, -covariate_2, -alive) %>%
+		ARMET_tc(
+			count | cens(alive) ~ covariate_2,
+			sample,
+			transcript,
+			count,
+			do_regression = T,
+			iterations = 400,
+			sampling_iterations = 200,
+			family = "beta"
+		)
+
+	expect_equal(
+		res %>%
+			test_differential_composition() %>%
+			filter(significant) %>%
+			pull(`Cell type category`) %>%
+			unique %in%
+			c("b_cell" ,  "mast_cell" , "b_memory",   "eosinophil") %>%
+			all(),
+		TRUE
+	)
+
+	# Test plotting
+	res %>%
+		test_differential_composition() %>%
+		plot_polar()
 
 })
 

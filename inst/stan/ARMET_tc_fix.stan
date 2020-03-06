@@ -642,6 +642,31 @@ if(dim_4[1] > 0) {
 		// Calculate log prob
 		return (dirichlet_lpdf(p | softmax( to_vector(X * alpha_ ))  * exp(phi) + 1 ));
 	}
+
+real beta_regression_lpdf(vector[] p, matrix X, matrix alpha, real phi, int[] cens){
+
+		real lp = 0;
+		int N = num_elements(p[,1]);
+		matrix[num_elements(p[,1]), num_elements(p[1])] mu;
+		real phi_exp = exp(phi);
+
+		mu  = inv_logit(X * alpha);
+
+		for(j in 1:num_elements(p[1])) {
+
+			for (n in 1:N) {
+      	// special treatment of censored data
+      	if (cens[n] == 0) {
+      	 lp += beta_lpdf(p[n,j] | mu[n,j] * phi_exp, (1.0 - mu[n,j]) * phi_exp);
+      	} else if (cens[n] == 1) {
+      		lp += beta_lccdf(p[n,j] | mu[n,j] * phi_exp, (1.0 - mu[n,j]) * phi_exp);
+      	}
+    	}
+		}
+		return (lp);
+	}
+
+
 }
 data {
 	// shards
@@ -745,6 +770,10 @@ data {
 	matrix[Q,A] X;
 	int do_regression;
 
+	// Censoring
+	int fam_dirichlet;
+	int cens[Q];
+
 
 }
 transformed data{
@@ -823,12 +852,6 @@ parameters {
 
   // lv3
   matrix[A * (lv == 3) * do_regression,ct_in_levels[3]]  alpha_3; // Root
-
-  // matrix[A * (lv == 3) * do_regression,ct_in_nodes[3]]  alpha_b; // b cells
-  // matrix[A * (lv == 3) * do_regression,ct_in_nodes[4]]  alpha_c; // granulocyte
-  // matrix[A * (lv == 3) * do_regression,ct_in_nodes[5]]  alpha_d; // mono_derived
-  // matrix[A * (lv == 3) * do_regression,ct_in_nodes[6]]  alpha_e; // natural_killer
-  // matrix[A * (lv == 3) * do_regression,ct_in_nodes[7]]  alpha_f; // t_cell
 
 	// lv4
   matrix[A * (lv == 4) * do_regression,ct_in_nodes[8]]  alpha_g; // dendritic myeloid
@@ -928,7 +951,8 @@ model {
 	// lv 1
   if(lv == 1 && do_regression) {
 
-  	for(q in 1:Q) prop_1[q] ~ dirichlet_regression( X[q], alpha_1, phi[1] );
+  	if(fam_dirichlet) for(q in 1:Q) prop_1[q] ~ dirichlet_regression( X[q], alpha_1, phi[1] );
+  	else  prop_1 ~ beta_regression(X, alpha_1, phi[1], cens);
   	to_vector( alpha_1 ) ~ normal(0,1);
 
   }

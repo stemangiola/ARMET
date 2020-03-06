@@ -47,6 +47,7 @@ ARMET_tc = function(.data,
 										.sample = NULL,
 										.transcript = NULL,
 										.abundance = NULL,
+										family = "dirichlet",
 										reference = NULL,
 										approximate_posterior = F,
 										verbose =                           F,
@@ -73,6 +74,8 @@ ARMET_tc = function(.data,
 	.transcript = col_names$.transcript
 	.abundance = col_names$.abundance
 
+	# Check family
+	if(family %in% c("dirichlet", "beta") %>% any %>% `!`) stop("ARMET says: Please choose between dirichlet or beta families")
 
 	# distinct_at is not released yet for dplyr, thus we have to use this trick
 	df_for_edgeR <- .data %>%
@@ -87,7 +90,7 @@ ARMET_tc = function(.data,
 		select(!!.transcript,
 					 !!.sample,
 					 !!.abundance,
-					 one_of(parse_formula(.formula))) %>%
+					 one_of(parse_formula(.formula)$covariates)) %>%
 		distinct() %>%
 
 		# Check if data rectangular
@@ -100,16 +103,24 @@ ARMET_tc = function(.data,
 	# Create design matrix
 	X =
 		model.matrix(
-			object = .formula,
-			data = df_for_edgeR %>% select(!!.sample, one_of(parse_formula(.formula))) %>% distinct %>% arrange(!!.sample)
+			object = 	as.formula( paste("~",paste(terms(.formula) %>% attr("term.labels"), collapse = "+"))),
+			data = df_for_edgeR %>% select(!!.sample, one_of(parse_formula(.formula)$covariates)) %>% distinct %>% arrange(!!.sample)
 		)
+
+	# Censoring column
+	.cens_column = parse_formula(.formula)$response %>% grep("cens(", ., fixed = T, value = T) %>% str_split("\\|") %>% `[[` (1) %>% `[` (-1) %>% gsub("cens\\(|\\)| ", "", .)
+	if(length(.cens_column) == 1) cens = .data %>% select(!!.sample, .cens_column) %>% distinct %>% arrange(!!.sample) %>% pull(2)
+	else cens = NULL
+
+	# Error if censorting with Dirichlet
+	if(!is.null(cens) & family == "dirichlet") stop("ARMET says: Censoring is not abilitated with Dirichlet. Stats is not there yet :(")
 
 	mix =
 		.data %>%
 		select(!!.sample,
 					 !!.transcript,
 					 !!.abundance,
-					 one_of(parse_formula(.formula))) %>%
+					 one_of(parse_formula(.formula)$covariates)) %>%
 		distinct() %>%
 		spread(!!.transcript, !!.abundance)
 
@@ -207,8 +218,8 @@ ARMET_tc = function(.data,
 			tree %>%
 				data.tree::ToDataFrameTree("Cell type category", "C", "C1", "C2", "C3") %>%
 				as_tibble %>%
-				select(-1)
-
+				select(-1),
+			by = "Cell type category"
 		)	%>%
 		# Decrease the number of house keeping used
 		anti_join({
@@ -218,7 +229,9 @@ ARMET_tc = function(.data,
 
 			withr::with_seed(123, 	sample_frac(mdf, 0.5)) %>%
 				distinct(symbol)
-		})
+		},
+		by = "symbol"
+	)
 
 	prop_posterior = get_null_prop_posterior(ct_in_nodes)
 
@@ -235,7 +248,9 @@ ARMET_tc = function(.data,
 		iterations = iterations,
 		sampling_iterations = sampling_iterations,
 		X = X,
-		do_regression = do_regression
+		do_regression = do_regression,
+		family = family,
+		cens = cens
 	)
 
 	df1 = res1[[1]]
@@ -250,17 +265,17 @@ ARMET_tc = function(.data,
 		select(-.variable) %>%
 		mutate(.value_relative = .value)
 
-	if (do_regression && length(parse_formula(.formula)) >0 ) {
+	if (do_regression && length(parse_formula(.formula)$covariates) >0 ) {
 		alpha_1 =
 			fit1 %>%
 			tidybayes::gather_draws(`alpha_[1]`[A, C], regex = T) %>%
 			ungroup() %>%
 
 			# rebuild the last component sum-to-zero
-			rebuild_last_component_sum_to_zero %>%
+			ifelse_pipe(family == "dirichlet", ~ .x %>% rebuild_last_component_sum_to_zero) %>%
 
 			# Calculate relative 0 because of dirichlet relativity
-			get_relative_zero %>%
+			ifelse_pipe(family == "dirichlet", ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
 
 			arrange(.chain, .iteration, .draw,     A) %>%
 
@@ -339,7 +354,9 @@ ARMET_tc = function(.data,
 			iterations = iterations,
 			sampling_iterations = sampling_iterations,
 			X = X,
-			do_regression = do_regression
+			do_regression = do_regression,
+			family = family,
+			cens = cens
 		)
 
 		df2 = res2[[1]]
@@ -384,17 +401,17 @@ ARMET_tc = function(.data,
 					mutate(.value_relative = .value2) %>%
 					mutate(.value2 = ifelse(.value2 %>% is.na, .value, .value * .value2))
 
-				if (do_regression && length(parse_formula(.formula)) >0 ){
+				if (do_regression && length(parse_formula(.formula)$covariates) >0 ){
 					alpha_2 =
 						fit2 %>%
 						tidybayes::gather_draws(`alpha_[2]`[A, C], regex = T) %>%
 						ungroup() %>%
 
 						# rebuild the last component sum-to-zero
-						rebuild_last_component_sum_to_zero %>%
+						ifelse_pipe(family == "dirichlet", ~ .x %>% rebuild_last_component_sum_to_zero) %>%
 
 						# Calculate relative 0 because of dirichlet relativity
-						get_relative_zero %>%
+						ifelse_pipe(family == "dirichlet", ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
 
 						arrange(.chain, .iteration, .draw,     A) %>%
 
@@ -460,7 +477,9 @@ ARMET_tc = function(.data,
 			iterations = iterations,
 			sampling_iterations = sampling_iterations	,
 			X = X,
-			do_regression = do_regression
+			do_regression = do_regression,
+			family = family,
+			cens = cens
 		)
 
 		df3 = res3[[1]]
@@ -497,17 +516,17 @@ ARMET_tc = function(.data,
 					mutate(.value_relative = .value3) %>%
 					mutate(.value3 = ifelse(.value3 %>% is.na, .value2, .value2 * .value3))
 
-				if (do_regression && length(parse_formula(.formula)) >0 ){
+				if (do_regression && length(parse_formula(.formula)$covariates) >0 ){
 					alpha_3 =
 						fit3 %>%
 						tidybayes::gather_draws(`alpha_[3]`[A, C], regex = T) %>%
 						ungroup() %>%
 
 						# rebuild the last component sum-to-zero
-						rebuild_last_component_sum_to_zero %>%
+						ifelse_pipe(family == "dirichlet", ~ .x %>% rebuild_last_component_sum_to_zero) %>%
 
 						# Calculate relative 0 because of dirichlet relativity
-						get_relative_zero %>%
+						ifelse_pipe(family == "dirichlet", ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
 
 						arrange(.chain, .iteration, .draw,     A) %>%
 
@@ -565,7 +584,7 @@ ARMET_tc = function(.data,
 
 			# Attach alpha if regression
 			ifelse_pipe(
-				do_regression && length(parse_formula(.formula)) >0 ,
+				do_regression && length(parse_formula(.formula)$covariates) >0 ,
 				~ .x %>%
 					nest(proportions = -c(`Cell type category`, C, level)) %>%
 					left_join(
@@ -600,7 +619,9 @@ run_model = function(reference_filtered,
 										 iterations = 250,
 										 sampling_iterations = 100,
 										 X,
-										 do_regression) {
+										 do_regression,
+										 family = "dirichlet",
+										 cens) {
 	# Filter on level considered
 	reference_filtered = reference_filtered %>% filter(level %in% lv)
 
@@ -721,6 +742,10 @@ run_model = function(reference_filtered,
 
 
 	Sys.setenv("STAN_NUM_THREADS" = shards)
+
+	fam_dirichlet = family == "dirichlet"
+	if(cens %>% is.null) cens =  rep(0, y_source %>% distinct(Q) %>% nrow )
+
 
 	#if(lv == 3) browser()
 

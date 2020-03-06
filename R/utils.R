@@ -463,14 +463,17 @@ filter_reference = function(reference, mix, n_markers) {
 							group_by(symbol) %>%
 							arrange(level %>% desc) %>%
 							slice(1) %>%
-							ungroup
-					) %>%
+							ungroup,
+						by = c("level", "symbol")
+					),
 
-					# Print number of markewrs per comparison
-					{
-						(.) %>% distinct(symbol, ct1, ct2) %>% count(ct1, ct2) %>% print(n = 99)
-						(.)
-					},
+					# %>%
+					#
+					# # Print number of markewrs per comparison
+					# {
+					# 	(.) %>% distinct(symbol, ct1, ct2) %>% count(ct1, ct2) %>% print(n = 99)
+					# 	(.)
+					# },
 
 				# Get house keeping genes
 				(.) %>% filter(`house keeping`)
@@ -1451,7 +1454,7 @@ create_design_matrix = function(input.df, formula, sample_column){
 		object = formula,
 		data =
 			input.df %>%
-			select(!!sample_column, one_of(parse_formula(formula))) %>%
+			select(!!sample_column, one_of(parse_formula(formula)$covariates)) %>%
 			distinct %>% arrange(!!sample_column)
 
 	)
@@ -1466,10 +1469,16 @@ create_design_matrix = function(input.df, formula, sample_column){
 #'
 #'
 parse_formula <- function(fm) {
-	if (attr(terms(fm), "response") == 1)
-		stop("The formula must be of the kind \"~ covariates\" ")
-	else
-		as.character(attr(terms(fm), "variables"))[-1]
+	pars = as.character(attr(terms(fm), "variables"))[-1]
+
+	response = NULL
+	if(attr(terms(fm), "response") == 1) response = pars[1]
+	covariates = ifelse(attr(terms(fm), "response") == 1, pars[-1], pars)
+
+	list(
+		response = response,
+		covariates = covariates
+	)
 }
 
 rebuild_last_component_sum_to_zero = function(.){

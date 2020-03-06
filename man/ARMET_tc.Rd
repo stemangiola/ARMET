@@ -10,6 +10,7 @@ ARMET_tc(
   .sample = NULL,
   .transcript = NULL,
   .abundance = NULL,
+  family = "dirichlet",
   reference = NULL,
   approximate_posterior = F,
   verbose = F,
