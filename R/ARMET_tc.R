@@ -774,7 +774,7 @@ run_model = function(reference_filtered,
 			 		save_warmup = FALSE
 			 	) %>%
 			 		{
-			 			(.)  %>% rstan::summary() %$% summary %>% as_tibble(rownames = "par") %>% arrange(Rhat %>% desc) %>% print
+			 			(.)  %>% rstan::summary() %$% summary %>% as_tibble(rownames = "par") %>% arrange(Rhat %>% desc) %>% filter(Rhat > 1.5) %>% ifelse_pipe(nrow(.) > 0, ~ .x %>% print)
 			 			(.)
 			 		},
 
