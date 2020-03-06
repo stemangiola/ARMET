@@ -643,7 +643,7 @@ if(dim_4[1] > 0) {
 		return (dirichlet_lpdf(p | softmax( to_vector(X * alpha_ ))  * exp(phi) + 1 ));
 	}
 
-real beta_regression_lpdf(vector[] p, matrix X, matrix alpha, real phi, int[] cens){
+real beta_regression_lpdf(vector[] p, matrix X, matrix alpha, real phi){
 
 		real lp = 0;
 		int N = num_elements(p[,1]);
@@ -654,14 +654,8 @@ real beta_regression_lpdf(vector[] p, matrix X, matrix alpha, real phi, int[] ce
 
 		for(j in 1:num_elements(p[1])) {
 
-			for (n in 1:N) {
-      	// special treatment of censored data
-      	if (cens[n] == 0) {
-      	 lp += beta_lpdf(p[n,j] | mu[n,j] * phi_exp, (1.0 - mu[n,j]) * phi_exp);
-      	} else if (cens[n] == 1) {
-      		lp += beta_lccdf(p[n,j] | mu[n,j] * phi_exp, (1.0 - mu[n,j]) * phi_exp);
-      	}
-    	}
+      	 lp += beta_lpdf(p[,j] | mu[,j] * phi_exp, (1.0 - mu[,j]) * phi_exp);
+
 		}
 		return (lp);
 	}
@@ -772,7 +766,8 @@ data {
 
 	// Censoring
 	int fam_dirichlet;
-	int cens[Q];
+	vector[Q] cens;
+	int is_cens;
 
 
 }
@@ -865,12 +860,20 @@ parameters {
 	vector<lower=0, upper = log(max(counts_linear))>[max(size_G_linear_MPI)/ct_in_levels[lv]] lambda_UFO[shards];
 	real<lower=0, upper=0.5> prop_UFO;
 
+	// Censoring
+	vector<lower=0>[Q * is_cens] unseen;
+	real<lower=0> mu_unseen;
+	real<lower=0> sigma_unseen;
+
 }
 transformed parameters{
 
 	vector[ct_in_levels[2]] prop_2[Q * (lv >= 2)];
 	vector[ct_in_levels[3]] prop_3[Q * (lv >= 3)];
 	vector[ct_in_levels[4]] prop_4[Q * (lv >= 4)];
+
+	matrix[Q,A] X_ = X;
+	if(is_cens) X_[,2] = X_[,2] + ( unseen .* cens );
 
 	// proportion of level 2
 	if(lv >= 2)
@@ -951,8 +954,8 @@ model {
 	// lv 1
   if(lv == 1 && do_regression) {
 
-  	if(fam_dirichlet) for(q in 1:Q) prop_1[q] ~ dirichlet_regression( X[q], alpha_1, phi[1] );
-  	else  prop_1 ~ beta_regression(X, alpha_1, phi[1], cens);
+  	if(fam_dirichlet) for(q in 1:Q) prop_1[q] ~ dirichlet_regression( X_[q], alpha_1, phi[1] );
+  	else  prop_1 ~ beta_regression(X_, alpha_1, phi[1]);
   	to_vector( alpha_1 ) ~ normal(0,1);
 
   }
@@ -962,8 +965,8 @@ model {
 	// lv 2
   if(lv == 2 && do_regression) {
 
-  	if(fam_dirichlet) for(q in 1:Q) prop_2[q] ~ dirichlet_regression( X[q], alpha_2, phi[2] );
-  	else  prop_2 ~ beta_regression(X, alpha_2, phi[2], cens);
+  	if(fam_dirichlet) for(q in 1:Q) prop_2[q] ~ dirichlet_regression( X_[q], alpha_2, phi[2] );
+  	else  prop_2 ~ beta_regression(X_, alpha_2, phi[2]);
   	to_vector( alpha_2 ) ~ normal(0,1);
 
   }
@@ -973,8 +976,8 @@ model {
 	// lv 3
   if(lv == 3 && do_regression){
 
-  	if(fam_dirichlet) for(q in 1:Q) prop_3[q] ~ dirichlet_regression( X[q], alpha_3, phi[3] );
-  	 else  prop_3 ~ beta_regression(X, alpha_3, phi[3], cens);
+  	if(fam_dirichlet) for(q in 1:Q) prop_3[q] ~ dirichlet_regression( X_[q], alpha_3, phi[3] );
+  	 else  prop_3 ~ beta_regression(X_, alpha_3, phi[3]);
   	to_vector( alpha_3 ) ~ normal(0,1);
 
   }
@@ -1030,4 +1033,11 @@ model {
 	for(i in 1:shards) lambda_UFO[i] ~ skew_normal(6.2, 3.3, -2.7);
 	prop_UFO ~ beta(1.001, 20);
 
+	// Censoring
+	if(is_cens){
+		for(q in 1:Q) if(cens[q] == 0) X[q,2] ~ gamma(mu_unseen, sigma_unseen);
+		X[,2] + unseen ~ gamma(mu_unseen, sigma_unseen);
+	}
+		mu_unseen ~ normal(0,2);
+		sigma_unseen ~ normal(0,2);
 }

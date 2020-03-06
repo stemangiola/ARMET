@@ -745,7 +745,7 @@ run_model = function(reference_filtered,
 
 	fam_dirichlet = family == "dirichlet"
 	if(cens %>% is.null) cens =  rep(0, y_source %>% distinct(Q) %>% nrow )
-
+	is_cens = !is.null(cens)
 
 	#if(lv == 3) browser()
 
