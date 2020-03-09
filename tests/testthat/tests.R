@@ -187,7 +187,7 @@ test_that("censoring",{
 		mutate(alive = sample(c(0,1), n(), replace=T)) %>%
 		gather(transcript, count, -sample, -covariate_2, -alive) %>%
 		ARMET_tc(
-			count | cens(alive) ~ covariate_2,
+			 ~ censored(covariate_2, alive),
 			sample,
 			transcript,
 			count,

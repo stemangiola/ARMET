@@ -77,6 +77,11 @@ ARMET_tc = function(.data,
 	# Check family
 	if(family %in% c("dirichlet", "beta") %>% any %>% `!`) stop("ARMET says: Please choose between dirichlet or beta families")
 
+	# Covariate column
+	cov_columns =
+		parse_formula(.formula)$covariates %>%
+		map_chr(~ .x %>% gsub("censored\\(|\\)| ", "", .) %>% str_split("\\,") %>% `[[` (1) %>% `[` (1))
+
 	# distinct_at is not released yet for dplyr, thus we have to use this trick
 	df_for_edgeR <- .data %>%
 
@@ -90,7 +95,7 @@ ARMET_tc = function(.data,
 		select(!!.transcript,
 					 !!.sample,
 					 !!.abundance,
-					 one_of(parse_formula(.formula)$covariates)) %>%
+					 one_of(cov_columns)) %>%
 		distinct() %>%
 
 		# Check if data rectangular
@@ -103,12 +108,12 @@ ARMET_tc = function(.data,
 	# Create design matrix
 	X =
 		model.matrix(
-			object = 	as.formula( paste("~",paste(terms(.formula) %>% attr("term.labels"), collapse = "+"))),
-			data = df_for_edgeR %>% select(!!.sample, one_of(parse_formula(.formula)$covariates)) %>% distinct %>% arrange(!!.sample)
+			object = 	as.formula( paste("~",paste(cov_columns, collapse = "+"))),
+			data = df_for_edgeR %>% select(!!.sample, one_of(cov_columns)) %>% distinct %>% arrange(!!.sample)
 		)
 
 	# Censoring column
-	.cens_column = parse_formula(.formula)$response %>% grep("cens(", ., fixed = T, value = T) %>% str_split("\\|") %>% `[[` (1) %>% `[` (-1) %>% gsub("cens\\(|\\)| ", "", .)
+	.cens_column = parse_formula(.formula)$covariates %>% grep("censored(", ., fixed = T, value = T)  %>% gsub("censored\\(|\\)| ", "", .) %>% str_split("\\,") %>% ifelse_pipe(length(.)>0, ~.x %>% `[[` (1) %>% `[` (-1), ~NULL)
 	if(length(.cens_column) == 1) cens = .data %>% select(!!.sample, .cens_column) %>% distinct %>% arrange(!!.sample) %>% pull(2)
 	else cens = NULL
 
