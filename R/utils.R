@@ -271,7 +271,7 @@ plot_differences_in_lambda = function() {
 			tidybayes::median_qi() %>%
 			left_join(
 				counts_baseline %>%
-					distinct(`symbol`, G, `Cell type category`)
+					distinct(symbol, G, `Cell type category`)
 			) %>%
 			left_join(
 				reference_filtered %>%
@@ -832,6 +832,7 @@ get_MPI_df = function(counts_baseline_to_linear,
 											counts_baseline,
 											shards_in_levels,
 											lv) {
+  
 	list(
 		counts_idx_lv_MPI =
 			counts_baseline_to_linear %>%
@@ -1013,7 +1014,7 @@ ref_mix_format = function(ref, mix) {
 		# Add marker symbol indeces
 		left_join((.) %>%
 								filter(!`house keeping`) %>%
-								distinct(`symbol`) %>%
+								distinct(symbol) %>%
 								mutate(M = 1:n())) %>%
 
 		# Add sample indeces
@@ -1023,7 +1024,7 @@ ref_mix_format = function(ref, mix) {
 		# Add query samples indeces
 		left_join((.) %>%
 								filter(`query`) %>%
-								distinct(`sample`) %>%
+								distinct(sample) %>%
 								mutate(Q = 1:n())) %>%
 
 		# Add house keeping into Cell type label
@@ -1101,36 +1102,34 @@ draws_to_alphas = function(.data, pars) {
 	.data %>%
 		tidybayes::gather_draws(`prop_[1,a-z]`[Q, C], regex = T) %>%
 		ungroup() %>%
-		{
-			print((.))
-			(.)
-		} %>%
+		# {
+		# 	print((.))
+		# 	(.)
+		# } %>%
 		filter(.variable %in% pars) %>%
-		{
-			print((.))
-			(.)
-		} %>%
+		# {
+		# 	print((.))
+		# 	(.)
+		# } %>%
 		nest(data = -c(.variable, Q)) %>%
 		mutate(
 			alphas = map(
 				data,
 				~
 					.x %>%
-					spread(C, .value) %>%
+				  drop_na() %>%
+				  spread(C, .value) %>%
 					select(-c(1:3)) %>%
 					as_matrix() %>%
 					sirt::dirichlet.mle() %$%
 					alpha %>%
 					as_tibble() %>%
 					rename(alpha = value) %>%
-					mutate(C = 1:n())
+					mutate(C = 1:n()) %>%
+				  spread(C, alpha)
 			)
 		) %>%
-		select(-data) %>%
-		unnest(cols = alphas) %>%
-		spread(C, alpha) %>%
-		select(-Q) %>%
-		nest(alphas = -.variable) %>%
+		select(-data, -Q) %>%
 		pull(alphas)
 }
 
@@ -1558,7 +1557,7 @@ eliminate_sparse_transcripts = function(.data, .transcript){
 	warning("Some transcripts have been omitted from the analysis because not present in every sample.")
 
 	.data %>%
-		add_count(!!.transcript, name = "my_n") %>%
+		add_count(symbol, name = "my_n") %>%
 		filter(my_n == max(my_n)) %>%
 		select(-my_n)
 }

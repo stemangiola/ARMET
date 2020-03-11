@@ -75,9 +75,12 @@ ARMET_tc = function(.data,
 	.sample = col_names$.sample
 	.transcript = col_names$.transcript
 	.abundance = col_names$.abundance
+	
+	# Rename columns mix
+	.data = .data %>% rename( sample = !!.sample, symbol = !!.transcript ,  count = !!.abundance)
 
 	# Checkif count is integer
-	if(.data %>% select(!!.abundance) %>% lapply(class) %>% unlist() %>% equals("integer") %>% `!`)
+	if(.data %>% select(count) %>% lapply(class) %>% unlist() %>% equals("integer") %>% `!`)
 		stop(sprintf("ARMET says: the %s column must be integer as the deconvolution model is Negative Binomial", quo_name(.abundance)))
 
 	# Check family
@@ -96,23 +99,23 @@ ARMET_tc = function(.data,
 	df_for_edgeR <- .data %>%
 
 		# Stop if any counts is NA
-		error_if_counts_is_na(!!.abundance) %>%
+		error_if_counts_is_na(count) %>%
 
 		# Stop if there are duplicated transcripts
-		error_if_duplicated_genes(!!.sample,!!.transcript,!!.abundance) %>%
+		error_if_duplicated_genes(sample,symbol,count) %>%
 
 		# Prepare the data frame
-		select(!!.transcript,
-					 !!.sample,
-					 !!.abundance,
+		select(symbol,
+					 sample,
+					 count,
 					 one_of(cov_columns)) %>%
 		distinct() %>%
 
 		# Check if data rectangular
 		ifelse_pipe(
-			(.) %>% check_if_data_rectangular(!!.sample,!!.transcript,!!.abundance, type = "soft") %>% `!` &
+			(.) %>% check_if_data_rectangular(sample,symbol,count, type = "soft") %>% `!` &
 				TRUE, #!fill_missing_values,
-			~ .x %>% eliminate_sparse_transcripts(!!.transcript)
+			~ .x %>% eliminate_sparse_transcripts(symbol)
 		)
 
 	# Create design matrix
@@ -122,22 +125,22 @@ ARMET_tc = function(.data,
 	X =
 		model.matrix(
 			object = 	my_formula,
-			data = df_for_edgeR %>% select(!!.sample, one_of(cov_columns)) %>% distinct %>% arrange(!!.sample)
+			data = df_for_edgeR %>% select(sample, one_of(cov_columns)) %>% distinct %>% arrange(sample)
 		)
 
 	# Censoring column
 	.cens_column = parse_formula(.formula)$covariates %>% grep("censored(", ., fixed = T, value = T)  %>% gsub("censored\\(|\\)| ", "", .) %>% str_split("\\,") %>% ifelse_pipe(length(.)>0, ~.x %>% `[[` (1) %>% `[` (-1), ~NULL)
-	if(length(.cens_column) == 1) cens = .data %>% select(!!.sample, .cens_column) %>% distinct %>% arrange(!!.sample) %>% pull(2)
+	if(length(.cens_column) == 1) cens = .data %>% select(sample, .cens_column) %>% distinct %>% arrange(sample) %>% pull(2)
 	else cens = NULL
 
 	mix =
 		.data %>%
-		select(!!.sample,
-					 !!.transcript,
-					 !!.abundance,
+		select(sample,
+					 symbol,
+					 count,
 					 one_of(parse_formula(.formula)$covariates)) %>%
 		distinct() %>%
-		spread(!!.transcript, !!.abundance)
+		spread(symbol, count)
 
 	shards = cores #* 2
 	is_level_in = shards %>% `>` (0) %>% as.integer
@@ -211,7 +214,7 @@ ARMET_tc = function(.data,
 
 
 	# Print overlap descriptive stats
-	#get_overlap_descriptive_stats(mix %>% slice(1) %>% gather(`symbol`, `read count`, -sample), reference)
+	#get_overlap_descriptive_stats(mix %>% slice(1) %>% gather(symbol, count, -sample), reference)
 
 	# Prepare data frames -
 	# For Q query first
@@ -500,6 +503,8 @@ ARMET_tc = function(.data,
 		df3 = res3[[1]]
 		fit3 = res3[[2]]
 
+		prop_posterior[3: (2+length(c("b", "c", "d", "e", "f")))] = fit3 %>% draws_to_alphas(sprintf("prop_%s", c("b", "c", "d", "e", "f"))) 
+		
 		draws_3 =
 			draws_2 %>%
 			left_join(
@@ -617,7 +622,7 @@ ARMET_tc = function(.data,
 	  fit4 = res4[[2]]
 	  
 	  draws_4 =
-	    draws_2 %>%
+	    draws_3 %>%
 	    left_join(
 	      fit4 %>%
 	        ######## ALTERED WITH TREE
@@ -629,7 +634,7 @@ ARMET_tc = function(.data,
 	          ######## ALTERED WITH TREE
 	          tibble(
 	            .variable = c("prop_g", "prop_h", "prop_i", "prop_l", "prop_m"),
-	            C2 = parents_lv4
+	            C3 = parents_lv4
 	          )
 	          #########################
 	        ) %>%
@@ -771,7 +776,7 @@ run_model = function(reference_filtered,
 		format_for_MPI(shards)
 
 	S = counts_baseline %>% distinct(sample) %>% nrow()
-	N = counts_baseline %>% distinct(idx_MPI, `read count`, `read count MPI row`) %>%  count(idx_MPI) %>% summarise(max(n)) %>% pull(1)
+	N = counts_baseline %>% distinct(idx_MPI, count, `read count MPI row`) %>%  count(idx_MPI) %>% summarise(max(n)) %>% pull(1)
 	M = counts_baseline %>% distinct(start, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
 
 	lambda_log = 	  counts_baseline %>% filter(!query) %>% distinct(G, lambda_log) %>% arrange(G) %>% pull(lambda_log)
@@ -780,10 +785,10 @@ run_model = function(reference_filtered,
 	y_source =
 		df %>%
 		filter(`query` & !`house keeping`) %>%
-		select(S, Q, `symbol`, `read count`, GM, sample) %>%
+		select(S, Q, symbol, count, GM, sample) %>%
 		left_join(
 			df %>% filter(!query) %>% distinct(
-				`symbol`,
+				symbol,
 				G,
 				`Cell type category`,
 				level,
@@ -803,7 +808,7 @@ run_model = function(reference_filtered,
 		mutate(counts_idx = 1:n()) %>%
 		mutate(S = S %>% as.factor %>% as.integer)
 
-	counts_linear = counts_baseline_to_linear %>%  pull(`read count`)
+	counts_linear = counts_baseline_to_linear %>%  pull(count)
 	G_to_counts_linear = counts_baseline_to_linear %>% pull(G)
 	G_linear = G_to_counts_linear
 	S_linear = counts_baseline_to_linear %>% pull(S)
@@ -824,10 +829,10 @@ run_model = function(reference_filtered,
 	G_lv = G_lv_linear %>% length
 
 	# Observed mix counts
-	y_linear_lv = y_source %>% filter(level == lv) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
+	y_linear_lv = y_source %>% filter(level == lv) %>% distinct(GM, Q, S, count) %>% arrange(GM, Q) %>% pull(count)
 
 	# Observed mix samples indexes
-	y_linear_S_lv = y_source %>% filter(level == lv) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
+	y_linear_S_lv = y_source %>% filter(level == lv) %>% distinct(GM, Q, S, count) %>% arrange(GM, Q) %>% pull(S)
 
 	# Lengths indexes
 	Y_lv = y_linear_lv %>% length
@@ -875,8 +880,9 @@ run_model = function(reference_filtered,
 	Sys.setenv("STAN_NUM_THREADS" = shards)
 
 	fam_dirichlet = family == "dirichlet"
-	if(cens %>% is.null) cens =  rep(0, y_source %>% distinct(Q) %>% nrow )
 	is_cens = !is.null(cens)
+	if(cens %>% is.null) cens =  rep(0, y_source %>% distinct(Q) %>% nrow ) %>% as.array()
+	
 
 	#if(lv == 3) browser()
 
