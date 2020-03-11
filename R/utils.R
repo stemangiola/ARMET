@@ -181,7 +181,7 @@ get_MPI_deconv = function(y_source, shards, my_level, tree) {
 
 	y_MPI_source =
 		y_source %>%
-		distinct(level, Q, S, symbol, G, GM, `Cell type category`, `read count`) %>%
+		distinct(level, Q, S, symbol, G, GM, `Cell type category`, count) %>%
 		filter(level == my_level)  %>%
 
 		# Add universal cell type rank
@@ -242,7 +242,7 @@ get_MPI_deconv = function(y_source, shards, my_level, tree) {
 
 		y_MPI_N_per_shard =
 			y_MPI_source %>%
-			distinct(MPI_row, `read count`, partition, Q) %>%
+			distinct(MPI_row, count, partition, Q) %>%
 			count(partition) %>%
 			add_empty_shards %>%
 			spread(partition, n) %>%
@@ -250,8 +250,8 @@ get_MPI_deconv = function(y_source, shards, my_level, tree) {
 
 		y_MPI_count =
 			y_MPI_source %>%
-			distinct(MPI_row, `read count`, partition, Q) %>%
-			spread(partition, `read count`) %>%
+			distinct(MPI_row, count, partition, Q) %>%
+			spread(partition, count) %>%
 			arrange(MPI_row, Q) %>%
 			select(-MPI_row,-Q) %>%
 			replace(is.na(.), 0 %>% as.integer) %>%
@@ -347,7 +347,7 @@ plot_counts_inferred_sum = function(fit_obj, samples = NULL) {
 		as_tibble(rownames = "par") %>% select(par, `2.5%`, `50%`, `97.5%`) %>%
 		separate(par, c(".variable", "Q", "GM"), sep = "\\[|,|\\]") %>%
 		mutate(Q = Q %>% as.integer, GM = GM %>% as.integer) %>%
-		left_join(fit_obj %$% data_source %>% distinct(Q, GM, symbol, `read count`, sample)) %>%
+		left_join(fit_obj %$% data_source %>% distinct(Q, GM, symbol, count, sample)) %>%
 
 		# Select samples
 		{
@@ -359,10 +359,10 @@ plot_counts_inferred_sum = function(fit_obj, samples = NULL) {
 
 		# Check if inside
 		rowwise %>%
-		mutate(inside = between(`read count`, `2.5%`, `97.5%`)) %>%
+		mutate(inside = between(count, `2.5%`, `97.5%`)) %>%
 		ungroup %>%
 		ggplot(aes(
-			x = `read count` + 1,
+			x = count + 1,
 			y = `50%` + 1,
 			color = inside,
 			label = symbol
@@ -816,7 +816,7 @@ parse_baseline = function(.data, shards_in_levels, lv) {
 			symbol,
 			`Cell type category`,
 			level,
-			`read count`,
+			count,
 			counts_idx,
 			G,
 			GM,
@@ -922,11 +922,11 @@ get_MPI_df = function(counts_baseline_to_linear,
 		y_linear_MPI =
 			y_source %>%
 			filter(level == lv) %>%
-			distinct(GM, Q, S, `read count`, level) %>%
+			distinct(GM, Q, S, count, level) %>%
 			left_join(tibble(level = lv, shards = shards_in_levels)) %>%
 			format_for_MPI_from_linear_GM() %>%
-			distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
-			spread(idx_MPI,  `read count`) %>%
+			distinct(idx_MPI, count, `read count MPI row`)  %>%
+			spread(idx_MPI,  count) %>%
 			select(-`read count MPI row`) %>%
 			replace(is.na(.), -999 %>% as.integer) %>%
 			as_matrix() %>% t %>% 		as.data.frame,
@@ -934,10 +934,10 @@ get_MPI_df = function(counts_baseline_to_linear,
 		size_y_linear_MPI =
 			y_source %>%
 			filter(level == lv) %>%
-			distinct(GM, Q, S, `read count`, level) %>%
+			distinct(GM, Q, S, count, level) %>%
 			left_join(tibble(level = lv, shards = shards_in_levels)) %>%
 			format_for_MPI_from_linear_GM() %>%
-			distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
+			distinct(idx_MPI, count, `read count MPI row`)  %>%
 			count(idx_MPI) %>%
 			pull(n) %>%
 			ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array,
@@ -945,7 +945,7 @@ get_MPI_df = function(counts_baseline_to_linear,
 		y_linear_S_MPI =
 			y_source %>%
 			filter(level == lv) %>%
-			distinct(GM, Q, S, `read count`, level) %>%
+			distinct(GM, Q, S, count, level) %>%
 			left_join(tibble(level = lv, shards = shards_in_levels)) %>%
 			format_for_MPI_from_linear_GM() %>%
 			distinct(idx_MPI, S, `read count MPI row`)  %>%
@@ -957,7 +957,7 @@ get_MPI_df = function(counts_baseline_to_linear,
 		size_y_linear_S_MPI =
 			y_source %>%
 			filter(level == lv) %>%
-			distinct(GM, Q, S, `read count`, level) %>%
+			distinct(GM, Q, S, count, level) %>%
 			left_join(tibble(level = lv, shards = shards_in_levels)) %>%
 			format_for_MPI_from_linear_GM() %>%
 			distinct(idx_MPI, S, `read count MPI row`)  %>%
@@ -1004,7 +1004,7 @@ ref_mix_format = function(ref, mix) {
 		# Get reference based on mix genes
 		ref %>% mutate(`query` = FALSE),
 		mix %>%
-			gather(`symbol`, `read count`,-sample) %>%
+			gather(`symbol`, count,-sample) %>%
 			inner_join(ref %>% distinct(symbol)) %>%
 			left_join(ref %>% distinct(symbol, `house keeping`)) %>%
 			mutate(`Cell type category` = "query") %>%

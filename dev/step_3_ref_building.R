@@ -405,42 +405,42 @@ get_input_data = function(markers, reps, pass){
 #
 # mix_base = readRDS("dev/mix_base.RDS")
 # my_ref = 	mix_base %>% distinct(sample, `Cell type category`, level) %>% ungroup() %>% mutate_if(is.character, as.factor) %>% mutate(level = level %>% as.integer)
-#
+# 
 # set.seed(123)
-#
+# 
 # get_mix_source = function(cl){
 # 	{
-#
+# 
 # 		# This function goes thought nodes and grubs names of the cluster
 # 		gn = function(node) {
 # 			if(length(node$children) > 0) {
-#
+# 
 # 				result =
-#
+# 
 # 					# Get cildren names
 # 					#tibble(parent = node$name, children = foreach(cc = node$children, .combine = c) %do% {cc$name}) %>%
 # 					foreach(cc = node$children, .combine = c) %do% {cc$name} %>%
-#
+# 
 # 					#create cmbinations
 # 					combn(m = 2) %>%
 # 					t %>%
 # 					as_tibble %>%
 # 					mutate(parent = node$name, level = node$level )
-#
+# 
 # 				# Merge results with other nodes
 # 				result %<>%
 # 					bind_rows(
 # 						foreach(nc = node$children, .combine = bind_rows) %do% {gn(nc)}
 # 					)
-#
+# 
 # 				return (result)
 # 			}
 # 		}
-#
+# 
 # 		gn(Clone(tree))
 # 	} %>%
 # 		mutate(`#` = 1:n()) %>%
-#
+# 
 # 		# Make more runs
 # 		right_join(
 # 			tibble(`#` = (1: ((.) %>% nrow)) %>% rep(reps))  %>%
@@ -452,9 +452,9 @@ get_input_data = function(markers, reps, pass){
 # 		#group_by(run) %>%
 # 		do({
 # 			`%>%` = magrittr::`%>%`
-#
+# 
 # 			cc = (.)
-#
+# 
 # 			dplyr::bind_rows(
 # 				my_ref %>%
 # 					dplyr::filter(`Cell type category` == (cc %>% dplyr::pull(V1)) & level == (cc %>% dplyr::pull(level))) %>%
@@ -470,10 +470,10 @@ get_input_data = function(markers, reps, pass){
 # 		}) %>%
 # 		collect() %>%
 # 		ungroup() %>%
-#
+# 
 # 		# Again solving the problem with house keeping genes
 # 		left_join(mix_base  %>% distinct(`symbol`, `count scaled bayes`, `Cell type category`, sample, level, `house keeping`))  %>%
-#
+# 
 # 		# Add mix_sample
 # 		left_join({
 # 			(.) %>%
@@ -491,19 +491,19 @@ get_input_data = function(markers, reps, pass){
 # 				ungroup() %>%
 # 				distinct(symbol, run, level, pair, sample_mix,  `count mix`)
 # 		}) %>%
-#
+# 
 # 		# Eliminate duplicated of difference levels for example house keepng genes
 # 		group_by(run, symbol, sample) %>%
 # 		arrange(level) %>%
 # 		slice(1) %>%
 # 		ungroup %>%
-#
+# 
 # 		# Decrease size
 # 		mutate_if(is.character, as.factor)
 # }
-#
+# 
 # mix_source = get_mix_source(cl)
-#
+# 
 # saveRDS(mix_source, file="dev/mix_source_30_reps.rds")
 
 # (xx %>%
@@ -562,7 +562,7 @@ do_iterate = function(mix_source, n_mark_df, full_bayesian, levels, iteration, o
 		result %$%
 		proportions %>%
 		mutate(iteration = iteration) %>%
-		separate(sample, c("run", "pair"), sep="_", extra="merge") %>%
+		separate(sample_mix, c("run", "pair"), sep="_", extra="merge") %>%
 		separate(pair, c("ct1", "ct2"), sep=" ") %>%
 		#filter(`Cell type category` == ct1 | `Cell type category` == ct2) %>%
 		mutate(truth = ifelse(`Cell type category` == ct1 | `Cell type category` == ct2, 0.5, 0)) %>%
@@ -640,7 +640,7 @@ do_iterate = function(mix_source, n_mark_df, full_bayesian, levels, iteration, o
 		)
 
 }
-#debugonce(do_iterate)
+debugonce(do_iterate)
 
 do_iterate(mix_source, n_mark_df, full_bayesian, levels, iteration, out_dir)
 
