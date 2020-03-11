@@ -642,25 +642,6 @@ if(dim_4[1] > 0) {
 		// Calculate log prob
 		return (dirichlet_lpdf(p | softmax( to_vector(X * alpha_ ))  * exp(phi) + 1 ));
 	}
-
-real beta_regression_lpdf(vector[] p, matrix X, matrix alpha, real phi){
-
-		real lp = 0;
-		int N = num_elements(p[,1]);
-		matrix[num_elements(p[,1]), num_elements(p[1])] mu;
-		real phi_exp = exp(phi);
-
-		mu  = inv_logit(X * alpha);
-
-		for(j in 1:num_elements(p[1])) {
-
-      	 lp += beta_lpdf(p[,j] | mu[,j] * phi_exp, (1.0 - mu[,j]) * phi_exp);
-
-		}
-		return (lp);
-	}
-
-
 }
 data {
 	// shards
@@ -764,11 +745,6 @@ data {
 	matrix[Q,A] X;
 	int do_regression;
 
-	// Censoring
-	int fam_dirichlet;
-	vector[Q] cens;
-	int is_cens;
-
 
 }
 transformed data{
@@ -834,19 +810,23 @@ parameters {
 	// lv4
   simplex[ct_in_nodes[8]]  prop_g[Q * (lv >= 4)]; // dendritic myeloid childrens
   simplex[ct_in_nodes[9]]  prop_h[Q * (lv >= 4)]; // macrophage childrens
-  simplex[ct_in_nodes[10]] prop_i[Q * (lv >= 4)]; // CD4 childrens
-  simplex[ct_in_nodes[11]] prop_l[Q * (lv >= 4)]; // CD8 childrens
+  simplex[ct_in_nodes[10]] prop_i[Q * (lv >= 4)]; // nk primed
+  simplex[ct_in_nodes[11]] prop_l[Q * (lv >= 4)]; // CD4 childrens
+  simplex[ct_in_nodes[12]] prop_m[Q * (lv >= 4)]; // CD8 childrens
 
 	// Dirichlet regression
   // lv1
   matrix[A * (lv == 1) * do_regression,ct_in_nodes[1]]  alpha_1; // Root
 
   // lv2
-   matrix[A * (lv == 2) * do_regression,ct_in_levels[2]]  alpha_2; // Root
-  //matrix[A * (lv == 2) * do_regression,ct_in_nodes[2]]  alpha_a; // Immune cells
+  matrix[A * (lv == 2) * do_regression,ct_in_nodes[2]]  alpha_a; // Immune cells
 
   // lv3
-  matrix[A * (lv == 3) * do_regression,ct_in_levels[3]]  alpha_3; // Root
+  matrix[A * (lv == 3) * do_regression,ct_in_nodes[3]]  alpha_b; // b cells
+  matrix[A * (lv == 3) * do_regression,ct_in_nodes[4]]  alpha_c; // granulocyte
+  matrix[A * (lv == 3) * do_regression,ct_in_nodes[5]]  alpha_d; // mono_derived
+  matrix[A * (lv == 3) * do_regression,ct_in_nodes[6]]  alpha_e; // natural_killer
+  matrix[A * (lv == 3) * do_regression,ct_in_nodes[7]]  alpha_f; // t_cell
 
 	// lv4
   matrix[A * (lv == 4) * do_regression,ct_in_nodes[8]]  alpha_g; // dendritic myeloid
@@ -860,20 +840,12 @@ parameters {
 	vector<lower=0, upper = log(max(counts_linear))>[max(size_G_linear_MPI)/ct_in_levels[lv]] lambda_UFO[shards];
 	real<lower=0, upper=0.5> prop_UFO;
 
-	// Censoring
-	vector<lower=0>[Q * is_cens] unseen;
-	real<lower=0> mu_unseen;
-	real<lower=0> sigma_unseen;
-
 }
 transformed parameters{
 
 	vector[ct_in_levels[2]] prop_2[Q * (lv >= 2)];
 	vector[ct_in_levels[3]] prop_3[Q * (lv >= 3)];
 	vector[ct_in_levels[4]] prop_4[Q * (lv >= 4)];
-
-	matrix[Q,A] X_ = X;
-	if(is_cens) X_[,2] = X_[,2] + ( unseen .* cens );
 
 	// proportion of level 2
 	if(lv >= 2)
@@ -954,8 +926,7 @@ model {
 	// lv 1
   if(lv == 1 && do_regression) {
 
-  	if(fam_dirichlet) for(q in 1:Q) prop_1[q] ~ dirichlet_regression( X_[q], alpha_1, phi[1] );
-  	else  prop_1 ~ beta_regression(X_, alpha_1, phi[1]);
+  	for(q in 1:Q) prop_1[q] ~ dirichlet_regression( X[q], alpha_1, phi[1] );
   	to_vector( alpha_1 ) ~ normal(0,1);
 
   }
@@ -965,9 +936,8 @@ model {
 	// lv 2
   if(lv == 2 && do_regression) {
 
-  	if(fam_dirichlet) for(q in 1:Q) prop_2[q] ~ dirichlet_regression( X_[q], alpha_2, phi[2] );
-  	else  prop_2 ~ beta_regression(X_, alpha_2, phi[2]);
-  	to_vector( alpha_2 ) ~ normal(0,1);
+  	for(q in 1:Q) prop_a[q] ~ dirichlet_regression( X[q], alpha_a, phi[2] );
+  	to_vector( alpha_a ) ~ normal(0,1);
 
   }
 	if(lv == 2 && !do_regression) for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | rep_vector(1, num_elements(prop_a[1])));
@@ -976,9 +946,20 @@ model {
 	// lv 3
   if(lv == 3 && do_regression){
 
-  	if(fam_dirichlet) for(q in 1:Q) prop_3[q] ~ dirichlet_regression( X_[q], alpha_3, phi[3] );
-  	 else  prop_3 ~ beta_regression(X_, alpha_3, phi[3]);
-  	to_vector( alpha_3 ) ~ normal(0,1);
+  	for(q in 1:Q) prop_b[q] ~ dirichlet_regression( X[q], alpha_b, phi[3] );
+  	to_vector( alpha_b ) ~ normal(0,1);
+
+  	for(q in 1:Q) prop_c[q] ~ dirichlet_regression( X[q], alpha_c, phi[4] );
+  	to_vector( alpha_c ) ~ normal(0,1);
+
+  	for(q in 1:Q) prop_d[q] ~ dirichlet_regression( X[q], alpha_d, phi[5] );
+  	to_vector( alpha_d ) ~ normal(0,1);
+
+  	for(q in 1:Q) prop_e[q] ~ dirichlet_regression( X[q], alpha_e, phi[6] );
+  	to_vector( alpha_e ) ~ normal(0,1);
+
+  	for(q in 1:Q) prop_f[q] ~ dirichlet_regression( X[q], alpha_f, phi[7] );
+  	to_vector( alpha_f ) ~ normal(0,1);
 
   }
   if(lv == 3 && !do_regression) for(q in 1:Q){
@@ -1025,19 +1006,10 @@ model {
 	// );
 
 	// Dirichlet regression
-	if(fam_dirichlet) phi ~ normal(0,1);
-	// Beta regression
-	else phi ~ normal(0,2);
+	phi ~ normal(0,1);
 
 	// lambda UFO
 	for(i in 1:shards) lambda_UFO[i] ~ skew_normal(6.2, 3.3, -2.7);
 	prop_UFO ~ beta(1.001, 20);
 
-	// Censoring
-	if(is_cens){
-		for(q in 1:Q) if(cens[q] == 0) X[q,2] ~ gamma(mu_unseen, sigma_unseen);
-		X[,2] + unseen ~ gamma(mu_unseen, sigma_unseen);
-	}
-		mu_unseen ~ normal(0,2);
-		sigma_unseen ~ normal(0,2);
 }

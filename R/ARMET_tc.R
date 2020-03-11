@@ -231,7 +231,7 @@ ARMET_tc = function(.data,
 		# Select cell types in hierarchy
 		inner_join(
 			tree %>%
-				data.tree::ToDataFrameTree("Cell type category", "C", "C1", "C2", "C3") %>%
+				data.tree::ToDataFrameTree("Cell type category", "C", "C1", "C2", "C3", "C4") %>%
 				as_tibble %>%
 				select(-1),
 			by = "Cell type category"
@@ -250,7 +250,7 @@ ARMET_tc = function(.data,
 
 	prop_posterior = get_null_prop_posterior(ct_in_nodes)
 
-	######################################
+	#------------------------------------#
 
 	res1 = run_model(
 		reference_filtered,
@@ -354,7 +354,7 @@ ARMET_tc = function(.data,
 	fit = list(fit1)
 	df = list(df1)
 
-	######################################
+	#------------------------------------#
 
 	if (levels > 1) {
 		res2 = run_model(
@@ -476,7 +476,7 @@ ARMET_tc = function(.data,
 				df = df %>% c(list(df2))
 	}
 
-	######################################
+	#------------------------------------#
 
 	if (levels > 2) {
 		# browser()
@@ -592,6 +592,122 @@ ARMET_tc = function(.data,
 
 	}
 
+	#------------------------------------#
+	
+	if (levels > 3) {
+	  # browser()
+	  res4 = run_model(
+	    reference_filtered,
+	    mix,
+	    shards,
+	    4,
+	    full_bayesian,
+	    approximate_posterior,
+	    prop_posterior,
+	    draws_to_exposure(fit1),
+	    iterations = iterations,
+	    sampling_iterations = sampling_iterations	,
+	    X = X,
+	    do_regression = do_regression,
+	    family = family,
+	    cens = cens
+	  )
+	  
+	  df4 = res4[[1]]
+	  fit4 = res4[[2]]
+	  
+	  draws_4 =
+	    draws_2 %>%
+	    left_join(
+	      fit4 %>%
+	        ######## ALTERED WITH TREE
+	        tidybayes::gather_draws(`prop_[g, h, i, l, m]`[Q, C], regex = T) %>%
+	        #########################
+	      drop_na %>%
+	        ungroup() %>%
+	        left_join(
+	          ######## ALTERED WITH TREE
+	          tibble(
+	            .variable = c("prop_g", "prop_h", "prop_i", "prop_l", "prop_m"),
+	            C2 = parents_lv4
+	          )
+	          #########################
+	        ) %>%
+	        select(-.variable) %>%
+	        rename(.value4 = .value, C4 = C),
+	      by = c(".chain", ".iteration", ".draw", "Q",  "C3")
+	    ) %>%
+	    group_by(.chain, .iteration, .draw, Q) %>%
+	    arrange(C1, C2, C3, C4) %>%
+	    mutate(
+	      C4 = tree$Get("C4") %>% na.omit,
+	      `Cell type category` = tree$Get("C4") %>% na.omit %>% names
+	    ) %>%
+	    ungroup() %>%
+	    mutate(.value_relative = .value4) %>%
+	    mutate(.value4 = ifelse(.value4 %>% is.na, .value2, .value2 * .value4))
+	  
+	  if (do_regression && length(parse_formula(.formula)$covariates) >0 ){
+	    alpha_4 =
+	      fit4 %>%
+	      tidybayes::gather_draws(`alpha_[4]`[A, C], regex = T) %>%
+	      ungroup() %>%
+	      
+	      # rebuild the last component sum-to-zero
+	      ifelse_pipe(family == "dirichlet", ~ .x %>% rebuild_last_component_sum_to_zero) %>%
+	      
+	      # Calculate relative 0 because of dirichlet relativity
+	      ifelse_pipe(family == "dirichlet", ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
+	      
+	      arrange(.chain, .iteration, .draw,     A) %>%
+	      
+	      nest(draws = -c(C, .variable, zero)) %>%
+	      
+	      left_join(
+	        tree %>%
+	          ToDataFrameTree("name", "level", sprintf("C%s", 4)) %>%
+	          arrange(C4) %>%
+	          drop_na() %>%
+	          select(name, C4) %>%
+	          rename(`Cell type category` = name) %>%
+	          rename(C = C4)
+	      )
+	    
+	    alpha = alpha  %>% bind_rows(alpha_4 %>% mutate(level = 4))
+	    
+	  }
+	  prop_4 =
+	    draws_4 %>%
+	    select(.chain,
+	           .iteration,
+	           .draw,
+	           Q,
+	           C4 ,
+	           `Cell type category`,
+	           .value4,
+	           .value_relative) %>%
+	    rename(C = C4, .value = .value4) %>%
+	    mutate(.variable = "prop_4") %>%
+	    mutate(level = 4) %>%
+	    
+	    # add sample annotation
+	    left_join(df4 %>% distinct(Q, sample), by = "Q")	%>%
+	    
+	    # If MCMC is used check divergencies as well
+	    ifelse_pipe(
+	      !approximate_posterior,
+	      ~ .x %>% parse_summary_check_divergence(),
+	      ~ .x %>% parse_summary() %>% rename(.value = mean)
+	    ) %>%
+	    
+	    left_join(df4 %>% distinct(Q, sample))
+	  
+	  prop = bind_rows(prop, prop_4)
+	  fit = fit %>% c(list(fit4))
+	  df = df %>% c(list(df4))
+	  
+	}
+	
 	# Return
 	list(
 		# Matrix of proportions
