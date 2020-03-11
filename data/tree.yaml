@@ -1,6 +1,9 @@
 name: Tissue
 epithelial:
-  o:
+  melanocyte:
+    o:
+  keratinocyte:
+    o:
 fibroblast:
   o:
 endothelial:
@@ -65,6 +68,3 @@ immune_cell:
           o:
         t_CD4_memory_effector:
           o:
-      t_CD4_naive_conventional:
-        o:
-

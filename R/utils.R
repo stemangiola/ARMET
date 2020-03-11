@@ -1532,25 +1532,19 @@ get_sample_transcript_counts = function(.data, .sample, .transcript, .abundance)
 
 	my_stop = function() {
 		stop("
-        tidyBulk says: The fucntion does not know what your sample, transcript and counts columns are.\n
+        ARMET says: The fucntion does not know what your sample, transcript and counts columns are.\n
         You have to either enter those as symbols (e.g., `sample`), \n
         or use the funtion create_tt_from_tibble() to pass your column names that will be remembered.
       ")
 	}
 
 	if( .sample %>% quo_is_symbol() ) .sample = .sample
-	else if(".sample" %in% (.data %>% get_tt_columns() %>% names))
-		.sample =  get_tt_columns(.data)$.sample
 	else my_stop()
 
 	if( .transcript %>% quo_is_symbol() ) .transcript = .transcript
-	else if(".transcript" %in% (.data %>% get_tt_columns() %>% names))
-		.transcript =  get_tt_columns(.data)$.transcript
 	else my_stop()
 
 	if( .abundance %>% quo_is_symbol() ) .abundance = .abundance
-	else if(".abundance" %in% (.data %>% get_tt_columns() %>% names))
-		.abundance = get_tt_columns(.data)$.abundance
 	else my_stop()
 
 	list(.sample = .sample, .transcript = .transcript, .abundance = .abundance)

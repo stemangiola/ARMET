@@ -8,12 +8,14 @@
 
 #'
 #' @import dplyr
+#' @import purrr
 #'
 #' @importFrom tidyr spread
 #' @importFrom tidyr gather
 #' @importFrom tidyr drop_na
 #' @importFrom rlang enquo
 #' @importFrom tibble tibble
+#' @importFrom stringr str_split
 #'
 #' @importFrom tidybayes gather_samples
 #' @importFrom tidybayes median_qi
@@ -74,13 +76,21 @@ ARMET_tc = function(.data,
 	.transcript = col_names$.transcript
 	.abundance = col_names$.abundance
 
+	# Checkif count is integer
+	if(.data %>% select(!!.abundance) %>% lapply(class) %>% unlist() %>% equals("integer") %>% `!`)
+		stop(sprintf("ARMET says: the %s column must be integer as the deconvolution model is Negative Binomial", quo_name(.abundance)))
+
 	# Check family
 	if(family %in% c("dirichlet", "beta") %>% any %>% `!`) stop("ARMET says: Please choose between dirichlet or beta families")
 
 	# Covariate column
 	cov_columns =
 		parse_formula(.formula)$covariates %>%
-		map_chr(~ .x %>% gsub("censored\\(|\\)| ", "", .) %>% str_split("\\,") %>% `[[` (1) %>% `[` (1))
+		map_chr(~ .x %>% gsub("censored\\(|\\)| ", "", .) %>% str_split("\\,") %>% `[[` (1) %>% `[` (1)) %>%
+		ifelse_pipe((.) %>% is.na, ~ c())
+
+	# Do regresson
+	if(length(cov_columns) > 0) do_regression = T
 
 	# distinct_at is not released yet for dplyr, thus we have to use this trick
 	df_for_edgeR <- .data %>%
@@ -106,9 +116,12 @@ ARMET_tc = function(.data,
 		)
 
 	# Create design matrix
+	if(length(cov_columns) > 0) my_formula = as.formula( paste("~",paste(cov_columns, collapse = "+")))
+	else my_formula = .formula
+
 	X =
 		model.matrix(
-			object = 	as.formula( paste("~",paste(cov_columns, collapse = "+"))),
+			object = 	my_formula,
 			data = df_for_edgeR %>% select(!!.sample, one_of(cov_columns)) %>% distinct %>% arrange(!!.sample)
 		)
 
@@ -116,9 +129,6 @@ ARMET_tc = function(.data,
 	.cens_column = parse_formula(.formula)$covariates %>% grep("censored(", ., fixed = T, value = T)  %>% gsub("censored\\(|\\)| ", "", .) %>% str_split("\\,") %>% ifelse_pipe(length(.)>0, ~.x %>% `[[` (1) %>% `[` (-1), ~NULL)
 	if(length(.cens_column) == 1) cens = .data %>% select(!!.sample, .cens_column) %>% distinct %>% arrange(!!.sample) %>% pull(2)
 	else cens = NULL
-
-	# Error if censorting with Dirichlet
-	if(!is.null(cens) & family == "dirichlet") stop("ARMET says: Censoring is not abilitated with Dirichlet. Stats is not there yet :(")
 
 	mix =
 		.data %>%
@@ -811,6 +821,8 @@ run_model = function(reference_filtered,
 
 #' @export
 test_differential_composition = function(.data, credible_interval = 0.95) {
+
+
 
 	.data$proportions %>%
 		mutate(regression = map2(draws, zero,
