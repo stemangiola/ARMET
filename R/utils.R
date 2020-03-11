@@ -38,7 +38,7 @@ format_for_MPI = function(df, shards) {
 								arrange(G) %>%
 								mutate(idx_MPI = head(
 									rep(1:shards, (.) %>% nrow %>% `/` (shards) %>% ceiling), n = (.) %>% nrow
-								))) %>%
+								)), by = "G") %>%
 		arrange(idx_MPI, G) %>%
 
 		# Decide start - end location
@@ -53,7 +53,7 @@ format_for_MPI = function(df, shards) {
 			 			mutate(start = c(
 			 				1, .$end %>% rev() %>% `[` (-1) %>% rev %>% `+` (1)
 			 			))
-			 	)) %>%
+			 	, by = "G")) %>%
 		ungroup() %>%
 
 		# Add ct_symbol MPI rows indexes - otherwise spread below gives error
@@ -63,7 +63,8 @@ format_for_MPI = function(df, shards) {
 				distinct(G) %>%
 				arrange(G) %>%
 				mutate(`symbol MPI row` = 1:n()) %>%
-				ungroup
+				ungroup,
+			by = c("G", "idx_MPI")
 		) %>%
 
 		# Add counts MPI rows indexes
@@ -90,7 +91,7 @@ format_for_MPI_from_linear = function(df) {
 								arrange(GM) %>%
 								mutate(idx_MPI = head(
 									rep(1:shards, (.) %>% nrow %>% `/` (shards) %>% ceiling), n = (.) %>% nrow
-								))) %>%
+								)), by = "GM") %>%
 		arrange(idx_MPI, GM, G) %>%
 
 		# Add counts MPI rows indexes
@@ -113,7 +114,7 @@ format_for_MPI_from_linear_GM = function(df) {
 								arrange(GM) %>%
 								mutate(idx_MPI = head(
 									rep(1:shards, (.) %>% nrow %>% `/` (shards) %>% ceiling), n = (.) %>% nrow
-								))) %>%
+								)), by = "GM") %>%
 		arrange(idx_MPI, GM) %>%
 
 		# Add counts MPI rows indexes
@@ -823,7 +824,7 @@ parse_baseline = function(.data, shards_in_levels, lv) {
 			S,
 			`house keeping`
 		) %>%
-		left_join(tibble(level = lv, shards = shards_in_levels)) %>%
+		left_join(tibble(level = lv, shards = shards_in_levels), by = "level") %>%
 		format_for_MPI_from_linear()
 }
 
@@ -891,7 +892,7 @@ get_MPI_df = function(counts_baseline_to_linear,
 			counts_baseline_to_linear %>%
 			parse_baseline(shards_in_levels, lv)   %>%
 			distinct(idx_MPI, G, `read count MPI row`)  %>%
-			left_join((.) %>% count(idx_MPI, G)) %>%
+			left_join((.) %>% count(idx_MPI, G), by = c("idx_MPI", "G")) %>%
 			distinct(idx_MPI, G, n) %>%
 			group_by(idx_MPI) %>% do((.) %>% rowid_to_column("read count MPI row")) %>% ungroup() %>%
 			distinct(idx_MPI, n, `read count MPI row`) %>%
@@ -923,7 +924,7 @@ get_MPI_df = function(counts_baseline_to_linear,
 			y_source %>%
 			filter(level == lv) %>%
 			distinct(GM, Q, S, count, level) %>%
-			left_join(tibble(level = lv, shards = shards_in_levels)) %>%
+			left_join(tibble(level = lv, shards = shards_in_levels),  by = "level") %>%
 			format_for_MPI_from_linear_GM() %>%
 			distinct(idx_MPI, count, `read count MPI row`)  %>%
 			spread(idx_MPI,  count) %>%
@@ -935,7 +936,7 @@ get_MPI_df = function(counts_baseline_to_linear,
 			y_source %>%
 			filter(level == lv) %>%
 			distinct(GM, Q, S, count, level) %>%
-			left_join(tibble(level = lv, shards = shards_in_levels)) %>%
+			left_join(tibble(level = lv, shards = shards_in_levels), by = "level") %>%
 			format_for_MPI_from_linear_GM() %>%
 			distinct(idx_MPI, count, `read count MPI row`)  %>%
 			count(idx_MPI) %>%
@@ -946,7 +947,7 @@ get_MPI_df = function(counts_baseline_to_linear,
 			y_source %>%
 			filter(level == lv) %>%
 			distinct(GM, Q, S, count, level) %>%
-			left_join(tibble(level = lv, shards = shards_in_levels)) %>%
+			left_join(tibble(level = lv, shards = shards_in_levels), by = "level") %>%
 			format_for_MPI_from_linear_GM() %>%
 			distinct(idx_MPI, S, `read count MPI row`)  %>%
 			spread(idx_MPI,  S) %>%
@@ -958,7 +959,7 @@ get_MPI_df = function(counts_baseline_to_linear,
 			y_source %>%
 			filter(level == lv) %>%
 			distinct(GM, Q, S, count, level) %>%
-			left_join(tibble(level = lv, shards = shards_in_levels)) %>%
+			left_join(tibble(level = lv, shards = shards_in_levels), by = "level") %>%
 			format_for_MPI_from_linear_GM() %>%
 			distinct(idx_MPI, S, `read count MPI row`)  %>%
 			count(idx_MPI) %>%
@@ -974,7 +975,7 @@ get_MPI_df = function(counts_baseline_to_linear,
 			arrange(GM, !!as.symbol(sprintf("C%s", lv))) %>%
 
 			#distinct(G, GM, C, level) %>%
-			left_join(tibble(level = lv, shards = shards_in_levels)) %>%
+			left_join(tibble(level = lv, shards = shards_in_levels), by = "level") %>%
 			format_for_MPI_from_linear_dec(lv) %>%
 			distinct(idx_MPI, G, `read count MPI row`) %>%
 			spread(idx_MPI,  G) %>%
@@ -990,7 +991,7 @@ get_MPI_df = function(counts_baseline_to_linear,
 			arrange(GM, !!as.symbol(sprintf("C%s", lv))) %>%
 
 			#distinct(G, GM, C, level) %>%
-			left_join(tibble(level = lv, shards = shards_in_levels)) %>%
+			left_join(tibble(level = lv, shards = shards_in_levels), by = "level") %>%
 			format_for_MPI_from_linear_dec(lv) %>%
 			distinct(idx_MPI, G, `read count MPI row`)   %>%
 			count(idx_MPI) %>%
@@ -1005,8 +1006,8 @@ ref_mix_format = function(ref, mix) {
 		ref %>% mutate(`query` = FALSE),
 		mix %>%
 			gather(`symbol`, count,-sample) %>%
-			inner_join(ref %>% distinct(symbol)) %>%
-			left_join(ref %>% distinct(symbol, `house keeping`)) %>%
+			inner_join(ref %>% distinct(symbol), by = "symbol") %>%
+			left_join(ref %>% distinct(symbol, `house keeping`), by = "symbol") %>%
 			mutate(`Cell type category` = "query") %>%
 			mutate(`query` = TRUE)
 	)	%>%
@@ -1015,7 +1016,7 @@ ref_mix_format = function(ref, mix) {
 		left_join((.) %>%
 								filter(!`house keeping`) %>%
 								distinct(symbol) %>%
-								mutate(M = 1:n())) %>%
+								mutate(M = 1:n()), by = "symbol") %>%
 
 		# Add sample indeces
 		arrange(!`query`) %>% # query first
@@ -1025,7 +1026,7 @@ ref_mix_format = function(ref, mix) {
 		left_join((.) %>%
 								filter(`query`) %>%
 								distinct(sample) %>%
-								mutate(Q = 1:n())) %>%
+								mutate(Q = 1:n()), by="sample") %>%
 
 		# Add house keeping into Cell type label
 		mutate(`Cell type category` = ifelse(`house keeping`, "house_keeping", `Cell type category`)) %>%
@@ -1038,7 +1039,8 @@ ref_mix_format = function(ref, mix) {
 				group_by(symbol) %>%
 				arrange(level) %>%
 				slice(2:max(n(), 2)) %>% # take away house keeping from level 2 above
-				ungroup()
+				ungroup(),
+			by = c("level", "symbol")
 		) %>%
 
 		# If house keeping delete level infomation
@@ -1053,7 +1055,8 @@ ref_mix_format = function(ref, mix) {
 				filter(!`query`) %>%
 				distinct(`Cell type category`, ct_symbol, `house keeping`) %>%
 				arrange(!`house keeping`, ct_symbol) %>% # House keeping first
-				mutate(G = 1:n())
+				mutate(G = 1:n()),
+			by = c("ct_symbol", "Cell type category", "house keeping")
 		) %>%
 		left_join(
 			(.) %>%
@@ -1061,7 +1064,8 @@ ref_mix_format = function(ref, mix) {
 				distinct(level, symbol) %>%
 				arrange(level, symbol) %>%
 				mutate(GM = 1:n()) %>%
-				select(-level)
+				select(-level),
+			by = "symbol"
 		)
 
 }

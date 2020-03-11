@@ -796,7 +796,8 @@ run_model = function(reference_filtered,
 				sigma_inv_log,
 				GM,
 				C
-			)
+			),
+			by = c("symbol", "GM")
 		) %>%
 		arrange(C, Q, symbol) %>%
 		mutate(`Cell type category` = factor(`Cell type category`, unique(`Cell type category`)))
