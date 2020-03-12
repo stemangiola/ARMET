@@ -1134,6 +1134,9 @@ draws_to_alphas = function(.data, pars) {
 			)
 		) %>%
 		select(-data, -Q) %>%
+    unnest(alphas) %>%
+    nest(alphas = -.variable) %>%
+    mutate(alphas = map(alphas, ~ .x %>% select_if(function(x){!all(is.na(x))})))%>%
 		pull(alphas)
 }
 
