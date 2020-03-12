@@ -753,7 +753,8 @@ data {
   vector[ct_in_nodes[3]]  prop_b_prior[Q * (lv > 3)]; // b cells
   vector[ct_in_nodes[4]]  prop_c_prior[Q * (lv > 3)]; // granulocyte
   vector[ct_in_nodes[5]]  prop_d_prior[Q * (lv > 3)]; // mono_derived
-  vector[ct_in_nodes[6]]  prop_e_prior[Q * (lv > 3)]; // t_cell
+  vector[ct_in_nodes[6]]  prop_e_prior[Q * (lv > 3)]; // nk
+  vector[ct_in_nodes[7]]  prop_f_prior[Q * (lv > 3)]; // t_cell
 
 	// exposure posterior previous fit
 	vector[2] exposure_posterior[Q * (lv > 1)];
@@ -834,8 +835,9 @@ parameters {
 	// lv4
   simplex[ct_in_nodes[8]]  prop_g[Q * (lv >= 4)]; // dendritic myeloid childrens
   simplex[ct_in_nodes[9]]  prop_h[Q * (lv >= 4)]; // macrophage childrens
-  simplex[ct_in_nodes[10]] prop_i[Q * (lv >= 4)]; // CD4 childrens
-  simplex[ct_in_nodes[11]] prop_l[Q * (lv >= 4)]; // CD8 childrens
+  simplex[ct_in_nodes[10]] prop_i[Q * (lv >= 4)]; // nk primed
+  simplex[ct_in_nodes[11]] prop_l[Q * (lv >= 4)]; // CD4 childrens
+  simplex[ct_in_nodes[12]] prop_m[Q * (lv >= 4)]; // CD8 childrens
 
 	// Dirichlet regression
   // lv1
@@ -849,12 +851,9 @@ parameters {
   matrix[A * (lv == 3) * do_regression,ct_in_levels[3]]  alpha_3; // Root
 
 	// lv4
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[8]]  alpha_g; // dendritic myeloid
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[9]]  alpha_h; // macrophage
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[10]]  alpha_i; // CD4
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[11]] alpha_l; // CD8
+  matrix[A * (lv == 4) * do_regression,ct_in_levels[4]]  alpha_4; // Root
 
-	real phi[11];
+	real phi[4];
 
 	// Unknown population
 	vector<lower=0, upper = log(max(counts_linear))>[max(size_G_linear_MPI)/ct_in_levels[lv]] lambda_UFO[shards];
@@ -914,7 +913,10 @@ transformed parameters{
 					multiply_by_column(prop_h, prop_3[,parents_lv4[2]]),
 					append_vector_array(
 						multiply_by_column(prop_i, prop_3[,parents_lv4[3]]),
-						multiply_by_column(prop_l, prop_3[,parents_lv4[4]])
+						append_vector_array(
+  						multiply_by_column(prop_l, prop_3[,parents_lv4[4]]),
+  						multiply_by_column(prop_m, prop_3[,parents_lv4[5]])
+  					)
 					)
 				)
 			)
@@ -988,14 +990,29 @@ model {
 		 target += dirichlet_lpdf(prop_e[q] | rep_vector(1, num_elements(prop_e[1])));
 		 target += dirichlet_lpdf(prop_f[q] | rep_vector(1, num_elements(prop_f[1])));
   }
+  if(lv > 3){
+    for(q in 1:Q) target += dirichlet_lpdf(prop_b[q] | prop_b_prior[q]);
+    for(q in 1:Q) target += dirichlet_lpdf(prop_c[q] | prop_c_prior[q]);
+    for(q in 1:Q) target += dirichlet_lpdf(prop_d[q] | prop_d_prior[q]);
+    for(q in 1:Q) target += dirichlet_lpdf(prop_e[q] | prop_e_prior[q]);
+    for(q in 1:Q) target += dirichlet_lpdf(prop_f[q] | prop_f_prior[q]);
+  }  
 
 	// lv 4
-	if(lv == 4) for(q in 1:Q) {
-		target += dirichlet_lpdf(prop_f[q] | rep_vector(num_elements(prop_f[1]), num_elements(prop_f[1])));
-		target += dirichlet_lpdf(prop_g[q] | rep_vector(num_elements(prop_g[1]), num_elements(prop_g[1])));
-		target += dirichlet_lpdf(prop_h[q] | rep_vector(num_elements(prop_h[1]), num_elements(prop_h[1])));
-		target += dirichlet_lpdf(prop_i[q] | rep_vector(num_elements(prop_i[1]), num_elements(prop_i[1])));
-	}
+  if(lv == 4 && do_regression){
+
+  	if(fam_dirichlet) for(q in 1:Q) prop_4[q] ~ dirichlet_regression( X_[q], alpha_4, phi[4] );
+  	 else  prop_4 ~ beta_regression(X_, alpha_4, phi[4]);
+  	to_vector( alpha_4 ) ~ normal(0,1);
+
+  }
+  if(lv == 4 && !do_regression) for(q in 1:Q){
+  	 target += dirichlet_lpdf(prop_g[q] | rep_vector(1, num_elements(prop_g[1])));
+		 target += dirichlet_lpdf(prop_h[q] | rep_vector(1, num_elements(prop_h[1])));
+		 target += dirichlet_lpdf(prop_i[q] | rep_vector(1, num_elements(prop_i[1])));
+		 target += dirichlet_lpdf(prop_l[q] | rep_vector(1, num_elements(prop_l[1])));
+		 target += dirichlet_lpdf(prop_m[q] | rep_vector(1, num_elements(prop_m[1])));
+  }
 
 
 	pack_r_1 = package_vector_parameters(

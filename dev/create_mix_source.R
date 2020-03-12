@@ -12,10 +12,10 @@ library(ARMET)
 n_cores = 20
 
 do_parallel_start = function(df, cores, partition_by){
-  
+
   # Only if cores > 1
   if(cores > 1)		cl <- multidplyr::new_cluster(cores)
-  
+
   df %>%
     dplyr::left_join(
       (.) %>%
@@ -29,10 +29,10 @@ do_parallel_start = function(df, cores, partition_by){
         )
     )  %>%
     group_by(.part) %>%
-    
+
     # Only if cores > 1
     ifelse_pipe(cores > 1,	~ .x %>% multidplyr::partition(cl))
-  
+
 }
 
 
@@ -41,7 +41,7 @@ do_parallel_end = function(.){
     # Only if cores > 1
     ifelse_pipe((.) %>% class %>% magrittr::equals("multidplyr_party_df") %>% any,	~ .x %>% dplyr::collect()) %>%
     dplyr::ungroup() %>%
-    
+
     # Only if cores > 1
     dplyr::select(-`.part`)
 }
@@ -88,24 +88,25 @@ mix_base_sparse = ref %>% filter(symbol %in% all_genes)
 
 impute_missing = function(ref2, tree){
 
-	tree %>% ToDataFrameTypeColFull() %>% select(-level_6, -level_1) %>% rename(`Cell type category` = level_5) %>%
+	yaml::yaml.load_file("data/tree.yaml") %>%
+		data.tree::as.Node() %>% ToDataFrameTypeColFull() %>% select(-level_6, -level_1) %>% rename(`Cell type category` = level_5) %>%
 		left_join(
-			ref2 %>% distinct(`Cell type category`, level, symbol, `count normalised bayes`, sample) %>%
-				spread(symbol, `count normalised bayes`) %>%
-				gather(symbol, `count normalised bayes`, -c(1:3))
+			ref2 %>% distinct(`Cell type category`, level, symbol, `count scaled bayes`, sample) %>%
+				spread(symbol, `count scaled bayes`) %>%
+				gather(symbol, `count scaled bayes`, -c(1:3))
 		) %>%
 
 		# Level 5
 
 		# do_parallel_start(
 		# 	.f = ~ {
-		# 		values = .x %>% drop_na() %>% pull(`count normalised bayes`)
+		# 		values = .x %>% drop_na() %>% pull(`count scaled bayes`)
 		# 		if(length(values) > 0)
 		#
 		# 			bind_rows(
-		# 				.x %>% filter(`count normalised bayes` %>% is.na %>% `!`),
-		# 				.x %>% filter(`count normalised bayes` %>% is.na ) %>%
-	# 					mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
+		# 				.x %>% filter(`count scaled bayes` %>% is.na %>% `!`),
+		# 				.x %>% filter(`count scaled bayes` %>% is.na ) %>%
+	# 					mutate(`count scaled bayes` = sample(values, size = n(), replace = T))
 	# 			)
 	#
 	# 		else (.)
@@ -123,13 +124,13 @@ impute_missing = function(ref2, tree){
 			(.) %>%
 				group_by(`Cell type category`, symbol) %>%
 				do({
-					values = (.) %>% drop_na() %>% pull(`count normalised bayes`)
+					values = (.) %>% drop_na() %>% pull(`count scaled bayes`)
 					if(length(values) > 0)
 
 						bind_rows(
-							(.) %>% filter(`count normalised bayes` %>% is.na %>% `!`),
-							(.) %>% filter(`count normalised bayes` %>% is.na ) %>%
-								mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
+							(.) %>% filter(`count scaled bayes` %>% is.na %>% `!`),
+							(.) %>% filter(`count scaled bayes` %>% is.na ) %>%
+								mutate(`count scaled bayes` = sample(values, size = n(), replace = T))
 						)
 
 					else (.)
@@ -142,13 +143,13 @@ impute_missing = function(ref2, tree){
 
 		# do_parallel_start(
 		# 	.f = ~ {
-		# 		values = .x %>% drop_na() %>% pull(`count normalised bayes`)
+		# 		values = .x %>% drop_na() %>% pull(`count scaled bayes`)
 		# 		if(length(values) > 0)
 		#
 		# 			bind_rows(
-		# 				.x %>% filter(`count normalised bayes` %>% is.na %>% `!`),
-		# 				.x %>% filter(`count normalised bayes` %>% is.na ) %>%
-	# 					mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
+		# 				.x %>% filter(`count scaled bayes` %>% is.na %>% `!`),
+		# 				.x %>% filter(`count scaled bayes` %>% is.na ) %>%
+	# 					mutate(`count scaled bayes` = sample(values, size = n(), replace = T))
 	# 			)
 	#
 	# 		else (.)
@@ -167,13 +168,13 @@ impute_missing = function(ref2, tree){
 			(.) %>%
 				group_by(`level_4`, symbol) %>%
 				do({
-					values = (.) %>% drop_na() %>% pull(`count normalised bayes`)
+					values = (.) %>% drop_na() %>% pull(`count scaled bayes`)
 					if(length(values) > 0)
 
 						bind_rows(
-							(.) %>% filter(`count normalised bayes` %>% is.na %>% `!`),
-							(.) %>% filter(`count normalised bayes` %>% is.na ) %>%
-								mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
+							(.) %>% filter(`count scaled bayes` %>% is.na %>% `!`),
+							(.) %>% filter(`count scaled bayes` %>% is.na ) %>%
+								mutate(`count scaled bayes` = sample(values, size = n(), replace = T))
 						)
 
 					else (.)
@@ -186,13 +187,13 @@ impute_missing = function(ref2, tree){
 
 		# do_parallel_start(
 		# 	.f = ~ {
-		# 		values = .x %>% drop_na() %>% pull(`count normalised bayes`)
+		# 		values = .x %>% drop_na() %>% pull(`count scaled bayes`)
 		# 		if(length(values) > 0)
 		#
 		# 			bind_rows(
-		# 				.x %>% filter(`count normalised bayes` %>% is.na %>% `!`),
-		# 				.x %>% filter(`count normalised bayes` %>% is.na ) %>%
-	# 					mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
+		# 				.x %>% filter(`count scaled bayes` %>% is.na %>% `!`),
+		# 				.x %>% filter(`count scaled bayes` %>% is.na ) %>%
+	# 					mutate(`count scaled bayes` = sample(values, size = n(), replace = T))
 	# 			)
 	#
 	# 		else (.)
@@ -210,13 +211,13 @@ impute_missing = function(ref2, tree){
 			(.) %>%
 				group_by(`level_3`, symbol) %>%
 				do({
-					values = (.) %>% drop_na() %>% pull(`count normalised bayes`)
+					values = (.) %>% drop_na() %>% pull(`count scaled bayes`)
 					if(length(values) > 0)
 
 						bind_rows(
-							(.) %>% filter(`count normalised bayes` %>% is.na %>% `!`),
-							(.) %>% filter(`count normalised bayes` %>% is.na ) %>%
-								mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
+							(.) %>% filter(`count scaled bayes` %>% is.na %>% `!`),
+							(.) %>% filter(`count scaled bayes` %>% is.na ) %>%
+								mutate(`count scaled bayes` = sample(values, size = n(), replace = T))
 						)
 
 					else (.)
@@ -229,13 +230,13 @@ impute_missing = function(ref2, tree){
 
 		# do_parallel_start(
 		# 	.f = ~ {
-		# 		values = .x %>% drop_na() %>% pull(`count normalised bayes`)
+		# 		values = .x %>% drop_na() %>% pull(`count scaled bayes`)
 		# 		if(length(values) > 0)
 		#
 		# 			bind_rows(
-		# 				.x %>% filter(`count normalised bayes` %>% is.na %>% `!`),
-		# 				.x %>% filter(`count normalised bayes` %>% is.na ) %>%
-	# 					mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
+		# 				.x %>% filter(`count scaled bayes` %>% is.na %>% `!`),
+		# 				.x %>% filter(`count scaled bayes` %>% is.na ) %>%
+	# 					mutate(`count scaled bayes` = sample(values, size = n(), replace = T))
 	# 			)
 	#
 	# 		else (.)
@@ -253,13 +254,13 @@ impute_missing = function(ref2, tree){
 			(.) %>%
 				group_by(`level_2`, symbol) %>%
 				do({
-					values = (.) %>% drop_na() %>% pull(`count normalised bayes`)
+					values = (.) %>% drop_na() %>% pull(`count scaled bayes`)
 					if(length(values) > 0)
 
 						bind_rows(
-							(.) %>% filter(`count normalised bayes` %>% is.na %>% `!`),
-							(.) %>% filter(`count normalised bayes` %>% is.na ) %>%
-								mutate(`count normalised bayes` = sample(values, size = n(), replace = T))
+							(.) %>% filter(`count scaled bayes` %>% is.na %>% `!`),
+							(.) %>% filter(`count scaled bayes` %>% is.na ) %>%
+								mutate(`count scaled bayes` = sample(values, size = n(), replace = T))
 						)
 
 					else (.)
@@ -292,7 +293,7 @@ mix_base_noiseless = impute_missing(
 			`Cell type category`,
 			level,
 			symbol,
-			`count normalised bayes` = exp( lambda_log),
+			`count scaled bayes` = exp( lambda_log),
 			sample = `Cell type category`
 		),
 	tree

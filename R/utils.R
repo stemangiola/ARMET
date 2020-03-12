@@ -38,7 +38,7 @@ format_for_MPI = function(df, shards) {
 								arrange(G) %>%
 								mutate(idx_MPI = head(
 									rep(1:shards, (.) %>% nrow %>% `/` (shards) %>% ceiling), n = (.) %>% nrow
-								))) %>%
+								)), by = "G") %>%
 		arrange(idx_MPI, G) %>%
 
 		# Decide start - end location
@@ -53,7 +53,7 @@ format_for_MPI = function(df, shards) {
 			 			mutate(start = c(
 			 				1, .$end %>% rev() %>% `[` (-1) %>% rev %>% `+` (1)
 			 			))
-			 	)) %>%
+			 	, by = "G")) %>%
 		ungroup() %>%
 
 		# Add ct_symbol MPI rows indexes - otherwise spread below gives error
@@ -63,7 +63,8 @@ format_for_MPI = function(df, shards) {
 				distinct(G) %>%
 				arrange(G) %>%
 				mutate(`symbol MPI row` = 1:n()) %>%
-				ungroup
+				ungroup,
+			by = c("G", "idx_MPI")
 		) %>%
 
 		# Add counts MPI rows indexes
@@ -90,7 +91,7 @@ format_for_MPI_from_linear = function(df) {
 								arrange(GM) %>%
 								mutate(idx_MPI = head(
 									rep(1:shards, (.) %>% nrow %>% `/` (shards) %>% ceiling), n = (.) %>% nrow
-								))) %>%
+								)), by = "GM") %>%
 		arrange(idx_MPI, GM, G) %>%
 
 		# Add counts MPI rows indexes
@@ -113,7 +114,7 @@ format_for_MPI_from_linear_GM = function(df) {
 								arrange(GM) %>%
 								mutate(idx_MPI = head(
 									rep(1:shards, (.) %>% nrow %>% `/` (shards) %>% ceiling), n = (.) %>% nrow
-								))) %>%
+								)), by = "GM") %>%
 		arrange(idx_MPI, GM) %>%
 
 		# Add counts MPI rows indexes
@@ -181,7 +182,7 @@ get_MPI_deconv = function(y_source, shards, my_level, tree) {
 
 	y_MPI_source =
 		y_source %>%
-		distinct(level, Q, S, symbol, G, GM, `Cell type category`, `read count`) %>%
+		distinct(level, Q, S, symbol, G, GM, `Cell type category`, count) %>%
 		filter(level == my_level)  %>%
 
 		# Add universal cell type rank
@@ -242,7 +243,7 @@ get_MPI_deconv = function(y_source, shards, my_level, tree) {
 
 		y_MPI_N_per_shard =
 			y_MPI_source %>%
-			distinct(MPI_row, `read count`, partition, Q) %>%
+			distinct(MPI_row, count, partition, Q) %>%
 			count(partition) %>%
 			add_empty_shards %>%
 			spread(partition, n) %>%
@@ -250,8 +251,8 @@ get_MPI_deconv = function(y_source, shards, my_level, tree) {
 
 		y_MPI_count =
 			y_MPI_source %>%
-			distinct(MPI_row, `read count`, partition, Q) %>%
-			spread(partition, `read count`) %>%
+			distinct(MPI_row, count, partition, Q) %>%
+			spread(partition, count) %>%
 			arrange(MPI_row, Q) %>%
 			select(-MPI_row,-Q) %>%
 			replace(is.na(.), 0 %>% as.integer) %>%
@@ -271,7 +272,7 @@ plot_differences_in_lambda = function() {
 			tidybayes::median_qi() %>%
 			left_join(
 				counts_baseline %>%
-					distinct(`symbol`, G, `Cell type category`)
+					distinct(symbol, G, `Cell type category`)
 			) %>%
 			left_join(
 				reference_filtered %>%
@@ -347,7 +348,7 @@ plot_counts_inferred_sum = function(fit_obj, samples = NULL) {
 		as_tibble(rownames = "par") %>% select(par, `2.5%`, `50%`, `97.5%`) %>%
 		separate(par, c(".variable", "Q", "GM"), sep = "\\[|,|\\]") %>%
 		mutate(Q = Q %>% as.integer, GM = GM %>% as.integer) %>%
-		left_join(fit_obj %$% data_source %>% distinct(Q, GM, symbol, `read count`, sample)) %>%
+		left_join(fit_obj %$% data_source %>% distinct(Q, GM, symbol, count, sample)) %>%
 
 		# Select samples
 		{
@@ -359,10 +360,10 @@ plot_counts_inferred_sum = function(fit_obj, samples = NULL) {
 
 		# Check if inside
 		rowwise %>%
-		mutate(inside = between(`read count`, `2.5%`, `97.5%`)) %>%
+		mutate(inside = between(count, `2.5%`, `97.5%`)) %>%
 		ungroup %>%
 		ggplot(aes(
-			x = `read count` + 1,
+			x = count + 1,
 			y = `50%` + 1,
 			color = inside,
 			label = symbol
@@ -816,14 +817,14 @@ parse_baseline = function(.data, shards_in_levels, lv) {
 			symbol,
 			`Cell type category`,
 			level,
-			`read count`,
+			count,
 			counts_idx,
 			G,
 			GM,
 			S,
 			`house keeping`
 		) %>%
-		left_join(tibble(level = lv, shards = shards_in_levels)) %>%
+		left_join(tibble(level = lv, shards = shards_in_levels), by = "level") %>%
 		format_for_MPI_from_linear()
 }
 
@@ -832,6 +833,7 @@ get_MPI_df = function(counts_baseline_to_linear,
 											counts_baseline,
 											shards_in_levels,
 											lv) {
+  
 	list(
 		counts_idx_lv_MPI =
 			counts_baseline_to_linear %>%
@@ -890,7 +892,7 @@ get_MPI_df = function(counts_baseline_to_linear,
 			counts_baseline_to_linear %>%
 			parse_baseline(shards_in_levels, lv)   %>%
 			distinct(idx_MPI, G, `read count MPI row`)  %>%
-			left_join((.) %>% count(idx_MPI, G)) %>%
+			left_join((.) %>% count(idx_MPI, G), by = c("idx_MPI", "G")) %>%
 			distinct(idx_MPI, G, n) %>%
 			group_by(idx_MPI) %>% do((.) %>% rowid_to_column("read count MPI row")) %>% ungroup() %>%
 			distinct(idx_MPI, n, `read count MPI row`) %>%
@@ -921,11 +923,11 @@ get_MPI_df = function(counts_baseline_to_linear,
 		y_linear_MPI =
 			y_source %>%
 			filter(level == lv) %>%
-			distinct(GM, Q, S, `read count`, level) %>%
-			left_join(tibble(level = lv, shards = shards_in_levels)) %>%
+			distinct(GM, Q, S, count, level) %>%
+			left_join(tibble(level = lv, shards = shards_in_levels),  by = "level") %>%
 			format_for_MPI_from_linear_GM() %>%
-			distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
-			spread(idx_MPI,  `read count`) %>%
+			distinct(idx_MPI, count, `read count MPI row`)  %>%
+			spread(idx_MPI,  count) %>%
 			select(-`read count MPI row`) %>%
 			replace(is.na(.), -999 %>% as.integer) %>%
 			as_matrix() %>% t %>% 		as.data.frame,
@@ -933,10 +935,10 @@ get_MPI_df = function(counts_baseline_to_linear,
 		size_y_linear_MPI =
 			y_source %>%
 			filter(level == lv) %>%
-			distinct(GM, Q, S, `read count`, level) %>%
-			left_join(tibble(level = lv, shards = shards_in_levels)) %>%
+			distinct(GM, Q, S, count, level) %>%
+			left_join(tibble(level = lv, shards = shards_in_levels), by = "level") %>%
 			format_for_MPI_from_linear_GM() %>%
-			distinct(idx_MPI, `read count`, `read count MPI row`)  %>%
+			distinct(idx_MPI, count, `read count MPI row`)  %>%
 			count(idx_MPI) %>%
 			pull(n) %>%
 			ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array,
@@ -944,8 +946,8 @@ get_MPI_df = function(counts_baseline_to_linear,
 		y_linear_S_MPI =
 			y_source %>%
 			filter(level == lv) %>%
-			distinct(GM, Q, S, `read count`, level) %>%
-			left_join(tibble(level = lv, shards = shards_in_levels)) %>%
+			distinct(GM, Q, S, count, level) %>%
+			left_join(tibble(level = lv, shards = shards_in_levels), by = "level") %>%
 			format_for_MPI_from_linear_GM() %>%
 			distinct(idx_MPI, S, `read count MPI row`)  %>%
 			spread(idx_MPI,  S) %>%
@@ -956,8 +958,8 @@ get_MPI_df = function(counts_baseline_to_linear,
 		size_y_linear_S_MPI =
 			y_source %>%
 			filter(level == lv) %>%
-			distinct(GM, Q, S, `read count`, level) %>%
-			left_join(tibble(level = lv, shards = shards_in_levels)) %>%
+			distinct(GM, Q, S, count, level) %>%
+			left_join(tibble(level = lv, shards = shards_in_levels), by = "level") %>%
 			format_for_MPI_from_linear_GM() %>%
 			distinct(idx_MPI, S, `read count MPI row`)  %>%
 			count(idx_MPI) %>%
@@ -973,7 +975,7 @@ get_MPI_df = function(counts_baseline_to_linear,
 			arrange(GM, !!as.symbol(sprintf("C%s", lv))) %>%
 
 			#distinct(G, GM, C, level) %>%
-			left_join(tibble(level = lv, shards = shards_in_levels)) %>%
+			left_join(tibble(level = lv, shards = shards_in_levels), by = "level") %>%
 			format_for_MPI_from_linear_dec(lv) %>%
 			distinct(idx_MPI, G, `read count MPI row`) %>%
 			spread(idx_MPI,  G) %>%
@@ -989,7 +991,7 @@ get_MPI_df = function(counts_baseline_to_linear,
 			arrange(GM, !!as.symbol(sprintf("C%s", lv))) %>%
 
 			#distinct(G, GM, C, level) %>%
-			left_join(tibble(level = lv, shards = shards_in_levels)) %>%
+			left_join(tibble(level = lv, shards = shards_in_levels), by = "level") %>%
 			format_for_MPI_from_linear_dec(lv) %>%
 			distinct(idx_MPI, G, `read count MPI row`)   %>%
 			count(idx_MPI) %>%
@@ -1003,9 +1005,9 @@ ref_mix_format = function(ref, mix) {
 		# Get reference based on mix genes
 		ref %>% mutate(`query` = FALSE),
 		mix %>%
-			gather(`symbol`, `read count`,-sample) %>%
-			inner_join(ref %>% distinct(symbol)) %>%
-			left_join(ref %>% distinct(symbol, `house keeping`)) %>%
+			gather(`symbol`, count,-sample) %>%
+			inner_join(ref %>% distinct(symbol), by = "symbol") %>%
+			left_join(ref %>% distinct(symbol, `house keeping`), by = "symbol") %>%
 			mutate(`Cell type category` = "query") %>%
 			mutate(`query` = TRUE)
 	)	%>%
@@ -1013,8 +1015,8 @@ ref_mix_format = function(ref, mix) {
 		# Add marker symbol indeces
 		left_join((.) %>%
 								filter(!`house keeping`) %>%
-								distinct(`symbol`) %>%
-								mutate(M = 1:n())) %>%
+								distinct(symbol) %>%
+								mutate(M = 1:n()), by = "symbol") %>%
 
 		# Add sample indeces
 		arrange(!`query`) %>% # query first
@@ -1023,8 +1025,8 @@ ref_mix_format = function(ref, mix) {
 		# Add query samples indeces
 		left_join((.) %>%
 								filter(`query`) %>%
-								distinct(`sample`) %>%
-								mutate(Q = 1:n())) %>%
+								distinct(sample) %>%
+								mutate(Q = 1:n()), by="sample") %>%
 
 		# Add house keeping into Cell type label
 		mutate(`Cell type category` = ifelse(`house keeping`, "house_keeping", `Cell type category`)) %>%
@@ -1037,7 +1039,8 @@ ref_mix_format = function(ref, mix) {
 				group_by(symbol) %>%
 				arrange(level) %>%
 				slice(2:max(n(), 2)) %>% # take away house keeping from level 2 above
-				ungroup()
+				ungroup(),
+			by = c("level", "symbol")
 		) %>%
 
 		# If house keeping delete level infomation
@@ -1052,7 +1055,8 @@ ref_mix_format = function(ref, mix) {
 				filter(!`query`) %>%
 				distinct(`Cell type category`, ct_symbol, `house keeping`) %>%
 				arrange(!`house keeping`, ct_symbol) %>% # House keeping first
-				mutate(G = 1:n())
+				mutate(G = 1:n()),
+			by = c("ct_symbol", "Cell type category", "house keeping")
 		) %>%
 		left_join(
 			(.) %>%
@@ -1060,7 +1064,8 @@ ref_mix_format = function(ref, mix) {
 				distinct(level, symbol) %>%
 				arrange(level, symbol) %>%
 				mutate(GM = 1:n()) %>%
-				select(-level)
+				select(-level),
+			by = "symbol"
 		)
 
 }
@@ -1101,36 +1106,37 @@ draws_to_alphas = function(.data, pars) {
 	.data %>%
 		tidybayes::gather_draws(`prop_[1,a-z]`[Q, C], regex = T) %>%
 		ungroup() %>%
-		{
-			print((.))
-			(.)
-		} %>%
+		# {
+		# 	print((.))
+		# 	(.)
+		# } %>%
 		filter(.variable %in% pars) %>%
-		{
-			print((.))
-			(.)
-		} %>%
+		# {
+		# 	print((.))
+		# 	(.)
+		# } %>%
 		nest(data = -c(.variable, Q)) %>%
 		mutate(
 			alphas = map(
 				data,
 				~
 					.x %>%
-					spread(C, .value) %>%
+				  drop_na() %>%
+				  spread(C, .value) %>%
 					select(-c(1:3)) %>%
 					as_matrix() %>%
 					sirt::dirichlet.mle() %$%
 					alpha %>%
 					as_tibble() %>%
 					rename(alpha = value) %>%
-					mutate(C = 1:n())
+					mutate(C = 1:n()) %>%
+				  spread(C, alpha)
 			)
 		) %>%
-		select(-data) %>%
-		unnest(cols = alphas) %>%
-		spread(C, alpha) %>%
-		select(-Q) %>%
-		nest(alphas = -.variable) %>%
+		select(-data, -Q) %>%
+    unnest(alphas) %>%
+    nest(alphas = -.variable) %>%
+    mutate(alphas = map(alphas, ~ .x %>% select_if(function(x){!all(is.na(x))})))%>%
 		pull(alphas)
 }
 
@@ -1532,25 +1538,19 @@ get_sample_transcript_counts = function(.data, .sample, .transcript, .abundance)
 
 	my_stop = function() {
 		stop("
-        tidyBulk says: The fucntion does not know what your sample, transcript and counts columns are.\n
+        ARMET says: The fucntion does not know what your sample, transcript and counts columns are.\n
         You have to either enter those as symbols (e.g., `sample`), \n
         or use the funtion create_tt_from_tibble() to pass your column names that will be remembered.
       ")
 	}
 
 	if( .sample %>% quo_is_symbol() ) .sample = .sample
-	else if(".sample" %in% (.data %>% get_tt_columns() %>% names))
-		.sample =  get_tt_columns(.data)$.sample
 	else my_stop()
 
 	if( .transcript %>% quo_is_symbol() ) .transcript = .transcript
-	else if(".transcript" %in% (.data %>% get_tt_columns() %>% names))
-		.transcript =  get_tt_columns(.data)$.transcript
 	else my_stop()
 
 	if( .abundance %>% quo_is_symbol() ) .abundance = .abundance
-	else if(".abundance" %in% (.data %>% get_tt_columns() %>% names))
-		.abundance = get_tt_columns(.data)$.abundance
 	else my_stop()
 
 	list(.sample = .sample, .transcript = .transcript, .abundance = .abundance)
@@ -1564,7 +1564,7 @@ eliminate_sparse_transcripts = function(.data, .transcript){
 	warning("Some transcripts have been omitted from the analysis because not present in every sample.")
 
 	.data %>%
-		add_count(!!.transcript, name = "my_n") %>%
+		add_count(symbol, name = "my_n") %>%
 		filter(my_n == max(my_n)) %>%
 		select(-my_n)
 }

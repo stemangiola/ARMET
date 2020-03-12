@@ -8,6 +8,7 @@ registerDoParallel()
 library(ARMET)
 library(data.tree)
 
+tree = yaml::yaml.load_file("data/tree.yaml") %>% data.tree::as.Node()
 #options(error = quote({dump.frames(to.file=TRUE); q()}), show.error.locations = TRUE)
 
 my_theme =
@@ -33,7 +34,7 @@ my_theme =
 args <- commandArgs(TRUE)
 
 n_markers = args[1] %>% as.integer
-reps = 10
+reps = 30
 
 
 levels = (args[3] %>% as.integer)
@@ -201,7 +202,7 @@ give_rank_to_ref = function(fit_df, level, fit_threshold, lambda_threshold =5){
 
 
 	fit_df %>%
-		left_join(  Clone(ARMET::tree) %>% ToDataFrameTypeColFull("name") %>% as_tibble() %>% rename(`Cell type formatted`= name)) %>%
+		left_join(  Clone(tree) %>% ToDataFrameTypeColFull("name") %>% as_tibble() %>% rename(`Cell type formatted`= name)) %>%
 		filter(`Cell type category` != "house_keeping") %>%
 
 		# Select only branches that have childs
@@ -314,7 +315,7 @@ create_ref = function(ref, markers){
 		) %>%
 
 		select(  -contains("idx")) %>%
-		mutate(`read count` = `read count` %>% as.integer)
+		mutate(`count` = `count` %>% as.integer)
 }
 
 get_input_data = function(markers, reps, pass){
@@ -382,15 +383,15 @@ get_input_data = function(markers, reps, pass){
 		# ) %>%
 
 		select(  -contains("idx")) %>%
-			mutate(`read count` = `read count` %>% as.integer)	,
+			mutate(`count` = `count` %>% as.integer)	,
 		mix =
 			mix_source %>%
-			distinct(symbol, sample_mix, `read count mix`) %>%
+			distinct(symbol, sample_mix, `count mix`) %>%
 			drop_na %>%
-			spread(`sample_mix`, `read count mix`) %>%
+			spread(`sample_mix`, `count mix`) %>%
 			drop_na %>%
-			gather(sample_mix, `read count mix`, -symbol) %>%
-			spread(`symbol`, `read count mix`) %>%
+			gather(sample_mix, `count mix`, -symbol) %>%
+			spread(`symbol`, `count mix`) %>%
 			rename(sample = sample_mix)
 	) %>%
 		{
@@ -401,63 +402,59 @@ get_input_data = function(markers, reps, pass){
 
 
 }
-
+#
 # mix_base = readRDS("dev/mix_base.RDS")
 # my_ref = 	mix_base %>% distinct(sample, `Cell type category`, level) %>% ungroup() %>% mutate_if(is.character, as.factor) %>% mutate(level = level %>% as.integer)
-#
+# 
 # set.seed(123)
-#
-# cl = multidplyr::create_cluster()
-# clusterExport(cl, "my_ref")
-#
-#
+# 
 # get_mix_source = function(cl){
 # 	{
-#
+# 
 # 		# This function goes thought nodes and grubs names of the cluster
 # 		gn = function(node) {
 # 			if(length(node$children) > 0) {
-#
+# 
 # 				result =
-#
+# 
 # 					# Get cildren names
 # 					#tibble(parent = node$name, children = foreach(cc = node$children, .combine = c) %do% {cc$name}) %>%
 # 					foreach(cc = node$children, .combine = c) %do% {cc$name} %>%
-#
+# 
 # 					#create cmbinations
 # 					combn(m = 2) %>%
 # 					t %>%
 # 					as_tibble %>%
 # 					mutate(parent = node$name, level = node$level )
-#
+# 
 # 				# Merge results with other nodes
 # 				result %<>%
 # 					bind_rows(
 # 						foreach(nc = node$children, .combine = bind_rows) %do% {gn(nc)}
 # 					)
-#
+# 
 # 				return (result)
 # 			}
 # 		}
-#
-# 		gn(Clone(ARMET::tree))
+# 
+# 		gn(Clone(tree))
 # 	} %>%
 # 		mutate(`#` = 1:n()) %>%
-#
+# 
 # 		# Make more runs
 # 		right_join(
 # 			tibble(`#` = (1: ((.) %>% nrow)) %>% rep(reps))  %>%
 # 				mutate(run = 1:n())
 # 		) %>%
 # 		select(-`#`) %>%
-#
-# 		multidplyr::partition(run, cluster = cl) %>%
+# 		group_by(run) %>%
+# 		#multidplyr::partition(cl) %>%
 # 		#group_by(run) %>%
 # 		do({
 # 			`%>%` = magrittr::`%>%`
-#
+# 
 # 			cc = (.)
-#
+# 
 # 			dplyr::bind_rows(
 # 				my_ref %>%
 # 					dplyr::filter(`Cell type category` == (cc %>% dplyr::pull(V1)) & level == (cc %>% dplyr::pull(level))) %>%
@@ -473,47 +470,47 @@ get_input_data = function(markers, reps, pass){
 # 		}) %>%
 # 		collect() %>%
 # 		ungroup() %>%
-#
+# 
 # 		# Again solving the problem with house keeping genes
-# 		left_join(mix_base  %>% distinct(`symbol`, `read count normalised bayes`, `Cell type category`, sample, level, `house keeping`))  %>%
-#
+# 		left_join(mix_base  %>% distinct(`symbol`, `count scaled bayes`, `Cell type category`, sample, level, `house keeping`))  %>%
+# 
 # 		# Add mix_sample
-# 		left_join(
+# 		left_join({
 # 			(.) %>%
 # 				group_by(run) %>%
-# 				do(
+# 				do({ #if((.) %>% pull(`Cell type category`) %>% unique %>% equals("t_CD4_memory")) browser()
 # 					(.) %>%
-# 						distinct(`symbol`, `read count normalised bayes`, `Cell type category`, run, level) %>%
-# 						spread(`Cell type category`, `read count normalised bayes`) %>%
+# 						distinct(`symbol`, `count scaled bayes`, `Cell type category`, run, level) %>%
+# 						spread(`Cell type category`, `count scaled bayes`) %>%
 # 						drop_na %>%
 # 						mutate(pair = names((.))[4:5] %>% paste(collapse=" ")) %>%
 # 						setNames(c("symbol", "run", "level", "1", "2", "pair")) %>%
-# 						mutate( `read count mix` = ( (`1` + `2`) / 2 ) %>% as.integer ) %>%
+# 						mutate( `count mix` = ( (`1` + `2`) / 2 ) %>% as.integer ) %>%
 # 						unite(sample_mix, c("run", "pair"), remove = F)
-# 				) %>%
+# 			}	) %>%
 # 				ungroup() %>%
-# 				distinct(symbol, run, level, pair, sample_mix,  `read count mix`)
-# 		) %>%
-#
+# 				distinct(symbol, run, level, pair, sample_mix,  `count mix`)
+# 		}) %>%
+# 
 # 		# Eliminate duplicated of difference levels for example house keepng genes
 # 		group_by(run, symbol, sample) %>%
 # 		arrange(level) %>%
 # 		slice(1) %>%
 # 		ungroup %>%
-#
+# 
 # 		# Decrease size
 # 		mutate_if(is.character, as.factor)
 # }
-#
+# 
 # mix_source = get_mix_source(cl)
-#
+# 
 # saveRDS(mix_source, file="dev/mix_source_30_reps.rds")
 
 # (xx %>%
 # 		#filter(symbol %in% (read_csv("docs/hk_600.txt", col_names = FALSE) %>% pull(1))) %>%
 # 		#inner_join((.) %>% distinct(symbol) %>% head(n=300)) %>%
-# 		aggregate_duplicated_gene_symbols(value_column = "read count normalised bayes") %>%
-# 		add_MDS_components(feature_column  = "symbol", elements_column  = "sample", value_column = "read count normalised bayes", components_list = list(1:2, 3:4, 5:6)) %>%
+# 		aggregate_duplicated_gene_symbols(value_column = "count scaled bayes") %>%
+# 		add_MDS_components(feature_column  = "symbol", elements_column  = "sample", value_column = "count scaled bayes", components_list = list(1:2, 3:4, 5:6)) %>%
 # 		#rotate_MDS_components(rotation_degrees = -50) %>%
 # 		select(contains("Dimension"), sample,  `Cell type formatted`, `Data base`) %>%
 # 		distinct() %>%
@@ -533,6 +530,8 @@ s = sample(size = 1, 1:99999999)
 if(levels==1) n_mark_df = ARMET::ARMET_ref %>% distinct(ct1, ct2) %>% mutate(`n markers` = n_markers)
 if(levels==2) n_mark_df = readRDS("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/feature_selection_eight_iterative_run_fix_1/markers_50.RData")$input$n_markers
 if(levels==3) n_mark_df = readRDS("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/feature_selection_eight_iterative_run_fix_2/markers_25.RData")$input$n_markers
+if(levels==4) n_mark_df = readRDS("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/feature_selection_eight_iterative_run_fix_3/markers_25.RData")$input$n_markers
+n_mark_df = ARMET::my_n_markers
 
 mix_source = readRDS("dev/mix_source_30_reps.rds")
 #mix_source = readRDS("dev/mix_source.rds")
@@ -544,17 +543,17 @@ do_iterate = function(mix_source, n_mark_df, full_bayesian, levels, iteration, o
 		ARMET_tc(
 			mix_source %>%
 				filter(level %in% levels) %>%
-				distinct(symbol, sample_mix, `read count mix`) %>%
+				distinct(symbol, sample_mix, `count mix`) %>%
 				drop_na %>%
-				spread(`sample_mix`, `read count mix`) %>%
+				spread(`sample_mix`, `count mix`) %>%
 				drop_na %>%
-				gather(sample_mix, `read count mix`, -symbol) %>%
-				spread(`symbol`, `read count mix`) %>%
-				rename(sample = sample_mix) ,
+				gather(sample_mix, `count mix`, -symbol)  ,
+			.sample = sample_mix, .transcrip = symbol, .abundance = `count mix`,
 			iterations = 250,
 			n_markers = n_mark_df,
-			full_bayesian  = full_bayesian,
-			cores = 10, levels = levels
+			approximate_posterior  = full_bayesian,
+			cores = 10,
+			levels = levels
 		)
 
 	result %>% saveRDS(file=sprintf("%s/markers_%s.RData", out_dir, iteration))
@@ -641,7 +640,8 @@ do_iterate = function(mix_source, n_mark_df, full_bayesian, levels, iteration, o
 		)
 
 }
-#debugonce(do_iterate)
+
+debugonce(do_iterate)
 
 do_iterate(mix_source, n_mark_df, full_bayesian, levels, iteration, out_dir)
 
@@ -777,6 +777,6 @@ filter(level_pair == level_tree) %>%
 # 	filter(level ==1) %>%
 # 	arrange(rank) %>%
 # 	mutate(symbol = factor(symbol, unique(symbol))) %>%
-# 	ggplot(aes(x=`Cell type category`, y=`read count normalised bayes`+1, color=`marker too noisy`)) +
+# 	ggplot(aes(x=`Cell type category`, y=`count scaled bayes`+1, color=`marker too noisy`)) +
 # 			geom_jitter() + facet_wrap(~symbol ) + scale_y_log10() + my_theme
 

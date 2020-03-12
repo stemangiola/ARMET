@@ -8,12 +8,14 @@
 
 #'
 #' @import dplyr
+#' @import purrr
 #'
 #' @importFrom tidyr spread
 #' @importFrom tidyr gather
 #' @importFrom tidyr drop_na
 #' @importFrom rlang enquo
 #' @importFrom tibble tibble
+#' @importFrom stringr str_split
 #'
 #' @importFrom tidybayes gather_samples
 #' @importFrom tidybayes median_qi
@@ -73,6 +75,13 @@ ARMET_tc = function(.data,
 	.sample = col_names$.sample
 	.transcript = col_names$.transcript
 	.abundance = col_names$.abundance
+	
+	# Rename columns mix
+	.data = .data %>% rename( sample = !!.sample, symbol = !!.transcript ,  count = !!.abundance)
+
+	# Checkif count is integer
+	if(.data %>% select(count) %>% lapply(class) %>% unlist() %>% equals("integer") %>% `!`)
+		stop(sprintf("ARMET says: the %s column must be integer as the deconvolution model is Negative Binomial", quo_name(.abundance)))
 
 	# Check family
 	if(family %in% c("dirichlet", "beta") %>% any %>% `!`) stop("ARMET says: Please choose between dirichlet or beta families")
@@ -80,54 +89,58 @@ ARMET_tc = function(.data,
 	# Covariate column
 	cov_columns =
 		parse_formula(.formula)$covariates %>%
-		map_chr(~ .x %>% gsub("censored\\(|\\)| ", "", .) %>% str_split("\\,") %>% `[[` (1) %>% `[` (1))
+		map_chr(~ .x %>% gsub("censored\\(|\\)| ", "", .) %>% str_split("\\,") %>% `[[` (1) %>% `[` (1)) %>%
+		ifelse_pipe((.) %>% is.na, ~ c())
+
+	# Do regresson
+	if(length(cov_columns) > 0) do_regression = T
 
 	# distinct_at is not released yet for dplyr, thus we have to use this trick
 	df_for_edgeR <- .data %>%
 
 		# Stop if any counts is NA
-		error_if_counts_is_na(!!.abundance) %>%
+		error_if_counts_is_na(count) %>%
 
 		# Stop if there are duplicated transcripts
-		error_if_duplicated_genes(!!.sample,!!.transcript,!!.abundance) %>%
+		error_if_duplicated_genes(sample,symbol,count) %>%
 
 		# Prepare the data frame
-		select(!!.transcript,
-					 !!.sample,
-					 !!.abundance,
+		select(symbol,
+					 sample,
+					 count,
 					 one_of(cov_columns)) %>%
 		distinct() %>%
 
 		# Check if data rectangular
 		ifelse_pipe(
-			(.) %>% check_if_data_rectangular(!!.sample,!!.transcript,!!.abundance, type = "soft") %>% `!` &
+			(.) %>% check_if_data_rectangular(sample,symbol,count, type = "soft") %>% `!` &
 				TRUE, #!fill_missing_values,
-			~ .x %>% eliminate_sparse_transcripts(!!.transcript)
+			~ .x %>% eliminate_sparse_transcripts(symbol)
 		)
 
 	# Create design matrix
+	if(length(cov_columns) > 0) my_formula = as.formula( paste("~",paste(cov_columns, collapse = "+")))
+	else my_formula = .formula
+
 	X =
 		model.matrix(
-			object = 	as.formula( paste("~",paste(cov_columns, collapse = "+"))),
-			data = df_for_edgeR %>% select(!!.sample, one_of(cov_columns)) %>% distinct %>% arrange(!!.sample)
+			object = 	my_formula,
+			data = df_for_edgeR %>% select(sample, one_of(cov_columns)) %>% distinct %>% arrange(sample)
 		)
 
 	# Censoring column
 	.cens_column = parse_formula(.formula)$covariates %>% grep("censored(", ., fixed = T, value = T)  %>% gsub("censored\\(|\\)| ", "", .) %>% str_split("\\,") %>% ifelse_pipe(length(.)>0, ~.x %>% `[[` (1) %>% `[` (-1), ~NULL)
-	if(length(.cens_column) == 1) cens = .data %>% select(!!.sample, .cens_column) %>% distinct %>% arrange(!!.sample) %>% pull(2)
+	if(length(.cens_column) == 1) cens = .data %>% select(sample, .cens_column) %>% distinct %>% arrange(sample) %>% pull(2)
 	else cens = NULL
-
-	# Error if censorting with Dirichlet
-	if(!is.null(cens) & family == "dirichlet") stop("ARMET says: Censoring is not abilitated with Dirichlet. Stats is not there yet :(")
 
 	mix =
 		.data %>%
-		select(!!.sample,
-					 !!.transcript,
-					 !!.abundance,
+		select(sample,
+					 symbol,
+					 count,
 					 one_of(parse_formula(.formula)$covariates)) %>%
 		distinct() %>%
-		spread(!!.transcript, !!.abundance)
+		spread(symbol, count)
 
 	shards = cores #* 2
 	is_level_in = shards %>% `>` (0) %>% as.integer
@@ -201,7 +214,7 @@ ARMET_tc = function(.data,
 
 
 	# Print overlap descriptive stats
-	#get_overlap_descriptive_stats(mix %>% slice(1) %>% gather(`symbol`, `read count`, -sample), reference)
+	#get_overlap_descriptive_stats(mix %>% slice(1) %>% gather(symbol, count, -sample), reference)
 
 	# Prepare data frames -
 	# For Q query first
@@ -221,7 +234,7 @@ ARMET_tc = function(.data,
 		# Select cell types in hierarchy
 		inner_join(
 			tree %>%
-				data.tree::ToDataFrameTree("Cell type category", "C", "C1", "C2", "C3") %>%
+				data.tree::ToDataFrameTree("Cell type category", "C", "C1", "C2", "C3", "C4") %>%
 				as_tibble %>%
 				select(-1),
 			by = "Cell type category"
@@ -240,7 +253,7 @@ ARMET_tc = function(.data,
 
 	prop_posterior = get_null_prop_posterior(ct_in_nodes)
 
-	######################################
+	#------------------------------------#
 
 	res1 = run_model(
 		reference_filtered,
@@ -344,7 +357,7 @@ ARMET_tc = function(.data,
 	fit = list(fit1)
 	df = list(df1)
 
-	######################################
+	#------------------------------------#
 
 	if (levels > 1) {
 		res2 = run_model(
@@ -466,7 +479,7 @@ ARMET_tc = function(.data,
 				df = df %>% c(list(df2))
 	}
 
-	######################################
+	#------------------------------------#
 
 	if (levels > 2) {
 		# browser()
@@ -490,6 +503,8 @@ ARMET_tc = function(.data,
 		df3 = res3[[1]]
 		fit3 = res3[[2]]
 
+		prop_posterior[3: (2+length(c("b", "c", "d", "e", "f")))] = fit3 %>% draws_to_alphas(sprintf("prop_%s", c("b", "c", "d", "e", "f"))) 
+		
 		draws_3 =
 			draws_2 %>%
 			left_join(
@@ -582,6 +597,122 @@ ARMET_tc = function(.data,
 
 	}
 
+	#------------------------------------#
+	
+	if (levels > 3) {
+	  # browser()
+	  res4 = run_model(
+	    reference_filtered,
+	    mix,
+	    shards,
+	    4,
+	    full_bayesian,
+	    approximate_posterior,
+	    prop_posterior,
+	    draws_to_exposure(fit1),
+	    iterations = iterations,
+	    sampling_iterations = sampling_iterations	,
+	    X = X,
+	    do_regression = do_regression,
+	    family = family,
+	    cens = cens
+	  )
+	  
+	  df4 = res4[[1]]
+	  fit4 = res4[[2]]
+	  
+	  draws_4 =
+	    draws_3 %>%
+	    left_join(
+	      fit4 %>%
+	        ######## ALTERED WITH TREE
+	        tidybayes::gather_draws(`prop_[g, h, i, l, m]`[Q, C], regex = T) %>%
+	        #########################
+	      drop_na %>%
+	        ungroup() %>%
+	        left_join(
+	          ######## ALTERED WITH TREE
+	          tibble(
+	            .variable = c("prop_g", "prop_h", "prop_i", "prop_l", "prop_m"),
+	            C3 = parents_lv4
+	          )
+	          #########################
+	        ) %>%
+	        select(-.variable) %>%
+	        rename(.value4 = .value, C4 = C),
+	      by = c(".chain", ".iteration", ".draw", "Q",  "C3")
+	    ) %>%
+	    group_by(.chain, .iteration, .draw, Q) %>%
+	    arrange(C1, C2, C3, C4) %>%
+	    mutate(
+	      C4 = tree$Get("C4") %>% na.omit,
+	      `Cell type category` = tree$Get("C4") %>% na.omit %>% names
+	    ) %>%
+	    ungroup() %>%
+	    mutate(.value_relative = .value4) %>%
+	    mutate(.value4 = ifelse(.value4 %>% is.na, .value2, .value2 * .value4))
+	  
+	  if (do_regression && length(parse_formula(.formula)$covariates) >0 ){
+	    alpha_4 =
+	      fit4 %>%
+	      tidybayes::gather_draws(`alpha_[4]`[A, C], regex = T) %>%
+	      ungroup() %>%
+	      
+	      # rebuild the last component sum-to-zero
+	      ifelse_pipe(family == "dirichlet", ~ .x %>% rebuild_last_component_sum_to_zero) %>%
+	      
+	      # Calculate relative 0 because of dirichlet relativity
+	      ifelse_pipe(family == "dirichlet", ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
+	      
+	      arrange(.chain, .iteration, .draw,     A) %>%
+	      
+	      nest(draws = -c(C, .variable, zero)) %>%
+	      
+	      left_join(
+	        tree %>%
+	          ToDataFrameTree("name", "level", sprintf("C%s", 4)) %>%
+	          arrange(C4) %>%
+	          drop_na() %>%
+	          select(name, C4) %>%
+	          rename(`Cell type category` = name) %>%
+	          rename(C = C4)
+	      )
+	    
+	    alpha = alpha  %>% bind_rows(alpha_4 %>% mutate(level = 4))
+	    
+	  }
+	  prop_4 =
+	    draws_4 %>%
+	    select(.chain,
+	           .iteration,
+	           .draw,
+	           Q,
+	           C4 ,
+	           `Cell type category`,
+	           .value4,
+	           .value_relative) %>%
+	    rename(C = C4, .value = .value4) %>%
+	    mutate(.variable = "prop_4") %>%
+	    mutate(level = 4) %>%
+	    
+	    # add sample annotation
+	    left_join(df4 %>% distinct(Q, sample), by = "Q")	%>%
+	    
+	    # If MCMC is used check divergencies as well
+	    ifelse_pipe(
+	      !approximate_posterior,
+	      ~ .x %>% parse_summary_check_divergence(),
+	      ~ .x %>% parse_summary() %>% rename(.value = mean)
+	    ) %>%
+	    
+	    left_join(df4 %>% distinct(Q, sample))
+	  
+	  prop = bind_rows(prop, prop_4)
+	  fit = fit %>% c(list(fit4))
+	  df = df %>% c(list(df4))
+	  
+	}
+	
 	# Return
 	list(
 		# Matrix of proportions
@@ -645,7 +776,7 @@ run_model = function(reference_filtered,
 		format_for_MPI(shards)
 
 	S = counts_baseline %>% distinct(sample) %>% nrow()
-	N = counts_baseline %>% distinct(idx_MPI, `read count`, `read count MPI row`) %>%  count(idx_MPI) %>% summarise(max(n)) %>% pull(1)
+	N = counts_baseline %>% distinct(idx_MPI, count, `read count MPI row`) %>%  count(idx_MPI) %>% summarise(max(n)) %>% pull(1)
 	M = counts_baseline %>% distinct(start, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
 
 	lambda_log = 	  counts_baseline %>% filter(!query) %>% distinct(G, lambda_log) %>% arrange(G) %>% pull(lambda_log)
@@ -654,10 +785,10 @@ run_model = function(reference_filtered,
 	y_source =
 		df %>%
 		filter(`query` & !`house keeping`) %>%
-		select(S, Q, `symbol`, `read count`, GM, sample) %>%
+		select(S, Q, symbol, count, GM, sample) %>%
 		left_join(
 			df %>% filter(!query) %>% distinct(
-				`symbol`,
+				symbol,
 				G,
 				`Cell type category`,
 				level,
@@ -665,7 +796,8 @@ run_model = function(reference_filtered,
 				sigma_inv_log,
 				GM,
 				C
-			)
+			),
+			by = c("symbol", "GM")
 		) %>%
 		arrange(C, Q, symbol) %>%
 		mutate(`Cell type category` = factor(`Cell type category`, unique(`Cell type category`)))
@@ -677,7 +809,7 @@ run_model = function(reference_filtered,
 		mutate(counts_idx = 1:n()) %>%
 		mutate(S = S %>% as.factor %>% as.integer)
 
-	counts_linear = counts_baseline_to_linear %>%  pull(`read count`)
+	counts_linear = counts_baseline_to_linear %>%  pull(count)
 	G_to_counts_linear = counts_baseline_to_linear %>% pull(G)
 	G_linear = G_to_counts_linear
 	S_linear = counts_baseline_to_linear %>% pull(S)
@@ -698,10 +830,10 @@ run_model = function(reference_filtered,
 	G_lv = G_lv_linear %>% length
 
 	# Observed mix counts
-	y_linear_lv = y_source %>% filter(level == lv) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(`read count`)
+	y_linear_lv = y_source %>% filter(level == lv) %>% distinct(GM, Q, S, count) %>% arrange(GM, Q) %>% pull(count)
 
 	# Observed mix samples indexes
-	y_linear_S_lv = y_source %>% filter(level == lv) %>% distinct(GM, Q, S, `read count`) %>% arrange(GM, Q) %>% pull(S)
+	y_linear_S_lv = y_source %>% filter(level == lv) %>% distinct(GM, Q, S, count) %>% arrange(GM, Q) %>% pull(S)
 
 	# Lengths indexes
 	Y_lv = y_linear_lv %>% length
@@ -749,8 +881,9 @@ run_model = function(reference_filtered,
 	Sys.setenv("STAN_NUM_THREADS" = shards)
 
 	fam_dirichlet = family == "dirichlet"
-	if(cens %>% is.null) cens =  rep(0, y_source %>% distinct(Q) %>% nrow )
 	is_cens = !is.null(cens)
+	if(cens %>% is.null) cens =  rep(0, y_source %>% distinct(Q) %>% nrow ) %>% as.array()
+	
 
 	#if(lv == 3) browser()
 
@@ -811,6 +944,8 @@ run_model = function(reference_filtered,
 
 #' @export
 test_differential_composition = function(.data, credible_interval = 0.95) {
+
+
 
 	.data$proportions %>%
 		mutate(regression = map2(draws, zero,

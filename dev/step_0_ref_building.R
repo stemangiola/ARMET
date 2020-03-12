@@ -873,35 +873,35 @@ group_by(level) %>%
   saveRDS(file="~/PhD/deconvolution/ARMET/dev/counts_infer_NB.rds")
 
 
-# # Plots and Study
-# library(ttBulk)
-# (
-#   readRDS(file="counts_infer_NB.rds") %>%
-#     dplyr::distinct(sample, symbol, `count`, `Cell type formatted`, `Data base`) %>%
-#     ttBulk::ttBulk(sample, symbol, `count`) %>%
-#     distinct() %>%
-#     aggregate_duplicates() %>%
-#     ttBulk::scale_abundance() %>%
-#     distinct(`Data base`, sample, symbol, `Cell type formatted`, `count scaled`)  %>%
-#     reduce_dimensions(sample, symbol, `count scaled`, method = "tSNE", .dims=2) %>%
-#     select(contains("tSNE"), `Data base`, `Cell type formatted`) %>%
-#     distinct %>%
-#     ggplot(aes(x = `tSNE1`, y = `tSNE2`, color=`Cell type formatted`)) + geom_point(size=2) +
-#     theme_bw() +
-#     theme(
-#       panel.border = element_blank(),
-#       axis.line = element_line(),
-#       panel.grid.major = element_line(size = 0.2),
-#       panel.grid.minor = element_line(size = 0.1),
-#       text = element_text(size=12),
-#       legend.position="bottom",
-#       aspect.ratio=1,
-#       #axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-#       strip.background = element_blank(),
-#       axis.title.x  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10)),
-#       axis.title.y  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10))
-#     )
-# ) %>% plotly::ggplotly()
+# Plots and Study
+library(ttBulk)
+(
+  readRDS(file="counts_infer_NB.rds") %>%
+    dplyr::distinct(sample, symbol, `count`, `Cell type formatted`, `Data base`) %>%
+    ttBulk::ttBulk(sample, symbol, `count`) %>%
+    distinct() %>%
+    aggregate_duplicates() %>%
+    ttBulk::scale_abundance() %>%
+    distinct(`Data base`, sample, symbol, `Cell type formatted`, `count scaled`)  %>%
+    reduce_dimensions(sample, symbol, `count scaled`, method = "tSNE", .dims=2) %>%
+    select(contains("tSNE"), `Data base`, `Cell type formatted`) %>%
+    distinct %>%
+    ggplot(aes(x = `tSNE1`, y = `tSNE2`, color=`Cell type formatted`)) + geom_point(size=2) +
+    theme_bw() +
+    theme(
+      panel.border = element_blank(),
+      axis.line = element_line(),
+      panel.grid.major = element_line(size = 0.2),
+      panel.grid.minor = element_line(size = 0.1),
+      text = element_text(size=12),
+      legend.position="bottom",
+      aspect.ratio=1,
+      #axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+      strip.background = element_blank(),
+      axis.title.x  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10)),
+      axis.title.y  = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10))
+    )
+) %>% plotly::ggplotly()
 #
 # (
 #   ARMET::ARMET_ref %>%
