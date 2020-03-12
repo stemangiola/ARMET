@@ -562,7 +562,7 @@ do_iterate = function(mix_source, n_mark_df, full_bayesian, levels, iteration, o
 		result %$%
 		proportions %>%
 		mutate(iteration = iteration) %>%
-		separate(sample_mix, c("run", "pair"), sep="_", extra="merge") %>%
+		separate(sample, c("run", "pair"), sep="_", extra="merge") %>%
 		separate(pair, c("ct1", "ct2"), sep=" ") %>%
 		#filter(`Cell type category` == ct1 | `Cell type category` == ct2) %>%
 		mutate(truth = ifelse(`Cell type category` == ct1 | `Cell type category` == ct2, 0.5, 0)) %>%
@@ -640,6 +640,7 @@ do_iterate = function(mix_source, n_mark_df, full_bayesian, levels, iteration, o
 		)
 
 }
+
 debugonce(do_iterate)
 
 do_iterate(mix_source, n_mark_df, full_bayesian, levels, iteration, out_dir)
