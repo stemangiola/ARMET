@@ -1,11 +1,8 @@
-
-
 #' ARMET-tc main
 #'
 #' @description This function calls the stan model.
 #'
 #'
-
 #'
 #' @import dplyr
 #' @import purrr
@@ -16,6 +13,7 @@
 #' @importFrom rlang enquo
 #' @importFrom tibble tibble
 #' @importFrom stringr str_split
+#' @importFrom tidybayes gather_draws
 #'
 #' @importFrom tidybayes gather_samples
 #' @importFrom tidybayes median_qi
@@ -59,13 +57,13 @@ ARMET_tc = function(.data,
 										iterations = 250,
 										sampling_iterations = 100,
 										levels = 3,
-										n_markers = my_n_markers ,
+										.n_markers = n_markers ,
 										do_regression = F) {
 
 	# At the moment is not active
 	full_bayesian = F
 
-	input = c(as.list(environment()))
+	#input = c(as.list(environment()))
 
 	# Get column names
 	.sample = enquo(.sample)
@@ -75,7 +73,7 @@ ARMET_tc = function(.data,
 	.sample = col_names$.sample
 	.transcript = col_names$.transcript
 	.abundance = col_names$.abundance
-	
+
 	# Rename columns mix
 	.data = .data %>% rename( sample = !!.sample, symbol = !!.transcript ,  count = !!.abundance)
 
@@ -90,10 +88,10 @@ ARMET_tc = function(.data,
 	cov_columns =
 		parse_formula(.formula)$covariates %>%
 		map_chr(~ .x %>% gsub("censored\\(|\\)| ", "", .) %>% str_split("\\,") %>% `[[` (1) %>% `[` (1)) %>%
-		ifelse_pipe((.) %>% is.na, ~ c())
+		ifelse_pipe((.) %>% is.null, ~ c())
 
 	# Do regresson
-	if(length(cov_columns) > 0) do_regression = T
+	if(length(cov_columns) > 0 & (cov_columns %>% is.na %>% `!`)) do_regression = T
 
 	# distinct_at is not released yet for dplyr, thus we have to use this trick
 	df_for_edgeR <- .data %>%
@@ -119,7 +117,7 @@ ARMET_tc = function(.data,
 		)
 
 	# Create design matrix
-	if(length(cov_columns) > 0) my_formula = as.formula( paste("~",paste(cov_columns, collapse = "+")))
+	if(length(cov_columns) > 0 & (cov_columns %>% is.na %>% `!`)) my_formula = as.formula( paste("~",paste(cov_columns, collapse = "+")))
 	else my_formula = .formula
 
 	X =
@@ -226,8 +224,8 @@ ARMET_tc = function(.data,
 	reference_filtered =
 		ARMET::ARMET_ref %>%
 
-		left_join(n_markers, by = c("ct1", "ct2")) %>%
-		filter_reference(mix, n_markers) %>%
+		left_join(.n_markers, by = c("ct1", "ct2")) %>%
+		filter_reference(mix, .n_markers) %>%
 		select(-ct1,-ct2,-rank,-`n markers`) %>%
 		distinct %>%
 
@@ -283,6 +281,46 @@ ARMET_tc = function(.data,
 		select(-.variable) %>%
 		mutate(.value_relative = .value)
 
+	prop_1 =
+		fit1 %>%
+		tidybayes::gather_draws(`prop_[1]`[Q, C], regex = T) %>%
+		drop_na  %>%
+		ungroup() %>%
+		
+		# Add relative proportions
+		mutate(.value_relative = .value) %>%
+		
+		# Add tree information
+		left_join(
+			tree %>% data.tree::ToDataFrameTree("name", "C1", "C2", "C3", "C4") %>%
+				as_tibble %>%
+				select(-1) %>%
+				rename(`Cell type category` = name) %>%
+				gather(level, C, -`Cell type category`) %>%
+				mutate(level = gsub("C", "", level)) %>%
+				filter(level == 1) %>%
+				drop_na %>%
+				mutate(C = C %>% as.integer, level = level %>% as.integer)
+		) %>%
+		
+		# add sample annotation
+		left_join(df1 %>% distinct(Q, sample), by = "Q")	%>%
+		
+		# If MCMC is used check divergencies as well
+		ifelse_pipe(
+			!approximate_posterior,
+			~ .x %>% parse_summary_check_divergence(),
+			~ .x %>% parse_summary() %>% rename(.value = mean)
+		) %>%
+		
+		# Parse
+		separate(.variable, c(".variable", "level"), convert = T) %>%
+		
+		# Add sample information
+		left_join(df1 %>%
+								filter(`query`) %>%
+								distinct(Q, sample))
+	
 	if (do_regression && length(parse_formula(.formula)$covariates) >0 ) {
 		alpha_1 =
 			fit1 %>%
@@ -309,49 +347,14 @@ ARMET_tc = function(.data,
 					rename(`Cell type category` = name)
 			)
 		alpha = alpha_1 %>% mutate(level = 1)
+		
+		prop_1 = prop_1 %>%
+			left_join(
+				fit1 %>% tidybayes::gather_draws(prop_rng[Q, C]) %>% ungroup() %>% nest(rng = -c(Q, C))
+			)
 	}
 
-	prop_1 =
-		fit1 %>%
-		tidybayes::gather_draws(`prop_[1]`[Q, C], regex = T) %>%
-		drop_na  %>%
-		ungroup() %>%
 
-		# Add relative proportions
-		mutate(.value_relative = .value) %>%
-
-		# Add tree information
-		left_join(
-			tree %>% data.tree::ToDataFrameTree("name", "C1", "C2", "C3", "C4") %>%
-				as_tibble %>%
-				select(-1) %>%
-				rename(`Cell type category` = name) %>%
-				gather(level, C, -`Cell type category`) %>%
-				mutate(level = gsub("C", "", level)) %>%
-				filter(level == 1) %>%
-				drop_na %>%
-				mutate(C = C %>% as.integer, level = level %>% as.integer)
-		) %>%
-
-		# add sample annotation
-		left_join(df1 %>% distinct(Q, sample), by = "Q")	%>%
-
-		# If MCMC is used check divergencies as well
-		ifelse_pipe(
-			!approximate_posterior,
-			~ .x %>% parse_summary_check_divergence(),
-			~ .x %>% parse_summary() %>% rename(.value = mean)
-		) %>%
-
-		# Parse
-		separate(.variable, c(".variable", "level"), convert = T) %>%
-
-
-
-		# Add sample information
-		left_join(df1 %>%
-								filter(`query`) %>%
-								distinct(Q, sample))
 
 	prop = prop_1
 	fit = list(fit1)
@@ -419,6 +422,31 @@ ARMET_tc = function(.data,
 					mutate(.value_relative = .value2) %>%
 					mutate(.value2 = ifelse(.value2 %>% is.na, .value, .value * .value2))
 
+		prop_2 =
+			draws_2 %>%
+			select(.chain,
+						 .iteration,
+						 .draw,
+						 Q,
+						 C2 ,
+						 `Cell type category`,
+						 .value2,
+						 .value_relative) %>%
+			
+			rename(C = C2, .value = .value2) %>%
+			mutate(.variable = "prop_2") %>%
+			mutate(level = 2) %>%
+			
+			# add sample annotation
+			left_join(df2 %>% distinct(Q, sample), by = "Q")	%>%
+			
+			# If MCMC is used check divergencies as well
+			ifelse_pipe(
+				!approximate_posterior,
+				~ .x %>% parse_summary_check_divergence(),
+				~ .x %>% parse_summary() %>% rename(.value = mean)
+			)
+		
 				if (do_regression && length(parse_formula(.formula)$covariates) >0 ){
 					alpha_2 =
 						fit2 %>%
@@ -445,33 +473,13 @@ ARMET_tc = function(.data,
 								rename(C = C2)
 						)
 					alpha = alpha  %>% bind_rows(alpha_2 %>% mutate(level = 2))
+					
+					prop_2 = prop_2 %>%
+						left_join(
+							fit2 %>% tidybayes::gather_draws(prop_rng[Q, C]) %>% ungroup() %>% nest(rng = -c(Q, C))
+						)
 
 				}
-
-				prop_2 =
-					draws_2 %>%
-					select(.chain,
-								 .iteration,
-								 .draw,
-								 Q,
-								 C2 ,
-								 `Cell type category`,
-								 .value2,
-								 .value_relative) %>%
-
-					rename(C = C2, .value = .value2) %>%
-					mutate(.variable = "prop_2") %>%
-					mutate(level = 2) %>%
-
-					# add sample annotation
-					left_join(df2 %>% distinct(Q, sample), by = "Q")	%>%
-
-					# If MCMC is used check divergencies as well
-					ifelse_pipe(
-						!approximate_posterior,
-						~ .x %>% parse_summary_check_divergence(),
-						~ .x %>% parse_summary() %>% rename(.value = mean)
-					)
 
 				# Eliminate
 				prop = bind_rows(prop, prop_2)
@@ -503,8 +511,8 @@ ARMET_tc = function(.data,
 		df3 = res3[[1]]
 		fit3 = res3[[2]]
 
-		prop_posterior[3: (2+length(c("b", "c", "d", "e", "f")))] = fit3 %>% draws_to_alphas(sprintf("prop_%s", c("b", "c", "d", "e", "f"))) 
-		
+		prop_posterior[3: (2+length(c("b", "c", "d", "e", "f")))] = fit3 %>% draws_to_alphas(sprintf("prop_%s", c("b", "c", "d", "e", "f")))
+
 		draws_3 =
 			draws_2 %>%
 			left_join(
@@ -536,35 +544,7 @@ ARMET_tc = function(.data,
 					mutate(.value_relative = .value3) %>%
 					mutate(.value3 = ifelse(.value3 %>% is.na, .value2, .value2 * .value3))
 
-				if (do_regression && length(parse_formula(.formula)$covariates) >0 ){
-					alpha_3 =
-						fit3 %>%
-						tidybayes::gather_draws(`alpha_[3]`[A, C], regex = T) %>%
-						ungroup() %>%
-
-						# rebuild the last component sum-to-zero
-						ifelse_pipe(family == "dirichlet", ~ .x %>% rebuild_last_component_sum_to_zero) %>%
-
-						# Calculate relative 0 because of dirichlet relativity
-						ifelse_pipe(family == "dirichlet", ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
-
-						arrange(.chain, .iteration, .draw,     A) %>%
-
-						nest(draws = -c(C, .variable, zero)) %>%
-
-						left_join(
-							tree %>%
-								ToDataFrameTree("name", "level", sprintf("C%s", 3)) %>%
-								arrange(C3) %>%
-								drop_na() %>%
-								select(name, C3) %>%
-								rename(`Cell type category` = name) %>%
-								rename(C = C3)
-						)
-
-					alpha = alpha  %>% bind_rows(alpha_3 %>% mutate(level = 3))
-
-				}
+				
 				prop_3 =
 					draws_3 %>%
 					select(.chain,
@@ -591,6 +571,41 @@ ARMET_tc = function(.data,
 
 					left_join(df3 %>% distinct(Q, sample))
 
+				if (do_regression && length(parse_formula(.formula)$covariates) >0 ){
+					alpha_3 =
+						fit3 %>%
+						tidybayes::gather_draws(`alpha_[3]`[A, C], regex = T) %>%
+						ungroup() %>%
+						
+						# rebuild the last component sum-to-zero
+						ifelse_pipe(family == "dirichlet", ~ .x %>% rebuild_last_component_sum_to_zero) %>%
+						
+						# Calculate relative 0 because of dirichlet relativity
+						ifelse_pipe(family == "dirichlet", ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
+						
+						arrange(.chain, .iteration, .draw,     A) %>%
+						
+						nest(draws = -c(C, .variable, zero)) %>%
+						
+						left_join(
+							tree %>%
+								ToDataFrameTree("name", "level", sprintf("C%s", 3)) %>%
+								arrange(C3) %>%
+								drop_na() %>%
+								select(name, C3) %>%
+								rename(`Cell type category` = name) %>%
+								rename(C = C3)
+						)
+					
+					alpha = alpha  %>% bind_rows(alpha_3 %>% mutate(level = 3))
+					
+					prop_3 = prop_3 %>%
+						left_join(
+							fit3 %>% tidybayes::gather_draws(prop_rng[Q, C]) %>% ungroup() %>% nest(rng = -c(Q, C))
+						)
+					
+				}
+				
 				prop = bind_rows(prop, prop_3)
 				fit = fit %>% c(list(fit3))
 				df = df %>% c(list(df3))
@@ -598,7 +613,7 @@ ARMET_tc = function(.data,
 	}
 
 	#------------------------------------#
-	
+
 	if (levels > 3) {
 	  # browser()
 	  res4 = run_model(
@@ -617,10 +632,10 @@ ARMET_tc = function(.data,
 	    family = family,
 	    cens = cens
 	  )
-	  
+
 	  df4 = res4[[1]]
 	  fit4 = res4[[2]]
-	  
+
 	  draws_4 =
 	    draws_3 %>%
 	    left_join(
@@ -651,36 +666,8 @@ ARMET_tc = function(.data,
 	    ungroup() %>%
 	    mutate(.value_relative = .value4) %>%
 	    mutate(.value4 = ifelse(.value4 %>% is.na, .value2, .value2 * .value4))
-	  
-	  if (do_regression && length(parse_formula(.formula)$covariates) >0 ){
-	    alpha_4 =
-	      fit4 %>%
-	      tidybayes::gather_draws(`alpha_[4]`[A, C], regex = T) %>%
-	      ungroup() %>%
-	      
-	      # rebuild the last component sum-to-zero
-	      ifelse_pipe(family == "dirichlet", ~ .x %>% rebuild_last_component_sum_to_zero) %>%
-	      
-	      # Calculate relative 0 because of dirichlet relativity
-	      ifelse_pipe(family == "dirichlet", ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
-	      
-	      arrange(.chain, .iteration, .draw,     A) %>%
-	      
-	      nest(draws = -c(C, .variable, zero)) %>%
-	      
-	      left_join(
-	        tree %>%
-	          ToDataFrameTree("name", "level", sprintf("C%s", 4)) %>%
-	          arrange(C4) %>%
-	          drop_na() %>%
-	          select(name, C4) %>%
-	          rename(`Cell type category` = name) %>%
-	          rename(C = C4)
-	      )
-	    
-	    alpha = alpha  %>% bind_rows(alpha_4 %>% mutate(level = 4))
-	    
-	  }
+
+	 
 	  prop_4 =
 	    draws_4 %>%
 	    select(.chain,
@@ -694,29 +681,68 @@ ARMET_tc = function(.data,
 	    rename(C = C4, .value = .value4) %>%
 	    mutate(.variable = "prop_4") %>%
 	    mutate(level = 4) %>%
-	    
+
 	    # add sample annotation
 	    left_join(df4 %>% distinct(Q, sample), by = "Q")	%>%
-	    
+
 	    # If MCMC is used check divergencies as well
 	    ifelse_pipe(
 	      !approximate_posterior,
 	      ~ .x %>% parse_summary_check_divergence(),
 	      ~ .x %>% parse_summary() %>% rename(.value = mean)
 	    ) %>%
-	    
+
 	    left_join(df4 %>% distinct(Q, sample))
+
+	  if (do_regression && length(parse_formula(.formula)$covariates) >0 ){
+	  	alpha_4 =
+	  		fit4 %>%
+	  		tidybayes::gather_draws(`alpha_[4]`[A, C], regex = T) %>%
+	  		ungroup() %>%
+	  		
+	  		# rebuild the last component sum-to-zero
+	  		ifelse_pipe(family == "dirichlet", ~ .x %>% rebuild_last_component_sum_to_zero) %>%
+	  		
+	  		# Calculate relative 0 because of dirichlet relativity
+	  		ifelse_pipe(family == "dirichlet", ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
+	  		
+	  		arrange(.chain, .iteration, .draw,     A) %>%
+	  		
+	  		nest(draws = -c(C, .variable, zero)) %>%
+	  		
+	  		left_join(
+	  			tree %>%
+	  				ToDataFrameTree("name", "level", sprintf("C%s", 4)) %>%
+	  				arrange(C4) %>%
+	  				drop_na() %>%
+	  				select(name, C4) %>%
+	  				rename(`Cell type category` = name) %>%
+	  				rename(C = C4)
+	  		)
+	  	
+	  	alpha = alpha  %>% bind_rows(alpha_4 %>% mutate(level = 4))
+	  	
+	  	prop_4 = prop_4 %>%
+	  		left_join(
+	  			fit4 %>% tidybayes::gather_draws(prop_rng[Q, C]) %>% ungroup() %>% nest(rng = -c(Q, C))
+	  		)
+	  	
+	  }
 	  
 	  prop = bind_rows(prop, prop_4)
 	  fit = fit %>% c(list(fit4))
 	  df = df %>% c(list(df4))
-	  
+
 	}
-	
+
 	# Return
 	list(
 		# Matrix of proportions
-		proportions =	prop %>%
+		proportions =	
+			.data %>%
+			select(c(sample, (.) %>% get_specific_annotation_columns(sample))) %>%
+			distinct() %>%
+			left_join(prop) %>%
 
 			# Attach alpha if regression
 			ifelse_pipe(
@@ -729,8 +755,8 @@ ARMET_tc = function(.data,
 					)
 			),
 
-		# Return the input itself
-		input = input,
+		# # Return the input itself
+		# input = input,
 
 		# Return the fitted object
 		fit = fit,
@@ -881,11 +907,12 @@ run_model = function(reference_filtered,
 	Sys.setenv("STAN_NUM_THREADS" = shards)
 
 	fam_dirichlet = family == "dirichlet"
-	is_cens = !is.null(cens)
-	if(cens %>% is.null) cens =  rep(0, y_source %>% distinct(Q) %>% nrow ) %>% as.array()
-	
 
-	#if(lv == 3) browser()
+	if(cens %>% is.null) cens =  c()
+	which_cens = which(cens == 1)
+	how_many_cens = length(which_cens)
+
+	max_unseen = ifelse(how_many_cens>0, max(X[,2]), 0 )
 
 	list(df,
 			 switch(

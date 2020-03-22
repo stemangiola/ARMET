@@ -643,23 +643,51 @@ if(dim_4[1] > 0) {
 		return (dirichlet_lpdf(p | softmax( to_vector(X * alpha_ ))  * exp(phi) + 1 ));
 	}
 
-real beta_regression_lpdf(vector[] p, matrix X, matrix alpha, real phi){
+	vector dirichlet_regression_rng( row_vector X, matrix alpha, real phi){
+
+		// Build sum to zero variable
+		int c = cols(alpha);
+		int r = rows(alpha);
+		matrix[r, c]  alpha_ = alpha;
+		alpha_[1,c] = -sum(alpha_[1, 1:(c-1)]);
+
+
+		// Calculate log prob
+		return (dirichlet_rng(softmax( to_vector(X * alpha_ ))  * exp(phi) + 1 ));
+	}
+
+real beta_regression_lpdf(vector[] p, matrix X, matrix alpha, real[] phi){
 
 		real lp = 0;
-		int N = num_elements(p[,1]);
 		matrix[num_elements(p[,1]), num_elements(p[1])] mu;
-		real phi_exp = exp(phi);
+		real phi_exp[num_elements(phi)] = exp(phi);
 
 		mu  = inv_logit(X * alpha);
 
 		for(j in 1:num_elements(p[1])) {
 
-      	 lp += beta_lpdf(p[,j] | mu[,j] * phi_exp, (1.0 - mu[,j]) * phi_exp);
+      	 lp += beta_lpdf(p[,j] | (mu[,j] * phi_exp[j]) +1, ((1.0 - mu[,j]) * phi_exp[j]) + 1);
 
 		}
 		return (lp);
 	}
 
+vector[] beta_regression_rng( matrix X, matrix alpha, real[] phi){
+
+		real lp = 0;
+		matrix[rows(X), cols(alpha)] mu;
+		vector[cols(alpha)] p[rows(X)];
+		real phi_exp[num_elements(phi)] = exp(phi);
+
+		mu  = inv_logit(X * alpha);
+
+		for(j in 1:num_elements(p[1])) {
+
+      	 p[,j] = beta_rng((mu[,j] * phi_exp[j]) +1, ((1.0 - mu[,j]) * phi_exp[j]) + 1);
+
+		}
+		return (p);
+	}
 
 }
 data {
@@ -765,10 +793,13 @@ data {
 	matrix[Q,A] X;
 	int do_regression;
 
-	// Censoring
+	// Family
 	int fam_dirichlet;
-	vector[Q] cens;
-	int is_cens;
+
+	// Censoring
+	int how_many_cens;
+	int which_cens[how_many_cens];
+	real<lower=0> max_unseen;
 
 
 }
@@ -844,7 +875,7 @@ parameters {
   matrix[A * (lv == 1) * do_regression,ct_in_nodes[1]]  alpha_1; // Root
 
   // lv2
-   matrix[A * (lv == 2) * do_regression,ct_in_levels[2]]  alpha_2; // Root
+  matrix[A * (lv == 2) * do_regression,ct_in_levels[2]]  alpha_2; // Root
   //matrix[A * (lv == 2) * do_regression,ct_in_nodes[2]]  alpha_a; // Immune cells
 
   // lv3
@@ -853,16 +884,15 @@ parameters {
 	// lv4
   matrix[A * (lv == 4) * do_regression,ct_in_levels[4]]  alpha_4; // Root
 
-	real phi[4];
+	real<lower=0, upper = 8> phi[fam_dirichlet ? 1 : ct_in_levels[lv]];
 
 	// Unknown population
 	vector<lower=0, upper = log(max(counts_linear))>[max(size_G_linear_MPI)/ct_in_levels[lv]] lambda_UFO[shards];
 	real<lower=0, upper=0.5> prop_UFO;
 
 	// Censoring
-	vector<lower=0>[Q * is_cens] unseen;
-	real<lower=0> mu_unseen;
-	real<lower=0> sigma_unseen;
+	vector<lower=0, upper=max_unseen>[how_many_cens] unseen;
+	real<lower=0> prior_unseen[2 * (how_many_cens > 0)];
 
 }
 transformed parameters{
@@ -872,7 +902,7 @@ transformed parameters{
 	vector[ct_in_levels[4]] prop_4[Q * (lv >= 4)];
 
 	matrix[Q,A] X_ = X;
-	if(is_cens) X_[,2] = X_[,2] + ( unseen .* cens );
+	if(how_many_cens > 0) X_[which_cens,2] = X_[which_cens,2] + unseen;
 
 	// proportion of level 2
 	if(lv >= 2)
@@ -957,7 +987,7 @@ model {
   if(lv == 1 && do_regression) {
 
   	if(fam_dirichlet) for(q in 1:Q) prop_1[q] ~ dirichlet_regression( X_[q], alpha_1, phi[1] );
-  	else  prop_1 ~ beta_regression(X_, alpha_1, phi[1]);
+  	else  prop_1 ~ beta_regression(X_, alpha_1, phi);
   	to_vector( alpha_1 ) ~ normal(0,1);
 
   }
@@ -967,8 +997,8 @@ model {
 	// lv 2
   if(lv == 2 && do_regression) {
 
-  	if(fam_dirichlet) for(q in 1:Q) prop_2[q] ~ dirichlet_regression( X_[q], alpha_2, phi[2] );
-  	else  prop_2 ~ beta_regression(X_, alpha_2, phi[2]);
+  	if(fam_dirichlet) for(q in 1:Q) prop_2[q] ~ dirichlet_regression( X_[q], alpha_2, phi[1] );
+  	else  prop_2 ~ beta_regression(X_, alpha_2, phi);
   	to_vector( alpha_2 ) ~ normal(0,1);
 
   }
@@ -978,8 +1008,8 @@ model {
 	// lv 3
   if(lv == 3 && do_regression){
 
-  	if(fam_dirichlet) for(q in 1:Q) prop_3[q] ~ dirichlet_regression( X_[q], alpha_3, phi[3] );
-  	 else  prop_3 ~ beta_regression(X_, alpha_3, phi[3]);
+  	if(fam_dirichlet) for(q in 1:Q) prop_3[q] ~ dirichlet_regression( X_[q], alpha_3, phi[1] );
+  	 else  prop_3 ~ beta_regression(X_, alpha_3, phi);
   	to_vector( alpha_3 ) ~ normal(0,1);
 
   }
@@ -996,13 +1026,13 @@ model {
     for(q in 1:Q) target += dirichlet_lpdf(prop_d[q] | prop_d_prior[q]);
     for(q in 1:Q) target += dirichlet_lpdf(prop_e[q] | prop_e_prior[q]);
     for(q in 1:Q) target += dirichlet_lpdf(prop_f[q] | prop_f_prior[q]);
-  }  
+  }
 
 	// lv 4
   if(lv == 4 && do_regression){
 
-  	if(fam_dirichlet) for(q in 1:Q) prop_4[q] ~ dirichlet_regression( X_[q], alpha_4, phi[4] );
-  	 else  prop_4 ~ beta_regression(X_, alpha_4, phi[4]);
+  	if(fam_dirichlet) for(q in 1:Q) prop_4[q] ~ dirichlet_regression( X_[q], alpha_4, phi[1] );
+  	 else  prop_4 ~ beta_regression(X_, alpha_4, phi);
   	to_vector( alpha_4 ) ~ normal(0,1);
 
   }
@@ -1044,17 +1074,43 @@ model {
 	// Dirichlet regression
 	if(fam_dirichlet) phi ~ normal(0,1);
 	// Beta regression
-	else phi ~ normal(0,2);
+	else phi ~ normal(0,1);
 
 	// lambda UFO
 	for(i in 1:shards) lambda_UFO[i] ~ skew_normal(6.2, 3.3, -2.7);
 	prop_UFO ~ beta(1.001, 20);
 
 	// Censoring
-	if(is_cens){
-		for(q in 1:Q) if(cens[q] == 0) X[q,2] ~ gamma(mu_unseen, sigma_unseen);
-		X[,2] + unseen ~ gamma(mu_unseen, sigma_unseen);
+	if(how_many_cens > 0){
+		X_[,2] ~ gamma(prior_unseen[1] + 1, 1/prior_unseen[2]);
+		prior_unseen ~ normal(0,1);
 	}
-		mu_unseen ~ normal(0,2);
-		sigma_unseen ~ normal(0,2);
+}
+generated quantities{
+	vector[ct_in_levels[lv]]  prop_rng[Q];
+
+	if(lv == 1 && do_regression) {
+
+  	if(fam_dirichlet) for(q in 1:Q) prop_rng[q] = dirichlet_regression_rng( X_[q], alpha_1, phi[1] );
+  	else  prop_rng = beta_regression_rng(X_, alpha_1, phi);
+
+  }
+	if(lv == 2 && do_regression) {
+
+  	if(fam_dirichlet) for(q in 1:Q) prop_rng[q] = dirichlet_regression_rng( X_[q], alpha_2, phi[1] );
+  	else  prop_rng = beta_regression_rng(X_, alpha_2, phi);
+
+  }
+  	if(lv == 3 && do_regression) {
+
+  	if(fam_dirichlet) for(q in 1:Q) prop_rng[q] = dirichlet_regression_rng( X_[q], alpha_3, phi[1] );
+  	else  prop_rng = beta_regression_rng(X_, alpha_3, phi);
+
+  }
+  	if(lv == 4 && do_regression) {
+
+  	if(fam_dirichlet) for(q in 1:Q) prop_rng[q] = dirichlet_regression_rng( X_[q], alpha_4, phi[1] );
+  	else  prop_rng = beta_regression_rng(X_, alpha_4, phi);
+
+  }
 }

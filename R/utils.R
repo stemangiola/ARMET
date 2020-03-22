@@ -833,7 +833,7 @@ get_MPI_df = function(counts_baseline_to_linear,
 											counts_baseline,
 											shards_in_levels,
 											lv) {
-  
+
 	list(
 		counts_idx_lv_MPI =
 			counts_baseline_to_linear %>%
@@ -1505,22 +1505,32 @@ rebuild_last_component_sum_to_zero = function(.){
 }
 
 get_relative_zero = function(fit_parsed){
-	# fit %>%
-	# 	tidybayes::gather_draws(`alpha_[1abcdefghi]`[A, C], regex = T) %>%
-	# 	ungroup() %>%
+
 	fit_parsed %>%
-		#filter(A == 2) %>%
 		nest(data = -.variable) %>%
 		mutate(zero = map(
 			data,
-			~ .x %>%
+			~ {
+
+				rng = .x %>% pull(.value) %>% summary %>% `[` (c(1,6))
+
+				.x %>%
 				filter(A == 2) %>%
-				pull(.value) %>%
-				density(na.rm = T) %>%
-				{	tibble(x = (.)$x, y = (.)$y)	} %>%
+				nest(data2 = -C) %>%
+				mutate(zero_C = map(data2, ~ .x %>%
+															pull(.value) %>%
+															density(na.rm = T, from = rng[1], to =rng[2]) %>%
+															{	tibble(x = (.)$x, y = (.)$y)	} %>%
+															mutate(y = y/max(y))
+															)) %>%
+				unnest(zero_C) %>%
+				select(-data2) %>%
+				group_by(x) %>%
+				summarise(y = sum(y)) %>%
 				arrange(y %>% desc) %>% slice(1) %>% select(zero = x)
-		)) %>%
+		})) %>%
 		unnest(cols = c(data, zero))
+
 }
 
 #' Get column names either from user or from attributes
@@ -1567,4 +1577,39 @@ eliminate_sparse_transcripts = function(.data, .transcript){
 		add_count(symbol, name = "my_n") %>%
 		filter(my_n == max(my_n)) %>%
 		select(-my_n)
+}
+
+get_specific_annotation_columns = function(.data, .col){
+	
+	
+	# Comply with CRAN NOTES
+	. = NULL
+	
+	# Make col names
+	.col = enquo(.col)
+	
+	# x-annotation df
+	n_x = .data %>% distinct(!!.col) %>% nrow
+	
+	# Sample wise columns
+	.data %>%
+		select(-!!.col) %>%
+		colnames %>%
+		map(
+			~
+				.x %>%
+				ifelse_pipe(
+					.data %>%
+						distinct(!!.col, !!as.symbol(.x)) %>%
+						nrow %>%
+						equals(n_x),
+					~ .x,
+					~ NULL
+				)
+		) %>%
+		
+		# Drop NULL
+		{	(.)[lengths((.)) != 0]	} %>%
+		unlist
+	
 }
