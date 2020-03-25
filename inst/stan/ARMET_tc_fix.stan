@@ -659,14 +659,21 @@ if(dim_4[1] > 0) {
 real beta_regression_lpdf(vector[] p, matrix X, matrix alpha, real[] phi){
 
 		real lp = 0;
-		matrix[num_elements(p[,1]), num_elements(p[1])] mu;
-		real phi_exp[num_elements(phi)] = exp(phi);
+		//matrix[num_elements(p[,1]), num_elements(p[1])] mu;
+		vector[num_elements(phi)]  phi_exp= exp(1.0 ./ to_vector(phi));
 
-		mu  = inv_logit(X * alpha);
+		// Build sum to zero variable
+		int c = cols(alpha);
+		int r = rows(alpha);
+		matrix[r, c]  alpha_ = alpha;
+		alpha_[1,c] = -sum(alpha_[1, 1:(c-1)]);
+		
+		
+		for(j in 1:num_elements(p[,1])) {
 
-		for(j in 1:num_elements(p[1])) {
+			vector[num_elements(p[1])] mu  = softmax( to_vector(X[j] * alpha_));
 
-      	 lp += beta_lpdf(p[,j] | (mu[,j] * phi_exp[j]) +1, ((1.0 - mu[,j]) * phi_exp[j]) + 1);
+     	lp += beta_lpdf(p[j] | (mu .* phi_exp) +1, ((1.0 - mu) .* phi_exp) + 1);
 
 		}
 		return (lp);
@@ -675,15 +682,22 @@ real beta_regression_lpdf(vector[] p, matrix X, matrix alpha, real[] phi){
 vector[] beta_regression_rng( matrix X, matrix alpha, real[] phi){
 
 		real lp = 0;
-		matrix[rows(X), cols(alpha)] mu;
 		vector[cols(alpha)] p[rows(X)];
-		real phi_exp[num_elements(phi)] = exp(phi);
 
-		mu  = inv_logit(X * alpha);
+		//matrix[num_elements(p[,1]), num_elements(p[1])] mu;
+		vector[num_elements(phi)]  phi_exp= exp(1.0 ./ to_vector(phi));
 
-		for(j in 1:num_elements(p[1])) {
+		// Build sum to zero variable
+		int c = cols(alpha);
+		int r = rows(alpha);
+		matrix[r, c]  alpha_ = alpha;
+		alpha_[1,c] = -sum(alpha_[1, 1:(c-1)]);
 
-      	 p[,j] = beta_rng((mu[,j] * phi_exp[j]) +1, ((1.0 - mu[,j]) * phi_exp[j]) + 1);
+		for(j in 1:num_elements(p[,1])) {
+
+			vector[num_elements(p[1])] mu  = softmax( to_vector(X[j] * alpha_));
+
+      	 p[j] = to_vector(beta_rng((mu .* phi_exp) +1, ((1.0 - mu) .* phi_exp) + 1));
 
 		}
 		return (p);
@@ -884,7 +898,7 @@ parameters {
 	// lv4
   matrix[A * (lv == 4) * do_regression,ct_in_levels[4]]  alpha_4; // Root
 
-	real<lower=0, upper = 8> phi[fam_dirichlet ? 1 : ct_in_levels[lv]];
+	real<lower=0.1, upper = 1> phi[fam_dirichlet ? 1 : ct_in_levels[lv]];
 
 	// Unknown population
 	vector<lower=0, upper = log(max(counts_linear))>[max(size_G_linear_MPI)/ct_in_levels[lv]] lambda_UFO[shards];
@@ -1074,7 +1088,7 @@ model {
 	// Dirichlet regression
 	if(fam_dirichlet) phi ~ normal(0,1);
 	// Beta regression
-	else phi ~ normal(0,1);
+	else phi ~ beta(1,20);
 
 	// lambda UFO
 	for(i in 1:shards) lambda_UFO[i] ~ skew_normal(6.2, 3.3, -2.7);

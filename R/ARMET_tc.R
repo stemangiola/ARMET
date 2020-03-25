@@ -328,7 +328,7 @@ ARMET_tc = function(.data,
 			ungroup() %>%
 
 			# rebuild the last component sum-to-zero
-			ifelse_pipe(family == "dirichlet", ~ .x %>% rebuild_last_component_sum_to_zero) %>%
+			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
 
 			# Calculate relative 0 because of dirichlet relativity
 			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
@@ -454,7 +454,7 @@ ARMET_tc = function(.data,
 						ungroup() %>%
 
 						# rebuild the last component sum-to-zero
-						ifelse_pipe(family == "dirichlet", ~ .x %>% rebuild_last_component_sum_to_zero) %>%
+						ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
 
 						# Calculate relative 0 because of dirichlet relativity
 						ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
@@ -578,7 +578,7 @@ ARMET_tc = function(.data,
 						ungroup() %>%
 						
 						# rebuild the last component sum-to-zero
-						ifelse_pipe(family == "dirichlet", ~ .x %>% rebuild_last_component_sum_to_zero) %>%
+						ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
 						
 						# Calculate relative 0 because of dirichlet relativity
 						ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
@@ -701,7 +701,7 @@ ARMET_tc = function(.data,
 	  		ungroup() %>%
 	  		
 	  		# rebuild the last component sum-to-zero
-	  		ifelse_pipe(family == "dirichlet", ~ .x %>% rebuild_last_component_sum_to_zero) %>%
+	  		ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
 	  		
 	  		# Calculate relative 0 because of dirichlet relativity
 	  		ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
@@ -914,6 +914,8 @@ run_model = function(reference_filtered,
 
 	max_unseen = ifelse(how_many_cens>0, max(X[,2]), 0 )
 
+	#if(lv==3) browser()
+	
 	list(df,
 			 switch(
 			 	approximate_posterior %>% sum(1),
