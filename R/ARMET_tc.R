@@ -331,7 +331,7 @@ ARMET_tc = function(.data,
 			ifelse_pipe(family == "dirichlet", ~ .x %>% rebuild_last_component_sum_to_zero) %>%
 
 			# Calculate relative 0 because of dirichlet relativity
-			ifelse_pipe(family == "dirichlet", ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
+			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
 
 			arrange(.chain, .iteration, .draw,     A) %>%
 
@@ -457,7 +457,7 @@ ARMET_tc = function(.data,
 						ifelse_pipe(family == "dirichlet", ~ .x %>% rebuild_last_component_sum_to_zero) %>%
 
 						# Calculate relative 0 because of dirichlet relativity
-						ifelse_pipe(family == "dirichlet", ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
+						ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
 
 						arrange(.chain, .iteration, .draw,     A) %>%
 
@@ -581,7 +581,7 @@ ARMET_tc = function(.data,
 						ifelse_pipe(family == "dirichlet", ~ .x %>% rebuild_last_component_sum_to_zero) %>%
 						
 						# Calculate relative 0 because of dirichlet relativity
-						ifelse_pipe(family == "dirichlet", ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
+						ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
 						
 						arrange(.chain, .iteration, .draw,     A) %>%
 						
@@ -704,7 +704,7 @@ ARMET_tc = function(.data,
 	  		ifelse_pipe(family == "dirichlet", ~ .x %>% rebuild_last_component_sum_to_zero) %>%
 	  		
 	  		# Calculate relative 0 because of dirichlet relativity
-	  		ifelse_pipe(family == "dirichlet", ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
+	  		ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
 	  		
 	  		arrange(.chain, .iteration, .draw,     A) %>%
 	  		
