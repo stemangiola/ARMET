@@ -251,6 +251,7 @@ ARMET_tc = function(.data,
 
 	prop_posterior = get_null_prop_posterior(ct_in_nodes)
 
+
 	#------------------------------------#
 
 	res1 = run_model(
@@ -272,7 +273,7 @@ ARMET_tc = function(.data,
 	df1 = res1[[1]]
 	fit1 = res1[[2]]
 
-	prop_posterior[[1]] = fit1 %>% draws_to_alphas("prop_1") %>% `[[` (1)
+	prop_posterior[[1]] = fit1 %>% prop_to_list %>% `[[` ("prop_1") 
 
 	draws_1 =
 		fit1 %>%
@@ -383,7 +384,7 @@ ARMET_tc = function(.data,
 		df2 = res2[[1]]
 		fit2 = res2[[2]]
 
-		prop_posterior[[2]] = fit2 %>% draws_to_alphas(sprintf("prop_%s", "a")) %>% `[[` (1)
+		prop_posterior[[2]] =  fit2 %>% prop_to_list %>% `[[` (sprintf("prop_%s", "a"))  
 
 		draws_a =
 			fit2 %>%
@@ -507,11 +508,11 @@ ARMET_tc = function(.data,
 			family = family,
 			cens = cens
 		)
-
+browser()
 		df3 = res3[[1]]
 		fit3 = res3[[2]]
 
-		prop_posterior[3: (2+length(c("b", "c", "d", "e", "f")))] = fit3 %>% draws_to_alphas(sprintf("prop_%s", c("b", "c", "d", "e", "f")))
+		prop_posterior[3: (2+length(c("b", "c", "d", "e", "f")))] = fit3 %>% prop_to_list 
 
 		draws_3 =
 			draws_2 %>%

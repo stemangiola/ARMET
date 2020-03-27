@@ -1613,3 +1613,30 @@ get_specific_annotation_columns = function(.data, .col){
 		unlist
 	
 }
+
+prop_to_list = function(fit){
+	fit %>%
+		tidybayes::gather_draws(`prop_[1a-z]`[Q, C], regex = T) %>%
+		median_qi() %>%
+		drop_na  %>%
+		ungroup() %>% 
+		nest(data = -.variable) %>% 
+		mutate(data =
+					 	map(
+					 		data, 
+					 		~.x %>% 
+					 			select(Q, C, .value) %>% 
+					 			spread(C, .value) %>% 
+					 			tidybulk::as_matrix(rownames = "Q")
+					 	)
+					) %>%
+		{ x = (.); x %>% pull(data) %>% setNames(x %>% pull( .variable))}
+}
+
+gamma_alpha_beta = function(x){
+	summ = summary((dglm(x~1, family=Gamma(link="log"), mustart=mean(x))))
+	mu <- exp(summ$coefficients[1])
+	shape <- exp(-summ$dispersion)
+	scale <- mu/shape
+	c(shape, 1/scale)
+}

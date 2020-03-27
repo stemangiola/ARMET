@@ -865,24 +865,24 @@ parameters {
 
   // Proportions
   // lv1
-  simplex[ct_in_nodes[1]]  prop_1[Q * (lv >= 1)]; // Root
+  simplex[ct_in_nodes[1]]  prop_1[Q * (lv == 1)]; // Root
 
   // lv2
-  simplex[ct_in_nodes[2]]  prop_a[Q * (lv >= 2)]; // Immune cells childrens
+  simplex[ct_in_nodes[2]]  prop_a[Q * (lv == 2)]; // Immune cells childrens
 
   // lv3
-  simplex[ct_in_nodes[3]]  prop_b[Q * (lv >= 3)]; // b cells childrens
-  simplex[ct_in_nodes[4]]  prop_c[Q * (lv >= 3)]; // granulocyte childrens
-  simplex[ct_in_nodes[5]]  prop_d[Q * (lv >= 3)]; // mono_derived childrens
-  simplex[ct_in_nodes[6]]  prop_e[Q * (lv >= 3)]; // natural_killer childrens
-  simplex[ct_in_nodes[7]]  prop_f[Q * (lv >= 3)]; // t_cell childrens
+  simplex[ct_in_nodes[3]]  prop_b[Q * (lv == 3)]; // b cells childrens
+  simplex[ct_in_nodes[4]]  prop_c[Q * (lv == 3)]; // granulocyte childrens
+  simplex[ct_in_nodes[5]]  prop_d[Q * (lv == 3)]; // mono_derived childrens
+  simplex[ct_in_nodes[6]]  prop_e[Q * (lv == 3)]; // natural_killer childrens
+  simplex[ct_in_nodes[7]]  prop_f[Q * (lv == 3)]; // t_cell childrens
 
 	// lv4
-  simplex[ct_in_nodes[8]]  prop_g[Q * (lv >= 4)]; // dendritic myeloid childrens
-  simplex[ct_in_nodes[9]]  prop_h[Q * (lv >= 4)]; // macrophage childrens
-  simplex[ct_in_nodes[10]] prop_i[Q * (lv >= 4)]; // nk primed
-  simplex[ct_in_nodes[11]] prop_l[Q * (lv >= 4)]; // CD4 childrens
-  simplex[ct_in_nodes[12]] prop_m[Q * (lv >= 4)]; // CD8 childrens
+  simplex[ct_in_nodes[8]]  prop_g[Q * (lv == 4)]; // dendritic myeloid childrens
+  simplex[ct_in_nodes[9]]  prop_h[Q * (lv == 4)]; // macrophage childrens
+  simplex[ct_in_nodes[10]] prop_i[Q * (lv == 4)]; // nk primed
+  simplex[ct_in_nodes[11]] prop_l[Q * (lv == 4)]; // CD4 childrens
+  simplex[ct_in_nodes[12]] prop_m[Q * (lv == 4)]; // CD8 childrens
 
 	// Dirichlet regression
   // lv1
@@ -922,8 +922,8 @@ transformed parameters{
 	if(lv >= 2)
 	prop_2 =
 		append_vector_array(
-			prop_1[,singles_lv2],
-			multiply_by_column(prop_a, prop_1[,parents_lv2[1]])
+			prop_1_prior[,singles_lv2],
+			multiply_by_column( (lv == 2 ? prop_a : prop_a_prior), prop_1_prior[,parents_lv2[1]])
 		);
 
 	// proportion of level 3
@@ -932,14 +932,14 @@ transformed parameters{
 		append_vector_array(
 			prop_2[,singles_lv3],
 			append_vector_array(
-				multiply_by_column(prop_b, prop_2[,parents_lv3[1]]),
+				multiply_by_column((lv == 3 ? prop_b : prop_b_prior), prop_2[,parents_lv3[1]]),
 				append_vector_array(
-					multiply_by_column(prop_c, prop_2[,parents_lv3[2]]),
+					multiply_by_column((lv == 3 ? prop_c : prop_c_prior), prop_2[,parents_lv3[2]]),
 					append_vector_array(
-						multiply_by_column(prop_d, prop_2[,parents_lv3[3]]),
+						multiply_by_column((lv == 3 ? prop_d : prop_d_prior), prop_2[,parents_lv3[3]]),
 						append_vector_array(
-							multiply_by_column(prop_e, prop_2[,parents_lv3[4]]),
-							multiply_by_column(prop_f, prop_2[,parents_lv3[5]])
+							multiply_by_column((lv == 3 ? prop_e : prop_e_prior), prop_2[,parents_lv3[4]]),
+							multiply_by_column((lv == 3 ? prop_f : prop_f_prior), prop_2[,parents_lv3[5]])
 						)
 					)
 				)
@@ -1006,7 +1006,7 @@ model {
 
   }
 	if(lv == 1 && !do_regression) for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | rep_vector(1, num_elements(prop_1[1])));
-	if(lv > 1)  for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | prop_1_prior[q]);
+	//if(lv > 1)  for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | prop_1_prior[q]);
 
 	// lv 2
   if(lv == 2 && do_regression) {
@@ -1017,7 +1017,7 @@ model {
 
   }
 	if(lv == 2 && !do_regression) for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | rep_vector(1, num_elements(prop_a[1])));
-	if(lv > 2)  for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | prop_a_prior[q]);
+	//if(lv > 2)  for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | prop_a_prior[q]);
 
 	// lv 3
   if(lv == 3 && do_regression){
@@ -1034,13 +1034,13 @@ model {
 		 target += dirichlet_lpdf(prop_e[q] | rep_vector(1, num_elements(prop_e[1])));
 		 target += dirichlet_lpdf(prop_f[q] | rep_vector(1, num_elements(prop_f[1])));
   }
-  if(lv > 3){
-    for(q in 1:Q) target += dirichlet_lpdf(prop_b[q] | prop_b_prior[q]);
-    for(q in 1:Q) target += dirichlet_lpdf(prop_c[q] | prop_c_prior[q]);
-    for(q in 1:Q) target += dirichlet_lpdf(prop_d[q] | prop_d_prior[q]);
-    for(q in 1:Q) target += dirichlet_lpdf(prop_e[q] | prop_e_prior[q]);
-    for(q in 1:Q) target += dirichlet_lpdf(prop_f[q] | prop_f_prior[q]);
-  }
+  // if(lv > 3){
+  //   for(q in 1:Q) target += dirichlet_lpdf(prop_b[q] | prop_b_prior[q]);
+  //   for(q in 1:Q) target += dirichlet_lpdf(prop_c[q] | prop_c_prior[q]);
+  //   for(q in 1:Q) target += dirichlet_lpdf(prop_d[q] | prop_d_prior[q]);
+  //   for(q in 1:Q) target += dirichlet_lpdf(prop_e[q] | prop_e_prior[q]);
+  //   for(q in 1:Q) target += dirichlet_lpdf(prop_f[q] | prop_f_prior[q]);
+  // }
 
 	// lv 4
   if(lv == 4 && do_regression){
