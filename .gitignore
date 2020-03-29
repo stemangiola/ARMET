@@ -54,14 +54,13 @@ Temporary Items
 data/ref_array.rda
 .Rproj.user
 job_torque*
-*.rds
+#*.rds
 docs/*.RData
 docs/*.pdf
 docs/feature_selection*
 docs/ref_1_2_3.csv
 temp*
 *torque*
-dev/feature_selection*
 dev/run*
 log*
 docs/RECOVERED_FILES/*
@@ -74,6 +73,10 @@ last.dump.rda
 src/ARMET.so
 src/stanExports_ARMET_tc.h
 dev/OLD*
-dev/*Rdata
+dev/*.Rdata
+dev/*.RData
 dev/*.rda
+dev/*.rds
+dev/*.RDS
 dev/*.csv
+dev/feature_selection*
