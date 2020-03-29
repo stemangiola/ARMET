@@ -4,7 +4,7 @@
 \alias{level_to_plot_inferred_vs_observed}
 \title{This is a generalisation of ifelse that acceots an object and return an objects}
 \usage{
-level_to_plot_inferred_vs_observed(result, level, S = NULL, cores = 20)
+level_to_plot_inferred_vs_observed(result, level, cores = 20)
 }
 \description{
 This is a generalisation of ifelse that acceots an object and return an objects

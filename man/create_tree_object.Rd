@@ -4,7 +4,7 @@
 \alias{create_tree_object}
 \title{create_tree_object}
 \usage{
-create_tree_object(my_ref = ARMET::ARMET_ref)
+create_tree_object()
 }
 \description{
 create tree object that is in data directory
