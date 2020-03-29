@@ -7,10 +7,10 @@ library(furrr)
 library(data.tree)
 library(foreach)
 library(ARMET)
-source("~/PhD/deconvolution/ARMET/R/utils.R")
-source("~/PostDoc/ppcSeq/R/do_parallel.R")
-n_cores = 20
-S = 30
+library(broom)
+# source("~/PostDoc/ppcSeq/R/do_parallel.R")
+# n_cores = 20
+# S = 30
 
 my_theme =
 	theme_bw() +
@@ -38,13 +38,15 @@ my_theme =
 		axis.text.x = element_text(angle = 90, hjust = 1)
 	)
 
-noiseles_test = function(which_is_up_down) {
+noise_test = function(which_is_up_down, do_regression = F) {
 	# intercept = rnorm(16)
 	intercept = rep(1, 16)
 	intercept = intercept - sum(intercept) / length(intercept)
 	slope = rep(0, 16)
 	slope[which_is_up_down[1]] = 2
-	slope[which_is_up_down[2]] = -2
+	slope[which_is_up_down[2]] = -4
+	slope[which_is_up_down[3]] = 1
+	slope[which_is_up_down[4]] = 0.5
 	alpha = matrix(intercept %>%	c(slope), ncol = 2)
 
 	mix = mix_base %>% generate_mixture(15, alpha)
@@ -57,9 +59,9 @@ noiseles_test = function(which_is_up_down) {
 		rename(sample = run) %>%
 		ARMET_tc(
 			~ covariate_2,
-			do_regression = F,
-			iterations = 700,
-			sampling_iterations = 200
+			do_regression = do_regression,
+			iterations = ifelse(do_regression, 2400, 700),
+			sampling_iterations = ifelse(do_regression, 2000, 300)
 		)
 
 	list(mix = mix, result = rr)
@@ -139,7 +141,7 @@ generate_mixture = function(.data, samples_per_condition, alpha) {
 
 	# Make mix
 	dirichlet_source %>%
-		mutate(c = `count normalised bayes` * p) %>%
+		mutate(c = `count scaled bayes` * p) %>%
 		group_by(run, symbol) %>%
 		summarise(`count mix` = c %>% sum) %>%
 		ungroup %>%
@@ -151,13 +153,23 @@ generate_mixture = function(.data, samples_per_condition, alpha) {
 
 }
 
-which_is_up_down = 1:16 %>% map( ~ c(.x, (.x + 4) %>% ifelse(. > 16, . - 16, .)))
+which_is_up_down = 1:16 %>% map( ~ c(
+	.x,
+	(.x + 4) %>% ifelse(. > 16, . - 16, .),
+	(.x + 8) %>% ifelse(. > 16, . - 16, .),
+	(.x + 12) %>% ifelse(. > 16, . - 16, .)
+))
 
-which_is_up_down %>%
-	map( ~ .x %>% noiseles_test) %>%
-	saveRDS("dev/test_dirichlet_with_noise.rds")
+# which_is_up_down %>%
+# 	map( ~ .x %>% noise_test) %>%
+# 	saveRDS("dev/test_dirichlet_with_noise.rds")
+#
+# which_is_up_down %>%
+# 	map( ~ .x %>% noise_test(do_regression = T)) %>%
+# 	saveRDS("dev/test_dirichlet_with_noise_regression.rds")
 
 res = readRDS("dev/test_dirichlet_with_noise.rds")
+
 
 # my_res = res[[1]]
 #
@@ -174,6 +186,8 @@ res[[1]]$mix %>% attr("proportions") %>%
 	geom_smooth(method = "lm") +
 	geom_errorbar(aes(ymin = .value.lower, ymax = .value.upper), alpha = 0.2) +
 	geom_point()
+
+res_regression[[8]]$result$fit[[3]] %>% tidybayes::gather_draws(alpha_3[A,C]) %>% filter(A==2) %>% ggplot(aes(.value, color=factor(C))) + geom_density() + geom_vline(xintercept = 0.232)
 
 # Calculate tpr
 res %>%
@@ -200,33 +214,6 @@ res %>%
 	geom_jitter() +
 	my_theme
 
-# Calculate fpr for regression
-res %>%
-	map_dfr(
-		~
-			# Integrate
-			.x$result$proportions %>%
-			filter(level == 3) %>%
-			select(`Cell type category`, contains("alpha2")) %>%
-			distinct() %>%
-			left_join(
-				.x$mix %>% attr("proportions") %>% distinct(`Cell type category`, alpha_2)
-			) %>%
-			drop_na  %>%
-
-			# Calculate
-			mutate(fp = alpha_2 == 0 &
-						 	(.lower_alpha2 * .upper_alpha2) > 0) %>%
-			mutate(fn = alpha_2 != 0 & (.lower_alpha2 * .upper_alpha2) < 0)
-
-	) %>%
-	group_by(`Cell type category`) %>%
-	summarise(fpr = sum(fp) / n(), fnr = sum(fn) / n()) %>%
-	gather(which, rate, c("fpr", "fnr")) %>%
-	ggplot(aes(y = rate, x = `Cell type category`)) +
-	geom_point() +
-	facet_wrap( ~ which) +
-	my_theme
 
 
 # get reference from ARMET
@@ -245,7 +232,9 @@ noise_test_ttBulk = function(which_is_up_down, ref, method = "cibersort") {
 	intercept = intercept - sum(intercept) / length(intercept)
 	slope = rep(0, 16)
 	slope[which_is_up_down[1]] = 2
-	slope[which_is_up_down[2]] = -2
+	slope[which_is_up_down[2]] = -4
+	slope[which_is_up_down[3]] = 1
+	slope[which_is_up_down[4]] = 0.5
 	alpha = matrix(intercept %>%	c(slope), ncol = 2)
 
 	mix =
@@ -329,38 +318,12 @@ res_cibersort %>%
 	geom_jitter() +
 	my_theme
 
-# Calculate fpr for regression
-res_cibersort %>%
-	map_dfr(
-		~
-			# Integrate
-			.x$result %>%
-			dplyr::select(`Cell type category`, contains("alpha2"), 	`Pr(>|t|)`) %>%
-			distinct() %>%
-			left_join(
-				.x$mix %>% attr("proportions") %>% distinct(`Cell type category`, alpha_2),
-				by = "Cell type category"
-			) %>%
-			drop_na  %>%
-
-			# Calculate
-			mutate(fp = alpha_2 == 0 &
-						 	`Pr(>|t|)` < 0.05) %>%
-			mutate(fn = alpha_2 != 0 & `Pr(>|t|)` > 0.05)
-
-	) %>%
-	group_by(`Cell type category`) %>%
-	summarise(fpr = sum(fp) / n(), fnr = sum(fn) / n()) %>%
-	gather(which, rate, c("fpr", "fnr")) %>%
-	ggplot(aes(y = rate, x = `Cell type category`)) +
-	geom_point() +
-	facet_wrap( ~ which) +
-	my_theme
 
 # Same run with LLSR
 res_llsr =
 	which_is_up_down %>%
 	map( ~ .x %>% noise_test_ttBulk(ref, method="llsr"))
+
 
 # Create boxplot of errors
 all_results =
@@ -401,7 +364,7 @@ all_results =
 		) %>%
 
 		# Add error
-		mutate(error_logit_space = abs(logit(p) - logit(.value))) %>%
+		mutate(error_logit_space = abs(gtools::logit(p) - gtools::logit(.value))) %>%
 
 		# Add regression
 		nest(data = -c(run, `Cell type category`, model)) %>%
@@ -414,7 +377,7 @@ all_results =
 # Plot error
 all_results %>%
 	unnest(data) %>%
-	ggplot(aes(x = model, y = error_logit_space)) +
+	ggplot(aes(x = model, y = error_gtools::logit_space)) +
 	geom_boxplot() +
 	facet_wrap(~ `Cell type category`)
 
@@ -433,4 +396,196 @@ all_results %>%
 	geom_boxplot() +
 	facet_wrap(~ `Cell type category`) + scale_y_log10()
 
+#------------------------------------#
+# REGRESSION
+#------------------------------------#
 
+res_regression = readRDS("dev/test_dirichlet_with_noise_regression.rds")
+
+CI_to_ARMET = function(.data, CI){
+		.data %>%
+		map_dfr(
+		~
+			# Integrate
+			.x$result %>%
+
+			test_differential_composition(credible_interval = CI) %>%
+			filter(level == 3) %>%
+			left_join(
+				.x$mix %>% attr("proportions") %>% dplyr::distinct(`Cell type category`, alpha_2),
+				by = "Cell type category"
+			) %>%
+			drop_na  %>%
+
+			# Calculate
+			mutate(fp = alpha_2 == 0 & significant) %>%
+			mutate(fn = alpha_2 != 0 & !significant)
+
+	)
+	}
+
+CI_to_others = function(.data, pvalue){
+	.data %>%
+		map_dfr(
+			~
+				# Integrate
+				.x$result %>%
+				dplyr::select(`Cell type category`, contains("alpha2"), 	`Pr(>|t|)`) %>%
+				distinct() %>%
+				left_join(
+					.x$mix %>% attr("proportions") %>% distinct(`Cell type category`, alpha_2),
+					by = "Cell type category"
+				) %>%
+				drop_na  %>%
+
+				# Calculate
+				mutate(fp = alpha_2 == 0 &
+							 	`Pr(>|t|)` < pvalue) %>%
+				mutate(fn = alpha_2 != 0 & `Pr(>|t|)` > pvalue)
+
+		)
+}
+
+# Calculate fpr for regression
+regression_ARMET =
+	tibble(CI = c( seq(0.0, 0.85, 0.005), seq(0.85, 0.9999, 0.001))) %>%
+	mutate(roc = future_map(
+		CI,
+		~ {
+			x = CI_to_ARMET(res_regression, .x)
+
+			x %>% filter(alpha_2 != 0) %>% group_by(alpha_2) %>%
+					summarise(fnr = sum(fn) / n()) %>%
+				mutate(
+					fpr =
+						x %>% filter(alpha_2 == 0) %>% select(-alpha_2) %>%
+						summarise(fpr = sum(fp) / n()) %>% pull(1)
+				)
+		}
+	))
+
+
+regression_cibersort =
+	tibble(CI = c( seq(0.0, 0.03, 0.001), seq(0.03, 0.9999, 0.001))) %>%
+	mutate(roc = future_map(
+		CI,
+		~ {
+			x = CI_to_others(res_cibersort, .x)
+
+			x %>% filter(alpha_2 != 0) %>% group_by(alpha_2) %>%
+				summarise(fnr = sum(fn) / n()) %>%
+				mutate(
+					fpr =
+						x %>% filter(alpha_2 == 0) %>% select(-alpha_2) %>%
+						summarise(fpr = sum(fp) / n()) %>% pull(1)
+				)
+		}
+	))
+
+regression_llsr =
+	tibble(CI = c( seq(0.0, 0.03, 0.001), seq(0.03, 0.9999, 0.001))) %>%
+	mutate(roc = future_map(
+		CI,
+		~ {
+			x = CI_to_others(res_llsr, .x)
+
+			x %>% filter(alpha_2 != 0) %>% group_by(alpha_2) %>%
+				summarise(fnr = sum(fn) / n()) %>%
+				mutate(
+					fpr =
+						x %>% filter(alpha_2 == 0) %>% select(-alpha_2) %>%
+						summarise(fpr = sum(fp) / n()) %>% pull(1)
+				)
+		}
+	))
+
+regression_ARMET %>%
+	mutate(method = "ARMET") %>%
+	bind_rows(
+		regression_cibersort %>%
+			mutate(method = "cibersort")
+	) %>%
+	bind_rows(
+		regression_llsr %>%
+			mutate(method = "llsr")
+	) %>%
+	unnest(roc) %>%
+	#bind_rows(tibble(CI = 1, alpha_2 = c(-4, 0.5, 1, 2), fnr = 1, fpr = 0)) %>%
+	arrange(fnr) %>%
+	mutate(tpr = 1-fnr) %>%
+	ggplot(aes(x=fpr, y=tpr, color=method)) +
+	geom_line() +
+	scale_color_brewer(palette = "Set1") +
+	facet_wrap(~ alpha_2, nrow = 1) +
+	xlim(c(0,0.1)) +
+	my_theme
+
+
+
+
+CI_to_ARMET(res_regression, 0.95) %>%
+	group_by(`Cell type category`, alpha_2) %>%
+	summarise(fpr = sum(fp) / n(), fnr = sum(fn) / n()) %>%
+	gather(which, rate, c("fpr", "fnr")) %>%
+	ggplot(aes(y = rate, x = `Cell type category`, color = factor(alpha_2))) +
+	geom_jitter() +
+	facet_wrap( ~ which) +
+	my_theme
+
+
+
+# Calculate fpr for regression
+
+regression_cibersort %>%
+	group_by(`Cell type category`, alpha_2) %>%
+	summarise(fpr = sum(fp) / n(), fnr = sum(fn) / n()) %>%
+	gather(which, rate, c("fpr", "fnr"))%>%
+	ggplot(aes(y = rate, x = `Cell type category`, color = factor( alpha_2))) +
+	geom_jitter() +
+	facet_wrap( ~ which) +
+	my_theme
+
+
+# Calculate fpr for regression
+regression_llsr =
+	res_llsr %>%
+	map_dfr(
+		~
+			# Integrate
+			.x$result %>%
+			dplyr::select(`Cell type category`, contains("alpha2"), 	`Pr(>|t|)`) %>%
+			distinct() %>%
+			left_join(
+				.x$mix %>% attr("proportions") %>% distinct(`Cell type category`, alpha_2),
+				by = "Cell type category"
+			) %>%
+			drop_na  %>%
+
+			# Calculate
+			mutate(fp = alpha_2 == 0 &
+						 	`Pr(>|t|)` < 0.005) %>%
+			mutate(fn = alpha_2 != 0 & `Pr(>|t|)` > 0.005)
+
+	)
+
+regression_llsr %>%
+	group_by(`Cell type category`, alpha_2) %>%
+	summarise(fpr = sum(fp) / n(), fnr = sum(fn) / n()) %>%
+	gather(which, rate, c("fpr", "fnr")) %>%
+	ggplot(aes(y = rate, x = `Cell type category`, color = factor(alpha_2))) +
+	geom_jitter() +
+	facet_wrap( ~ which) +
+	my_theme
+
+
+# Regression accuracy
+CI_to_ARMET(res_regression, 0.95) %>% mutate(algorithm="ARMET") %>%
+	bind_rows(	regression_cibersort %>% mutate(algorithm="cibersort")) %>%
+	bind_rows(	regression_llsr %>% mutate(algorithm="llsr")) %>%
+	group_by( alpha_2, algorithm) %>%
+	summarise(fpr = sum(fp) / n(), fnr = sum(fn) / n()) %>%
+	gather(which, rate, c("fpr", "fnr")) %>%
+	ggplot(aes(y = rate, x = algorithm, color = factor(alpha_2))) +
+	geom_point() +
+	facet_grid( ~ which) +
+	my_theme
