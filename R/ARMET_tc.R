@@ -128,8 +128,14 @@ ARMET_tc = function(.data,
 
 	# Censoring column
 	.cens_column = parse_formula(.formula)$covariates %>% grep("censored(", ., fixed = T, value = T)  %>% gsub("censored\\(|\\)| ", "", .) %>% str_split("\\,") %>% ifelse_pipe(length(.)>0, ~.x %>% `[[` (1) %>% `[` (-1), ~NULL)
-	if(length(.cens_column) == 1) cens = .data %>% select(sample, .cens_column) %>% distinct %>% arrange(sample) %>% pull(2)
-	else cens = NULL
+	if(length(.cens_column) == 1) {
+		cens = .data %>% select(sample, .cens_column) %>% distinct %>% arrange(sample) %>% pull(2)
+		#surv_prior = .data %>% filter(!(!!as.symbol(.cens_column))) %>% select(sample, .cens_column, cov_columns) %>% distinct() %>% pull(cov_columns[1]) %>% gamma_alpha_beta ()
+	}
+	else{
+		cens = NULL
+		#surv_prior = c()
+	} 
 
 	mix =
 		.data %>%
@@ -916,7 +922,7 @@ run_model = function(reference_filtered,
 	max_unseen = ifelse(how_many_cens>0, max(X[,2]), 0 )
 
 	#if(lv==3) browser()
-	
+
 	list(df,
 			 switch(
 			 	approximate_posterior %>% sum(1),
