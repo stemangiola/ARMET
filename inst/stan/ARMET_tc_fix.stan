@@ -898,7 +898,7 @@ parameters {
 	// lv4
   matrix[A * (lv == 4) * do_regression,ct_in_levels[4]]  alpha_4; // Root
 
-	real<lower=0.05, upper=0> phi[fam_dirichlet ? 1 : ct_in_levels[lv]];
+	real<lower=0.05, upper=1> phi[fam_dirichlet ? 1 : ct_in_levels[lv]];
 
 	// Unknown population
 	vector<lower=0, upper = log(max(counts_linear))>[max(size_G_linear_MPI)/ct_in_levels[lv]] lambda_UFO[shards];
