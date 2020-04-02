@@ -355,10 +355,10 @@ ARMET_tc = function(.data,
 			)
 		alpha = alpha_1 %>% mutate(level = 1)
 		
-		prop_1 = prop_1 %>%
-			left_join(
-				fit1 %>% tidybayes::gather_draws(prop_rng[Q, C]) %>% ungroup() %>% nest(rng = -c(Q, C))
-			)
+		# prop_1 = prop_1 %>%
+		# 	left_join(
+		# 		fit1 %>% tidybayes::gather_draws(prop_rng[Q, C]) %>% ungroup() %>% nest(rng = -c(Q, C))
+		# 	)
 	}
 
 
@@ -367,6 +367,7 @@ ARMET_tc = function(.data,
 	fit = list(fit1)
 	df = list(df1)
 
+	
 	#------------------------------------#
 
 	if (levels > 1) {
@@ -428,7 +429,7 @@ ARMET_tc = function(.data,
 					ungroup() %>%
 					mutate(.value_relative = .value2) %>%
 					mutate(.value2 = ifelse(.value2 %>% is.na, .value, .value * .value2))
-
+ 
 		prop_2 =
 			draws_2 %>%
 			select(.chain,
@@ -454,10 +455,10 @@ ARMET_tc = function(.data,
 				~ .x %>% parse_summary() %>% rename(.value = mean)
 			)
 		
-				if (do_regression && length(parse_formula(.formula)$covariates) >0 ){
+			if (do_regression && length(parse_formula(.formula)$covariates) >0 ){
 					alpha_2 =
 						fit2 %>%
-						tidybayes::gather_draws(`alpha_[2]`[A, C], regex = T) %>%
+						tidybayes::gather_draws(`alpha_[a]`[A, C], regex = T) %>%
 						ungroup() %>%
 
 						# rebuild the last component sum-to-zero
@@ -471,20 +472,28 @@ ARMET_tc = function(.data,
 						nest(draws = -c(C, .variable, zero)) %>%
 
 						left_join(
-							tree %>%
+							# FOR HIERARHICAL
+								tree %>%
 								ToDataFrameTree("name", "level", sprintf("C%s", 2)) %>%
+								filter(level == 2+1) %>%
 								arrange(C2) %>%
-								drop_na() %>%
-								select(name, C2) %>%
-								rename(`Cell type category` = name) %>%
-								rename(C = C2)
+								mutate(C = 1:n()) %>%
+								select(name, C) %>%
+								rename(`Cell type category` = name)					
+							# tree %>%
+							# 	ToDataFrameTree("name", "level", sprintf("C%s", 2)) %>%
+							# 	arrange(C2) %>%
+							# 	drop_na() %>%
+							# 	select(name, C2) %>%
+							# 	rename(`Cell type category` = name) %>%
+							# 	rename(C = C2)
 						)
 					alpha = alpha  %>% bind_rows(alpha_2 %>% mutate(level = 2))
 					
-					prop_2 = prop_2 %>%
-						left_join(
-							fit2 %>% tidybayes::gather_draws(prop_rng[Q, C]) %>% ungroup() %>% nest(rng = -c(Q, C))
-						)
+					# prop_2 = prop_2 %>%
+					# 	left_join(
+					# 		fit2 %>% tidybayes::gather_draws(prop_rng[Q, C]) %>% ungroup() %>% nest(rng = -c(Q, C))
+					# 	)
 
 				}
 
@@ -493,6 +502,14 @@ ARMET_tc = function(.data,
 				fit = fit %>% c(list(fit2))
 				df = df %>% c(list(df2))
 	}
+
+
+# tukey_dirichlet = function(){
+# 	
+# 	alpha_2 %>% unnest(draws) %>% mutate(C = factor(C)) %>%  aov(.value ~ C, data = .) %>% TukeyHSD() %>% tidy() %>% filter(adj.p.value>0.05)
+# 	
+# 	
+# }
 
 	#------------------------------------#
 
@@ -514,7 +531,7 @@ ARMET_tc = function(.data,
 			family = family,
 			cens = cens
 		)
-browser()
+
 		df3 = res3[[1]]
 		fit3 = res3[[2]]
 
@@ -581,8 +598,11 @@ browser()
 				if (do_regression && length(parse_formula(.formula)$covariates) >0 ){
 					alpha_3 =
 						fit3 %>%
-						tidybayes::gather_draws(`alpha_[3]`[A, C], regex = T) %>%
+						tidybayes::gather_draws(`alpha_[b|c|d|e|f]`[A, C], regex = T) %>%
 						ungroup() %>%
+						
+						drop_na() %>%
+						arrange(.variable) %>%
 						
 						# rebuild the last component sum-to-zero
 						ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
@@ -594,22 +614,33 @@ browser()
 						
 						nest(draws = -c(C, .variable, zero)) %>%
 						
+						# FOR HIERARCHICAL
+						mutate(C = 1:n()) %>%
+					
 						left_join(
 							tree %>%
 								ToDataFrameTree("name", "level", sprintf("C%s", 3)) %>%
+								filter(level == 3+1) %>%
 								arrange(C3) %>%
-								drop_na() %>%
-								select(name, C3) %>%
-								rename(`Cell type category` = name) %>%
-								rename(C = C3)
+								mutate(C = 1:n()) %>%
+								select(name, C) %>%
+								rename(`Cell type category` = name)
+							
+							# tree %>%
+							# 	ToDataFrameTree("name", "level", sprintf("C%s", 3)) %>%
+							# 	arrange(C3) %>%
+							# 	drop_na() %>%
+							# 	select(name, C3) %>%
+							# 	rename(`Cell type category` = name) %>%
+							# 	rename(C = C3)
 						)
 					
 					alpha = alpha  %>% bind_rows(alpha_3 %>% mutate(level = 3))
 					
-					prop_3 = prop_3 %>%
-						left_join(
-							fit3 %>% tidybayes::gather_draws(prop_rng[Q, C]) %>% ungroup() %>% nest(rng = -c(Q, C))
-						)
+					# prop_3 = prop_3 %>%
+					# 	left_join(
+					# 		fit3 %>% tidybayes::gather_draws(prop_rng[Q, C]) %>% ungroup() %>% nest(rng = -c(Q, C))
+					# 	)
 					
 				}
 				
@@ -674,7 +705,6 @@ browser()
 	    mutate(.value_relative = .value4) %>%
 	    mutate(.value4 = ifelse(.value4 %>% is.na, .value2, .value2 * .value4))
 
-	 
 	  prop_4 =
 	    draws_4 %>%
 	    select(.chain,
@@ -704,7 +734,7 @@ browser()
 	  if (do_regression && length(parse_formula(.formula)$covariates) >0 ){
 	  	alpha_4 =
 	  		fit4 %>%
-	  		tidybayes::gather_draws(`alpha_[4]`[A, C], regex = T) %>%
+	  		tidybayes::gather_draws(`alpha_[a-z]`[A, C], regex = T) %>%
 	  		ungroup() %>%
 	  		
 	  		# rebuild the last component sum-to-zero
@@ -717,22 +747,34 @@ browser()
 	  		
 	  		nest(draws = -c(C, .variable, zero)) %>%
 	  		
+	  		# FOR HIERARCHICAL
+	  		mutate(C = 1:n()) %>%
+	  		
 	  		left_join(
+	  			
 	  			tree %>%
 	  				ToDataFrameTree("name", "level", sprintf("C%s", 4)) %>%
+	  				filter(level == 4+1) %>%
 	  				arrange(C4) %>%
-	  				drop_na() %>%
-	  				select(name, C4) %>%
-	  				rename(`Cell type category` = name) %>%
-	  				rename(C = C4)
+	  				mutate(C = 1:n()) %>%
+	  				select(name, C) %>%
+	  				rename(`Cell type category` = name)
+	  			
+	  			# tree %>%
+	  			# 	ToDataFrameTree("name", "level", sprintf("C%s", 4)) %>%
+	  			# 	arrange(C4) %>%
+	  			# 	drop_na() %>%
+	  			# 	select(name, C4) %>%
+	  			# 	rename(`Cell type category` = name) %>%
+	  			# 	rename(C = C4)
 	  		)
 	  	
 	  	alpha = alpha  %>% bind_rows(alpha_4 %>% mutate(level = 4))
 	  	
-	  	prop_4 = prop_4 %>%
-	  		left_join(
-	  			fit4 %>% tidybayes::gather_draws(prop_rng[Q, C]) %>% ungroup() %>% nest(rng = -c(Q, C))
-	  		)
+	  	# prop_4 = prop_4 %>%
+	  	# 	left_join(
+	  	# 		fit4 %>% tidybayes::gather_draws(prop_rng[Q, C]) %>% ungroup() %>% nest(rng = -c(Q, C))
+	  	# 	)
 	  	
 	  }
 	  
@@ -757,7 +799,7 @@ browser()
 				~ .x %>%
 					nest(proportions = -c(`Cell type category`, C, level)) %>%
 					left_join(
-						alpha %>%	select(`Cell type category`, contains("alpha"), zero, level, draws),
+						alpha %>%	select(`Cell type category`, contains("alpha"), zero, level, draws, .variable),
 						by = c("Cell type category", "level")
 					)
 			),
@@ -883,10 +925,7 @@ run_model = function(reference_filtered,
 
 
 
-	model  = switch(full_bayesian %>% `!` %>% sum(1),
-									stanmodels$ARMET_tc,
-									stanmodels$ARMET_tc_fix)
-
+	
 	additional_par_to_save  = switch(full_bayesian %>% `!` %>% sum(1),
 																	 c("lambda_log", "sigma_inv_log"),
 																	 c())
@@ -921,36 +960,44 @@ run_model = function(reference_filtered,
 
 	max_unseen = ifelse(how_many_cens>0, max(X[,2]), 0 )
 
-	#if(lv==3) browser()
+
+	
+	model  = stanmodels$ARMET_tc_fix_hierarchical
+	# switch(fam_dirichlet %>% `!` %>% sum(1),
+	# 								stanmodels$ARMET_tc_fix_hierarchical,
+	# 								stanmodels$ARMET_tc_fix)
+
+	fit = 
+		sampling(
+			model,
+			#ARMET_tc_model, #,
+			chains = 3,
+			cores = 3,
+			iter = iterations,
+			warmup = iterations - sampling_iterations,
+			data = MPI_data %>% c(prop_posterior),
+			# pars=
+			# 	c("prop_1", "prop_2", "prop_3", sprintf("prop_%s", letters[1:9])) %>%
+			# 	c("alpha_1", sprintf("alpha_%s", letters[1:9])) %>%
+			# 	c("exposure_rate") %>%
+			# 	c("lambda_UFO") %>%
+			# 	c("prop_UFO") %>%
+			# 	c(additional_par_to_save),
+			init = function ()
+				init_list
+			#,
+			#save_warmup = FALSE
+		) %>%
+		{
+			(.)  %>% rstan::summary() %$% summary %>% as_tibble(rownames = "par") %>% arrange(Rhat %>% desc) %>% filter(Rhat > 1.5) %>% ifelse_pipe(nrow(.) > 0, ~ .x %>% print)
+			(.)
+		}
 
 	list(df,
 			 switch(
 			 	approximate_posterior %>% sum(1),
 
-			 	# HMC
-			 	sampling(
-			 		model,
-			 		#ARMET_tc_model, #,
-			 		chains = 3,
-			 		cores = 3,
-			 		iter = iterations,
-			 		warmup = iterations - sampling_iterations,
-			 		data = MPI_data %>% c(prop_posterior),
-			 		# pars=
-			 		# 	c("prop_1", "prop_2", "prop_3", sprintf("prop_%s", letters[1:9])) %>%
-			 		# 	c("alpha_1", sprintf("alpha_%s", letters[1:9])) %>%
-			 		# 	c("exposure_rate") %>%
-			 		# 	c("lambda_UFO") %>%
-			 		# 	c("prop_UFO") %>%
-			 		# 	c(additional_par_to_save),
-			 		init = function ()
-			 			init_list,
-			 		save_warmup = FALSE
-			 	) %>%
-			 		{
-			 			(.)  %>% rstan::summary() %$% summary %>% as_tibble(rownames = "par") %>% arrange(Rhat %>% desc) %>% filter(Rhat > 1.5) %>% ifelse_pipe(nrow(.) > 0, ~ .x %>% print)
-			 			(.)
-			 		},
+			 	fit,
 
 			 	vb_iterative(
 			 		model,
@@ -979,11 +1026,12 @@ run_model = function(reference_filtered,
 }
 
 #' @export
-test_differential_composition = function(.data, credible_interval = 0.95) {
+test_differential_composition = function(.data, credible_interval = 0.90) {
 
 
 
 	.data$proportions %>%
+		filter(.variable %>% is.na %>% `!`) %>%
 		mutate(regression = map2(draws, zero,
 			~ .x %>%
 				group_by(A) %>%
@@ -1003,6 +1051,39 @@ test_differential_composition = function(.data, credible_interval = 0.95) {
 		)) %>%
 		unnest(cols = c(regression))
 
+}
+
+
+
+tidy_overlap = function(.data, formula){
+		
+}
+
+all_vs_all = function(.data){
+
+		.data$proportions %>%
+		filter(.variable %>% is.na %>% `!`) %>%
+		nest(draws_node = -.variable) %>%
+		mutate(data_overlap = map(draws_node, 
+															~.x %>% 
+																unnest(draws) %>%
+																filter(A == 2) %>% 
+																
+																# permute
+																permute(C, .value) %>%
+																mutate(overlap = map_dbl(
+																	data, 
+																	~ 	bayestestR::overlap(
+																		.x %>% filter(C==min(C)) %>% pull(.value),
+																		.x %>% filter(C==max(C)) %>% pull(.value)
+																	) %>%
+																		as.numeric()
+																))
+						)) %>%
+		select(-draws_node) %>%
+		unnest(data_overlap)
+		
+	
 }
 
 #' Create polar plot of results

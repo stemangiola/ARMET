@@ -1640,3 +1640,22 @@ gamma_alpha_beta = function(x){
 	scale <- mu/shape
 	c(shape, 1/scale)
 }
+
+
+permute_nest = function(.data, .names_from, .values_from){
+	.names_from = enquo(.names_from)
+	.values_from = enquo(.values_from)
+	
+	.data %>% 
+		pull(!!.names_from) %>%
+		unique() %>%
+		gtools::permutations(n = length(.), r = 2, v = .) %>%
+		as_tibble() %>%
+		unite(run, c(V1, V2), remove = F) %>%
+		gather(which, !!.names_from, -run) %>%
+		select(-which) %>%
+		left_join(.data %>% select(!!.names_from, !!.values_from), by = quo_name(.names_from)) %>%
+		nest(data = -run) %>%
+		separate(run, sprintf("%s_%s", quo_name(.names_from), 1:2 ))
+	
+}
