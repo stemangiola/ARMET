@@ -905,7 +905,7 @@ parameters {
   matrix[A * (lv == 4) * do_regression,ct_in_nodes[11]] alpha_l; // CD4
   matrix[A * (lv == 4) * do_regression,ct_in_nodes[12]] alpha_m; // CD8
 
-	real<lower=0, upper=7> phi[12]; //[fam_dirichlet ? 10 : ct_in_levels[lv]];
+	real<lower=0, upper=(lv==1 ? 8 : 6)> phi[12]; //[fam_dirichlet ? 10 : ct_in_levels[lv]];
 
 	// Unknown population
 	vector<lower=0, upper = log(max(counts_linear))>[max(size_G_linear_MPI)/ct_in_levels[lv]] lambda_UFO[shards];
@@ -919,13 +919,29 @@ parameters {
 }
 transformed parameters{
 
-	vector[ct_in_levels[2]] prop_2[Q * (lv >= 2)];
-	vector[ct_in_levels[3]] prop_3[Q * (lv >= 3)];
-	vector[ct_in_levels[4]] prop_4[Q * (lv >= 4)];
+
 
 	matrix[Q,A] X_ = X;
 	if(how_many_cens > 0) X_[which_cens,2] = X_[which_cens,2] + unseen;
 
+
+
+
+}
+model {
+
+	vector[Y_lv] lambda_log_deconvoluted_1;
+	vector[Y_lv] sigma_deconvoluted_1;
+
+ 	//vector[ct_in_levels[lv]] prop_lv[Q] = which(lv, prop_1, prop_2, prop_3, prop_4);
+	vector[(ct_in_levels[lv] * Q) + max(size_y_linear_S_MPI) + (max(size_G_linear_MPI)/ct_in_levels[lv])] pack_r_1[shards];
+
+	// Tree poportion
+	
+	vector[ct_in_levels[2]] prop_2[Q * (lv >= 2)];
+	vector[ct_in_levels[3]] prop_3[Q * (lv >= 3)];
+	vector[ct_in_levels[4]] prop_4[Q * (lv >= 4)];
+	
 	// proportion of level 2
 	if(lv >= 2)
 	prop_2 =
@@ -973,16 +989,8 @@ transformed parameters{
 				)
 			)
 		);
-
-}
-model {
-
-	vector[Y_lv] lambda_log_deconvoluted_1;
-	vector[Y_lv] sigma_deconvoluted_1;
-
- 	vector[ct_in_levels[lv]] prop_lv[Q] = which(lv, prop_1, prop_2, prop_3, prop_4);
-	vector[(ct_in_levels[lv] * Q) + max(size_y_linear_S_MPI) + (max(size_G_linear_MPI)/ct_in_levels[lv])] pack_r_1[shards];
-
+		
+		//
 	// Exposure
 	exposure_rate ~ normal(0,1);
 
@@ -1159,7 +1167,7 @@ model {
 	}
 }
 generated quantities{
-	vector[ct_in_levels[lv]]  prop_rng[Q];
+	//vector[ct_in_levels[lv]]  prop_rng[Q];
 
   // lv1
   vector[ct_in_nodes[1]]  prop_1_rng[Q * (lv == 1)]; // Root
@@ -1184,13 +1192,13 @@ generated quantities{
 	if(lv == 1 && do_regression) {
 
   	if(fam_dirichlet) for(q in 1:Q) prop_1_rng[q] = dirichlet_regression_rng( X_[q], alpha_1, phi[1] );
-  	else  prop_1_rng = beta_regression_rng(X_, alpha_1, phi);
+  	else  prop_1_rng = beta_regression_rng(X_, alpha_1, phi[1:4]);
 
   }
 	if(lv == 2 && do_regression) {
 
   	if(fam_dirichlet) for(q in 1:Q) prop_a_rng[q] = dirichlet_regression_rng( X_[q], alpha_a, phi[1] );
-  	else  prop_a_rng = beta_regression_rng(X_, alpha_a, phi);
+  	else  prop_a_rng = beta_regression_rng(X_, alpha_a, phi[1:6]);
 
   }
   	if(lv == 3 && do_regression) {

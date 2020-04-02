@@ -327,7 +327,7 @@ ARMET_tc = function(.data,
 		left_join(df1 %>%
 								filter(`query`) %>%
 								distinct(Q, sample))
-	
+
 	if (do_regression && length(parse_formula(.formula)$covariates) >0 ) {
 		alpha_1 =
 			fit1 %>%
@@ -353,12 +353,16 @@ ARMET_tc = function(.data,
 					select(name, C)  %>%
 					rename(`Cell type category` = name)
 			)
+		
+		alpha_1 = alpha_1 %>%
+			separate(.variable, c("par", "node"), remove = F) %>%
+			left_join(
+				fit1 %>% tidybayes::gather_draws(`prop_[1]_rng`[Q, C], regex = T) %>% ungroup() %>% mutate(.variable = gsub("_rng", "", .variable)) %>% separate(.variable, c("par", "node"), remove = F)  %>% select(-par) %>% nest(rng = -c(node, C)) 
+			)
+		
 		alpha = alpha_1 %>% mutate(level = 1)
 		
-		# prop_1 = prop_1 %>%
-		# 	left_join(
-		# 		fit1 %>% tidybayes::gather_draws(prop_rng[Q, C]) %>% ungroup() %>% nest(rng = -c(Q, C))
-		# 	)
+
 	}
 
 
@@ -488,12 +492,16 @@ ARMET_tc = function(.data,
 							# 	rename(`Cell type category` = name) %>%
 							# 	rename(C = C2)
 						)
+					
+					alpha_2 = alpha_2 %>%
+						separate(.variable, c("par", "node"), remove = F) %>%
+						left_join(
+							fit2 %>% tidybayes::gather_draws(`prop_[a-z]_rng`[Q, C], regex = T) %>% ungroup() %>% mutate(.variable = gsub("_rng", "", .variable)) %>% separate(.variable, c("par", "node"), remove = F)  %>% select(-par) %>% nest(rng = -c(node, C)) 
+						)
+					
+			
 					alpha = alpha  %>% bind_rows(alpha_2 %>% mutate(level = 2))
 					
-					# prop_2 = prop_2 %>%
-					# 	left_join(
-					# 		fit2 %>% tidybayes::gather_draws(prop_rng[Q, C]) %>% ungroup() %>% nest(rng = -c(Q, C))
-					# 	)
 
 				}
 
@@ -635,12 +643,14 @@ ARMET_tc = function(.data,
 							# 	rename(C = C3)
 						)
 					
-					alpha = alpha  %>% bind_rows(alpha_3 %>% mutate(level = 3))
+					alpha_3 = alpha_3 %>%
+						separate(.variable, c("par", "node"), remove = F) %>%
+						left_join(
+							fit3 %>% tidybayes::gather_draws(`prop_[a-z]_rng`[Q, C], regex = T) %>% ungroup() %>% mutate(.variable = gsub("_rng", "", .variable)) %>% separate(.variable, c("par", "node"), remove = F)  %>% select(-par) %>% nest(rng = -c(node, C)) 
+						)
 					
-					# prop_3 = prop_3 %>%
-					# 	left_join(
-					# 		fit3 %>% tidybayes::gather_draws(prop_rng[Q, C]) %>% ungroup() %>% nest(rng = -c(Q, C))
-					# 	)
+					
+					alpha = alpha  %>% bind_rows(alpha_3 %>% mutate(level = 3))
 					
 				}
 				
@@ -679,7 +689,7 @@ ARMET_tc = function(.data,
 	    left_join(
 	      fit4 %>%
 	        ######## ALTERED WITH TREE
-	        tidybayes::gather_draws(`prop_[g, h, i, l, m]`[Q, C], regex = T) %>%
+	        tidybayes::gather_draws(`prop_[a-z]`[Q, C], regex = T) %>%
 	        #########################
 	      drop_na %>%
 	        ungroup() %>%
@@ -769,12 +779,16 @@ ARMET_tc = function(.data,
 	  			# 	rename(C = C4)
 	  		)
 	  	
+	  	alpha_4 = alpha_4 %>%
+	  		separate(.variable, c("par", "node"), remove = F) %>%
+	  		left_join(
+	  			fit4 %>% tidybayes::gather_draws(`prop_[a-z]_rng`[Q, C], regex = T) %>% ungroup() %>% mutate(.variable = gsub("_rng", "", .variable)) %>% separate(.variable, c("par", "node"), remove = F)  %>% select(-par) %>% nest(rng = -c(node, C)) 
+	  		)
+	  
+	  		  	
 	  	alpha = alpha  %>% bind_rows(alpha_4 %>% mutate(level = 4))
 	  	
-	  	# prop_4 = prop_4 %>%
-	  	# 	left_join(
-	  	# 		fit4 %>% tidybayes::gather_draws(prop_rng[Q, C]) %>% ungroup() %>% nest(rng = -c(Q, C))
-	  	# 	)
+
 	  	
 	  }
 	  
