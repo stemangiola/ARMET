@@ -1238,8 +1238,6 @@ plot_markers = function(.data, n_markers, mix, ct1, ct2, n = 10, level) {
 		my_theme
 }
 
-
-
 #' This is a generalisation of ifelse that acceots an object and return an objects
 #'
 #' @import dplyr
@@ -1641,7 +1639,6 @@ gamma_alpha_beta = function(x){
 	c(shape, 1/scale)
 }
 
-
 permute_nest = function(.data, .names_from, .values_from){
 	.names_from = enquo(.names_from)
 	.values_from = enquo(.values_from)
@@ -1658,4 +1655,17 @@ permute_nest = function(.data, .names_from, .values_from){
 		nest(data = -run) %>%
 		separate(run, sprintf("%s_%s", quo_name(.names_from), 1:2 ))
 	
+}
+
+get_ancesotr_child = function(tree){
+	tree %>% ToDataFrameTypeColFull %>% distinct(level_1, level_2) %>% setNames(c("ancestor", "Cell type category")) %>% bind_rows(
+		tree %>% ToDataFrameTypeColFull %>% distinct(level_2, level_3) %>% setNames(c("ancestor", "Cell type category"))
+	) %>%
+		bind_rows(
+			tree %>% ToDataFrameTypeColFull %>% distinct(level_3, level_4) %>% setNames(c("ancestor", "Cell type category"))
+		) %>%
+		bind_rows(
+			tree %>% ToDataFrameTypeColFull %>% distinct(level_4, level_5) %>% setNames(c("ancestor", "Cell type category"))
+		) %>%
+		filter(ancestor != `Cell type category`)
 }

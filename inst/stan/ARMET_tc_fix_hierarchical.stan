@@ -933,7 +933,7 @@ model {
 	vector[Y_lv] lambda_log_deconvoluted_1;
 	vector[Y_lv] sigma_deconvoluted_1;
 
- 	//vector[ct_in_levels[lv]] prop_lv[Q] = which(lv, prop_1, prop_2, prop_3, prop_4);
+ 	vector[ct_in_levels[lv]] prop_lv[Q] ;
 	vector[(ct_in_levels[lv] * Q) + max(size_y_linear_S_MPI) + (max(size_G_linear_MPI)/ct_in_levels[lv])] pack_r_1[shards];
 
 	// Tree poportion
@@ -990,7 +990,8 @@ model {
 			)
 		);
 		
-		//
+	prop_lv	= which(lv, prop_1, prop_2, prop_3, prop_4);
+
 	// Exposure
 	exposure_rate ~ normal(0,1);
 

@@ -63,7 +63,7 @@ ARMET_tc = function(.data,
 	# At the moment is not active
 	full_bayesian = F
 
-	#input = c(as.list(environment()))
+	input = c(as.list(environment()))
 
 	# Get column names
 	.sample = enquo(.sample)
@@ -813,13 +813,13 @@ ARMET_tc = function(.data,
 				~ .x %>%
 					nest(proportions = -c(`Cell type category`, C, level)) %>%
 					left_join(
-						alpha %>%	select(`Cell type category`, contains("alpha"), zero, level, draws, .variable),
+						alpha %>%	select(`Cell type category`, contains("alpha"), zero, level, draws, rng, .variable),
 						by = c("Cell type category", "level")
 					)
 			),
 
 		# # Return the input itself
-		# input = input,
+		input = input,
 
 		# Return the fitted object
 		fit = fit,
@@ -998,9 +998,8 @@ run_model = function(reference_filtered,
 			# 	c("prop_UFO") %>%
 			# 	c(additional_par_to_save),
 			init = function ()
-				init_list
-			#,
-			#save_warmup = FALSE
+				init_list,
+			save_warmup = FALSE
 		) %>%
 		{
 			(.)  %>% rstan::summary() %$% summary %>% as_tibble(rownames = "par") %>% arrange(Rhat %>% desc) %>% filter(Rhat > 1.5) %>% ifelse_pipe(nrow(.) > 0, ~ .x %>% print)
@@ -1043,10 +1042,10 @@ run_model = function(reference_filtered,
 test_differential_composition = function(.data, credible_interval = 0.90) {
 
 
-
+	# Get zero
 	.data$proportions %>%
 		filter(.variable %>% is.na %>% `!`) %>%
-		mutate(regression = map2(draws, zero,
+		mutate(regression = map(draws,
 			~ .x %>%
 				group_by(A) %>%
 				tidybayes::median_qi(.width = credible_interval) %>%
@@ -1055,21 +1054,55 @@ test_differential_composition = function(.data, credible_interval = 0.90) {
 					names_from = A,
 					values_from = c(.value, .lower, .upper),
 					names_prefix = "alpha"
-				) %>%
-				mutate(
-					.value_alpha2 = .value_alpha2 - .y,
-					.lower_alpha2 = .lower_alpha2 - .y,
-					.upper_alpha2 = .upper_alpha2 - .y
-				) %>%
-				mutate(significant = (.lower_alpha2 * .upper_alpha2) > 0)
+				) 
 		)) %>%
-		unnest(cols = c(regression))
+		unnest(cols = c(regression)) %>%
+		
+		# Link zero to closest posterior
+		nest(data = -.variable) %>%
+		mutate(
+			data = map(
+				data, 
+				~ .x %>%
+					mutate(
+						zero = 
+							.x %>%
+							mutate(diff = abs(zero - .value_alpha2)) %>%
+							arrange(diff) %>% 
+							slice(1) %>%
+							pull(.value_alpha2)
+					)
+				)
+		) %>%
+		unnest(data) %>%
+		
+		# Label signifcant
+		# mutate(
+		# 	.value_alpha2 = .value_alpha2 - zero,
+		# 	.lower_alpha2 = .lower_alpha2 - zero,
+		# 	.upper_alpha2 = .upper_alpha2 - zero
+		# ) %>%
+		mutate(significant = ((.lower_alpha2 - zero) * (.upper_alpha2 - zero)) > 0) %>%
+		
+		# Adjust ifancestor is significant
+		# equential important becaue we hav toudatecildren on level at the time
+		left_join(ARMET::tree %>% get_ancesotr_child)	%>%
+		left_join( (.) %>% distinct(ancestor = `Cell type category`, fold_change_ancestor = ifelse(significant, .value_alpha2, 0)) )	%>%
+		group_by(.variable) %>%
+		mutate(zero = ifelse(level == 2 & fold_change_ancestor > 0, min(.value_alpha2), zero)) %>%
+		mutate(zero = ifelse(level == 2 & fold_change_ancestor < 0, max(.value_alpha2), zero)) %>%
+		mutate(zero = ifelse(level == 3 & fold_change_ancestor > 0, min(.value_alpha2), zero)) %>%
+		mutate(zero = ifelse(level == 3 & fold_change_ancestor < 0, max(.value_alpha2), zero)) %>%
+		mutate(zero = ifelse(level == 4 & fold_change_ancestor > 0, min(.value_alpha2), zero)) %>%
+		mutate(zero = ifelse(level == 4 & fold_change_ancestor < 0, max(.value_alpha2), zero)) %>%
+		
+		# Calculate fold chage
+		mutate(fold_change = .value_alpha2 - zero) %>%
+		mutate(significant = ((.lower_alpha2 - zero) * (.upper_alpha2 - zero)) > 0) 
+		
+	
 
-}
-
-
-
-tidy_overlap = function(.data, formula){
+#	ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
 		
 }
 
@@ -1143,7 +1176,7 @@ plot_polar = function(	.data,
 		left_join(.data) %>%
 
 		# process
-		mutate(Estimate = ifelse(significant, .value_alpha2, NA)) %>%
+		mutate(Estimate = ifelse(significant, fold_change, NA)) %>%
 		mutate(branch_length = ifelse(isLeaf, 0.1, 2)) %>%
 
 		# Correct branch length
