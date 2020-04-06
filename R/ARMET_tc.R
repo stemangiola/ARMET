@@ -1,3 +1,56 @@
+#' ARMET_tc_continue
+#' 
+#' @description This function
+#' 
+#' @export
+ARMET_tc_continue = function(armet_obj, levels){
+	
+	run_lv = switch(	levels,run_lv_1,	run_lv_2,	run_lv_3,	run_lv_4)
+	
+	
+	internals = 
+		run_lv(
+			armet_obj$internals,
+			shards = armet_obj$input$cores,
+			level = levels,
+			full_bayesian = armet_obj$input$full_bayesian,
+			approximate_posterior = armet_obj$input$approximate_posterior,
+			iterations = armet_obj$input$iterations,
+			sampling_iterations = armet_obj$input$sampling_iterations	,
+			do_regression = armet_obj$input$do_regression,
+			family = armet_obj$input$family,
+			.formula = armet_obj$input$.formula
+		)
+	
+	# Return
+	list(
+		# Matrix of proportions
+		proportions =	
+			armet_obj$input$.data %>%
+			select(c(sample, (.) %>% get_specific_annotation_columns(sample))) %>%
+			distinct() %>%
+			left_join(internals$prop) %>%
+			
+			# Attach alpha if regression
+			ifelse_pipe(
+				armet_obj$input$do_regression && length(parse_formula(armet_obj$input$.formula)$covariates) >0 ,
+				~ .x %>%
+					nest(proportions = -c(`Cell type category`, C, level)) %>%
+					left_join(
+						internals$alpha %>%	select(`Cell type category`, contains("alpha"), zero, level, draws, rng, .variable),
+						by = c("Cell type category", "level")
+					)
+			),
+		
+		# # Return the input itself
+		input = armet_obj$input,
+		
+		# Return the fitted object
+		internals = internals
+	)
+	
+}
+
 #' ARMET-tc main
 #'
 #' @description This function calls the stan model.
@@ -58,13 +111,15 @@ ARMET_tc = function(.data,
 										sampling_iterations = 100,
 										levels = 3,
 										.n_markers = n_markers ,
-										do_regression = F) {
+										do_regression = T) {
 
 	# At the moment is not active
 	full_bayesian = F
 
 	input = c(as.list(environment()))
-
+	input$.formula = .formula
+	
+	
 	# Get column names
 	.sample = enquo(.sample)
 	.transcript = enquo(.transcript)
@@ -76,7 +131,8 @@ ARMET_tc = function(.data,
 
 	# Rename columns mix
 	.data = .data %>% rename( sample = !!.sample, symbol = !!.transcript ,  count = !!.abundance)
-
+	input$.data = .data
+	
 	# Checkif count is integer
 	if(.data %>% select(count) %>% lapply(class) %>% unlist() %>% equals("integer") %>% `!`)
 		stop(sprintf("ARMET says: the %s column must be integer as the deconvolution model is Negative Binomial", quo_name(.abundance)))
@@ -149,74 +205,19 @@ ARMET_tc = function(.data,
 	shards = cores #* 2
 	is_level_in = shards %>% `>` (0) %>% as.integer
 
-	# Global properties - derived by previous analyses of the whole reference dataset
-	sigma_intercept = 1.3420415
-	sigma_slope = -0.3386389
-	sigma_sigma = 1.1720851
-	lambda_mu_mu = 5.612671
-	lambda_sigma = 7.131593
-
-	# Non centered
-	lambda_mu_prior = c(6.2, 1)
-	lambda_sigma_prior =  c(3.3 , 1)
-	lambda_skew_prior =  c(-2.7, 1)
-	sigma_intercept_prior = c(1.9 , 0.1)
-
-	# Set up tree structure
-	levels_in_the_tree = 1:4
-
-	tree = 	data.tree::Clone(ARMET::tree) %>%	{
-		# Filter selected levels
-		data.tree::Prune(., function(x)
-			x$level <= max(levels_in_the_tree) + 1)
-
-		# Filter if not in referenc
-		#data.tree::Prune(., function(x) ( x$name %in% (ARMET::ARMET_ref %>% distinct(`Cell type category`) %>% pull(1) %>% as.character) ))
-		.
-	}
-
-	ct_in_nodes =
-		tree %>%
-		data.tree::ToDataFrameTree("name", "level", "C", "count", "isLeaf") %>%
-		as_tibble %>%
-		arrange(level, C) %>%
-		filter(!isLeaf) %>%
-		pull(count)
-
-	# Get the number of leafs for every level
-	ct_in_levels = foreach(l = levels_in_the_tree + 1, .combine = c) %do% {
-		data.tree::Clone(tree) %>%
-			ifelse_pipe((.) %>% data.tree::ToDataFrameTree("level") %>% pull(2) %>% max %>% `>` (l),
-									~ {
-										.x
-										data.tree::Prune(.x, function(x)
-											x$level <= l)
-										.x
-									})  %>%
-			data.tree::Traverse(., filterFun = isLeaf) %>%
-			length()
-	}
-
-	n_nodes = ct_in_nodes %>% length
-	n_levels = ct_in_levels %>% length
-
-	# Needed in the model
-	singles_lv2 = tree$Get("C1", filterFun = isLeaf) %>% na.omit %>% as.array
-	SLV2 = length(singles_lv2)
-	parents_lv2 = tree$Get("C1", filterFun = isNotLeaf) %>% na.omit %>% as.array
-	PLV2 = length(parents_lv2)
-
-	singles_lv3 = tree$Get("C2", filterFun = isLeaf) %>% na.omit %>% as.array
-	SLV3 = length(singles_lv3)
-	parents_lv3 = tree$Get("C2", filterFun = isNotLeaf) %>% na.omit %>% as.array
-	PLV3 = length(parents_lv3)
-
-	singles_lv4 = tree$Get("C3", filterFun = isLeaf) %>% na.omit %>% as.array
-	SLV4 = length(singles_lv4)
-	parents_lv4 = tree$Get("C3", filterFun = isNotLeaf) %>% na.omit %>% as.array
-	PLV4 = length(parents_lv4)
+	tree = 	data.tree::Clone(ARMET::tree) 
+	# %>%	{
+	# 	# Filter selected levels
+	# 	data.tree::Prune(., function(x)
+	# 		x$level <= max(levels_in_the_tree) + 1)
+	# 
+	# 	# Filter if not in referenc
+	# 	#data.tree::Prune(., function(x) ( x$name %in% (ARMET::ARMET_ref %>% distinct(`Cell type category`) %>% pull(1) %>% as.character) ))
+	# 	.
+	# }
 
 
+	
 	# Print overlap descriptive stats
 	#get_overlap_descriptive_stats(mix %>% slice(1) %>% gather(symbol, count, -sample), reference)
 
@@ -243,6 +244,7 @@ ARMET_tc = function(.data,
 				select(-1),
 			by = "Cell type category"
 		)	%>%
+		
 		# Decrease the number of house keeping used
 		anti_join({
 			mdf = (.) %>%
@@ -255,549 +257,40 @@ ARMET_tc = function(.data,
 		by = "symbol"
 	)
 
-	prop_posterior = get_null_prop_posterior(ct_in_nodes)
-
-
-	#------------------------------------#
-
-	res1 = run_model(
-		reference_filtered,
-		mix,
-		shards,
-		1,
-		full_bayesian,
-		approximate_posterior,
-		prop_posterior,
-		iterations = iterations,
-		sampling_iterations = sampling_iterations,
-		X = X,
-		do_regression = do_regression,
-		family = family,
-		cens = cens
-	)
-
-	df1 = res1[[1]]
-	fit1 = res1[[2]]
-
-	prop_posterior[[1]] = fit1 %>% prop_to_list %>% `[[` ("prop_1") 
-
-	draws_1 =
-		fit1 %>%
-		tidybayes::gather_draws(prop_1[Q, C1]) %>%
-		ungroup() %>%
-		select(-.variable) %>%
-		mutate(.value_relative = .value)
-
-	prop_1 =
-		fit1 %>%
-		tidybayes::gather_draws(`prop_[1]`[Q, C], regex = T) %>%
-		drop_na  %>%
-		ungroup() %>%
-		
-		# Add relative proportions
-		mutate(.value_relative = .value) %>%
-		
-		# Add tree information
-		left_join(
-			tree %>% data.tree::ToDataFrameTree("name", "C1", "C2", "C3", "C4") %>%
-				as_tibble %>%
-				select(-1) %>%
-				rename(`Cell type category` = name) %>%
-				gather(level, C, -`Cell type category`) %>%
-				mutate(level = gsub("C", "", level)) %>%
-				filter(level == 1) %>%
-				drop_na %>%
-				mutate(C = C %>% as.integer, level = level %>% as.integer)
-		) %>%
-		
-		# add sample annotation
-		left_join(df1 %>% distinct(Q, sample), by = "Q")	%>%
-		
-		# If MCMC is used check divergencies as well
-		ifelse_pipe(
-			!approximate_posterior,
-			~ .x %>% parse_summary_check_divergence(),
-			~ .x %>% parse_summary() %>% rename(.value = mean)
-		) %>%
-		
-		# Parse
-		separate(.variable, c(".variable", "level"), convert = T) %>%
-		
-		# Add sample information
-		left_join(df1 %>%
-								filter(`query`) %>%
-								distinct(Q, sample))
-
-	if (do_regression && length(parse_formula(.formula)$covariates) >0 ) {
-		alpha_1 =
-			fit1 %>%
-			tidybayes::gather_draws(`alpha_[1]`[A, C], regex = T) %>%
-			ungroup() %>%
-
-			# rebuild the last component sum-to-zero
-			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
-
-			# Calculate relative 0 because of dirichlet relativity
-			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
-
-			arrange(.chain, .iteration, .draw,     A) %>%
-
-			nest(draws = -c(C, .variable, zero)) %>%
-
-			left_join(
-				tree %>%
-					ToDataFrameTree("name", "level", sprintf("C%s", 1)) %>%
-					filter(level == 1 + 1) %>%
-					arrange(C1) %>%
-					mutate(C = 1:n()) %>%
-					select(name, C)  %>%
-					rename(`Cell type category` = name)
-			)
-		
-		alpha_1 = alpha_1 %>%
-			separate(.variable, c("par", "node"), remove = F) %>%
-			left_join(
-				fit1 %>% tidybayes::gather_draws(`prop_[1]_rng`[Q, C], regex = T) %>% ungroup() %>% mutate(.variable = gsub("_rng", "", .variable)) %>% separate(.variable, c("par", "node"), remove = F)  %>% select(-par) %>% nest(rng = -c(node, C)) 
-			)
-		
-		alpha = alpha_1 %>% mutate(level = 1)
-		
-
-	}
-
-
-
-	prop = prop_1
-	fit = list(fit1)
-	df = list(df1)
-
+	run_lv = switch(	levels,run_lv_1,	run_lv_2,	run_lv_3,	run_lv_4)
 	
-	#------------------------------------#
-
-	if (levels > 1) {
-		res2 = run_model(
-			reference_filtered,
-			mix,
-			shards,
-			2,
-			full_bayesian,
-			approximate_posterior,
-			prop_posterior,
-			draws_to_exposure(fit1)	,
-			iterations = iterations,
-			sampling_iterations = sampling_iterations,
+	tree_propeties = get_tree_properties(tree)
+	
+	# Default internals
+	internals = 
+		list(
+			prop = NULL,
+			fit = NULL,
+			df = NULL,
+			prop_posterior = get_null_prop_posterior(tree_propeties$ct_in_nodes),
+			alpha = NULL,
+			Q = Q,
+			reference_filtered = reference_filtered,
+			mix = mix,
 			X = X,
-			do_regression = do_regression,
-			family = family,
-			cens = cens
-		)
-
-		df2 = res2[[1]]
-		fit2 = res2[[2]]
-
-		prop_posterior[[2]] =  fit2 %>% prop_to_list %>% `[[` (sprintf("prop_%s", "a"))  
-
-		draws_a =
-			fit2 %>%
-			tidybayes::gather_draws(prop_a[Q, C]) %>%
-			ungroup() %>%
-			select(-.variable)
-
-		draws_2 =
-			draws_1 %>%
-			left_join(
-				fit2 %>%
-					######## ALTERED WITH TREE
-					tidybayes::gather_draws(`prop_[a]`[Q, C], regex = T) %>%
-					###########################
-				drop_na %>%
-					ungroup() %>%
-					left_join(
-						######## ALTERED WITH TREE
-						tibble(
-							.variable = c("prop_a"),
-							C1 = parents_lv2
-						)
-						##########################
-					) %>%
-						select(-.variable) %>%
-							rename(.value2 = .value, C2 = C),
-						by = c(".chain", ".iteration", ".draw", "Q",  "C1")
-					) %>%
-					group_by(.chain, .iteration, .draw, Q) %>%
-					arrange(C1, C2) %>%
-					mutate(
-						C2 = tree$Get("C2") %>% na.omit,
-						`Cell type category` = tree$Get("C2") %>% na.omit %>% names
-					) %>%
-					ungroup() %>%
-					mutate(.value_relative = .value2) %>%
-					mutate(.value2 = ifelse(.value2 %>% is.na, .value, .value * .value2))
- 
-		prop_2 =
-			draws_2 %>%
-			select(.chain,
-						 .iteration,
-						 .draw,
-						 Q,
-						 C2 ,
-						 `Cell type category`,
-						 .value2,
-						 .value_relative) %>%
-			
-			rename(C = C2, .value = .value2) %>%
-			mutate(.variable = "prop_2") %>%
-			mutate(level = 2) %>%
-			
-			# add sample annotation
-			left_join(df2 %>% distinct(Q, sample), by = "Q")	%>%
-			
-			# If MCMC is used check divergencies as well
-			ifelse_pipe(
-				!approximate_posterior,
-				~ .x %>% parse_summary_check_divergence(),
-				~ .x %>% parse_summary() %>% rename(.value = mean)
-			)
-		
-			if (do_regression && length(parse_formula(.formula)$covariates) >0 ){
-					alpha_2 =
-						fit2 %>%
-						tidybayes::gather_draws(`alpha_[a]`[A, C], regex = T) %>%
-						ungroup() %>%
-
-						# rebuild the last component sum-to-zero
-						ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
-
-						# Calculate relative 0 because of dirichlet relativity
-						ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
-
-						arrange(.chain, .iteration, .draw,     A) %>%
-
-						nest(draws = -c(C, .variable, zero)) %>%
-
-						left_join(
-							# FOR HIERARHICAL
-								tree %>%
-								ToDataFrameTree("name", "level", sprintf("C%s", 2)) %>%
-								filter(level == 2+1) %>%
-								arrange(C2) %>%
-								mutate(C = 1:n()) %>%
-								select(name, C) %>%
-								rename(`Cell type category` = name)					
-							# tree %>%
-							# 	ToDataFrameTree("name", "level", sprintf("C%s", 2)) %>%
-							# 	arrange(C2) %>%
-							# 	drop_na() %>%
-							# 	select(name, C2) %>%
-							# 	rename(`Cell type category` = name) %>%
-							# 	rename(C = C2)
-						)
-					
-					alpha_2 = alpha_2 %>%
-						separate(.variable, c("par", "node"), remove = F) %>%
-						left_join(
-							fit2 %>% tidybayes::gather_draws(`prop_[a-z]_rng`[Q, C], regex = T) %>% ungroup() %>% mutate(.variable = gsub("_rng", "", .variable)) %>% separate(.variable, c("par", "node"), remove = F)  %>% select(-par) %>% nest(rng = -c(node, C)) 
-						)
-					
-			
-					alpha = alpha  %>% bind_rows(alpha_2 %>% mutate(level = 2))
-					
-
-				}
-
-				# Eliminate
-				prop = bind_rows(prop, prop_2)
-				fit = fit %>% c(list(fit2))
-				df = df %>% c(list(df2))
-	}
-
-
-# tukey_dirichlet = function(){
-# 	
-# 	alpha_2 %>% unnest(draws) %>% mutate(C = factor(C)) %>%  aov(.value ~ C, data = .) %>% TukeyHSD() %>% tidy() %>% filter(adj.p.value>0.05)
-# 	
-# 	
-# }
-
-	#------------------------------------#
-
-	if (levels > 2) {
-		# browser()
-		res3 = run_model(
-			reference_filtered,
-			mix,
+			cens = cens,
+			tree_properties = tree_propeties
+		) 
+	
+	internals = 
+		run_lv(
+			internals,
 			shards,
-			3,
+			levels,
 			full_bayesian,
 			approximate_posterior,
-			prop_posterior,
-			draws_to_exposure(fit1),
 			iterations = iterations,
 			sampling_iterations = sampling_iterations	,
-			X = X,
 			do_regression = do_regression,
 			family = family,
-			cens = cens
+			.formula = .formula
 		)
-
-		df3 = res3[[1]]
-		fit3 = res3[[2]]
-
-		prop_posterior[3: (2+length(c("b", "c", "d", "e", "f")))] = fit3 %>% prop_to_list 
-
-		draws_3 =
-			draws_2 %>%
-			left_join(
-				fit3 %>%
-					######## ALTERED WITH TREE
-					tidybayes::gather_draws(`prop_[b, c, d, e, f]`[Q, C], regex = T) %>%
-					#########################
-				drop_na %>%
-					ungroup() %>%
-					left_join(
-						######## ALTERED WITH TREE
-						tibble(
-							.variable = c("prop_b", "prop_c", "prop_d", "prop_e", "prop_f"),
-							C2 = parents_lv3
-						)
-						#########################
-					) %>%
-						select(-.variable) %>%
-							rename(.value3 = .value, C3 = C),
-						by = c(".chain", ".iteration", ".draw", "Q",  "C2")
-					) %>%
-					group_by(.chain, .iteration, .draw, Q) %>%
-					arrange(C1, C2, C3) %>%
-					mutate(
-						C3 = tree$Get("C3") %>% na.omit,
-						`Cell type category` = tree$Get("C3") %>% na.omit %>% names
-					) %>%
-					ungroup() %>%
-					mutate(.value_relative = .value3) %>%
-					mutate(.value3 = ifelse(.value3 %>% is.na, .value2, .value2 * .value3))
-
-				
-				prop_3 =
-					draws_3 %>%
-					select(.chain,
-								 .iteration,
-								 .draw,
-								 Q,
-								 C3 ,
-								 `Cell type category`,
-								 .value3,
-								 .value_relative) %>%
-					rename(C = C3, .value = .value3) %>%
-					mutate(.variable = "prop_3") %>%
-					mutate(level = 3) %>%
-
-					# add sample annotation
-					left_join(df3 %>% distinct(Q, sample), by = "Q")	%>%
-
-					# If MCMC is used check divergencies as well
-					ifelse_pipe(
-						!approximate_posterior,
-						~ .x %>% parse_summary_check_divergence(),
-						~ .x %>% parse_summary() %>% rename(.value = mean)
-					) %>%
-
-					left_join(df3 %>% distinct(Q, sample))
-
-				if (do_regression && length(parse_formula(.formula)$covariates) >0 ){
-					alpha_3 =
-						fit3 %>%
-						tidybayes::gather_draws(`alpha_[b|c|d|e|f]`[A, C], regex = T) %>%
-						ungroup() %>%
-						
-						drop_na() %>%
-						arrange(.variable) %>%
-						
-						# rebuild the last component sum-to-zero
-						ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
-						
-						# Calculate relative 0 because of dirichlet relativity
-						ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
-						
-						arrange(.chain, .iteration, .draw,     A) %>%
-						
-						nest(draws = -c(C, .variable, zero)) %>%
-						
-						# FOR HIERARCHICAL
-						mutate(C = 1:n()) %>%
-					
-						left_join(
-							tree %>%
-								ToDataFrameTree("name", "level", sprintf("C%s", 3)) %>%
-								filter(level == 3+1) %>%
-								arrange(C3) %>%
-								mutate(C = 1:n()) %>%
-								select(name, C) %>%
-								rename(`Cell type category` = name)
-							
-							# tree %>%
-							# 	ToDataFrameTree("name", "level", sprintf("C%s", 3)) %>%
-							# 	arrange(C3) %>%
-							# 	drop_na() %>%
-							# 	select(name, C3) %>%
-							# 	rename(`Cell type category` = name) %>%
-							# 	rename(C = C3)
-						)
-					
-					alpha_3 = alpha_3 %>%
-						separate(.variable, c("par", "node"), remove = F) %>%
-						left_join(
-							fit3 %>% tidybayes::gather_draws(`prop_[a-z]_rng`[Q, C], regex = T) %>% ungroup() %>% mutate(.variable = gsub("_rng", "", .variable)) %>% separate(.variable, c("par", "node"), remove = F)  %>% select(-par) %>% nest(rng = -c(node, C)) 
-						)
-					
-					
-					alpha = alpha  %>% bind_rows(alpha_3 %>% mutate(level = 3))
-					
-				}
-				
-				prop = bind_rows(prop, prop_3)
-				fit = fit %>% c(list(fit3))
-				df = df %>% c(list(df3))
-
-	}
-
-	#------------------------------------#
-
-	if (levels > 3) {
-	  # browser()
-	  res4 = run_model(
-	    reference_filtered,
-	    mix,
-	    shards,
-	    4,
-	    full_bayesian,
-	    approximate_posterior,
-	    prop_posterior,
-	    draws_to_exposure(fit1),
-	    iterations = iterations,
-	    sampling_iterations = sampling_iterations	,
-	    X = X,
-	    do_regression = do_regression,
-	    family = family,
-	    cens = cens
-	  )
-
-	  df4 = res4[[1]]
-	  fit4 = res4[[2]]
-
-	  draws_4 =
-	    draws_3 %>%
-	    left_join(
-	      fit4 %>%
-	        ######## ALTERED WITH TREE
-	        tidybayes::gather_draws(`prop_[a-z]`[Q, C], regex = T) %>%
-	        #########################
-	      drop_na %>%
-	        ungroup() %>%
-	        left_join(
-	          ######## ALTERED WITH TREE
-	          tibble(
-	            .variable = c("prop_g", "prop_h", "prop_i", "prop_l", "prop_m"),
-	            C3 = parents_lv4
-	          )
-	          #########################
-	        ) %>%
-	        select(-.variable) %>%
-	        rename(.value4 = .value, C4 = C),
-	      by = c(".chain", ".iteration", ".draw", "Q",  "C3")
-	    ) %>%
-	    group_by(.chain, .iteration, .draw, Q) %>%
-	    arrange(C1, C2, C3, C4) %>%
-	    mutate(
-	      C4 = tree$Get("C4") %>% na.omit,
-	      `Cell type category` = tree$Get("C4") %>% na.omit %>% names
-	    ) %>%
-	    ungroup() %>%
-	    mutate(.value_relative = .value4) %>%
-	    mutate(.value4 = ifelse(.value4 %>% is.na, .value2, .value2 * .value4))
-
-	  prop_4 =
-	    draws_4 %>%
-	    select(.chain,
-	           .iteration,
-	           .draw,
-	           Q,
-	           C4 ,
-	           `Cell type category`,
-	           .value4,
-	           .value_relative) %>%
-	    rename(C = C4, .value = .value4) %>%
-	    mutate(.variable = "prop_4") %>%
-	    mutate(level = 4) %>%
-
-	    # add sample annotation
-	    left_join(df4 %>% distinct(Q, sample), by = "Q")	%>%
-
-	    # If MCMC is used check divergencies as well
-	    ifelse_pipe(
-	      !approximate_posterior,
-	      ~ .x %>% parse_summary_check_divergence(),
-	      ~ .x %>% parse_summary() %>% rename(.value = mean)
-	    ) %>%
-
-	    left_join(df4 %>% distinct(Q, sample))
-
-	  if (do_regression && length(parse_formula(.formula)$covariates) >0 ){
-	  	alpha_4 =
-	  		fit4 %>%
-	  		tidybayes::gather_draws(`alpha_[a-z]`[A, C], regex = T) %>%
-	  		ungroup() %>%
-	  		
-	  		# rebuild the last component sum-to-zero
-	  		ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
-	  		
-	  		# Calculate relative 0 because of dirichlet relativity
-	  		ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
-	  		
-	  		arrange(.chain, .iteration, .draw,     A) %>%
-	  		
-	  		nest(draws = -c(C, .variable, zero)) %>%
-	  		
-	  		# FOR HIERARCHICAL
-	  		mutate(C = 1:n()) %>%
-	  		
-	  		left_join(
-	  			
-	  			tree %>%
-	  				ToDataFrameTree("name", "level", sprintf("C%s", 4)) %>%
-	  				filter(level == 4+1) %>%
-	  				arrange(C4) %>%
-	  				mutate(C = 1:n()) %>%
-	  				select(name, C) %>%
-	  				rename(`Cell type category` = name)
-	  			
-	  			# tree %>%
-	  			# 	ToDataFrameTree("name", "level", sprintf("C%s", 4)) %>%
-	  			# 	arrange(C4) %>%
-	  			# 	drop_na() %>%
-	  			# 	select(name, C4) %>%
-	  			# 	rename(`Cell type category` = name) %>%
-	  			# 	rename(C = C4)
-	  		)
-	  	
-	  	alpha_4 = alpha_4 %>%
-	  		separate(.variable, c("par", "node"), remove = F) %>%
-	  		left_join(
-	  			fit4 %>% tidybayes::gather_draws(`prop_[a-z]_rng`[Q, C], regex = T) %>% ungroup() %>% mutate(.variable = gsub("_rng", "", .variable)) %>% separate(.variable, c("par", "node"), remove = F)  %>% select(-par) %>% nest(rng = -c(node, C)) 
-	  		)
-	  
-	  		  	
-	  	alpha = alpha  %>% bind_rows(alpha_4 %>% mutate(level = 4))
-	  	
-
-	  	
-	  }
-	  
-	  prop = bind_rows(prop, prop_4)
-	  fit = fit %>% c(list(fit4))
-	  df = df %>% c(list(df4))
-
-	}
-
+	
 	# Return
 	list(
 		# Matrix of proportions
@@ -805,7 +298,7 @@ ARMET_tc = function(.data,
 			.data %>%
 			select(c(sample, (.) %>% get_specific_annotation_columns(sample))) %>%
 			distinct() %>%
-			left_join(prop) %>%
+			left_join(internals$prop) %>%
 
 			# Attach alpha if regression
 			ifelse_pipe(
@@ -813,7 +306,7 @@ ARMET_tc = function(.data,
 				~ .x %>%
 					nest(proportions = -c(`Cell type category`, C, level)) %>%
 					left_join(
-						alpha %>%	select(`Cell type category`, contains("alpha"), zero, level, draws, rng, .variable),
+						internals$alpha %>%	select(`Cell type category`, contains("alpha"), zero, level, draws, rng, .variable),
 						by = c("Cell type category", "level")
 					)
 			),
@@ -822,11 +315,7 @@ ARMET_tc = function(.data,
 		input = input,
 
 		# Return the fitted object
-		fit = fit,
-
-		# # Return data source
-		# data_source = y_source,
-		signatures = df
+		internals = internals
 	)
 
 }
@@ -846,7 +335,25 @@ run_model = function(reference_filtered,
 										 X,
 										 do_regression,
 										 family = "dirichlet",
-										 cens) {
+										 cens,
+										 tree_properties,
+										 Q) {
+	
+	Q = Q
+
+	# Global properties - derived by previous analyses of the whole reference dataset
+	sigma_intercept = 1.3420415
+	sigma_slope = -0.3386389
+	sigma_sigma = 1.1720851
+	lambda_mu_mu = 5.612671
+	lambda_sigma = 7.131593
+	
+	# Non centered
+	lambda_mu_prior = c(6.2, 1)
+	lambda_sigma_prior =  c(3.3 , 1)
+	lambda_skew_prior =  c(-2.7, 1)
+	sigma_intercept_prior = c(1.9 , 0.1)
+	
 	# Filter on level considered
 	reference_filtered = reference_filtered %>% filter(level %in% lv)
 
@@ -984,12 +491,12 @@ run_model = function(reference_filtered,
 	fit = 
 		sampling(
 			model,
-			#ARMET_tc_model, #,
+			#rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix_hierarchical.stan", auto_write = F),
 			chains = 3,
 			cores = 3,
 			iter = iterations,
 			warmup = iterations - sampling_iterations,
-			data = MPI_data %>% c(prop_posterior),
+			data = MPI_data %>% c(prop_posterior) %>% c(tree_properties),
 			# pars=
 			# 	c("prop_1", "prop_2", "prop_3", sprintf("prop_%s", letters[1:9])) %>%
 			# 	c("alpha_1", sprintf("alpha_%s", letters[1:9])) %>%
@@ -1372,3 +879,602 @@ plot_polar = function(	.data,
 }
 
 
+#------------------------------------#
+
+run_lv_1 = function(internals,
+										shards,
+										level = 1,
+										full_bayesian,
+										approximate_posterior,
+										iterations = iterations,
+										sampling_iterations = sampling_iterations,
+										do_regression = do_regression,
+										family = family,
+										.formula = .formula){
+	res1 = run_model(
+		internals$reference_filtered,
+		internals$mix,
+		shards,
+		level,
+		full_bayesian,
+		approximate_posterior,
+		internals$prop_posterior,
+		iterations = iterations,
+		sampling_iterations = sampling_iterations,
+		X = internals$X,
+		do_regression = do_regression,
+		family = family,
+		cens = internals$cens,
+		tree_properties = internals$tree_properties,
+		Q = internals$Q
+	)
+	
+	df1 = res1[[1]]
+	fit1 = res1[[2]]
+	
+	
+	
+	draws_1 =
+		fit1 %>%
+		tidybayes::gather_draws(prop_1[Q, C1]) %>%
+		ungroup() %>%
+		select(-.variable) %>%
+		mutate(.value_relative = .value)
+	
+	prop_1 =
+		fit1 %>%
+		tidybayes::gather_draws(`prop_[1]`[Q, C], regex = T) %>%
+		drop_na  %>%
+		ungroup() %>%
+		
+		# Add relative proportions
+		mutate(.value_relative = .value) %>%
+		
+		# Add tree information
+		left_join(
+			tree %>% data.tree::ToDataFrameTree("name", "C1", "C2", "C3", "C4") %>%
+				as_tibble %>%
+				select(-1) %>%
+				rename(`Cell type category` = name) %>%
+				gather(level, C, -`Cell type category`) %>%
+				mutate(level = gsub("C", "", level)) %>%
+				filter(level == 1) %>%
+				drop_na %>%
+				mutate(C = C %>% as.integer, level = level %>% as.integer)
+		) %>%
+		
+		# add sample annotation
+		left_join(df1 %>% distinct(Q, sample), by = "Q")	%>%
+		
+		# If MCMC is used check divergencies as well
+		ifelse_pipe(
+			!approximate_posterior,
+			~ .x %>% parse_summary_check_divergence(),
+			~ .x %>% parse_summary() %>% rename(.value = mean)
+		) %>%
+		
+		# Parse
+		separate(.variable, c(".variable", "level"), convert = T) %>%
+		
+		# Add sample information
+		left_join(df1 %>%
+								filter(`query`) %>%
+								distinct(Q, sample))
+	
+	if (do_regression && length(parse_formula(.formula)$covariates) >0 ) {
+		alpha_1 =
+			fit1 %>%
+			tidybayes::gather_draws(`alpha_[1]`[A, C], regex = T) %>%
+			ungroup() %>%
+			
+			# rebuild the last component sum-to-zero
+			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
+			
+			# Calculate relative 0 because of dirichlet relativity
+			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
+			
+			arrange(.chain, .iteration, .draw,     A) %>%
+			
+			nest(draws = -c(C, .variable, zero)) %>%
+			
+			left_join(
+				tree %>%
+					ToDataFrameTree("name", "level", sprintf("C%s", 1)) %>%
+					filter(level == 1 + 1) %>%
+					arrange(C1) %>%
+					mutate(C = 1:n()) %>%
+					select(name, C)  %>%
+					rename(`Cell type category` = name)
+			)
+		
+		alpha_1 = alpha_1 %>%
+			separate(.variable, c("par", "node"), remove = F) %>%
+			left_join(
+				fit1 %>% tidybayes::gather_draws(`prop_[1a-z]_rng`[Q, C], regex = T) %>% ungroup() %>% mutate(.variable = gsub("_rng", "", .variable)) %>% separate(.variable, c("par", "node"), remove = F)  %>% select(-par) %>% nest(rng = -c(node, C)) 
+			)
+		
+		internals$alpha = alpha_1 %>% mutate(level = 1)
+		
+		
+	}
+	
+	internals$prop = prop_1
+	internals$fit = list(fit1)
+	internals$df = list(df1)
+	internals$draws = list(draws_1)
+	internals$prop_posterior[[1]] = fit1 %>% prop_to_list %>% `[[` ("prop_1") 
+
+	internals
+	
+	
+}
+
+
+
+
+#------------------------------------#
+run_lv_2 = function(internals,
+										shards,
+										level = 2,
+										full_bayesian,
+										approximate_posterior,
+										iterations = iterations,
+										sampling_iterations = sampling_iterations,
+										do_regression = do_regression,
+										family = family,
+										.formula = .formula){
+	res2 = run_model(
+		internals$reference_filtered,
+		internals$mix,
+		shards,
+		level,
+		full_bayesian,
+		approximate_posterior,
+		internals$prop_posterior,
+		draws_to_exposure(internals$fit[[1]])	,
+		iterations = iterations,
+		sampling_iterations = sampling_iterations,
+		X = internals$X,
+		do_regression = do_regression,
+		family = family,
+		cens = internals$cens,
+		tree_properties = internals$tree_properties,
+		Q = internals$Q
+	)
+	
+	
+	
+	df2 = res2[[1]]
+	fit2 = res2[[2]]
+	
+	
+	draws_a =
+		fit2 %>%
+		tidybayes::gather_draws(prop_a[Q, C]) %>%
+		ungroup() %>%
+		select(-.variable)
+	
+	draws_2 =
+		internals$draws[[1]] %>%
+		left_join(
+			fit2 %>%
+				######## ALTERED WITH TREE
+				tidybayes::gather_draws(`prop_[a]`[Q, C], regex = T) %>%
+				###########################
+			drop_na %>%
+				ungroup() %>%
+				left_join(
+					######## ALTERED WITH TREE
+					tibble(
+						.variable = c("prop_a"),
+						C1 = internals$tree_properties$parents_lv2
+					)
+					##########################
+				) %>%
+				select(-.variable) %>%
+				rename(.value2 = .value, C2 = C),
+			by = c(".chain", ".iteration", ".draw", "Q",  "C1")
+		) %>%
+		group_by(.chain, .iteration, .draw, Q) %>%
+		arrange(C1, C2) %>%
+		mutate(
+			C2 = tree$Get("C2") %>% na.omit,
+			`Cell type category` = tree$Get("C2") %>% na.omit %>% names
+		) %>%
+		ungroup() %>%
+		mutate(.value_relative = .value2) %>%
+		mutate(.value2 = ifelse(.value2 %>% is.na, .value, .value * .value2))
+	
+	prop_2 =
+		draws_2 %>%
+		select(.chain,
+					 .iteration,
+					 .draw,
+					 Q,
+					 C2 ,
+					 `Cell type category`,
+					 .value2,
+					 .value_relative) %>%
+		
+		rename(C = C2, .value = .value2) %>%
+		mutate(.variable = "prop_2") %>%
+		mutate(level = 2) %>%
+		
+		# add sample annotation
+		left_join(df2 %>% distinct(Q, sample), by = "Q")	%>%
+		
+		# If MCMC is used check divergencies as well
+		ifelse_pipe(
+			!approximate_posterior,
+			~ .x %>% parse_summary_check_divergence(),
+			~ .x %>% parse_summary() %>% rename(.value = mean)
+		)
+	
+	if (do_regression && length(parse_formula(.formula)$covariates) >0 ){
+		alpha_2 =
+			fit2 %>%
+			tidybayes::gather_draws(`alpha_[a]`[A, C], regex = T) %>%
+			ungroup() %>%
+			
+			# rebuild the last component sum-to-zero
+			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
+			
+			# Calculate relative 0 because of dirichlet relativity
+			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
+			
+			arrange(.chain, .iteration, .draw,     A) %>%
+			
+			nest(draws = -c(C, .variable, zero)) %>%
+			
+			left_join(
+				# FOR HIERARHICAL
+				tree %>%
+					ToDataFrameTree("name", "level", sprintf("C%s", 2)) %>%
+					filter(level == 2+1) %>%
+					arrange(C2) %>%
+					mutate(C = 1:n()) %>%
+					select(name, C) %>%
+					rename(`Cell type category` = name)					
+				# tree %>%
+				# 	ToDataFrameTree("name", "level", sprintf("C%s", 2)) %>%
+				# 	arrange(C2) %>%
+				# 	drop_na() %>%
+				# 	select(name, C2) %>%
+				# 	rename(`Cell type category` = name) %>%
+				# 	rename(C = C2)
+			)
+		
+		alpha_2 = alpha_2 %>%
+			separate(.variable, c("par", "node"), remove = F) %>%
+			left_join(
+				fit2 %>% tidybayes::gather_draws(`prop_[a-z]_rng`[Q, C], regex = T) %>% ungroup() %>% mutate(.variable = gsub("_rng", "", .variable)) %>% separate(.variable, c("par", "node"), remove = F)  %>% select(-par) %>% nest(rng = -c(node, C)) 
+			)
+		
+		
+		internals$alpha = internals$alpha  %>% bind_rows(alpha_2 %>% mutate(level = 2))
+		
+		
+	}
+	
+	internals$prop = bind_rows(internals$prop , prop_2) 
+	internals$fit = internals$fit %>% c(list(fit2))
+	internals$df = internals$df %>% c(list(df2))
+	internals$prop_posterior[[2]] =  fit2 %>% prop_to_list %>% `[[` (sprintf("prop_%s", "a"))  
+	internals$draws = internals$draws %>% c(list(draws_2))
+
+	internals
+	
+}
+
+
+
+
+#------------------------------------#
+
+run_lv_3 = function(internals,
+										shards,
+										level,
+										full_bayesian,
+										approximate_posterior,
+										iterations = iterations,
+										sampling_iterations = sampling_iterations	,
+										do_regression = do_regression,
+										family = family,
+										.formula = .formula){
+	# browser()
+	res3 = run_model(
+		internals$reference_filtered,
+		internals$mix,
+		shards,
+		level,
+		full_bayesian,
+		approximate_posterior,
+		internals$prop_posterior,
+		draws_to_exposure(internals$fit[[1]]),
+		iterations = iterations,
+		sampling_iterations = sampling_iterations	,
+		X = internals$X,
+		do_regression = do_regression,
+		family = family,
+		cens = internals$cens,
+		tree_properties = internals$tree_properties,
+		Q = internals$Q
+	)
+	
+	df3 = res3[[1]]
+	fit3 = res3[[2]]
+	
+	
+	draws_3 =
+		internals$draws[[2]] %>%
+		left_join(
+			fit3 %>%
+				######## ALTERED WITH TREE
+				tidybayes::gather_draws(`prop_[a-z]`[Q, C], regex = T) %>%
+				#########################
+			drop_na %>%
+				ungroup() %>%
+				left_join(
+					######## ALTERED WITH TREE
+					tibble(
+						.variable = c("prop_b", "prop_c", "prop_d", "prop_e", "prop_f"),
+						C2 = internals$tree_properties$parents_lv3
+					)
+					#########################
+				) %>%
+				select(-.variable) %>%
+				rename(.value3 = .value, C3 = C),
+			by = c(".chain", ".iteration", ".draw", "Q",  "C2")
+		) %>%
+		group_by(.chain, .iteration, .draw, Q) %>%
+		arrange(C1, C2, C3) %>%
+		mutate(
+			C3 = tree$Get("C3") %>% na.omit,
+			`Cell type category` = tree$Get("C3") %>% na.omit %>% names
+		) %>%
+		ungroup() %>%
+		mutate(.value_relative = .value3) %>%
+		mutate(.value3 = ifelse(.value3 %>% is.na, .value2, .value2 * .value3))
+	
+	
+	prop_3 =
+		draws_3 %>%
+		select(.chain,
+					 .iteration,
+					 .draw,
+					 Q,
+					 C3 ,
+					 `Cell type category`,
+					 .value3,
+					 .value_relative) %>%
+		rename(C = C3, .value = .value3) %>%
+		mutate(.variable = "prop_3") %>%
+		mutate(level = 3) %>%
+		
+		# add sample annotation
+		left_join(df3 %>% distinct(Q, sample), by = "Q")	%>%
+		
+		# If MCMC is used check divergencies as well
+		ifelse_pipe(
+			!approximate_posterior,
+			~ .x %>% parse_summary_check_divergence(),
+			~ .x %>% parse_summary() %>% rename(.value = mean)
+		) %>%
+		
+		left_join(df3 %>% distinct(Q, sample))
+	
+	if (do_regression && length(parse_formula(.formula)$covariates) >0 ){
+		alpha_3 =
+			fit3 %>%
+			tidybayes::gather_draws(`alpha_[b|c|d|e|f]`[A, C], regex = T) %>%
+			ungroup() %>%
+			
+			drop_na() %>%
+			arrange(.variable) %>%
+			
+			# rebuild the last component sum-to-zero
+			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
+			
+			# Calculate relative 0 because of dirichlet relativity
+			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
+			
+			arrange(.chain, .iteration, .draw,     A) %>%
+			
+			nest(draws = -c(C, .variable, zero)) %>%
+			
+			# FOR HIERARCHICAL
+			mutate(C = 1:n()) %>%
+			
+			left_join(
+				tree %>%
+					ToDataFrameTree("name", "level", sprintf("C%s", 3)) %>%
+					filter(level == 3+1) %>%
+					arrange(C3) %>%
+					mutate(C = 1:n()) %>%
+					select(name, C) %>%
+					rename(`Cell type category` = name)
+				
+				# tree %>%
+				# 	ToDataFrameTree("name", "level", sprintf("C%s", 3)) %>%
+				# 	arrange(C3) %>%
+				# 	drop_na() %>%
+				# 	select(name, C3) %>%
+				# 	rename(`Cell type category` = name) %>%
+				# 	rename(C = C3)
+			)
+		
+		alpha_3 = alpha_3 %>%
+			separate(.variable, c("par", "node"), remove = F) %>%
+			left_join(
+				fit3 %>% tidybayes::gather_draws(`prop_[a-z]_rng`[Q, C], regex = T) %>% ungroup() %>% mutate(.variable = gsub("_rng", "", .variable)) %>% separate(.variable, c("par", "node"), remove = F)  %>% select(-par) %>% nest(rng = -c(node, C)) 
+			)
+		
+		
+		internals$alpha = 	internals$alpha  %>% bind_rows(alpha_3 %>% mutate(level = 3))
+		
+	}
+	
+	internals$prop = bind_rows(internals$prop , prop_3) 
+	internals$fit = internals$fit %>% c(list(fit3))
+	internals$df = internals$df %>% c(list(df3))
+	internals$prop_posterior[3: (2+length(c("b", "c", "d", "e", "f")))] = fit3 %>% prop_to_list 
+	internals$draws = internals$draws %>% c(list(draws_3))
+
+	internals
+	
+
+}
+
+#------------------------------------#
+
+run_lv_4 = function(internals,
+										shards,
+										level,
+										full_bayesian,
+										approximate_posterior,
+										iterations = iterations,
+										sampling_iterations = sampling_iterations	,
+										do_regression = do_regression,
+										family = family,
+										.formula = .formula){
+	# browser()
+	res4 = run_model(
+		internals$reference_filtered,
+		internals$mix,
+		shards,
+		level,
+		full_bayesian,
+		approximate_posterior,
+		internals$prop_posterior,
+		draws_to_exposure(internals$fit[[1]]),
+		iterations = iterations,
+		sampling_iterations = sampling_iterations	,
+		X = internals$X,
+		do_regression = do_regression,
+		family = family,
+		cens = internals$cens,
+		tree_properties = internals$tree_properties,
+		Q = internals$Q
+	)
+	
+	df4 = res4[[1]]
+	fit4 = res4[[2]]
+	
+	draws_4 =
+		internals$draws[[3]] %>%
+		left_join(
+			fit4 %>%
+				######## ALTERED WITH TREE
+				tidybayes::gather_draws(`prop_[a-z]`[Q, C], regex = T) %>%
+				#########################
+			drop_na %>%
+				ungroup() %>%
+				left_join(
+					######## ALTERED WITH TREE
+					tibble(
+						.variable = c("prop_g", "prop_h", "prop_i", "prop_l", "prop_m"),
+						C3 = internals$tree_properties$parents_lv4
+					)
+					#########################
+				) %>%
+				select(-.variable) %>%
+				rename(.value4 = .value, C4 = C),
+			by = c(".chain", ".iteration", ".draw", "Q",  "C3")
+		) %>%
+		group_by(.chain, .iteration, .draw, Q) %>%
+		arrange(C1, C2, C3, C4) %>%
+		mutate(
+			C4 = tree$Get("C4") %>% na.omit,
+			`Cell type category` = tree$Get("C4") %>% na.omit %>% names
+		) %>%
+		ungroup() %>%
+		mutate(.value_relative = .value4) %>%
+		mutate(.value4 = ifelse(.value4 %>% is.na, .value2, .value2 * .value4))
+	
+	prop_4 =
+		draws_4 %>%
+		select(.chain,
+					 .iteration,
+					 .draw,
+					 Q,
+					 C4 ,
+					 `Cell type category`,
+					 .value4,
+					 .value_relative) %>%
+		rename(C = C4, .value = .value4) %>%
+		mutate(.variable = "prop_4") %>%
+		mutate(level = 4) %>%
+		
+		# add sample annotation
+		left_join(df4 %>% distinct(Q, sample), by = "Q")	%>%
+		
+		# If MCMC is used check divergencies as well
+		ifelse_pipe(
+			!approximate_posterior,
+			~ .x %>% parse_summary_check_divergence(),
+			~ .x %>% parse_summary() %>% rename(.value = mean)
+		) %>%
+		
+		left_join(df4 %>% distinct(Q, sample))
+	
+	if (do_regression && length(parse_formula(.formula)$covariates) >0 ){
+		alpha_4 =
+			fit4 %>%
+			tidybayes::gather_draws(`alpha_[a-z]`[A, C], regex = T) %>%
+			ungroup() %>%
+			
+			# rebuild the last component sum-to-zero
+			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
+			
+			# Calculate relative 0 because of dirichlet relativity
+			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
+			
+			arrange(.chain, .iteration, .draw,     A) %>%
+			
+			nest(draws = -c(C, .variable, zero)) %>%
+			
+			# FOR HIERARCHICAL
+			mutate(C = 1:n()) %>%
+			
+			left_join(
+				
+				tree %>%
+					ToDataFrameTree("name", "level", sprintf("C%s", 4)) %>%
+					filter(level == 4+1) %>%
+					arrange(C4) %>%
+					mutate(C = 1:n()) %>%
+					select(name, C) %>%
+					rename(`Cell type category` = name)
+				
+				# tree %>%
+				# 	ToDataFrameTree("name", "level", sprintf("C%s", 4)) %>%
+				# 	arrange(C4) %>%
+				# 	drop_na() %>%
+				# 	select(name, C4) %>%
+				# 	rename(`Cell type category` = name) %>%
+				# 	rename(C = C4)
+			)
+		
+		alpha_4 = alpha_4 %>%
+			separate(.variable, c("par", "node"), remove = F) %>%
+			left_join(
+				fit4 %>% tidybayes::gather_draws(`prop_[a-z]_rng`[Q, C], regex = T) %>% ungroup() %>% mutate(.variable = gsub("_rng", "", .variable)) %>% separate(.variable, c("par", "node"), remove = F)  %>% select(-par) %>% nest(rng = -c(node, C)) 
+			)
+		
+		
+		internals$alpha = 	internals$alpha  %>% bind_rows(alpha_4 %>% mutate(level = 4))
+		
+		
+		
+	}
+	
+	internals$prop = bind_rows(internals$prop , prop_4) 
+	internals$fit = internals$fit %>% c(list(fit4))
+	internals$df = internals$df %>% c(list(df4))
+	internals$draws = internals$draws %>% c(list(draws_4))
+	
+	
+	internals
+
+	
+}

@@ -1669,3 +1669,78 @@ get_ancesotr_child = function(tree){
 		) %>%
 		filter(ancestor != `Cell type category`)
 }
+
+get_tree_properties = function(tree){
+	
+	
+	
+	# Set up tree structure
+	levels_in_the_tree = 1:4
+	
+	ct_in_nodes =
+		tree %>%
+		data.tree::ToDataFrameTree("name", "level", "C", "count", "isLeaf") %>%
+		as_tibble %>%
+		arrange(level, C) %>%
+		filter(!isLeaf) %>%
+		pull(count)
+	
+	# Get the number of leafs for every level
+	ct_in_levels = foreach(l = levels_in_the_tree + 1, .combine = c) %do% {
+		data.tree::Clone(tree) %>%
+			ifelse_pipe((.) %>% data.tree::ToDataFrameTree("level") %>% pull(2) %>% max %>% `>` (l),
+									~ {
+										.x
+										data.tree::Prune(.x, function(x)
+											x$level <= l)
+										.x
+									})  %>%
+			data.tree::Traverse(., filterFun = isLeaf) %>%
+			length()
+	}
+	
+	n_nodes = ct_in_nodes %>% length
+	n_levels = ct_in_levels %>% length
+	
+	# Needed in the model
+	singles_lv2 = tree$Get("C1", filterFun = isLeaf) %>% na.omit %>% as.array
+	SLV2 = length(singles_lv2)
+	parents_lv2 = tree$Get("C1", filterFun = isNotLeaf) %>% na.omit %>% as.array
+	PLV2 = length(parents_lv2)
+	
+	singles_lv3 = tree$Get("C2", filterFun = isLeaf) %>% na.omit %>% as.array
+	SLV3 = length(singles_lv3)
+	parents_lv3 = tree$Get("C2", filterFun = isNotLeaf) %>% na.omit %>% as.array
+	PLV3 = length(parents_lv3)
+	
+	singles_lv4 = tree$Get("C3", filterFun = isLeaf) %>% na.omit %>% as.array
+	SLV4 = length(singles_lv4)
+	parents_lv4 = tree$Get("C3", filterFun = isNotLeaf) %>% na.omit %>% as.array
+	PLV4 = length(parents_lv4)
+	
+	list(
+		ct_in_nodes =ct_in_nodes,
+		
+		# Get the number of leafs for every level
+		ct_in_levels = ct_in_levels,
+		
+		n_nodes = ct_in_nodes %>% length,
+		n_levels = ct_in_levels %>% length,
+		
+		# Needed in the model
+		singles_lv2 = singles_lv2,
+		SLV2 = SLV2,
+		parents_lv2 = parents_lv2,
+		PLV2 = PLV2,
+		
+		singles_lv3 = singles_lv3,
+		SLV3 = SLV3,
+		parents_lv3 = parents_lv3,
+		PLV3 = PLV3,
+		
+		singles_lv4 = singles_lv4,
+		SLV4 = SLV4,
+		parents_lv4 = parents_lv4,
+		PLV4 = PLV4
+	)
+}

@@ -681,7 +681,6 @@ real beta_regression_lpdf(vector[] p, matrix X, matrix alpha, real[] phi){
 
 vector[] beta_regression_rng( matrix X, matrix alpha, real[] phi){
 
-		real lp = 0;
 		vector[cols(alpha)] p[rows(X)];
 
 		//matrix[num_elements(p[,1]), num_elements(p[1])] mu;
@@ -754,7 +753,6 @@ data {
 	int size_G_linear_MPI[max(shards, 1)];
 	int G_linear_MPI[shards,max(size_G_linear_MPI)];
 	int y_linear_MPI[shards,max(size_y_linear_MPI)];
-
 
 	// Lv2 tree structure parents singles
 	int<lower=0> SLV2;
@@ -1171,24 +1169,24 @@ generated quantities{
 	//vector[ct_in_levels[lv]]  prop_rng[Q];
 
   // lv1
-  vector[ct_in_nodes[1]]  prop_1_rng[Q * (lv == 1)]; // Root
+  vector[ct_in_nodes[1]]  prop_1_rng[Q * (lv == 1) * do_regression]; // Root
 
   // lv2
-  vector[ct_in_nodes[2]]  prop_a_rng[Q * (lv == 2)]; // Immune cells childrens
+  vector[ct_in_nodes[2]]  prop_a_rng[Q * (lv == 2)* do_regression]; // Immune cells childrens
 
   // lv3
-  vector[ct_in_nodes[3]]  prop_b_rng[Q * (lv == 3)]; // b cells childrens
-  vector[ct_in_nodes[4]]  prop_c_rng[Q * (lv == 3)]; // granulocyte childrens
-  vector[ct_in_nodes[5]]  prop_d_rng[Q * (lv == 3)]; // mono_derived childrens
-  vector[ct_in_nodes[6]]  prop_e_rng[Q * (lv == 3)]; // natural_killer childrens
-  vector[ct_in_nodes[7]]  prop_f_rng[Q * (lv == 3)]; // t_cell childrens
+  vector[ct_in_nodes[3]]  prop_b_rng[Q * (lv == 3)* do_regression]; // b cells childrens
+  vector[ct_in_nodes[4]]  prop_c_rng[Q * (lv == 3)* do_regression]; // granulocyte childrens
+  vector[ct_in_nodes[5]]  prop_d_rng[Q * (lv == 3)* do_regression]; // mono_derived childrens
+  vector[ct_in_nodes[6]]  prop_e_rng[Q * (lv == 3)* do_regression]; // natural_killer childrens
+  vector[ct_in_nodes[7]]  prop_f_rng[Q * (lv == 3)* do_regression]; // t_cell childrens
 
 	// lv4
-  vector[ct_in_nodes[8]]  prop_g_rng[Q * (lv == 4)]; // dendritic myeloid childrens
-  vector[ct_in_nodes[9]]  prop_h_rng[Q * (lv == 4)]; // macrophage childrens
-  vector[ct_in_nodes[10]] prop_i_rng[Q * (lv == 4)]; // nk primed
-  vector[ct_in_nodes[11]] prop_l_rng[Q * (lv == 4)]; // CD4 childrens
-  vector[ct_in_nodes[12]] prop_m_rng[Q * (lv == 4)]; // CD8 childrens
+  vector[ct_in_nodes[8]]  prop_g_rng[Q * (lv == 4)* do_regression]; // dendritic myeloid childrens
+  vector[ct_in_nodes[9]]  prop_h_rng[Q * (lv == 4)* do_regression]; // macrophage childrens
+  vector[ct_in_nodes[10]] prop_i_rng[Q * (lv == 4)* do_regression]; // nk primed
+  vector[ct_in_nodes[11]] prop_l_rng[Q * (lv == 4)* do_regression]; // CD4 childrens
+  vector[ct_in_nodes[12]] prop_m_rng[Q * (lv == 4)* do_regression]; // CD8 childrens
   
 	if(lv == 1 && do_regression) {
 
