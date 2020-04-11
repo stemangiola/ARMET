@@ -1,5 +1,34 @@
 
 
+my_theme =
+	theme_bw() +
+	theme(
+		panel.border = element_blank(),
+		axis.line = element_line(),
+		panel.grid.major = element_line(size = 0.2),
+		panel.grid.minor = element_line(size = 0.1),
+		text = element_text(size = 12),
+		legend.position = "bottom",
+		aspect.ratio = 1,
+		axis.text.x = element_text(
+			angle = 90,
+			hjust = 1,
+			vjust = 0.5
+		),
+		strip.background = element_blank(),
+		axis.title.x  = element_text(margin = margin(
+			t = 10,
+			r = 10,
+			b = 10,
+			l = 10
+		)),
+		axis.title.y  = element_text(margin = margin(
+			t = 10,
+			r = 10,
+			b = 10,
+			l = 10
+		))
+	)
 
 # library(magrittr)
 # library(tidyverse)
@@ -25,6 +54,138 @@ ifelse_pipe = function(.x, .p, .f1, .f2 = NULL) {
 				 else
 				 	.x)
 
+}
+
+#' This is a generalisation of ifelse that acceots an object and return an objects
+#'
+#' @import dplyr
+#' @import tidyr
+#'
+#' @param .x A tibble
+#' @param .p1 A boolean
+#' @param .p2 ELSE IF condition
+#' @param .f1 A function
+#' @param .f2 A function
+#' @param .f3 A function
+#'
+#' @return A tibble
+ifelse2_pipe = function(.x, .p1, .p2, .f1, .f2, .f3 = NULL) {
+	# Nested switch
+	switch(# First condition
+		.p1 %>% `!` %>% sum(1),
+		
+		# First outcome
+		as_mapper(.f1)(.x),
+		switch(
+			# Second condition
+			.p2 %>% `!` %>% sum(1),
+			
+			# Second outcome
+			as_mapper(.f2)(.x),
+			
+			# Third outcome - if there is not .f3 just return the original data frame
+			if (.f3 %>% is.null %>% `!`)
+				as_mapper(.f3)(.x)
+			else
+				.x
+		))
+}
+
+#' This is a generalisation of ifelse that acceots an object and return an objects
+#'
+#' @import dplyr
+#' @import tidyr
+#'
+#' @param .x A tibble
+#' @param .p1 A boolean
+#' @param .p2 ELSE IF condition
+#' @param .f1 A function
+#' @param .f2 A function
+#' @param .f3 A function
+#'
+#' @return A tibble
+ifelse3_pipe = function(.x, .p1, .p2, .p3, .f1, .f2, .f3, .f4 = NULL) {
+	# Nested switch
+	switch(# First condition
+		.p1 %>% `!` %>% sum(1),
+		
+		# First outcome
+		as_mapper(.f1)(.x),
+		switch(
+			# Second condition
+			.p2 %>% `!` %>% sum(1),
+			
+			# Second outcome
+			as_mapper(.f2)(.x),
+			
+			# Third outcome - if there is not .f3 just return the original data frame
+			switch(
+				# Second condition
+				.p3 %>% `!` %>% sum(1),
+				
+				# Second outcome
+				as_mapper(.f3)(.x),
+				
+				# Third outcome - if there is not .f3 just return the original data frame
+				if (.f4 %>% is.null %>% `!`)
+					as_mapper(.f4)(.x)
+				else
+					.x
+			)
+		))
+}
+
+#' This is a generalisation of ifelse that acceots an object and return an objects
+#'
+#' @import dplyr
+#' @import tidyr
+#'
+#' @param .x A tibble
+#' @param .p1 A boolean
+#' @param .p2 ELSE IF condition
+#' @param .f1 A function
+#' @param .f2 A function
+#' @param .f3 A function
+#'
+#' @return A tibble
+ifelse4_pipe = function(.x, .p1, .p2, .p3, .p4, .f1, .f2, .f3, .f4, .f5 = NULL) {
+	# Nested switch
+	switch(# First condition
+		.p1 %>% `!` %>% sum(1),
+		
+		# First outcome
+		as_mapper(.f1)(.x),
+		switch(
+			# Second condition
+			.p2 %>% `!` %>% sum(1),
+			
+			# Second outcome
+			as_mapper(.f2)(.x),
+			
+			# Third outcome - if there is not .f3 just return the original data frame
+			switch(
+				# Second condition
+				.p3 %>% `!` %>% sum(1),
+				
+				# Second outcome
+				as_mapper(.f3)(.x),
+				
+				# Third outcome - if there is not .f3 just return the original data frame
+				switch(
+					# Second condition
+					.p4 %>% `!` %>% sum(1),
+					
+					# Second outcome
+					as_mapper(.f4)(.x),
+					
+					# Third outcome - if there is not .f3 just return the original data frame
+					if (.f5 %>% is.null %>% `!`)
+						as_mapper(.f5)(.x)
+					else
+						.x
+				)
+			)
+		))
 }
 
 #' format_for_MPI
@@ -670,6 +831,54 @@ as_matrix = function(tbl, rownames = NULL) {
 #'
 #' @export
 ToDataFrameTypeColFull = function(tree, fill = T, ...) {
+	t = tree %>% data.tree::Clone()
+	
+	1:(t %$% Get("level") %>% max) %>%
+		map_dfr(
+			~ data.tree::Clone(t) %>%
+					{
+						data.tree::Prune(., function(x)
+							x$level <= .x + 1)
+						.
+					} %>%
+					data.tree::ToDataFrameTypeCol() %>%
+					as_tibble
+			
+		) %>%
+		distinct() %>%
+		ifelse_pipe(
+			fill,
+			~ .x %>%
+				{
+					if ("level_3" %in% ((.) %>% colnames))
+						(.) %>% mutate(level_3 = ifelse(level_3 %>% is.na, level_2, level_3))
+					else
+						(.)
+				} %>%
+				{
+					if ("level_4" %in% ((.) %>% colnames))
+						(.) %>% mutate(level_4 = ifelse(level_4 %>% is.na, level_3, level_4))
+					else
+						(.)
+				} %>%
+				{
+					if ("level_5" %in% ((.) %>% colnames))
+						(.) %>% mutate(level_5 = ifelse(level_5 %>% is.na, level_4, level_5))
+					else
+						(.)
+				} %>%
+				{
+					if ("level_6" %in% ((.) %>% colnames))
+						(.) %>% mutate(level_6 = ifelse(level_6 %>% is.na, level_5, level_6))
+					else
+						(.)
+				}
+		) %>%
+		select(..., everything())
+	
+}
+
+ToDataFrameTypeColFull_old = function(tree, fill = T, ...) {
 	tree %>%
 		data.tree::Clone() %>%
 		{
@@ -713,8 +922,21 @@ ToDataFrameTypeColFull = function(tree, fill = T, ...) {
 					else
 						(.)
 				}
-			) %>%
+		) %>%
 		select(..., everything())
+}
+
+get_ancesotr_child = function(tree){
+	tree %>% ToDataFrameTypeColFull %>% distinct(level_1, level_2) %>% setNames(c("ancestor", "Cell type category")) %>% bind_rows(
+		tree %>% ToDataFrameTypeColFull %>% distinct(level_2, level_3) %>% setNames(c("ancestor", "Cell type category"))
+	) %>%
+		bind_rows(
+			tree %>% ToDataFrameTypeColFull %>% distinct(level_3, level_4) %>% setNames(c("ancestor", "Cell type category"))
+		) %>%
+		bind_rows(
+			tree %>% ToDataFrameTypeColFull %>% distinct(level_4, level_5) %>% setNames(c("ancestor", "Cell type category"))
+		) %>%
+		filter(ancestor != `Cell type category`)
 }
 
 #' vb_iterative
@@ -1177,7 +1399,7 @@ plot_boxplot = function(input.df, symbols) {
 		scale_y_log10()
 }
 
-plot_markers = function(.data, n_markers, mix, ct1, ct2, n = 10, level) {
+plot_signatures = function(.data, n_markers, mix, ct1, ct2, n = 10, level) {
 	my_theme =
 		theme_bw() +
 		theme(
@@ -1643,17 +1865,45 @@ permute_nest = function(.data, .names_from, .values_from){
 	.names_from = enquo(.names_from)
 	.values_from = enquo(.values_from)
 	
+	factor_levels = .data %>% pull(!!.names_from)
+	
 	.data %>% 
 		pull(!!.names_from) %>%
 		unique() %>%
 		gtools::permutations(n = length(.), r = 2, v = .) %>%
 		as_tibble() %>%
-		unite(run, c(V1, V2), remove = F) %>%
+		unite(run, c(V1, V2), remove = F, sep="___") %>%
 		gather(which, !!.names_from, -run) %>%
 		select(-which) %>%
 		left_join(.data %>% select(!!.names_from, !!.values_from), by = quo_name(.names_from)) %>%
 		nest(data = -run) %>%
-		separate(run, sprintf("%s_%s", quo_name(.names_from), 1:2 ))
+		separate(run, sprintf("%s_%s", quo_name(.names_from), 1:2 ), sep="___") %>%
+		
+		# Introduce levels
+		mutate_at(vars(1:2),function(x) factor(x, levels = factor_levels))
+	
+}
+
+combine_nest = function(.data, .names_from, .values_from){
+	.names_from = enquo(.names_from)
+	.values_from = enquo(.values_from)
+	
+	factor_levels = .data %>% pull(!!.names_from)
+	
+	.data %>% 
+		pull(!!.names_from) %>%
+		unique() %>%
+		gtools::combinations(n = length(.), r = 2, v = .) %>%
+		as_tibble() %>%
+		unite(run, c(V1, V2), remove = F, sep="___") %>%
+		gather(which, !!.names_from, -run) %>%
+		select(-which) %>%
+		left_join(.data %>% select(!!.names_from, !!.values_from), by = quo_name(.names_from)) %>%
+		nest(data = -run) %>%
+		separate(run, sprintf("%s_%s", quo_name(.names_from), 1:2), sep="___") %>%
+		
+		# Introduce levels
+		mutate_at(vars(1:2),function(x) factor(x, levels = factor_levels))
 	
 }
 
@@ -1744,3 +1994,5 @@ get_tree_properties = function(tree){
 		PLV4 = PLV4
 	)
 }
+
+

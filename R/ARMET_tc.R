@@ -3,7 +3,7 @@
 #' @description This function
 #' 
 #' @export
-ARMET_tc_continue = function(armet_obj, levels){
+ARMET_tc_continue = function(armet_obj, levels, model = stanmodels$ARMET_tc_fix_hierarchical){
 	
 	run_lv = switch(	levels,run_lv_1,	run_lv_2,	run_lv_3,	run_lv_4)
 	
@@ -19,7 +19,8 @@ ARMET_tc_continue = function(armet_obj, levels){
 			sampling_iterations = armet_obj$input$sampling_iterations	,
 			do_regression = armet_obj$input$do_regression,
 			family = armet_obj$input$family,
-			.formula = armet_obj$input$.formula
+			.formula = armet_obj$input$.formula,
+			model = model
 		)
 	
 	# Return
@@ -111,7 +112,8 @@ ARMET_tc = function(.data,
 										sampling_iterations = 100,
 										levels = 3,
 										.n_markers = n_markers ,
-										do_regression = T) {
+										do_regression = T, 
+										model = stanmodels$ARMET_tc_fix_hierarchical) {
 
 	# At the moment is not active
 	full_bayesian = F
@@ -288,7 +290,8 @@ ARMET_tc = function(.data,
 			sampling_iterations = sampling_iterations	,
 			do_regression = do_regression,
 			family = family,
-			.formula = .formula
+			.formula = .formula,
+			model = model
 		)
 	
 	# Return
@@ -337,7 +340,8 @@ run_model = function(reference_filtered,
 										 family = "dirichlet",
 										 cens,
 										 tree_properties,
-										 Q) {
+										 Q,
+										 model = stanmodels$ARMET_tc_fix_hierarchical) {
 	
 	Q = Q
 
@@ -483,7 +487,7 @@ run_model = function(reference_filtered,
 
 
 	
-	model  = stanmodels$ARMET_tc_fix_hierarchical
+	# model  = stanmodels$ARMET_tc_fix_hierarchical
 	# switch(fam_dirichlet %>% `!` %>% sum(1),
 	# 								stanmodels$ARMET_tc_fix_hierarchical,
 	# 								stanmodels$ARMET_tc_fix)
@@ -545,67 +549,254 @@ run_model = function(reference_filtered,
 
 }
 
-#' @export
-test_differential_composition = function(.data, credible_interval = 0.90) {
-
-
-	# Get zero
-	.data$proportions %>%
+cluster_posterior_slopes = function(.data, credible_interval = 0.67){
+	
+	# Add cluster info to cell types per node
+	.data %>%
 		filter(.variable %>% is.na %>% `!`) %>%
-		mutate(regression = map(draws,
-			~ .x %>%
-				group_by(A) %>%
-				tidybayes::median_qi(.width = credible_interval) %>%
-				ungroup()  %>%
-				pivot_wider(
-					names_from = A,
-					values_from = c(.value, .lower, .upper),
-					names_prefix = "alpha"
-				) 
-		)) %>%
-		unnest(cols = c(regression)) %>%
-		
-		# Link zero to closest posterior
-		nest(data = -.variable) %>%
-		mutate(
-			data = map(
-				data, 
-				~ .x %>%
-					mutate(
-						zero = 
-							.x %>%
-							mutate(diff = abs(zero - .value_alpha2)) %>%
-							arrange(diff) %>% 
-							slice(1) %>%
-							pull(.value_alpha2)
-					)
+		nest(node = -c(level, .variable)) %>%
+		mutate(node = map(
+			node,
+			~ {
+				.x %>%
+				left_join(
+					
+					# Unnest data
+					(.) %>%
+						select(-proportions, -rng) %>%
+						unnest(draws) %>%
+						filter(A == 2) %>%
+						
+						# Calculate credible interval
+						group_by(C, `Cell type category` , A) %>%
+						tidybayes::median_qi(.width = credible_interval) %>%
+						ungroup() %>%
+						
+						# Build combination of cell types
+						combine_nest(
+							.names_from = `Cell type category`,
+							.values_from = c(.lower, .upper)
+						)  %>%
+						
+						# Check overlap of credible intervals
+						mutate(is_cluster = map_lgl(
+							data,
+							~ .x %>% 
+								summarise(ma = max(.lower), mi = min(.upper)) %>% 
+								mutate(is_cluster = ma < mi) %>%
+								pull(is_cluster)
+						)) %>% 
+						
+						# If there is not cluster
+						
+						# Find communities based on cell type clusters
+						{
+							ct_levels = (.) %>% arrange(!is_cluster) %>% select(1:2) %>% as_matrix %>% t %>% as.character() %>% unique
+							
+							(.) %>%
+								filter(is_cluster) %>% 
+									select(1:2) %>%
+									tidygraph::tbl_graph(
+										edges = .,
+										nodes = data.frame(name = ct_levels)
+									) %>%
+									mutate(community = as.factor(tidygraph::group_infomap())) 
+						}
+						%>%
+						
+						# Format for joining
+						as_tibble() %>%
+						rename(`Cell type category` = name)
 				)
-		) %>%
-		unnest(data) %>%
+			
+	}	)) %>%
+		unnest(node)
+	
+}
+
+identify_baseline_by_clustering = function(.data){
+	
+.data %>%
+		nest(node = -c(.variable)) %>%
 		
-		# Label signifcant
-		# mutate(
-		# 	.value_alpha2 = .value_alpha2 - zero,
-		# 	.lower_alpha2 = .lower_alpha2 - zero,
-		# 	.upper_alpha2 = .upper_alpha2 - zero
-		# ) %>%
+		mutate(node = map(
+			node, ~ .x %>%
+				#mutate(baseline = TRUE) %>%
+				add_count(community) %>%
+				
+				# Add sd
+				nest(comm_data = -community) %>%
+				mutate(
+					sd_community = map_dbl( comm_data, ~ .x %>% unnest(draws) %>% pull(.value) %>% sd ),
+					mean_community = map_dbl( comm_data, ~ .x %>% unnest(draws) %>% pull(.value) %>% mean )
+				) %>%
+				unnest(comm_data) %>%
+			
+				# If we have a unique bigger community
+				ifelse4_pipe(
+					(.) %>% distinct(community) %>% nrow %>% equals(1),
+					(.) %>% distinct(n) %>% nrow %>% `>` (1),
+					(.) %>% distinct(fold_change_ancestor) %>% pull(1) %>% equals(0) %>% `!`,
+					(.) %>% distinct(community) %>% nrow %>% `>` (1),
+					
+					# No nothing
+					~ .x %>% mutate(baseline = TRUE),
+					
+					# Majority roule
+					~ .x %>% mutate(baseline = n == max(n)),
+					
+					# If ancestor changed
+					~ .x %>% mutate(baseline = ifelse(fold_change_ancestor > 0, mean_community == min(mean_community), mean_community == max(mean_community))),
+					
+					# If equally sized clusters take the most variable
+					~ .x %>% mutate(baseline = sd_community == max(sd_community))
+				)
+												
+		)) %>% 
+		unnest(node)  %>%
+
+		# Select zero
+		nest(node = -.variable) %>%
+		mutate(zero = map_dbl(node, ~ .x %>% filter(baseline) %>% pull(mean_community) %>% unique)) %>%
+		unnest(node)
+		
+		
+}
+
+
+extract_CI =  function(.data, credible_interval = 0.90){
+	.data %>%
+		mutate(regression = map(draws,
+														~ .x %>%
+															group_by(A) %>%
+															tidybayes::median_qi(.width = credible_interval) %>%
+															ungroup()  %>%
+															pivot_wider(
+																names_from = A,
+																values_from = c(.value, .lower, .upper),
+																names_prefix = "alpha"
+															) 
+		)) %>%
+		unnest(cols = c(regression))
+}
+
+#' @export
+test_differential_composition = function(.data, credible_interval = 0.90, cluster_CI = 0.55) {
+
+
+	.d = 
+		.data$proportions %>%
+		filter(.variable %>% is.na %>% `!`) %>%
+		select(-one_of("zero")) %>%
+		cluster_posterior_slopes(credible_interval = cluster_CI) %>%
+		extract_CI
+	
+	dx = list()	
+	
+	# Level 1
+	if(.d %>% filter(level ==1) %>% nrow %>% `>` (0))
+	dx = 
+		.d %>%
+		
+		filter(level ==1) %>%
+		mutate(fold_change_ancestor = 0) %>%
+		identify_baseline_by_clustering( ) %>%
+		
 		mutate(significant = ((.lower_alpha2 - zero) * (.upper_alpha2 - zero)) > 0) %>%
+		mutate(fold_change  = ifelse(significant, .value_alpha2, 0))
 		
-		# Adjust ifancestor is significant
-		# equential important becaue we hav toudatecildren on level at the time
-		left_join(ARMET::tree %>% get_ancesotr_child)	%>%
-		left_join( (.) %>% distinct(ancestor = `Cell type category`, fold_change_ancestor = ifelse(significant, .value_alpha2, 0)) )	%>%
-		group_by(.variable) %>%
-		mutate(zero = ifelse(level == 2 & fold_change_ancestor > 0, min(.value_alpha2), zero)) %>%
-		mutate(zero = ifelse(level == 2 & fold_change_ancestor < 0, max(.value_alpha2), zero)) %>%
-		mutate(zero = ifelse(level == 3 & fold_change_ancestor > 0, min(.value_alpha2), zero)) %>%
-		mutate(zero = ifelse(level == 3 & fold_change_ancestor < 0, max(.value_alpha2), zero)) %>%
-		mutate(zero = ifelse(level == 4 & fold_change_ancestor > 0, min(.value_alpha2), zero)) %>%
-		mutate(zero = ifelse(level == 4 & fold_change_ancestor < 0, max(.value_alpha2), zero)) %>%
+	# Level 2
+	if(.d %>% filter(level ==2) %>% nrow %>% `>` (0))
+		dx =	dx %>% bind_rows(
+				.d %>%
 		
-		# Calculate fold chage
-		mutate(fold_change = .value_alpha2 - zero) %>%
-		mutate(significant = ((.lower_alpha2 - zero) * (.upper_alpha2 - zero)) > 0) 
+		filter(level ==2) %>%
+		left_join(ARMET::tree %>% get_ancesotr_child) %>%
+		left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) )  %>%
+		identify_baseline_by_clustering( ) %>%
+		
+		mutate(significant = ((.lower_alpha2 - zero) * (.upper_alpha2 - zero)) > 0) %>%
+		mutate(fold_change  = ifelse(significant, .value_alpha2, 0))
+		) 
+	
+	
+	# Level 3
+	if(.d %>% filter(level ==3) %>% nrow %>% `>` (0))
+		dx =	dx %>% bind_rows(
+		.d %>%
+		
+		filter(level ==3) %>%
+		left_join(ARMET::tree %>% get_ancesotr_child) %>%
+		left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) )  %>%
+		identify_baseline_by_clustering( ) %>%
+		
+		mutate(significant = ((.lower_alpha2 - zero) * (.upper_alpha2 - zero)) > 0) %>%
+		mutate(fold_change  = ifelse(significant, .value_alpha2, 0))
+		)
+	
+	# Level 4
+	if(.d %>% filter(level ==4) %>% nrow %>% `>` (0))
+		dx =	dx %>% bind_rows(
+			.d %>%
+				
+				filter(level ==4) %>%
+				left_join(ARMET::tree %>% get_ancesotr_child) %>%
+				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) )  %>%
+				identify_baseline_by_clustering( ) %>%
+				
+				mutate(significant = ((.lower_alpha2 - zero) * (.upper_alpha2 - zero)) > 0) %>%
+				mutate(fold_change  = ifelse(significant, .value_alpha2, 0))
+		)
+	
+	dx
+	
+	
+	# # Get zero
+	# .data$proportions %>%
+	# 	filter(.variable %>% is.na %>% `!`) %>%
+	# 	extract_CI %>%
+	# 	
+	# 	# Link zero to closest posterior
+	# 	nest(data = -.variable) %>%
+	# 	mutate(
+	# 		data = map(
+	# 			data, 
+	# 			~ .x %>%
+	# 				mutate(
+	# 					zero = 
+	# 						.x %>%
+	# 						mutate(diff = abs(zero - .value_alpha2)) %>%
+	# 						arrange(diff) %>% 
+	# 						slice(1) %>%
+	# 						pull(.value_alpha2)
+	# 				)
+	# 			)
+	# 	) %>%
+	# 	unnest(data) %>%
+	# 	
+	# 	# Label signifcant
+	# 	# mutate(
+	# 	# 	.value_alpha2 = .value_alpha2 - zero,
+	# 	# 	.lower_alpha2 = .lower_alpha2 - zero,
+	# 	# 	.upper_alpha2 = .upper_alpha2 - zero
+	# 	# ) %>%
+	# 	mutate(significant = ((.lower_alpha2 - zero) * (.upper_alpha2 - zero)) > 0) %>%
+	# 	
+	# 	# Adjust ifancestor is significant
+	# 	# equential important becaue we hav toudatecildren on level at the time
+	# 	left_join(ARMET::tree %>% get_ancesotr_child)	%>%
+	# 	left_join( (.) %>% distinct(ancestor = `Cell type category`, fold_change_ancestor = ifelse(significant, .value_alpha2, 0)) )	%>%
+	# 	group_by(.variable) %>%
+	# 	mutate(zero = ifelse(level == 2 & fold_change_ancestor > 0, min(.value_alpha2), zero)) %>%
+	# 	mutate(zero = ifelse(level == 2 & fold_change_ancestor < 0, max(.value_alpha2), zero)) %>%
+	# 	mutate(zero = ifelse(level == 3 & fold_change_ancestor > 0, min(.value_alpha2), zero)) %>%
+	# 	mutate(zero = ifelse(level == 3 & fold_change_ancestor < 0, max(.value_alpha2), zero)) %>%
+	# 	mutate(zero = ifelse(level == 4 & fold_change_ancestor > 0, min(.value_alpha2), zero)) %>%
+	# 	mutate(zero = ifelse(level == 4 & fold_change_ancestor < 0, max(.value_alpha2), zero)) %>%
+	# 	
+	# 	# Calculate fold chage
+	# 	mutate(fold_change = .value_alpha2 - zero) %>%
+	# 	mutate(significant = ((.lower_alpha2 - zero) * (.upper_alpha2 - zero)) > 0) 
 		
 	
 
@@ -641,7 +832,7 @@ all_vs_all = function(.data){
 }
 
 #' Create polar plot of results
-#' @rdname ARMET_plotTree
+#' @rdname plot_polar
 #'
 #' Prints a report of the hipothesis testing
 #'
@@ -878,6 +1069,216 @@ plot_polar = function(	.data,
 		coord_polar(theta = "x")
 }
 
+#' 
+#' #' Create polar plot of results
+#' @rdname plot_scatter
+#'
+#' Prints a report of the hipothesis testing
+#'
+#' @import ggplot2
+#' @import tibble
+#' @import dplyr
+#'
+#'
+#' @param ARMET-tc object
+#'
+#' @return a ggplot
+#'
+#' @export
+#' 
+plot_scatter = function(.data){
+	
+	data_CI = 
+		.data$proportions %>%
+		select(-proportions, -.variable) %>%
+		#unnest(draws) %>%
+		select( -draws) %>%
+		unnest(rng)  %>% group_by(zero, C, Q, .variable, level, `Cell type category`) %>% tidybayes::median_qi() %>% ungroup() %>%
+		left_join(
+			.data$proportions %>%
+				select(-draws, -.variable) %>%
+				unnest(proportions) %>% distinct(Q,  DFS_MONTHS)
+		) %>%
+		select(level,  `Cell type category`, Q, .upper, .lower)
+	
+	.data$proportions %>%
+		select(-draws, -.variable) %>%
+		unnest(proportions) %>%
+		left_join(data_CI) %>%
+		ggplot(aes(x = DFS_MONTHS, y = `.value_relative`, label=sample)) +
+		# geom_point(
+		# 	data =
+		# 		res$proportions %>% filter(level ==1) %>%
+		# 		select(-proportions, -.variable) %>%
+		# 		#unnest(draws) %>%
+		# 		select( -draws) %>%
+		# 		unnest(rng) %>%
+		# left_join(
+		# 	res$proportions %>%
+		# 		filter(level ==1) %>%
+		# 		select(-draws, -.variable) %>%
+	# 		unnest(proportions) %>% distinct(Q,  DFS_MONTHS)
+	# ),
+	# 	aes(x = DFS_MONTHS, y = .value),
+	# 	color="black",
+	# 	alpha=0.1) +
+	geom_errorbar( aes(ymin=.lower, ymax=.upper) ) +
+	geom_point(aes(color = alive)) +
+	facet_wrap(~`Cell type category`, scale="free")
+}
+
+#' This is a generalisation of ifelse that acceots an object and return an objects
+#'
+#' @import ggplot2
+#'
+#' @export
+plot_markers  = function(result, level, S = NULL, cores = 20){
+	
+	library(multidplyr)
+	
+	result$signatures[[level]] %>%
+		filter(!query & !`house keeping`) %>%
+		distinct(`Cell type category`, C, level, G, GM, symbol, lambda_log, sigma_inv_log) %>%
+		{ print(1); Sys.time(); (.) } %>%
+		
+		# Add divergence
+		left_join(
+			result$fit[[level]] %>% rstan::summary() %$% summary %>% as_tibble(rownames = "par") %>% filter(Rhat > 1.6) %>%
+				filter(grepl("^lambda_log", par)) %>%
+				separate(par, c("par", "G"), sep="\\[|\\]", extra = "drop") %>%
+				distinct(G) %>% mutate(G = G %>% as.integer) %>%
+				mutate(converged = F)
+		) %>%
+		mutate(converged = ifelse(converged %>% is.na, T, converged)) %>%
+		{ print(2); Sys.time(); (.) } %>%
+		
+		# If inferred replace lambda_log and sigma_inv_log
+		ifelse_pipe(
+			result$input$full_bayesian,
+			~ .x %>% select(-lambda_log, -sigma_inv_log) %>%
+				left_join(
+					result$fit[[level]] %>% tidybayes::spread_draws(lambda_log[G], sigma_inv_log[G]) %>% ungroup() %>%
+						rename(lambda_log = lambda_log,sigma_inv_log = sigma_inv_log)
+				)
+		) %>%
+		{ print(3); Sys.time(); (.) } %>%
+		
+		left_join(
+			ARMET::ARMET_ref %>% distinct(symbol, ct1, ct2, level)
+		) %>%
+		
+		# Add proportions
+		left_join(
+			result$proportions %>% select(level, Q, sample, .draws, `Cell type category`) %>% unnest(.draws)
+		) %>%
+		
+		# add expsure
+		left_join(
+			result$fit[[level]] %>% tidybayes::spread_draws(exposure_rate[S]) %>% ungroup() %>% rename(Q = S)
+		) %>%
+		
+		# Filter by sample
+		ifelse_pipe(
+			S %>% is.null %>% `!`,
+			~ .x %>% filter(Q == S)
+		)	 %>%
+		
+		# Calculate sum
+		mutate(
+			lambda_exp = lambda_log %>% exp,
+			sigma_exp = 1 / exp(sigma_inv_log)
+		) %>%
+		
+		{ print(4); Sys.time(); (.) } %>%
+		
+		# Filter just first 30 draws
+		inner_join( (.) %>% distinct(.draw) %>% sample_n(30) ) %>%
+		
+		do_parallel_start(cores, "symbol") %>%
+		do({
+			
+			`%>%` = magrittr::`%>%`
+			
+			sum_NB = function(lambda, sigma, prop){
+				
+				prop_mat = matrix(prop, nrow=1)
+				lambda_mat = matrix(lambda, ncol = 1)
+				sigma_mat = matrix(sigma, ncol = 1)
+				
+				lambda_sum = prop_mat %*% lambda_mat;
+				sigma_sum =
+					lambda_sum^2 /
+					(
+						prop_mat %*%
+							(
+								lambda_mat^2 /
+									sigma_mat
+							)
+					) ;
+				
+				
+				c(lambda_sum, sigma_sum)
+				
+			}
+			
+			(.) %>%
+				tidyr::nest(data_for_sum = -c(level, symbol, GM, converged, ct1    ,     ct2   ,     sample   ,   exposure_rate,   .chain, .iteration ,.draw )) %>%
+				dplyr::mutate(.sum = purrr::map(
+					data_for_sum,
+					~
+						sum_NB(.x$lambda_exp, .x$sigma_exp, .x$.value) %>%
+						as.matrix %>%
+						t %>%
+						tibble::as_tibble() %>%
+						setNames(c("lambda_sum", "sigma_sum"))
+					
+				))
+			
+		}) %>%
+		do_parallel_end() %>%
+		
+		{ print(5); Sys.time(); (.) } %>%
+		
+		select(-data_for_sum) %>%
+		unnest(.sum) %>%
+		{ print(6); Sys.time(); (.) } %>%
+		
+		# normalise
+		mutate(lambda_sum = lambda_sum * exp(exposure_rate)) %>%
+		
+		# Calculate generated quantities
+		mutate(counts_inferred = rnbinom(n(), mu = lambda_sum, size = sigma_sum)) %>%
+		{ print(7); Sys.time(); (.) } %>%
+		
+		# Summarise
+		group_by(level, symbol, GM, converged, ct1, ct2, sample, .chain) %>%
+		summarize(.mean = mean(counts_inferred),
+							.sd = sd(counts_inferred),
+							.q025 = quantile(counts_inferred, probs = .025),
+							.q25 = quantile(counts_inferred, probs = .25),
+							.q50 = quantile(counts_inferred, probs = .5),
+							.q75 = quantile(counts_inferred, probs = .75),
+							.q97.5 = quantile(counts_inferred, probs = .975)
+		) %>%
+		{ print(8); Sys.time(); (.) } %>%
+		
+		# Add counts
+		left_join(	result$input$mix %>%	gather(symbol, count, -sample) ) %>%
+		{ print(9); Sys.time(); (.) } %>%
+		
+		{ ((.) %>%	ggplot(aes(x = count+1, y=.q50+1, color=ct1, shape = converged, GM = GM)) +
+			 	geom_abline() +
+			 	geom_errorbar(aes(ymin = .q025 + 1, ymax=.q97.5 + 1), alpha=0.5) +
+			 	geom_point() +
+			 	scale_y_log10() +
+			 	scale_x_log10() +
+			 	facet_grid(converged ~.chain) +
+			 	my_theme) %>% print
+			
+			(.)
+		}
+}
+
 
 #------------------------------------#
 
@@ -890,7 +1291,7 @@ run_lv_1 = function(internals,
 										sampling_iterations = sampling_iterations,
 										do_regression = do_regression,
 										family = family,
-										.formula = .formula){
+										.formula = .formula, model = stanmodels$ARMET_tc_fix_hierarchical){
 	res1 = run_model(
 		internals$reference_filtered,
 		internals$mix,
@@ -906,7 +1307,8 @@ run_lv_1 = function(internals,
 		family = family,
 		cens = internals$cens,
 		tree_properties = internals$tree_properties,
-		Q = internals$Q
+		Q = internals$Q,
+		model = model
 	)
 	
 	df1 = res1[[1]]
@@ -1022,7 +1424,7 @@ run_lv_2 = function(internals,
 										sampling_iterations = sampling_iterations,
 										do_regression = do_regression,
 										family = family,
-										.formula = .formula){
+										.formula = .formula, model = stanmodels$ARMET_tc_fix_hierarchical){
 	res2 = run_model(
 		internals$reference_filtered,
 		internals$mix,
@@ -1039,7 +1441,8 @@ run_lv_2 = function(internals,
 		family = family,
 		cens = internals$cens,
 		tree_properties = internals$tree_properties,
-		Q = internals$Q
+		Q = internals$Q,
+		model = model
 	)
 	
 	
@@ -1180,7 +1583,7 @@ run_lv_3 = function(internals,
 										sampling_iterations = sampling_iterations	,
 										do_regression = do_regression,
 										family = family,
-										.formula = .formula){
+										.formula = .formula, model = stanmodels$ARMET_tc_fix_hierarchical){
 	# browser()
 	res3 = run_model(
 		internals$reference_filtered,
@@ -1198,7 +1601,8 @@ run_lv_3 = function(internals,
 		family = family,
 		cens = internals$cens,
 		tree_properties = internals$tree_properties,
-		Q = internals$Q
+		Q = internals$Q,
+		model = model
 	)
 	
 	df3 = res3[[1]]
@@ -1266,7 +1670,7 @@ run_lv_3 = function(internals,
 	if (do_regression && length(parse_formula(.formula)$covariates) >0 ){
 		alpha_3 =
 			fit3 %>%
-			tidybayes::gather_draws(`alpha_[b|c|d|e|f]`[A, C], regex = T) %>%
+			tidybayes::gather_draws(`alpha_[a-z]`[A, C], regex = T) %>%
 			ungroup() %>%
 			
 			drop_na() %>%
@@ -1306,7 +1710,7 @@ run_lv_3 = function(internals,
 		alpha_3 = alpha_3 %>%
 			separate(.variable, c("par", "node"), remove = F) %>%
 			left_join(
-				fit3 %>% tidybayes::gather_draws(`prop_[a-z]_rng`[Q, C], regex = T) %>% ungroup() %>% mutate(.variable = gsub("_rng", "", .variable)) %>% separate(.variable, c("par", "node"), remove = F)  %>% select(-par) %>% nest(rng = -c(node, C)) 
+				fit3 %>% tidybayes::gather_draws(`prop_[a-z]_rng`[Q, C], regex = T) %>% ungroup() %>% mutate(.variable = gsub("_rng", "", .variable)) %>% separate(.variable, c("par", "node"), remove = F)  %>% select(-par) %>% drop_na() %>% nest(rng = -c(node, C)) %>% mutate(C = 1:n()) 
 			)
 		
 		
@@ -1336,9 +1740,9 @@ run_lv_4 = function(internals,
 										sampling_iterations = sampling_iterations	,
 										do_regression = do_regression,
 										family = family,
-										.formula = .formula){
+										.formula = .formula, model = stanmodels$ARMET_tc_fix_hierarchical){
 	# browser()
-	res4 = run_model(
+	res = run_model(
 		internals$reference_filtered,
 		internals$mix,
 		shards,
@@ -1354,16 +1758,17 @@ run_lv_4 = function(internals,
 		family = family,
 		cens = internals$cens,
 		tree_properties = internals$tree_properties,
-		Q = internals$Q
+		Q = internals$Q,
+		model = model
 	)
 	
-	df4 = res4[[1]]
-	fit4 = res4[[2]]
+	df = res[[1]]
+	fit = res[[2]]
 	
-	draws_4 =
-		internals$draws[[3]] %>%
+	draws =
+		internals$draws[[level-1]] %>%
 		left_join(
-			fit4 %>%
+			fit %>%
 				######## ALTERED WITH TREE
 				tidybayes::gather_draws(`prop_[a-z]`[Q, C], regex = T) %>%
 				#########################
@@ -1384,15 +1789,15 @@ run_lv_4 = function(internals,
 		group_by(.chain, .iteration, .draw, Q) %>%
 		arrange(C1, C2, C3, C4) %>%
 		mutate(
-			C4 = tree$Get("C4") %>% na.omit,
-			`Cell type category` = tree$Get("C4") %>% na.omit %>% names
+			C4 = tree$Get(sprintf("C%s", level)) %>% na.omit,
+			`Cell type category` = tree$Get(sprintf("C%s", level)) %>% na.omit %>% names
 		) %>%
 		ungroup() %>%
 		mutate(.value_relative = .value4) %>%
 		mutate(.value4 = ifelse(.value4 %>% is.na, .value2, .value2 * .value4))
 	
-	prop_4 =
-		draws_4 %>%
+	prop =
+		draws %>%
 		select(.chain,
 					 .iteration,
 					 .draw,
@@ -1402,11 +1807,11 @@ run_lv_4 = function(internals,
 					 .value4,
 					 .value_relative) %>%
 		rename(C = C4, .value = .value4) %>%
-		mutate(.variable = "prop_4") %>%
-		mutate(level = 4) %>%
+		mutate(.variable = sprintf("prop_%s", level)) %>%
+		mutate(level := !!level) %>%
 		
 		# add sample annotation
-		left_join(df4 %>% distinct(Q, sample), by = "Q")	%>%
+		left_join(df %>% distinct(Q, sample), by = "Q")	%>%
 		
 		# If MCMC is used check divergencies as well
 		ifelse_pipe(
@@ -1415,11 +1820,11 @@ run_lv_4 = function(internals,
 			~ .x %>% parse_summary() %>% rename(.value = mean)
 		) %>%
 		
-		left_join(df4 %>% distinct(Q, sample))
+		left_join(df %>% distinct(Q, sample))
 	
 	if (do_regression && length(parse_formula(.formula)$covariates) >0 ){
 		alpha_4 =
-			fit4 %>%
+			fit %>%
 			tidybayes::gather_draws(`alpha_[a-z]`[A, C], regex = T) %>%
 			ungroup() %>%
 			
@@ -1458,7 +1863,7 @@ run_lv_4 = function(internals,
 		alpha_4 = alpha_4 %>%
 			separate(.variable, c("par", "node"), remove = F) %>%
 			left_join(
-				fit4 %>% tidybayes::gather_draws(`prop_[a-z]_rng`[Q, C], regex = T) %>% ungroup() %>% mutate(.variable = gsub("_rng", "", .variable)) %>% separate(.variable, c("par", "node"), remove = F)  %>% select(-par) %>% nest(rng = -c(node, C)) 
+				fit %>% tidybayes::gather_draws(`prop_[a-z]_rng`[Q, C], regex = T) %>% ungroup() %>% mutate(.variable = gsub("_rng", "", .variable)) %>% separate(.variable, c("par", "node"), remove = F)  %>% select(-par) %>% drop_na() %>% nest(rng = -c(node, C)) %>% mutate(C = 1:n()) 
 			)
 		
 		
@@ -1468,10 +1873,10 @@ run_lv_4 = function(internals,
 		
 	}
 	
-	internals$prop = bind_rows(internals$prop , prop_4) 
-	internals$fit = internals$fit %>% c(list(fit4))
-	internals$df = internals$df %>% c(list(df4))
-	internals$draws = internals$draws %>% c(list(draws_4))
+	internals$prop = bind_rows(internals$prop , prop) 
+	internals$fit = internals$fit %>% c(list(fit))
+	internals$df = internals$df %>% c(list(df))
+	internals$draws = internals$draws %>% c(list(draws))
 	
 	
 	internals

@@ -630,7 +630,7 @@ if(dim_4[1] > 0) {
 		else return(d);
 	}
 
-	real dirichlet_regression_lpdf(vector p, row_vector X, matrix alpha, real phi){
+	real dirichlet_regression_lpdf(vector p, row_vector X, matrix alpha, real phi, real plateau){
 
 		// Build sum to zero variable
 		int c = cols(alpha);
@@ -640,10 +640,10 @@ if(dim_4[1] > 0) {
 
 
 		// Calculate log prob
-		return (dirichlet_lpdf(p | softmax( to_vector(X * alpha_ ))  * exp( phi) + 1 ));
+		return (dirichlet_lpdf(p | softmax( to_vector(X * alpha_ ))  * exp( phi) + plateau ));
 	}
 
-	vector dirichlet_regression_rng( row_vector X, matrix alpha, real phi){
+	vector dirichlet_regression_rng( row_vector X, matrix alpha, real phi, real plateau){
 
 		// Build sum to zero variable
 		int c = cols(alpha);
@@ -653,7 +653,7 @@ if(dim_4[1] > 0) {
 
 
 		// Calculate log prob
-		return (dirichlet_rng(softmax( to_vector(X * alpha_ ))  * exp( phi) + 1 ));
+		return (dirichlet_rng(softmax( to_vector(X * alpha_ ))  * exp( phi) + plateau));
 	}
 
 real beta_regression_lpdf(vector[] p, matrix X, matrix alpha, real[] phi){
@@ -1015,7 +1015,7 @@ model {
 	// lv 1
   if(lv == 1 && do_regression) {
 
-  	if(fam_dirichlet) for(q in 1:Q) prop_1[q] ~ dirichlet_regression( X_[q], alpha_1, phi[1] );
+  	if(fam_dirichlet) for(q in 1:Q) prop_1[q] ~ dirichlet_regression( X_[q], alpha_1, phi[1], 0.01 );
   	else  prop_1 ~ beta_regression(X_, alpha_1, phi[1:4]);
   	 alpha_1[1] ~ normal(0,1);
   	 to_vector( alpha_1[2:] ) ~ normal(0,2.5);
@@ -1028,7 +1028,7 @@ model {
 	// lv 2
   if(lv == 2 && do_regression) {
 
-  	if(fam_dirichlet) for(q in 1:Q) prop_a[q] ~ dirichlet_regression( X_[q], alpha_a, phi[1] );
+  	if(fam_dirichlet) for(q in 1:Q) prop_a[q] ~ dirichlet_regression( X_[q], alpha_a, phi[1], 0.2 );
   	else  prop_a ~ beta_regression(X_, alpha_a, phi[1:6]);
   	alpha_a[1] ~ normal(0,1);
   	to_vector( alpha_a[2:] ) ~ normal(0,2.5);
@@ -1041,11 +1041,11 @@ model {
   if(lv == 3 && do_regression){
 
   	if(fam_dirichlet) {
-  		for(q in 1:Q) prop_b[q] ~ dirichlet_regression( X_[q], alpha_b, phi[1] );
-  		for(q in 1:Q) prop_c[q] ~ dirichlet_regression( X_[q], alpha_c, phi[2] );
-  		for(q in 1:Q) prop_d[q] ~ dirichlet_regression( X_[q], alpha_d, phi[3] );
-  		for(q in 1:Q) prop_e[q] ~ dirichlet_regression( X_[q], alpha_e, phi[4] );
-  		for(q in 1:Q) prop_f[q] ~ dirichlet_regression( X_[q], alpha_f, phi[5] );
+  		for(q in 1:Q) prop_b[q] ~ dirichlet_regression( X_[q], alpha_b, phi[1] , 1);
+  		for(q in 1:Q) prop_c[q] ~ dirichlet_regression( X_[q], alpha_c, phi[2] , 1);
+  		for(q in 1:Q) prop_d[q] ~ dirichlet_regression( X_[q], alpha_d, phi[3] , 1);
+  		for(q in 1:Q) prop_e[q] ~ dirichlet_regression( X_[q], alpha_e, phi[4] , 1);
+  		for(q in 1:Q) prop_f[q] ~ dirichlet_regression( X_[q], alpha_f, phi[5] , 1);
   	}
   	else {
   		prop_b ~ beta_regression(X_, alpha_b, phi[1:2]);
@@ -1084,11 +1084,11 @@ model {
   if(lv == 4 && do_regression){
 
 	if(fam_dirichlet) {
-  		for(q in 1:Q) prop_g[q] ~ dirichlet_regression( X_[q], alpha_g, phi[1] );
-  		for(q in 1:Q) prop_h[q] ~ dirichlet_regression( X_[q], alpha_h, phi[2] );
-  		for(q in 1:Q) prop_i[q] ~ dirichlet_regression( X_[q], alpha_i, phi[3] );
-  		for(q in 1:Q) prop_l[q] ~ dirichlet_regression( X_[q], alpha_l, phi[4] );
-  		for(q in 1:Q) prop_m[q] ~ dirichlet_regression( X_[q], alpha_m, phi[5] );
+  		for(q in 1:Q) prop_g[q] ~ dirichlet_regression( X_[q], alpha_g, phi[1] , 1);
+  		for(q in 1:Q) prop_h[q] ~ dirichlet_regression( X_[q], alpha_h, phi[2] , 1);
+  		for(q in 1:Q) prop_i[q] ~ dirichlet_regression( X_[q], alpha_i, phi[3] , 1);
+  		for(q in 1:Q) prop_l[q] ~ dirichlet_regression( X_[q], alpha_l, phi[4] , 1);
+  		for(q in 1:Q) prop_m[q] ~ dirichlet_regression( X_[q], alpha_m, phi[5] , 1);
   	}
   	else {
   		 prop_g ~ beta_regression(X_, alpha_g, phi[1:2]);
@@ -1146,7 +1146,7 @@ model {
 	// );
 
 	// Dirichlet regression
-	if(fam_dirichlet) phi ~ normal(0,1);
+	if(fam_dirichlet) phi ~ normal(0,2); // normal((lv==1 ? 8 : 6), 2);
 	// Beta regression
 	else phi ~ normal(0,1); // beta(1,20);
 
@@ -1190,24 +1190,24 @@ generated quantities{
   
 	if(lv == 1 && do_regression) {
 
-  	if(fam_dirichlet) for(q in 1:Q) prop_1_rng[q] = dirichlet_regression_rng( X_[q], alpha_1, phi[1] );
+  	if(fam_dirichlet) for(q in 1:Q) prop_1_rng[q] = dirichlet_regression_rng( X_[q], alpha_1, phi[1] , 0.01);
   	else  prop_1_rng = beta_regression_rng(X_, alpha_1, phi[1:4]);
 
   }
 	if(lv == 2 && do_regression) {
 
-  	if(fam_dirichlet) for(q in 1:Q) prop_a_rng[q] = dirichlet_regression_rng( X_[q], alpha_a, phi[1] );
+  	if(fam_dirichlet) for(q in 1:Q) prop_a_rng[q] = dirichlet_regression_rng( X_[q], alpha_a, phi[1] , 0.2);
   	else  prop_a_rng = beta_regression_rng(X_, alpha_a, phi[1:6]);
 
   }
   	if(lv == 3 && do_regression) {
 
   	if(fam_dirichlet) {
-  		for(q in 1:Q) prop_b_rng[q] = dirichlet_regression_rng( X_[q], alpha_b, phi[1] );
-  		for(q in 1:Q) prop_c_rng[q] = dirichlet_regression_rng( X_[q], alpha_c, phi[2] );
-  		for(q in 1:Q) prop_d_rng[q] = dirichlet_regression_rng( X_[q], alpha_d, phi[3] );
-  		for(q in 1:Q) prop_e_rng[q] = dirichlet_regression_rng( X_[q], alpha_e, phi[4] );
-  		for(q in 1:Q) prop_f_rng[q] = dirichlet_regression_rng( X_[q], alpha_f, phi[5] );
+  		for(q in 1:Q) prop_b_rng[q] = dirichlet_regression_rng( X_[q], alpha_b, phi[1] , 1);
+  		for(q in 1:Q) prop_c_rng[q] = dirichlet_regression_rng( X_[q], alpha_c, phi[2] , 1);
+  		for(q in 1:Q) prop_d_rng[q] = dirichlet_regression_rng( X_[q], alpha_d, phi[3] , 1);
+  		for(q in 1:Q) prop_e_rng[q] = dirichlet_regression_rng( X_[q], alpha_e, phi[4] , 1);
+  		for(q in 1:Q) prop_f_rng[q] = dirichlet_regression_rng( X_[q], alpha_f, phi[5] , 1);
   	}
   	else {
   		 prop_b_rng = beta_regression_rng(X_, alpha_b, phi[1:2]);
@@ -1221,11 +1221,11 @@ generated quantities{
   	if(lv == 4 && do_regression) {
 
   		if(fam_dirichlet) {
-  		for(q in 1:Q) prop_g_rng[q] = dirichlet_regression_rng( X_[q], alpha_g, phi[1] );
-  		for(q in 1:Q) prop_h_rng[q] = dirichlet_regression_rng( X_[q], alpha_h, phi[2] );
-  		for(q in 1:Q) prop_i_rng[q] = dirichlet_regression_rng( X_[q], alpha_i, phi[3] );
-  		for(q in 1:Q) prop_l_rng[q] = dirichlet_regression_rng( X_[q], alpha_l, phi[4] );
-  		for(q in 1:Q) prop_m_rng[q] = dirichlet_regression_rng( X_[q], alpha_m, phi[5] );
+  		for(q in 1:Q) prop_g_rng[q] = dirichlet_regression_rng( X_[q], alpha_g, phi[1] , 1);
+  		for(q in 1:Q) prop_h_rng[q] = dirichlet_regression_rng( X_[q], alpha_h, phi[2] , 1);
+  		for(q in 1:Q) prop_i_rng[q] = dirichlet_regression_rng( X_[q], alpha_i, phi[3] , 1);
+  		for(q in 1:Q) prop_l_rng[q] = dirichlet_regression_rng( X_[q], alpha_l, phi[4] , 1);
+  		for(q in 1:Q) prop_m_rng[q] = dirichlet_regression_rng( X_[q], alpha_m, phi[5] , 1);
   	}
   	else {
   		 prop_g_rng = beta_regression_rng(X_, alpha_g, phi[1:2]);
