@@ -486,7 +486,7 @@ run_model = function(reference_filtered,
 
 	fam_dirichlet = family == "dirichlet"
 
-	if(cens %>% is.null) cens =  c()
+	if(cens %>% is.null) cens =  rep(0, Q)
 	which_cens = which(cens == 1)
 	which_not_cens = which(cens == 0)
 	how_many_cens = length(which_cens)
