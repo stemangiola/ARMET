@@ -67,6 +67,7 @@ df$A = A
 
 m = brm(A ~ 1 + x, data = df, family = "beta")
 
+data = df %>% mutate(censored = sample(c(1,0), replace = T, size = n()))
 
-m_censored = brm(A | cens(censored) ~ 1 + x, data = df %>% mutate(censored = sample(c(1,0), replace = T, size = n())), family = "beta")
+m_censored = brm(A | cens(censored) ~ 1 , data = data, family = "beta")
 

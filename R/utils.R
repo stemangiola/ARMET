@@ -1834,9 +1834,8 @@ get_specific_annotation_columns = function(.data, .col){
 	
 }
 
-prop_to_list = function(fit){
-	fit %>%
-		tidybayes::gather_draws(`prop_[1a-z]`[Q, C], regex = T) %>%
+prop_to_list = function(fit_parsed){
+	fit_parsed %>%
 		median_qi() %>%
 		drop_na  %>%
 		ungroup() %>% 
@@ -1865,7 +1864,7 @@ permute_nest = function(.data, .names_from, .values_from){
 	.names_from = enquo(.names_from)
 	.values_from = enquo(.values_from)
 	
-	factor_levels = .data %>% pull(!!.names_from)
+	factor_levels = .data %>% pull(!!.names_from) %>% unique
 	
 	.data %>% 
 		pull(!!.names_from) %>%
@@ -1888,7 +1887,7 @@ combine_nest = function(.data, .names_from, .values_from){
 	.names_from = enquo(.names_from)
 	.values_from = enquo(.values_from)
 	
-	factor_levels = .data %>% pull(!!.names_from)
+	factor_levels = .data %>% pull(!!.names_from) %>% unique
 	
 	.data %>% 
 		pull(!!.names_from) %>%
@@ -1995,4 +1994,169 @@ get_tree_properties = function(tree){
 	)
 }
 
+cluster_posterior_slopes = function(.data, credible_interval = 0.67){
+	 
+	# Add cluster info to cell types per node
+	.data %>%
+		filter(.variable %>% is.na %>% `!`) %>%
+		nest(node = -c(level, .variable)) %>%
+		mutate(node = map(
+			node,
+			~ {
+				.x %>%
+					left_join(
+						
+						# Unnest data
+						(.) %>%
+							select(-proportions, -rng) %>%
+							unnest(draws) %>%
+							filter(A == 2) %>%
+							
+							# Calculate credible interval
+							group_by(C, `Cell type category` , A, Rhat) %>%
+							tidybayes::median_qi(.width = credible_interval) %>%
+							ungroup() %>%
+							
+							# Build combination of cell types
+							combine_nest(
+								.names_from = `Cell type category`,
+								.values_from = c(.lower, .upper, Rhat)
+							)  %>%
+							
+							# Check overlap of credible intervals
+							mutate(is_cluster = map_lgl(
+								data,
+								~ .x %>% 
+									summarise(ma = max(.lower), mi = min(.upper), converged = any(Rhat > 1.6)==F) %>% 
+									mutate(is_cluster = ma < mi & converged) %>%
+									pull(is_cluster)
+							)) %>% 
+							
+							# If there is not cluster
+							
+							# Find communities based on cell type clusters
+							{
+								ct_levels = (.) %>% arrange(!is_cluster) %>% select(1:2) %>% as_matrix %>% t %>% as.character() %>% unique
+								
+								(.) %>%
+									filter(is_cluster) %>% 
+									select(1:2) %>%
+									tidygraph::tbl_graph(
+										edges = .,
+										nodes = data.frame(name = ct_levels)
+									) %>%
+									mutate(community = as.factor(tidygraph::group_infomap())) 
+							}	%>%
+							
+							# Format for joining
+							as_tibble() %>%
+							rename(`Cell type category` = name)
+					)
+				
+			}	)) %>%
+		unnest(node)
+	
+}
 
+identify_baseline_by_clustering = function(.data){
+	
+	.data %>%
+		nest(node = -c(.variable)) %>%
+		
+		mutate(node = map(
+			node, ~ .x %>%
+				#mutate(baseline = TRUE) %>%
+				add_count(community) %>%
+				
+				# Add sd
+				nest(comm_data = -community) %>%
+				mutate(
+					sd_community = map_dbl( comm_data, ~ .x %>% unnest(draws) %>% pull(.value) %>% sd ),
+					mean_community = map_dbl( comm_data, ~ .x %>% unnest(draws) %>% pull(.value) %>% mean )
+				) %>%
+				unnest(comm_data) %>%
+				
+				# If we have a unique bigger community
+				ifelse4_pipe(
+					(.) %>% distinct(community) %>% nrow %>% equals(1),
+					(.) %>% distinct(n) %>% nrow %>% `>` (1),
+					(.) %>% distinct(fold_change_ancestor) %>% pull(1) %>% equals(0) %>% `!`,
+					(.) %>% distinct(community) %>% nrow %>% `>` (1),
+					
+					# No nothing
+					~ .x %>% mutate(baseline = TRUE),
+					
+					# Majority roule
+					~ .x %>% mutate(baseline = n == max(n)),
+					
+					# If ancestor changed
+					~ .x %>% mutate(baseline = ifelse(fold_change_ancestor > 0, mean_community == min(mean_community), mean_community == max(mean_community))),
+					
+					# If equally sized clusters take the most variable
+					~ .x %>% mutate(baseline = sd_community == max(sd_community))
+				)
+			
+		)) %>% 
+		unnest(node)  %>%
+		
+		# Select zero
+		nest(node = -.variable) %>%
+		mutate(zero = map_dbl(node, ~ .x %>% filter(baseline) %>% pull(mean_community) %>% unique)) %>%
+		unnest(node)
+	
+	
+}
+
+extract_CI =  function(.data, credible_interval = 0.90){
+	.data %>%
+		mutate(regression = map(draws,
+														~ .x %>%
+															group_by(A) %>%
+															tidybayes::median_qi(.width = credible_interval) %>%
+															ungroup()  %>%
+															pivot_wider(
+																names_from = A,
+																values_from = c(.value, .lower, .upper),
+																names_prefix = "alpha"
+															) 
+		)) %>%
+		unnest(cols = c(regression))
+}
+
+calculate_x_for_polar = function(.data){
+	# Create annotation
+	internal_branch_length = 40
+	external_branch_length = 10
+	
+	
+	# Integrate data
+	tree_df_source = 
+		ARMET::tree %>%
+		data.tree::ToDataFrameTree("name", "isLeaf", "level", "leafCount", pruneFun = function(x)	x$level <= 5) %>%
+		as_tibble() %>%
+		rename(`Cell type category` = name) %>%
+		mutate(level = level -1)
+	
+	# Calculate x
+	map_df(
+		0:4,
+		~ tree_df_source %>%
+			filter(level == .x | (level < .x & isLeaf)) %>%
+			mutate(leafCount_norm = leafCount/sum(leafCount)) %>%
+			mutate(leafCount_norm_cum = cumsum(leafCount_norm)) %>%
+			mutate(length_error_bar = leafCount_norm - 0.005) %>%
+			mutate(x = leafCount_norm_cum - 0.5 * leafCount_norm) 	
+	) %>%
+		
+		# Attach data
+		left_join(.data) %>%
+		
+		# process
+		mutate(Estimate = ifelse(significant, fold_change, NA)) %>%
+		mutate(branch_length = ifelse(isLeaf, 0.1, 2)) %>%
+		
+		# Correct branch length
+		mutate(branch_length = ifelse(!isLeaf, internal_branch_length,	external_branch_length) ) %>%
+		mutate(branch_length =  ifelse(	isLeaf, branch_length + ((max(level) - level) * internal_branch_length),	branch_length	)) 
+	
+}

@@ -38,7 +38,7 @@ ARMET_tc_continue = function(armet_obj, levels, model = stanmodels$ARMET_tc_fix_
 				~ .x %>%
 					nest(proportions = -c(`Cell type category`, C, level)) %>%
 					left_join(
-						internals$alpha %>%	select(`Cell type category`, contains("alpha"), zero, level, draws, rng, .variable),
+						internals$alpha %>%	select(`Cell type category`, contains("alpha"), zero, level, draws, rng, .variable, Rhat),
 						by = c("Cell type category", "level")
 					)
 			),
@@ -121,7 +121,6 @@ ARMET_tc = function(.data,
 	input = c(as.list(environment()))
 	input$.formula = .formula
 	
-	
 	# Get column names
 	.sample = enquo(.sample)
 	.transcript = enquo(.transcript)
@@ -174,6 +173,23 @@ ARMET_tc = function(.data,
 			~ .x %>% eliminate_sparse_transcripts(symbol)
 		)
 
+	# Censoring column
+	.cens_column = parse_formula(.formula)$covariates %>% grep("censored(", ., fixed = T, value = T)  %>% gsub("censored\\(|\\)| ", "", .) %>% str_split("\\,") %>% ifelse_pipe(length(.)>0, ~.x %>% `[[` (1) %>% `[` (-1), ~NULL)
+	.cens_value_column = parse_formula(.formula)$covariates %>% grep("censored(", ., fixed = T, value = T)  %>% gsub("censored\\(|\\)| ", "", .) %>% str_split("\\,") %>% ifelse_pipe(length(.)>0, ~.x %>% `[[` (1) %>% `[` (1), ~NULL)
+	
+	if(length(.cens_column) == 1) {
+		cens = .data %>% select(sample, .cens_column) %>% distinct %>% arrange(sample) %>% pull(2)
+		
+		sd_survival_months = 29.3
+		
+		df_for_edgeR = df_for_edgeR %>% mutate(!!.cens_value_column := !!as.symbol(.cens_value_column) / sd_survival_months)
+		#surv_prior = .data %>% filter(!(!!as.symbol(.cens_column))) %>% select(sample, .cens_column, cov_columns) %>% distinct() %>% pull(cov_columns[1]) %>% gamma_alpha_beta ()
+	}
+	else{
+		cens = NULL
+		#surv_prior = c()
+	} 
+	
 	# Create design matrix
 	if(length(cov_columns) > 0 & (cov_columns %>% is.na %>% `!`)) my_formula = as.formula( paste("~",paste(cov_columns, collapse = "+")))
 	else my_formula = .formula
@@ -184,16 +200,7 @@ ARMET_tc = function(.data,
 			data = df_for_edgeR %>% select(sample, one_of(cov_columns)) %>% distinct %>% arrange(sample)
 		)
 
-	# Censoring column
-	.cens_column = parse_formula(.formula)$covariates %>% grep("censored(", ., fixed = T, value = T)  %>% gsub("censored\\(|\\)| ", "", .) %>% str_split("\\,") %>% ifelse_pipe(length(.)>0, ~.x %>% `[[` (1) %>% `[` (-1), ~NULL)
-	if(length(.cens_column) == 1) {
-		cens = .data %>% select(sample, .cens_column) %>% distinct %>% arrange(sample) %>% pull(2)
-		#surv_prior = .data %>% filter(!(!!as.symbol(.cens_column))) %>% select(sample, .cens_column, cov_columns) %>% distinct() %>% pull(cov_columns[1]) %>% gamma_alpha_beta ()
-	}
-	else{
-		cens = NULL
-		#surv_prior = c()
-	} 
+
 
 	mix =
 		.data %>%
@@ -309,7 +316,7 @@ ARMET_tc = function(.data,
 				~ .x %>%
 					nest(proportions = -c(`Cell type category`, C, level)) %>%
 					left_join(
-						internals$alpha %>%	select(`Cell type category`, contains("alpha"), zero, level, draws, rng, .variable),
+						internals$alpha %>%	select(`Cell type category`, contains("alpha"), zero, level, draws, rng, .variable, Rhat),
 						by = c("Cell type category", "level")
 					)
 			),
@@ -481,6 +488,7 @@ run_model = function(reference_filtered,
 
 	if(cens %>% is.null) cens =  c()
 	which_cens = which(cens == 1)
+	which_not_cens = which(cens == 0)
 	how_many_cens = length(which_cens)
 
 	max_unseen = ifelse(how_many_cens>0, max(X[,2]), 0 )
@@ -549,135 +557,71 @@ run_model = function(reference_filtered,
 
 }
 
-cluster_posterior_slopes = function(.data, credible_interval = 0.67){
+lower_triangular = function(.data){
 	
-	# Add cluster info to cell types per node
+	levs = .data$`Cell type category_1` %>% levels
+	
 	.data %>%
+		select(`Cell type category_1`, `Cell type category_2`,    prob) %>%
+		spread(`Cell type category_2` ,   prob) %>% 
+		as_matrix(rownames = "Cell type category_1") %>%
+		
+		# Drop upper triangular
+		{ ma = (.); ma[lower.tri(ma)] <- NA; ma} %>% 
+		
+		as_tibble(rownames = "Cell type category_1") %>% 
+		gather(`Cell type category_2`, prob, -`Cell type category_1`) %>% 
+		mutate(
+			`Cell type category_1` = factor(`Cell type category_1`, levels = levs), 
+			`Cell type category_2` = factor(`Cell type category_2`, levels = levs), 
+		) %>%
+		drop_na
+}
+
+#' @export
+get_signatures = function(.data){
+	.data$proportions %>%
 		filter(.variable %>% is.na %>% `!`) %>%
-		nest(node = -c(level, .variable)) %>%
+		select(-proportions, -rng) %>%
+		unnest(draws) %>%
+		
+		# Group
+		nest(node = -c(level, .variable, A)) %>%
 		mutate(node = map(
 			node,
-			~ {
-				.x %>%
-				left_join(
-					
-					# Unnest data
-					(.) %>%
-						select(-proportions, -rng) %>%
-						unnest(draws) %>%
-						filter(A == 2) %>%
-						
-						# Calculate credible interval
-						group_by(C, `Cell type category` , A) %>%
-						tidybayes::median_qi(.width = credible_interval) %>%
-						ungroup() %>%
-						
-						# Build combination of cell types
-						combine_nest(
-							.names_from = `Cell type category`,
-							.values_from = c(.lower, .upper)
-						)  %>%
-						
-						# Check overlap of credible intervals
-						mutate(is_cluster = map_lgl(
-							data,
-							~ .x %>% 
-								summarise(ma = max(.lower), mi = min(.upper)) %>% 
-								mutate(is_cluster = ma < mi) %>%
-								pull(is_cluster)
-						)) %>% 
-						
-						# If there is not cluster
-						
-						# Find communities based on cell type clusters
-						{
-							ct_levels = (.) %>% arrange(!is_cluster) %>% select(1:2) %>% as_matrix %>% t %>% as.character() %>% unique
-							
-							(.) %>%
-								filter(is_cluster) %>% 
-									select(1:2) %>%
-									tidygraph::tbl_graph(
-										edges = .,
-										nodes = data.frame(name = ct_levels)
-									) %>%
-									mutate(community = as.factor(tidygraph::group_infomap())) 
-						}
-						%>%
-						
-						# Format for joining
-						as_tibble() %>%
-						rename(`Cell type category` = name)
-				)
-			
-	}	)) %>%
-		unnest(node)
-	
-}
+			~ .x %>%
 
-identify_baseline_by_clustering = function(.data){
-	
-.data %>%
-		nest(node = -c(.variable)) %>%
-		
-		mutate(node = map(
-			node, ~ .x %>%
-				#mutate(baseline = TRUE) %>%
-				add_count(community) %>%
+				# Build combination of cell types
+				permute_nest(
+					.names_from = `Cell type category`,
+					.values_from = c(.value)
+				) %>% 
 				
-				# Add sd
-				nest(comm_data = -community) %>%
-				mutate(
-					sd_community = map_dbl( comm_data, ~ .x %>% unnest(draws) %>% pull(.value) %>% sd ),
-					mean_community = map_dbl( comm_data, ~ .x %>% unnest(draws) %>% pull(.value) %>% mean )
-				) %>%
-				unnest(comm_data) %>%
-			
-				# If we have a unique bigger community
-				ifelse4_pipe(
-					(.) %>% distinct(community) %>% nrow %>% equals(1),
-					(.) %>% distinct(n) %>% nrow %>% `>` (1),
-					(.) %>% distinct(fold_change_ancestor) %>% pull(1) %>% equals(0) %>% `!`,
-					(.) %>% distinct(community) %>% nrow %>% `>` (1),
-					
-					# No nothing
-					~ .x %>% mutate(baseline = TRUE),
-					
-					# Majority roule
-					~ .x %>% mutate(baseline = n == max(n)),
-					
-					# If ancestor changed
-					~ .x %>% mutate(baseline = ifelse(fold_change_ancestor > 0, mean_community == min(mean_community), mean_community == max(mean_community))),
-					
-					# If equally sized clusters take the most variable
-					~ .x %>% mutate(baseline = sd_community == max(sd_community))
-				)
-												
-		)) %>% 
-		unnest(node)  %>%
-
-		# Select zero
-		nest(node = -.variable) %>%
-		mutate(zero = map_dbl(node, ~ .x %>% filter(baseline) %>% pull(mean_community) %>% unique)) %>%
-		unnest(node)
-		
-		
-}
-
-
-extract_CI =  function(.data, credible_interval = 0.90){
-	.data %>%
-		mutate(regression = map(draws,
-														~ .x %>%
-															group_by(A) %>%
-															tidybayes::median_qi(.width = credible_interval) %>%
-															ungroup()  %>%
-															pivot_wider(
-																names_from = A,
-																values_from = c(.value, .lower, .upper),
-																names_prefix = "alpha"
-															) 
+				# Perform calculation
+				mutate(prob_df = map(
+					data, 
+					~.x %>%
+						nest(data = -c(`Cell type category`)) %>% 
+						mutate(med = map_dbl(data, ~.x$.value %>% median )) %>% 
+						mutate(med = rev(med)) %>% 
+						mutate(frac_up = map2_dbl(data, med, ~ (.x$.value  > .y) %>% sum %>% divide_by(nrow(.x)))) %>% 
+						mutate(frac_down = map2_dbl(data, med, ~ (.x$.value  < .y) %>% sum %>% divide_by(nrow(.x)))) %>%
+						mutate(prob = ifelse(frac_up > frac_down, frac_up, frac_down)) %>%
+						
+						# stretch to o 1 interval
+						mutate(prob = (prob-0.5)/0.5) %>%
+						
+						# Insert sign
+						mutate(prob = ifelse(frac_up < frac_down, -prob, prob)) %>%
+						select(`Cell type category`, prob)
+				)) %>%
+				select(-data) %>%
+				unnest(prob_df) %>% 
+				filter(`Cell type category_1` == `Cell type category`) %>%
+				select(-`Cell type category`)
+				
 		)) %>%
-		unnest(cols = c(regression))
+		unnest( node)
 }
 
 #' @export
@@ -804,33 +748,6 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 		
 }
 
-all_vs_all = function(.data){
-
-		.data$proportions %>%
-		filter(.variable %>% is.na %>% `!`) %>%
-		nest(draws_node = -.variable) %>%
-		mutate(data_overlap = map(draws_node, 
-															~.x %>% 
-																unnest(draws) %>%
-																filter(A == 2) %>% 
-																
-																# permute
-																permute(C, .value) %>%
-																mutate(overlap = map_dbl(
-																	data, 
-																	~ 	bayestestR::overlap(
-																		.x %>% filter(C==min(C)) %>% pull(.value),
-																		.x %>% filter(C==max(C)) %>% pull(.value)
-																	) %>%
-																		as.numeric()
-																))
-						)) %>%
-		select(-draws_node) %>%
-		unnest(data_overlap)
-		
-	
-}
-
 #' Create polar plot of results
 #' @rdname plot_polar
 #'
@@ -857,41 +774,11 @@ plot_polar = function(	.data,
 												legend_justification = 0.67,
 												fill_direction = 1){
 
-
-	# Create annotation
-	internal_branch_length = 40
-	external_branch_length = 10
-
-
-	dd =
-
-		# Integrate data
-		ARMET::tree %>%
-		data.tree::ToDataFrameTree("name", "isLeaf", "level", "leafCount", pruneFun = function(x)	x$level <= 4) %>%
-		as_tibble() %>%
-		rename(`Cell type category` = name) %>%
-		mutate(level = level -1) %>%
-		left_join(.data) %>%
-
-		# process
-		mutate(Estimate = ifelse(significant, fold_change, NA)) %>%
-		mutate(branch_length = ifelse(isLeaf, 0.1, 2)) %>%
-
-		# Correct branch length
-		mutate(branch_length = ifelse(!isLeaf, internal_branch_length,	external_branch_length) ) %>%
-		mutate(branch_length =  ifelse(	isLeaf, branch_length + ((max(level) - level) * internal_branch_length),	branch_length	))
-
-
-
-	xx = dd %>%
-		mutate(leafCount_norm = leafCount/max(leafCount)) %>%
-		group_by(level) %>%
-		arrange(desc(leafCount>1)) %>%
-		mutate(leafCount_norm_cum = cumsum(leafCount_norm)) %>%
-		ungroup() %>%
-		arrange(level) %>%
-		mutate(length_error_bar = leafCount_norm - 0.005) %>%
-		mutate(x = leafCount_norm_cum - 0.5 * leafCount_norm) %>%
+	xx  = 
+	.data %>%
+		calculate_x_for_polar %>%
+		
+		# Add angle text
 		mutate(angle = x * -360) %>%
 		mutate(angle = ifelse(angle < - 240 | angle > -120, angle, angle - 180)) %>%
 		mutate(angle = ifelse(angle > - 360, angle, angle + 360)) %>%
@@ -903,15 +790,22 @@ plot_polar = function(	.data,
 		mutate(summarised_proportion =
 					 	proportions %>% map(~ .x %>% summarise(median_proportion = .value %>% median))
 		) %>%
-		unnest(summarised_proportion)
-		#mutate(median_proportion = median_proportion / max(median_proportion))
+		unnest(summarised_proportion) %>%
+		#mutate(median_proportion = median_proportion / max(median_proportion)) %>%
+		
+		distinct() %>%
+		left_join(
+			ct_names_polar, by=c("Cell type category" = "name")
+		)
 
 	my_rescale = function(x) { as.character( format(round( x * xx %>% pull(median_proportion) %>% max, 2), nsmall = 2)) }
 	cusotm_root_trans = function() scales::trans_new("cusotm_root",function(x) x^(1/4), function(x) x^(4))
 	DTC_scale =  xx %>% pull(Estimate) %>% abs() %>% { switch( (!all(is.na(.))) + 1, 1, .) } %>% max(na.rm = T)
-	y_text_out = 5.0625
+	y_text_out = 8.5
 	y_text_in = 1.4641
 
+	# Size outer circles
+	soc = (c(0, 0.2, 0.4, 0.6, 0.8)*0.5 + 1)^4  
 
 	xx %>%
 		{
@@ -926,28 +820,33 @@ plot_polar = function(	.data,
 				ggplot(data=(.),aes(x = x,fill = "Non significant",size = 1/sqrt(level)))
 			)
 		}	+
-		annotate("rect", xmin=0, xmax=1, ymin=1, ymax= 2.0736, fill="grey95") +
-		annotate("rect", xmin=0, xmax=1, ymin=2.0736, ymax=3.8416, fill="grey90") +
-		annotate("rect", xmin=0, xmax=1, ymin=3.8416, ymax=6.5536, fill="grey87") +
+		annotate("rect", xmin=0, xmax=1, ymin=soc[1], ymax= soc[2], fill="grey95") +
+		annotate("rect", xmin=0, xmax=1, ymin=soc[2], ymax=soc[3], fill="grey90") +
+		annotate("rect", xmin=0, xmax=1, ymin=soc[3], ymax=soc[4], fill="grey87") +
+		annotate("rect", xmin=0, xmax=1, ymin=soc[4], ymax=soc[5], fill="grey83") +
+		
+		# Lv 1
 		geom_bar(
 			data = xx %>% filter(level == 1),
 			aes(width = leafCount_norm, y = `median_proportion`), # / leafCount_norm),
 			color = "grey20",  stat = "identity"
 		) +
 		geom_errorbar(
-			data = xx %>% filter(level == 1) %>% mutate(x = ifelse(`Cell type category`=="immune_cell", 0.5, x)),
-			aes(width = 0 , ymin=`median_proportion`, ymax=y_text_out-0.7), # / leafCount_norm),
+			data = xx %>% filter(level == 1), # %>% mutate(x = ifelse(`Cell type category`=="immune_cell", 0.5, x)),
+			aes(width = 0 , ymin=`median_proportion`, ymax=mean(soc[1:2])), # / leafCount_norm),
 			color = "grey20",  stat = "identity"
 		) +
 		geom_text(
 			data =
 				xx %>%
 				filter(level == 1) %>%
-				mutate(x = ifelse(`Cell type category`=="immune_cell", 0.5, x)) %>%
-				mutate(angle = ifelse(`Cell type category`=="immune_cell", -0, angle)) %>%
-				mutate(`Cell type category` = sub("\\s+$", "", `Cell type category`)),
-			aes(label=`Cell type category`, y = y_text_out, angle= angle  ) ,size =size_geom_text ) +
-		#scale_x_continuous(labels = xx %>% filter(level == 1) %>% pull(`Cell type category`), breaks = xx %>% filter(level == 1) %>% pull(leafCount_norm_cum) - 0.5 * xx %>% filter(level == 1) %>% pull(leafCount_norm)) +
+				# mutate(x = ifelse(`Cell type category`=="immune_cell", 0.5, x)) %>%
+				# mutate(angle = ifelse(`Cell type category`=="immune_cell", -0, angle)) %>%
+				mutate(`formatted` = sub("\\s+$", "", `formatted`)),
+			aes(label=`formatted`, y = mean(soc[1:2]), angle= angle  ) ,size =size_geom_text ) +
+		#scale_x_continuous(labels = xx %>% filter(level == 1) %>% pull(`formatted`), breaks = xx %>% filter(level == 1) %>% pull(leafCount_norm_cum) - 0.5 * xx %>% filter(level == 1) %>% pull(leafCount_norm)) +
+		
+		# Lv 2
 		geom_bar(
 			data = xx %>% filter(level == 2),
 			aes(width = leafCount_norm, y = `median_proportion` ), # / leafCount_norm),
@@ -955,16 +854,18 @@ plot_polar = function(	.data,
 		) +
 		geom_errorbar(
 			data = xx %>% filter(level == 2),
-			aes(width = 0 , ymin=`median_proportion`, ymax=2.2736), # / leafCount_norm),
+			aes(width = 0 , ymin=`median_proportion`, ymax=mean(soc[2:3])), # / leafCount_norm),
 			color = "grey20",  stat = "identity",linetype="dotted"
 		) +
 		geom_text(
 			data =
 				xx %>%
 				filter(level == 2) %>%
-				mutate(`Cell type category` = sub("\\s+$", "", `Cell type category`)),
-			aes(label=`Cell type category`, y = 2.8561, angle= angle) ,size =size_geom_text) +
-		#scale_x_continuous(labels = xx %>% filter(level == 2) %>% pull(`Cell type category`), breaks = xx %>% filter(level == 2) %>% pull(leafCount_norm_cum) - 0.5 * xx %>% filter(level == 2) %>% pull(leafCount_norm)) +
+				mutate(`formatted` = sub("\\s+$", "", `formatted`)),
+			aes(label=`formatted`, y = mean(soc[2:3]), angle= angle) ,size =size_geom_text) +
+		#scale_x_continuous(labels = xx %>% filter(level == 2) %>% pull(`formatted`), breaks = xx %>% filter(level == 2) %>% pull(leafCount_norm_cum) - 0.5 * xx %>% filter(level == 2) %>% pull(leafCount_norm)) +
+		
+		# Lv 3
 		geom_bar(
 			data = xx %>% filter(level == 3),
 			aes(width = leafCount_norm, y = `median_proportion` ), # / leafCount_norm),
@@ -978,7 +879,7 @@ plot_polar = function(	.data,
 				# If there are cell types
 				geom_errorbar(
 					data = xx %>% filter(level == 3) %>% filter(`median_proportion`>prop_filter | !is.na(Estimate)),
-					aes(width = 0 , ymin=`median_proportion`, ymax=y_text_in-0.2), # / leafCount_norm),
+					aes(width = 0 , ymin=`median_proportion`, ymax=mean(soc[3:4])), # / leafCount_norm),
 					color = "grey20",  stat = "identity",linetype="dotted"
 				) ,
 
@@ -1001,14 +902,62 @@ plot_polar = function(	.data,
 							`median_proportion`>prop_filter |
 								!is.na(Estimate)
 						) %>%
-						mutate(`Cell type category` = sub("\\s+$", "", `Cell type category`)),
-					aes(label=`Cell type category`, y = y_text_in , angle= angle) ,size =size_geom_text
+						mutate(`formatted` = sub("\\s+$", "", `formatted`)),
+					aes(label=`formatted`, y = mean(soc[3:4]) , angle= angle) ,size =size_geom_text
 				),
 
 				# If there are NOT cell types
 				geom_errorbar(ymin=0, ymax=0)
 			)
 		} +
+		
+		
+		# Lv 4
+		geom_bar(
+			data = xx %>% filter(level == 4),
+			aes(width = leafCount_norm, y = `median_proportion` ), # / leafCount_norm),
+			color = "grey20", stat = "identity"
+		)  +
+		{
+			# Make plotting robust if no level 4 cell types were detected
+			switch(
+				(!  xx %>% filter(level == 4) %>% filter(`median_proportion`>prop_filter | !is.na(Estimate)) %>% nrow() > 0) + 1,
+				
+				# If there are cell types
+				geom_errorbar(
+					data = xx %>% filter(level == 4) %>% filter(`median_proportion`>prop_filter | !is.na(Estimate)),
+					aes(width = 0 , ymin=`median_proportion`, ymax=mean(soc[4:5])), # / leafCount_norm),
+					color = "grey20",  stat = "identity",linetype="dotted"
+				) ,
+				
+				# If there are NOT cell types
+				geom_errorbar(ymin=0, ymax=0)
+			)
+		} +
+		{
+			# Make plotting robust if no level 4 cell types were detected
+			switch(
+				(!  xx %>% filter(level == 4) %>% filter(`median_proportion`>prop_filter | !is.na(Estimate)) %>% nrow() > 0) + 1,
+				
+				# If there are cell types
+				
+				geom_text(
+					data =
+						xx %>%
+						filter(level == 4)  %>%
+						filter(
+							`median_proportion`>prop_filter |
+								!is.na(Estimate)
+						) %>%
+						mutate(`formatted` = sub("\\s+$", "", `formatted`)),
+					aes(label=`formatted`, y = mean(soc[4:5]) , angle= angle) ,size =size_geom_text
+				),
+				
+				# If there are NOT cell types
+				geom_errorbar(ymin=0, ymax=0)
+			)
+		} +
+	
 		{
 			# Case if none is significant
 			switch(
@@ -1093,7 +1042,7 @@ plot_scatter = function(.data){
 		select(-proportions, -.variable) %>%
 		#unnest(draws) %>%
 		select( -draws) %>%
-		unnest(rng)  %>% group_by(zero, C, Q, .variable, level, `Cell type category`) %>% tidybayes::median_qi() %>% ungroup() %>%
+		unnest(rng)  %>% group_by(zero, C, Q, .variable, level, `Cell type category`, Rhat) %>% tidybayes::median_qi() %>% ungroup() %>%
 		left_join(
 			.data$proportions %>%
 				select(-draws, -.variable) %>%
@@ -1101,11 +1050,25 @@ plot_scatter = function(.data){
 		) %>%
 		select(level,  `Cell type category`, Q, .upper, .lower)
 	
+
+		inferred_x = 
+			map2_dfr(
+			.data$internals$fit,
+			1:length(.data$internals$fit),
+			~ .x %>%
+				tidybayes::gather_draws(X_[Q, A]) %>% 
+				tidybayes::median_qi() %>% 
+				ungroup() %>% 
+				filter(A==2) %>% 
+				mutate(level = .y)
+		) %>% rename(inferred_x = .value)
+	
 	.data$proportions %>%
 		select(-draws, -.variable) %>%
 		unnest(proportions) %>%
 		left_join(data_CI) %>%
-		ggplot(aes(x = DFS_MONTHS, y = `.value_relative`, label=sample)) +
+		left_join(inferred_x %>% select(level, Q, inferred_x)) %>%
+		ggplot(aes(x = inferred_x, y = `.value_relative`, label=sample)) +
 		# geom_point(
 		# 	data =
 		# 		res$proportions %>% filter(level ==1) %>%
@@ -1280,6 +1243,7 @@ plot_markers  = function(result, level, S = NULL, cores = 20){
 }
 
 
+
 #------------------------------------#
 
 run_lv_1 = function(internals,
@@ -1314,11 +1278,11 @@ run_lv_1 = function(internals,
 	df1 = res1[[1]]
 	fit1 = res1[[2]]
 	
-	
+	fit_prop_parsed = fit1 %>%
+		tidybayes::gather_draws(prop_1[Q, C])
 	
 	draws_1 =
-		fit1 %>%
-		tidybayes::gather_draws(prop_1[Q, C1]) %>%
+		fit_prop_parsed %>%
 		ungroup() %>%
 		select(-.variable) %>%
 		mutate(.value_relative = .value)
@@ -1379,6 +1343,16 @@ run_lv_1 = function(internals,
 			
 			nest(draws = -c(C, .variable, zero)) %>%
 			
+			# Attach convergence information
+			left_join(
+				rstan::summary(fit1, pars=c("alpha_1"))$summary %>% 
+					as_tibble(rownames=".variable") %>% 
+					separate(.variable, c(".variable", "A", "C"), sep="\\[|\\]|,", extra = "drop") %>% 
+					mutate(A = as.integer(A), C = as.integer(C)) %>% filter(A == 2) %>% 
+					select(.variable, C, Rhat),
+				by = c(".variable", "C")
+			) %>%
+			
 			left_join(
 				tree %>%
 					ToDataFrameTree("name", "level", sprintf("C%s", 1)) %>%
@@ -1404,7 +1378,7 @@ run_lv_1 = function(internals,
 	internals$fit = list(fit1)
 	internals$df = list(df1)
 	internals$draws = list(draws_1)
-	internals$prop_posterior[[1]] = fit1 %>% prop_to_list %>% `[[` ("prop_1") 
+	internals$prop_posterior[[1]] = fit_prop_parsed %>% prop_to_list %>% `[[` ("prop_1") 
 
 	internals
 	
@@ -1450,15 +1424,17 @@ run_lv_2 = function(internals,
 	df2 = res2[[1]]
 	fit2 = res2[[2]]
 	
-	
+	fit_prop_parsed = fit2 %>%
+		tidybayes::gather_draws(prop_a[Q, C])
+		
 	draws_a =
-		fit2 %>%
-		tidybayes::gather_draws(prop_a[Q, C]) %>%
+		fit_prop_parsed %>%
 		ungroup() %>%
 		select(-.variable)
 	
 	draws_2 =
 		internals$draws[[1]] %>%
+		rename(C1 = C) %>%
 		left_join(
 			fit2 %>%
 				######## ALTERED WITH TREE
@@ -1529,6 +1505,16 @@ run_lv_2 = function(internals,
 			
 			nest(draws = -c(C, .variable, zero)) %>%
 			
+			# Attach convergence information
+			left_join(
+				rstan::summary(fit2, pars=c("alpha_a"))$summary %>% 
+					as_tibble(rownames=".variable") %>% 
+					separate(.variable, c(".variable", "A", "C"), sep="\\[|\\]|,", extra = "drop") %>% 
+					mutate(A = as.integer(A), C = as.integer(C)) %>% filter(A == 2) %>% 
+					select(.variable, C, Rhat),
+				by = c(".variable", "C")
+			) %>%
+			
 			left_join(
 				# FOR HIERARHICAL
 				tree %>%
@@ -1562,7 +1548,7 @@ run_lv_2 = function(internals,
 	internals$prop = bind_rows(internals$prop , prop_2) 
 	internals$fit = internals$fit %>% c(list(fit2))
 	internals$df = internals$df %>% c(list(df2))
-	internals$prop_posterior[[2]] =  fit2 %>% prop_to_list %>% `[[` (sprintf("prop_%s", "a"))  
+	internals$prop_posterior[[2]] =  fit_prop_parsed %>% prop_to_list %>% `[[` (sprintf("prop_%s", "a"))  
 	internals$draws = internals$draws %>% c(list(draws_2))
 
 	internals
@@ -1571,7 +1557,15 @@ run_lv_2 = function(internals,
 
 
 
-
+gather_graws_multi = function(.fit, pars){
+	
+	map_dfr(
+		pars,
+		~.fit %>% tidybayes::gather_draws(.x[Q, C], regex = T)
+	)
+	tidybayes::gather_draws(`prop_[a-z]`[Q, C], regex = T) %>%
+		bind_rows(	tidybayes::gather_draws(`prop_[a-z]`[Q, C], regex = T))
+}
 #------------------------------------#
 
 run_lv_3 = function(internals,
@@ -1608,14 +1602,14 @@ run_lv_3 = function(internals,
 	df3 = res3[[1]]
 	fit3 = res3[[2]]
 	
+	fit_prop_parsed = fit3 %>%
+		######## ALTERED WITH TREE
+		tidybayes::gather_draws(prop_b[Q, C], prop_c[Q, C], prop_d[Q, C], prop_e[Q, C], prop_f[Q, C])
 	
 	draws_3 =
 		internals$draws[[2]] %>%
 		left_join(
-			fit3 %>%
-				######## ALTERED WITH TREE
-				tidybayes::gather_draws(`prop_[a-z]`[Q, C], regex = T) %>%
-				#########################
+			fit_prop_parsed %>%
 			drop_na %>%
 				ungroup() %>%
 				left_join(
@@ -1670,7 +1664,7 @@ run_lv_3 = function(internals,
 	if (do_regression && length(parse_formula(.formula)$covariates) >0 ){
 		alpha_3 =
 			fit3 %>%
-			tidybayes::gather_draws(`alpha_[a-z]`[A, C], regex = T) %>%
+			tidybayes::gather_draws(alpha_b[A, C], alpha_c[A, C], alpha_d[A, C], alpha_e[A, C], alpha_f[A, C]) %>%
 			ungroup() %>%
 			
 			drop_na() %>%
@@ -1685,6 +1679,16 @@ run_lv_3 = function(internals,
 			arrange(.chain, .iteration, .draw,     A) %>%
 			
 			nest(draws = -c(C, .variable, zero)) %>%
+			
+			# Attach convergence information
+			left_join(
+				rstan::summary(fit3, pars=sprintf("alpha_%s", c("b", "c", "d", "e", "f")))$summary %>% 
+					as_tibble(rownames=".variable") %>% 
+					separate(.variable, c(".variable", "A", "C"), sep="\\[|\\]|,", extra = "drop") %>% 
+					mutate(A = as.integer(A), C = as.integer(C)) %>% filter(A == 2) %>% 
+					select(.variable, C, Rhat),
+				by = c(".variable", "C")
+			) %>%
 			
 			# FOR HIERARCHICAL
 			mutate(C = 1:n()) %>%
@@ -1710,7 +1714,15 @@ run_lv_3 = function(internals,
 		alpha_3 = alpha_3 %>%
 			separate(.variable, c("par", "node"), remove = F) %>%
 			left_join(
-				fit3 %>% tidybayes::gather_draws(`prop_[a-z]_rng`[Q, C], regex = T) %>% ungroup() %>% mutate(.variable = gsub("_rng", "", .variable)) %>% separate(.variable, c("par", "node"), remove = F)  %>% select(-par) %>% drop_na() %>% nest(rng = -c(node, C)) %>% mutate(C = 1:n()) 
+				fit3 %>% 
+					tidybayes::gather_draws(prop_b_rng[Q, C], prop_c_rng[Q, C], prop_d_rng[Q, C], prop_e_rng[Q, C], prop_f_rng[Q, C]) %>% 
+					ungroup() %>%
+					mutate(.variable = gsub("_rng", "", .variable)) %>% 
+					separate(.variable, c("par", "node"), remove = F)  %>% 
+					select(-par) %>% 
+					drop_na() %>%
+					nest(rng = -c(node, C)) %>%
+					mutate(C = 1:n()) 
 			)
 		
 		
@@ -1721,7 +1733,7 @@ run_lv_3 = function(internals,
 	internals$prop = bind_rows(internals$prop , prop_3) 
 	internals$fit = internals$fit %>% c(list(fit3))
 	internals$df = internals$df %>% c(list(df3))
-	internals$prop_posterior[3: (2+length(c("b", "c", "d", "e", "f")))] = fit3 %>% prop_to_list 
+	internals$prop_posterior[3: (2+length(c("b", "c", "d", "e", "f")))] = fit_prop_parsed %>% prop_to_list 
 	internals$draws = internals$draws %>% c(list(draws_3))
 
 	internals
@@ -1765,13 +1777,15 @@ run_lv_4 = function(internals,
 	df = res[[1]]
 	fit = res[[2]]
 	
+	fit_prop_parsed = fit %>%
+		######## ALTERED WITH TREE
+		tidybayes::gather_draws(prop_g[Q, C], prop_h[Q, C], prop_i[Q, C], prop_l[Q, C], prop_m[Q, C])
+		#########################
+		
 	draws =
 		internals$draws[[level-1]] %>%
 		left_join(
-			fit %>%
-				######## ALTERED WITH TREE
-				tidybayes::gather_draws(`prop_[a-z]`[Q, C], regex = T) %>%
-				#########################
+			fit_prop_parsed %>%
 			drop_na %>%
 				ungroup() %>%
 				left_join(
@@ -1794,7 +1808,7 @@ run_lv_4 = function(internals,
 		) %>%
 		ungroup() %>%
 		mutate(.value_relative = .value4) %>%
-		mutate(.value4 = ifelse(.value4 %>% is.na, .value2, .value2 * .value4))
+		mutate(.value4 = ifelse(.value4 %>% is.na, .value2, .value3 * .value4))
 	
 	prop =
 		draws %>%
@@ -1825,7 +1839,7 @@ run_lv_4 = function(internals,
 	if (do_regression && length(parse_formula(.formula)$covariates) >0 ){
 		alpha_4 =
 			fit %>%
-			tidybayes::gather_draws(`alpha_[a-z]`[A, C], regex = T) %>%
+			tidybayes::gather_draws(alpha_g[A, C], alpha_h[A, C], alpha_i[A, C], alpha_l[A, C], alpha_m[A, C]) %>%
 			ungroup() %>%
 			
 			# rebuild the last component sum-to-zero
@@ -1837,6 +1851,16 @@ run_lv_4 = function(internals,
 			arrange(.chain, .iteration, .draw,     A) %>%
 			
 			nest(draws = -c(C, .variable, zero)) %>%
+			
+			# Attach convergence information
+			left_join(
+				rstan::summary(fit, pars=sprintf("alpha_%s", c("g", "h", "i", "l", "m")))$summary %>% 
+					as_tibble(rownames=".variable") %>% 
+					separate(.variable, c(".variable", "A", "C"), sep="\\[|\\]|,", extra = "drop") %>% 
+					mutate(A = as.integer(A), C = as.integer(C)) %>% filter(A == 2) %>% 
+					select(.variable, C, Rhat),
+				by = c(".variable", "C")
+			) %>%
 			
 			# FOR HIERARCHICAL
 			mutate(C = 1:n()) %>%
@@ -1863,7 +1887,12 @@ run_lv_4 = function(internals,
 		alpha_4 = alpha_4 %>%
 			separate(.variable, c("par", "node"), remove = F) %>%
 			left_join(
-				fit %>% tidybayes::gather_draws(`prop_[a-z]_rng`[Q, C], regex = T) %>% ungroup() %>% mutate(.variable = gsub("_rng", "", .variable)) %>% separate(.variable, c("par", "node"), remove = F)  %>% select(-par) %>% drop_na() %>% nest(rng = -c(node, C)) %>% mutate(C = 1:n()) 
+				fit %>% 
+					tidybayes::gather_draws(prop_g_rng[Q, C], prop_h_rng[Q, C], prop_i_rng[Q, C], prop_l_rng[Q, C], prop_m_rng[Q, C]) %>% 
+					ungroup() %>% mutate(.variable = gsub("_rng", "", .variable)) %>% 
+					separate(.variable, c("par", "node"), remove = F)  %>% 
+					select(-par) %>% drop_na() %>% nest(rng = -c(node, C)) %>%
+					mutate(C = 1:n()) 
 			)
 		
 		

@@ -777,8 +777,6 @@ data {
 	real lambda_sigma_prior[2];
 	real lambda_skew_prior[2];
 	real sigma_intercept_prior[2];
-
-
 	vector[G] lambda_log;
   vector[G] sigma_inv_log;
 
@@ -811,6 +809,7 @@ data {
 	// Censoring
 	int how_many_cens;
 	int which_cens[how_many_cens];
+	int which_not_cens[Q-how_many_cens];
 	real<lower=0> max_unseen;
 
 
@@ -912,7 +911,7 @@ parameters {
 	// Censoring
 	vector<lower=0>[how_many_cens] unseen;
 	real<lower=0> prior_unseen_alpha[how_many_cens > 0];
-	real<lower=0, upper=1> prior_unseen_beta[how_many_cens > 0];
+	real prior_unseen_beta[how_many_cens > 0];
 
 }
 transformed parameters{
@@ -1138,15 +1137,8 @@ model {
 		int_package
 	));
 
-	// target += lp_reduce(
-	// 	[prop_UFO, sigma_intercept_dec]' ,
-	// 	pack_r_1[1],
-	// 	pack_R_1[1],
-	// 	int_package[1]
-	// );
-
 	// Dirichlet regression
-	if(fam_dirichlet) phi ~ normal(0,2); // normal((lv==1 ? 8 : 6), 2);
+	if(fam_dirichlet) phi ~ normal(0,1); // normal((lv==1 ? 8 : 6), 2);
 	// Beta regression
 	else phi ~ normal(0,1); // beta(1,20);
 
@@ -1156,13 +1148,20 @@ model {
 
 	// Censoring
 	if(how_many_cens > 0){
-		X_[,2] ~ gamma(prior_unseen_alpha[1], 1.0/prior_unseen_beta[1]);
-		prior_unseen_alpha ~ normal(0,1);
-		prior_unseen_beta ~ beta(1,20);
 		
-		// 		X_[,2] ~ gamma(prior_unseen_alpha[1] + 1, prior_unseen_beta[1]);
-		// prior_unseen_alpha ~ normal(1.2,0.5);
-		// prior_unseen_beta ~ normal(4, 0.5);
+		real mu = prior_unseen_alpha[1] * exp(-prior_unseen_beta[1]);
+		
+		// unseen
+		X_[which_cens,2] ~ gamma( prior_unseen_alpha[1], mu);
+
+		// Priors
+		target += gamma_lpdf(X[which_not_cens,2] | prior_unseen_alpha[1], mu);
+	 	target += gamma_lccdf(	X[which_cens,2] | prior_unseen_alpha[1], mu);
+	 	
+	 	// Hyperprior
+	 	prior_unseen_alpha ~ normal(1.28, 0.1); // sd is increased on 2.5x
+		prior_unseen_beta ~ normal(-0.717, 0.05); // sd is increased on 2.5x
+
 	}
 }
 generated quantities{
