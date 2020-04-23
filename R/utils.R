@@ -1,5 +1,34 @@
 
 
+my_theme =
+	theme_bw() +
+	theme(
+		panel.border = element_blank(),
+		axis.line = element_line(),
+		panel.grid.major = element_line(size = 0.2),
+		panel.grid.minor = element_line(size = 0.1),
+		text = element_text(size = 12),
+		legend.position = "bottom",
+		aspect.ratio = 1,
+		axis.text.x = element_text(
+			angle = 90,
+			hjust = 1,
+			vjust = 0.5
+		),
+		strip.background = element_blank(),
+		axis.title.x  = element_text(margin = margin(
+			t = 10,
+			r = 10,
+			b = 10,
+			l = 10
+		)),
+		axis.title.y  = element_text(margin = margin(
+			t = 10,
+			r = 10,
+			b = 10,
+			l = 10
+		))
+	)
 
 # library(magrittr)
 # library(tidyverse)
@@ -25,6 +54,138 @@ ifelse_pipe = function(.x, .p, .f1, .f2 = NULL) {
 				 else
 				 	.x)
 
+}
+
+#' This is a generalisation of ifelse that acceots an object and return an objects
+#'
+#' @import dplyr
+#' @import tidyr
+#'
+#' @param .x A tibble
+#' @param .p1 A boolean
+#' @param .p2 ELSE IF condition
+#' @param .f1 A function
+#' @param .f2 A function
+#' @param .f3 A function
+#'
+#' @return A tibble
+ifelse2_pipe = function(.x, .p1, .p2, .f1, .f2, .f3 = NULL) {
+	# Nested switch
+	switch(# First condition
+		.p1 %>% `!` %>% sum(1),
+		
+		# First outcome
+		as_mapper(.f1)(.x),
+		switch(
+			# Second condition
+			.p2 %>% `!` %>% sum(1),
+			
+			# Second outcome
+			as_mapper(.f2)(.x),
+			
+			# Third outcome - if there is not .f3 just return the original data frame
+			if (.f3 %>% is.null %>% `!`)
+				as_mapper(.f3)(.x)
+			else
+				.x
+		))
+}
+
+#' This is a generalisation of ifelse that acceots an object and return an objects
+#'
+#' @import dplyr
+#' @import tidyr
+#'
+#' @param .x A tibble
+#' @param .p1 A boolean
+#' @param .p2 ELSE IF condition
+#' @param .f1 A function
+#' @param .f2 A function
+#' @param .f3 A function
+#'
+#' @return A tibble
+ifelse3_pipe = function(.x, .p1, .p2, .p3, .f1, .f2, .f3, .f4 = NULL) {
+	# Nested switch
+	switch(# First condition
+		.p1 %>% `!` %>% sum(1),
+		
+		# First outcome
+		as_mapper(.f1)(.x),
+		switch(
+			# Second condition
+			.p2 %>% `!` %>% sum(1),
+			
+			# Second outcome
+			as_mapper(.f2)(.x),
+			
+			# Third outcome - if there is not .f3 just return the original data frame
+			switch(
+				# Second condition
+				.p3 %>% `!` %>% sum(1),
+				
+				# Second outcome
+				as_mapper(.f3)(.x),
+				
+				# Third outcome - if there is not .f3 just return the original data frame
+				if (.f4 %>% is.null %>% `!`)
+					as_mapper(.f4)(.x)
+				else
+					.x
+			)
+		))
+}
+
+#' This is a generalisation of ifelse that acceots an object and return an objects
+#'
+#' @import dplyr
+#' @import tidyr
+#'
+#' @param .x A tibble
+#' @param .p1 A boolean
+#' @param .p2 ELSE IF condition
+#' @param .f1 A function
+#' @param .f2 A function
+#' @param .f3 A function
+#'
+#' @return A tibble
+ifelse4_pipe = function(.x, .p1, .p2, .p3, .p4, .f1, .f2, .f3, .f4, .f5 = NULL) {
+	# Nested switch
+	switch(# First condition
+		.p1 %>% `!` %>% sum(1),
+		
+		# First outcome
+		as_mapper(.f1)(.x),
+		switch(
+			# Second condition
+			.p2 %>% `!` %>% sum(1),
+			
+			# Second outcome
+			as_mapper(.f2)(.x),
+			
+			# Third outcome - if there is not .f3 just return the original data frame
+			switch(
+				# Second condition
+				.p3 %>% `!` %>% sum(1),
+				
+				# Second outcome
+				as_mapper(.f3)(.x),
+				
+				# Third outcome - if there is not .f3 just return the original data frame
+				switch(
+					# Second condition
+					.p4 %>% `!` %>% sum(1),
+					
+					# Second outcome
+					as_mapper(.f4)(.x),
+					
+					# Third outcome - if there is not .f3 just return the original data frame
+					if (.f5 %>% is.null %>% `!`)
+						as_mapper(.f5)(.x)
+					else
+						.x
+				)
+			)
+		))
 }
 
 #' format_for_MPI
@@ -670,6 +831,54 @@ as_matrix = function(tbl, rownames = NULL) {
 #'
 #' @export
 ToDataFrameTypeColFull = function(tree, fill = T, ...) {
+	t = tree %>% data.tree::Clone()
+	
+	1:(t %$% Get("level") %>% max) %>%
+		map_dfr(
+			~ data.tree::Clone(t) %>%
+					{
+						data.tree::Prune(., function(x)
+							x$level <= .x + 1)
+						.
+					} %>%
+					data.tree::ToDataFrameTypeCol() %>%
+					as_tibble
+			
+		) %>%
+		distinct() %>%
+		ifelse_pipe(
+			fill,
+			~ .x %>%
+				{
+					if ("level_3" %in% ((.) %>% colnames))
+						(.) %>% mutate(level_3 = ifelse(level_3 %>% is.na, level_2, level_3))
+					else
+						(.)
+				} %>%
+				{
+					if ("level_4" %in% ((.) %>% colnames))
+						(.) %>% mutate(level_4 = ifelse(level_4 %>% is.na, level_3, level_4))
+					else
+						(.)
+				} %>%
+				{
+					if ("level_5" %in% ((.) %>% colnames))
+						(.) %>% mutate(level_5 = ifelse(level_5 %>% is.na, level_4, level_5))
+					else
+						(.)
+				} %>%
+				{
+					if ("level_6" %in% ((.) %>% colnames))
+						(.) %>% mutate(level_6 = ifelse(level_6 %>% is.na, level_5, level_6))
+					else
+						(.)
+				}
+		) %>%
+		select(..., everything())
+	
+}
+
+ToDataFrameTypeColFull_old = function(tree, fill = T, ...) {
 	tree %>%
 		data.tree::Clone() %>%
 		{
@@ -713,8 +922,21 @@ ToDataFrameTypeColFull = function(tree, fill = T, ...) {
 					else
 						(.)
 				}
-			) %>%
+		) %>%
 		select(..., everything())
+}
+
+get_ancesotr_child = function(tree){
+	tree %>% ToDataFrameTypeColFull %>% distinct(level_1, level_2) %>% setNames(c("ancestor", "Cell type category")) %>% bind_rows(
+		tree %>% ToDataFrameTypeColFull %>% distinct(level_2, level_3) %>% setNames(c("ancestor", "Cell type category"))
+	) %>%
+		bind_rows(
+			tree %>% ToDataFrameTypeColFull %>% distinct(level_3, level_4) %>% setNames(c("ancestor", "Cell type category"))
+		) %>%
+		bind_rows(
+			tree %>% ToDataFrameTypeColFull %>% distinct(level_4, level_5) %>% setNames(c("ancestor", "Cell type category"))
+		) %>%
+		filter(ancestor != `Cell type category`)
 }
 
 #' vb_iterative
@@ -1177,7 +1399,7 @@ plot_boxplot = function(input.df, symbols) {
 		scale_y_log10()
 }
 
-plot_markers = function(.data, n_markers, mix, ct1, ct2, n = 10, level) {
+plot_signatures = function(.data, n_markers, mix, ct1, ct2, n = 10, level) {
 	my_theme =
 		theme_bw() +
 		theme(
@@ -1237,8 +1459,6 @@ plot_markers = function(.data, n_markers, mix, ct1, ct2, n = 10, level) {
 		scale_y_log10() +
 		my_theme
 }
-
-
 
 #' This is a generalisation of ifelse that acceots an object and return an objects
 #'
@@ -1614,9 +1834,8 @@ get_specific_annotation_columns = function(.data, .col){
 	
 }
 
-prop_to_list = function(fit){
-	fit %>%
-		tidybayes::gather_draws(`prop_[1a-z]`[Q, C], regex = T) %>%
+prop_to_list = function(fit_parsed){
+	fit_parsed %>%
 		median_qi() %>%
 		drop_na  %>%
 		ungroup() %>% 
@@ -1639,4 +1858,305 @@ gamma_alpha_beta = function(x){
 	shape <- exp(-summ$dispersion)
 	scale <- mu/shape
 	c(shape, 1/scale)
+}
+
+permute_nest = function(.data, .names_from, .values_from){
+	.names_from = enquo(.names_from)
+	.values_from = enquo(.values_from)
+	
+	factor_levels = .data %>% pull(!!.names_from) %>% unique
+	
+	.data %>% 
+		pull(!!.names_from) %>%
+		unique() %>%
+		gtools::permutations(n = length(.), r = 2, v = .) %>%
+		as_tibble() %>%
+		unite(run, c(V1, V2), remove = F, sep="___") %>%
+		gather(which, !!.names_from, -run) %>%
+		select(-which) %>%
+		left_join(.data %>% select(!!.names_from, !!.values_from), by = quo_name(.names_from)) %>%
+		nest(data = -run) %>%
+		separate(run, sprintf("%s_%s", quo_name(.names_from), 1:2 ), sep="___") %>%
+		
+		# Introduce levels
+		mutate_at(vars(1:2),function(x) factor(x, levels = factor_levels))
+	
+}
+
+combine_nest = function(.data, .names_from, .values_from){
+	.names_from = enquo(.names_from)
+	.values_from = enquo(.values_from)
+	
+	factor_levels = .data %>% pull(!!.names_from) %>% unique
+	
+	.data %>% 
+		pull(!!.names_from) %>%
+		unique() %>%
+		gtools::combinations(n = length(.), r = 2, v = .) %>%
+		as_tibble() %>%
+		unite(run, c(V1, V2), remove = F, sep="___") %>%
+		gather(which, !!.names_from, -run) %>%
+		select(-which) %>%
+		left_join(.data %>% select(!!.names_from, !!.values_from), by = quo_name(.names_from)) %>%
+		nest(data = -run) %>%
+		separate(run, sprintf("%s_%s", quo_name(.names_from), 1:2), sep="___") %>%
+		
+		# Introduce levels
+		mutate_at(vars(1:2),function(x) factor(x, levels = factor_levels))
+	
+}
+
+get_ancesotr_child = function(tree){
+	tree %>% ToDataFrameTypeColFull %>% distinct(level_1, level_2) %>% setNames(c("ancestor", "Cell type category")) %>% bind_rows(
+		tree %>% ToDataFrameTypeColFull %>% distinct(level_2, level_3) %>% setNames(c("ancestor", "Cell type category"))
+	) %>%
+		bind_rows(
+			tree %>% ToDataFrameTypeColFull %>% distinct(level_3, level_4) %>% setNames(c("ancestor", "Cell type category"))
+		) %>%
+		bind_rows(
+			tree %>% ToDataFrameTypeColFull %>% distinct(level_4, level_5) %>% setNames(c("ancestor", "Cell type category"))
+		) %>%
+		filter(ancestor != `Cell type category`)
+}
+
+get_tree_properties = function(tree){
+	
+	
+	
+	# Set up tree structure
+	levels_in_the_tree = 1:4
+	
+	ct_in_nodes =
+		tree %>%
+		data.tree::ToDataFrameTree("name", "level", "C", "count", "isLeaf") %>%
+		as_tibble %>%
+		arrange(level, C) %>%
+		filter(!isLeaf) %>%
+		pull(count)
+	
+	# Get the number of leafs for every level
+	ct_in_levels = foreach(l = levels_in_the_tree + 1, .combine = c) %do% {
+		data.tree::Clone(tree) %>%
+			ifelse_pipe((.) %>% data.tree::ToDataFrameTree("level") %>% pull(2) %>% max %>% `>` (l),
+									~ {
+										.x
+										data.tree::Prune(.x, function(x)
+											x$level <= l)
+										.x
+									})  %>%
+			data.tree::Traverse(., filterFun = isLeaf) %>%
+			length()
+	}
+	
+	n_nodes = ct_in_nodes %>% length
+	n_levels = ct_in_levels %>% length
+	
+	# Needed in the model
+	singles_lv2 = tree$Get("C1", filterFun = isLeaf) %>% na.omit %>% as.array
+	SLV2 = length(singles_lv2)
+	parents_lv2 = tree$Get("C1", filterFun = isNotLeaf) %>% na.omit %>% as.array
+	PLV2 = length(parents_lv2)
+	
+	singles_lv3 = tree$Get("C2", filterFun = isLeaf) %>% na.omit %>% as.array
+	SLV3 = length(singles_lv3)
+	parents_lv3 = tree$Get("C2", filterFun = isNotLeaf) %>% na.omit %>% as.array
+	PLV3 = length(parents_lv3)
+	
+	singles_lv4 = tree$Get("C3", filterFun = isLeaf) %>% na.omit %>% as.array
+	SLV4 = length(singles_lv4)
+	parents_lv4 = tree$Get("C3", filterFun = isNotLeaf) %>% na.omit %>% as.array
+	PLV4 = length(parents_lv4)
+	
+	list(
+		ct_in_nodes =ct_in_nodes,
+		
+		# Get the number of leafs for every level
+		ct_in_levels = ct_in_levels,
+		
+		n_nodes = ct_in_nodes %>% length,
+		n_levels = ct_in_levels %>% length,
+		
+		# Needed in the model
+		singles_lv2 = singles_lv2,
+		SLV2 = SLV2,
+		parents_lv2 = parents_lv2,
+		PLV2 = PLV2,
+		
+		singles_lv3 = singles_lv3,
+		SLV3 = SLV3,
+		parents_lv3 = parents_lv3,
+		PLV3 = PLV3,
+		
+		singles_lv4 = singles_lv4,
+		SLV4 = SLV4,
+		parents_lv4 = parents_lv4,
+		PLV4 = PLV4
+	)
+}
+
+cluster_posterior_slopes = function(.data, credible_interval = 0.67){
+	 
+	# Add cluster info to cell types per node
+	.data %>%
+		filter(.variable %>% is.na %>% `!`) %>%
+		nest(node = -c(level, .variable)) %>%
+		mutate(node = map(
+			node,
+			~ {
+				.x %>%
+					left_join(
+						
+						# Unnest data
+						(.) %>%
+							select(-proportions, -rng) %>%
+							unnest(draws) %>%
+							filter(A == 2) %>%
+							
+							# Calculate credible interval
+							group_by(C, `Cell type category` , A, Rhat) %>%
+							tidybayes::median_qi(.width = credible_interval) %>%
+							ungroup() %>%
+							
+							# Build combination of cell types
+							combine_nest(
+								.names_from = `Cell type category`,
+								.values_from = c(.lower, .upper, Rhat)
+							)  %>%
+							
+							# Check overlap of credible intervals
+							mutate(is_cluster = map_lgl(
+								data,
+								~ .x %>% 
+									summarise(ma = max(.lower), mi = min(.upper), converged = any(Rhat > 1.6)==F) %>% 
+									mutate(is_cluster = ma < mi & converged) %>%
+									pull(is_cluster)
+							)) %>% 
+							
+							# If there is not cluster
+							
+							# Find communities based on cell type clusters
+							{
+								ct_levels = (.) %>% arrange(!is_cluster) %>% select(1:2) %>% as_matrix %>% t %>% as.character() %>% unique
+								
+								(.) %>%
+									filter(is_cluster) %>% 
+									select(1:2) %>%
+									tidygraph::tbl_graph(
+										edges = .,
+										nodes = data.frame(name = ct_levels)
+									) %>%
+									mutate(community = as.factor(tidygraph::group_infomap())) 
+							}	%>%
+							
+							# Format for joining
+							as_tibble() %>%
+							rename(`Cell type category` = name)
+					)
+				
+			}	)) %>%
+		unnest(node)
+	
+}
+
+identify_baseline_by_clustering = function(.data){
+	
+	.data %>%
+		nest(node = -c(.variable)) %>%
+		
+		mutate(node = map(
+			node, ~ .x %>%
+				#mutate(baseline = TRUE) %>%
+				add_count(community) %>%
+				
+				# Add sd
+				nest(comm_data = -community) %>%
+				mutate(
+					sd_community = map_dbl( comm_data, ~ .x %>% unnest(draws) %>% pull(.value) %>% sd ),
+					mean_community = map_dbl( comm_data, ~ .x %>% unnest(draws) %>% pull(.value) %>% mean )
+				) %>%
+				unnest(comm_data) %>%
+				
+				# If we have a unique bigger community
+				ifelse4_pipe(
+					(.) %>% distinct(community) %>% nrow %>% equals(1),
+					(.) %>% distinct(n) %>% nrow %>% `>` (1),
+					(.) %>% distinct(fold_change_ancestor) %>% pull(1) %>% equals(0) %>% `!`,
+					(.) %>% distinct(community) %>% nrow %>% `>` (1),
+					
+					# No nothing
+					~ .x %>% mutate(baseline = TRUE),
+					
+					# Majority roule
+					~ .x %>% mutate(baseline = n == max(n)),
+					
+					# If ancestor changed
+					~ .x %>% mutate(baseline = ifelse(fold_change_ancestor > 0, mean_community == min(mean_community), mean_community == max(mean_community))),
+					
+					# If equally sized clusters take the most variable
+					~ .x %>% mutate(baseline = sd_community == max(sd_community))
+				)
+			
+		)) %>% 
+		unnest(node)  %>%
+		
+		# Select zero
+		nest(node = -.variable) %>%
+		mutate(zero = map_dbl(node, ~ .x %>% filter(baseline) %>% pull(mean_community) %>% unique)) %>%
+		unnest(node)
+	
+	
+}
+
+extract_CI =  function(.data, credible_interval = 0.90){
+	.data %>%
+		mutate(regression = map(draws,
+														~ .x %>%
+															group_by(A) %>%
+															tidybayes::median_qi(.width = credible_interval) %>%
+															ungroup()  %>%
+															pivot_wider(
+																names_from = A,
+																values_from = c(.value, .lower, .upper),
+																names_prefix = "alpha"
+															) 
+		)) %>%
+		unnest(cols = c(regression))
+}
+
+calculate_x_for_polar = function(.data){
+	# Create annotation
+	internal_branch_length = 40
+	external_branch_length = 10
+	
+	
+	# Integrate data
+	tree_df_source = 
+		ARMET::tree %>%
+		data.tree::ToDataFrameTree("name", "isLeaf", "level", "leafCount", pruneFun = function(x)	x$level <= 5) %>%
+		as_tibble() %>%
+		rename(`Cell type category` = name) %>%
+		mutate(level = level -1)
+	
+	# Calculate x
+	map_df(
+		0:4,
+		~ tree_df_source %>%
+			filter(level == .x | (level < .x & isLeaf)) %>%
+			mutate(leafCount_norm = leafCount/sum(leafCount)) %>%
+			mutate(leafCount_norm_cum = cumsum(leafCount_norm)) %>%
+			mutate(length_error_bar = leafCount_norm - 0.005) %>%
+			mutate(x = leafCount_norm_cum - 0.5 * leafCount_norm) 	
+	) %>%
+		
+		# Attach data
+		left_join(.data) %>%
+		
+		# process
+		mutate(Estimate = ifelse(significant, fold_change, NA)) %>%
+		mutate(branch_length = ifelse(isLeaf, 0.1, 2)) %>%
+		
+		# Correct branch length
+		mutate(branch_length = ifelse(!isLeaf, internal_branch_length,	external_branch_length) ) %>%
+		mutate(branch_length =  ifelse(	isLeaf, branch_length + ((max(level) - level) * internal_branch_length),	branch_length	)) 
+	
 }
