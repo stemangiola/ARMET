@@ -1,0 +1,79 @@
+
+get_alpha = function(C, slope_value){
+	intercept = 1:C
+	intercept[(C-1):C] = intercept[(C-1):C] * 2
+	slope = rep(0, C)
+	slope[4] = slope_value
+	
+	alpha = matrix(intercept %>%	c(slope), ncol = 2)
+}
+
+
+
+simulate_infiltration_process = function(X, .alpha){
+	
+	X %*% t(.alpha) %>%
+		as.data.frame() %>%
+		as_tibble() %>%
+		mutate(sample = 1:n()) %>%
+		mutate(risk = X[,2]) %>%
+		gather(cell_type, rate, -sample, -risk) 
+	
+	
+}
+
+C = 5
+S = 100
+X = matrix(rep(1, S) %>% 	c(seq(0, 1, len = S)) , ncol = 2)
+alpha = get_alpha(C, 20)
+
+my_counts = 
+	simulate_infiltration_process(X, alpha) %>%
+	mutate(rate = rate * 100) %>%
+	mutate(count = rnbinom(n(), mu = rate, size = 200))
+
+my_counts %>%
+	ggplot(aes(risk, count, color=cell_type)) + 
+	geom_point()
+
+
+my_prop = 
+	my_counts %>%
+	group_by(risk) %>%
+	mutate(proportion = count / sum(count)) %>%
+	ungroup() 
+
+my_prop %>%
+	ggplot(aes(risk, proportion, color=cell_type)) + 
+	geom_point()
+
+m = rstan::stan_model("inst/stan/proof_concept.stan")
+fit = 
+	sampling(
+		m,
+		data = list(
+			S = S,
+			A = 2,
+			C = C,
+			X = X,
+			prop = 
+				my_prop %>%
+				select(sample, cell_type, proportion) %>%
+				spread(cell_type, proportion) %>%
+				nanny::as_matrix(rownames="sample")
+		),
+		cores = 4
+	)
+
+fit %>% gather_draws(alpha_generative[A, C]) %>% filter(A ==2) %>% ggplot(aes(.value, color=factor(C))) + geom_density()
+fit %>% gather_draws(alpha_descriptive[A, C]) %>% filter(A ==2) %>% ggplot(aes(.value, color=factor(C))) + geom_density()
+
+# BRMS
+fit_brms <- brm(
+	bind(V1 ,   V2 ,   V3   , V4  ,  V5) ~ risk,
+	my_prop %>%
+		select(sample, risk, cell_type, proportion) %>%
+		spread(cell_type, proportion),
+	family = 'dirichlet'
+)
+fit_brms %>%  gather_draws(b_muV2_risk, b_muV3_risk, b_muV4_risk,b_muV5_risk) %>% ggplot(aes(.value, color=.variable)) + geom_density()
