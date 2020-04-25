@@ -70,7 +70,9 @@ my_prop_dir %>%
 	ggplot(aes(risk, proportion, color=cell_type)) + 
 	geom_point()
 
-#
+my_prop_dir %>%
+	ggplot(aes(risk, exp(rate), color=cell_type)) + 
+	geom_point()
 
 my_prop_dir_2 = 
 	simulate_infiltration_process(X, alpha) %>%
@@ -83,6 +85,22 @@ my_prop_dir_2 %>%
 	ggplot(aes(risk, proportion, color=cell_type)) + 
 	geom_point()
 
+my_prop_dir_2 %>%
+	mutate(count = rnbinom(n(), mu = rate * 100, size = 20)) %>%
+	ggplot(aes(risk, count, color=cell_type)) + 
+	geom_point()
+
+my_prop_dir_3 =
+	my_prop_dir_2 %>%
+	mutate(count = rnbinom(n(), mu = rate * 100, size = 100)) %>%
+	group_by(risk) %>%
+	arrange(sample) %>%
+	mutate(proportion = count / sum(count)) %>%
+	ungroup()
+
+my_prop_dir_3 %>%
+	ggplot(aes(risk, proportion, color=cell_type)) + 
+	geom_point()
 
 m = rstan::stan_model("inst/stan/proof_concept.stan")
 fit = 
@@ -94,7 +112,7 @@ fit =
 			C = C,
 			X = X,
 			prop = 
-				my_prop_dir %>%
+				my_prop_dir_3 %>%
 				select(sample, cell_type, proportion) %>%
 				spread(cell_type, proportion) %>%
 				nanny::as_matrix(rownames="sample")
