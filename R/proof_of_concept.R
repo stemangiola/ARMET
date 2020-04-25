@@ -1,7 +1,17 @@
 
+logsumexp <- function (x) {
+	y = max(x)
+	y + log(sum(exp(x - y)))
+}
+
+softmax <- function (x) {
+	exp(x - logsumexp(x))
+}
+
 get_alpha = function(C, slope_value){
 	intercept = 1:C
 	intercept[(C-1):C] = intercept[(C-1):C] * 2
+	intercept = intercept /5
 	slope = rep(0, C)
 	slope[4] = slope_value
 	
@@ -25,8 +35,9 @@ simulate_infiltration_process = function(X, .alpha){
 C = 5
 S = 100
 X = matrix(rep(1, S) %>% 	c(seq(0, 1, len = S)) , ncol = 2)
-alpha = get_alpha(C, 20)
+alpha = get_alpha(C, 4)
 
+#
 my_counts = 
 	simulate_infiltration_process(X, alpha) %>%
 	mutate(rate = rate * 100) %>%
@@ -47,6 +58,32 @@ my_prop %>%
 	ggplot(aes(risk, proportion, color=cell_type)) + 
 	geom_point()
 
+#
+my_prop_dir = 
+	simulate_infiltration_process(X, alpha) %>%
+	group_by(risk) %>%
+	arrange(sample) %>%
+	mutate(proportion = gtools::rdirichlet(1, alpha = softmax(rate) * 20)) %>%
+	ungroup()
+
+my_prop_dir %>%
+	ggplot(aes(risk, proportion, color=cell_type)) + 
+	geom_point()
+
+#
+
+my_prop_dir_2 = 
+	simulate_infiltration_process(X, alpha) %>%
+	group_by(risk) %>%
+	arrange(sample) %>%
+	mutate(proportion = gtools::rdirichlet(1, alpha = softmax(log(rate)) * 40)) %>%
+	ungroup()
+
+my_prop_dir_2 %>%
+	ggplot(aes(risk, proportion, color=cell_type)) + 
+	geom_point()
+
+
 m = rstan::stan_model("inst/stan/proof_concept.stan")
 fit = 
 	sampling(
@@ -57,7 +94,7 @@ fit =
 			C = C,
 			X = X,
 			prop = 
-				my_prop %>%
+				my_prop_dir %>%
 				select(sample, cell_type, proportion) %>%
 				spread(cell_type, proportion) %>%
 				nanny::as_matrix(rownames="sample")
@@ -71,7 +108,7 @@ fit %>% gather_draws(alpha_descriptive[A, C]) %>% filter(A ==2) %>% ggplot(aes(.
 # BRMS
 fit_brms <- brm(
 	bind(V1 ,   V2 ,   V3   , V4  ,  V5) ~ risk,
-	my_prop %>%
+	my_prop_dir_2 %>%
 		select(sample, risk, cell_type, proportion) %>%
 		spread(cell_type, proportion),
 	family = 'dirichlet'
