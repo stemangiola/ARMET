@@ -11,7 +11,7 @@ functions{
 
 		for(j in 1:num_elements(p[1])) {
 
-      	 lp += beta_lpdf(p[,j] | (mu[,j] .* phi[,j]) +1, ((1.0 - mu[,j]) .* phi[,j]) + 1);
+      	 lp += beta_lpdf(p[,j] | (mu[,j] .* phi[,j]) , ((1.0 - mu[,j]) .* phi[,j]) );
 
 		}
 		return (lp);
@@ -26,7 +26,7 @@ functions{
 			vector[num_elements(p[1])] mu  = softmax( append_row([0]', to_vector(X[j] * alpha)));
 			vector[num_elements(p[1])] phi  = exp( to_vector(X[j] * beta));
 
-     	lp += beta_lpdf(p[j] | (mu .* phi) +1, ((1.0 - mu) .* phi) + 1);
+     	lp += beta_lpdf(p[j] | (mu .* phi), ((1.0 - mu) .* phi) );
 
 		}
 		return (lp);

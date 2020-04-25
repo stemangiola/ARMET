@@ -1,3 +1,8 @@
+library(tidyverse)
+library(rstan)
+library(tidybayes)
+library(brms)
+bind <- function(...) cbind(...)
 
 logsumexp <- function (x) {
 	y = max(x)
@@ -18,8 +23,6 @@ get_alpha = function(C, slope_value){
 	alpha = matrix(intercept %>%	c(slope), ncol = 2)
 }
 
-
-
 simulate_infiltration_process = function(X, .alpha){
 	
 	X %*% t(.alpha) %>%
@@ -37,61 +40,26 @@ S = 100
 X = matrix(rep(1, S) %>% 	c(seq(0, 1, len = S)) , ncol = 2)
 alpha = get_alpha(C, 4)
 
-#
-my_counts = 
-	simulate_infiltration_process(X, alpha) %>%
-	mutate(rate = rate * 100) %>%
-	mutate(count = rnbinom(n(), mu = rate, size = 200))
+set.seed(123)
 
-my_counts %>%
-	ggplot(aes(risk, count, color=cell_type)) + 
-	geom_point()
-
-
-my_prop = 
-	my_counts %>%
-	group_by(risk) %>%
-	mutate(proportion = count / sum(count)) %>%
-	ungroup() 
-
-my_prop %>%
-	ggplot(aes(risk, proportion, color=cell_type)) + 
-	geom_point()
-
-#
-my_prop_dir = 
-	simulate_infiltration_process(X, alpha) %>%
-	group_by(risk) %>%
-	arrange(sample) %>%
-	mutate(proportion = gtools::rdirichlet(1, alpha = softmax(rate) * 20)) %>%
-	ungroup()
-
-my_prop_dir %>%
-	ggplot(aes(risk, proportion, color=cell_type)) + 
-	geom_point()
-
-my_prop_dir %>%
-	ggplot(aes(risk, exp(rate), color=cell_type)) + 
-	geom_point()
-
-my_prop_dir_2 = 
-	simulate_infiltration_process(X, alpha) %>%
-	group_by(risk) %>%
-	arrange(sample) %>%
-	mutate(proportion = gtools::rdirichlet(1, alpha = softmax(log(rate)) * 40)) %>%
-	ungroup()
-
-my_prop_dir_2 %>%
-	ggplot(aes(risk, proportion, color=cell_type)) + 
-	geom_point()
-
-my_prop_dir_2 %>%
-	mutate(count = rnbinom(n(), mu = rate * 100, size = 20)) %>%
-	ggplot(aes(risk, count, color=cell_type)) + 
-	geom_point()
+# my_prop_dir_2 = 
+# 	simulate_infiltration_process(X, alpha) %>%
+# 	group_by(risk) %>%
+# 	arrange(sample) %>%
+# 	mutate(proportion = gtools::rdirichlet(1, alpha = softmax(log(rate)) * 40)) %>%
+# 	ungroup()
+# 
+# my_prop_dir_2 %>%
+# 	ggplot(aes(risk, proportion, color=cell_type)) + 
+# 	geom_point()
+# 
+# my_prop_dir_2 %>%
+# 	mutate(count = rnbinom(n(), mu = rate * 100, size = 20)) %>%
+# 	ggplot(aes(risk, count, color=cell_type)) + 
+# 	geom_point()
 
 my_prop_dir_3 =
-	my_prop_dir_2 %>%
+	simulate_infiltration_process(X, alpha) %>%
 	mutate(count = rnbinom(n(), mu = rate * 100, size = 100)) %>%
 	group_by(risk) %>%
 	arrange(sample) %>%
@@ -123,12 +91,12 @@ fit =
 fit %>% gather_draws(alpha_generative[A, C]) %>% filter(A ==2) %>% ggplot(aes(.value, color=factor(C))) + geom_density()
 fit %>% gather_draws(alpha_descriptive[A, C]) %>% filter(A ==2) %>% ggplot(aes(.value, color=factor(C))) + geom_density()
 
-# BRMS
-fit_brms <- brm(
-	bind(V1 ,   V2 ,   V3   , V4  ,  V5) ~ risk,
-	my_prop_dir_2 %>%
-		select(sample, risk, cell_type, proportion) %>%
-		spread(cell_type, proportion),
-	family = 'dirichlet'
-)
-fit_brms %>%  gather_draws(b_muV2_risk, b_muV3_risk, b_muV4_risk,b_muV5_risk) %>% ggplot(aes(.value, color=.variable)) + geom_density()
+# # BRMS
+# fit_brms <- brm(
+# 	bind(V1 ,   V2 ,   V3   , V4  ,  V5) ~ risk,
+# 	my_prop_dir_3 %>%
+# 		select(sample, risk, cell_type, proportion) %>%
+# 		spread(cell_type, proportion),
+# 	family = 'dirichlet'
+# )
+# fit_brms %>%  gather_draws(b_muV2_risk, b_muV3_risk, b_muV4_risk,b_muV5_risk) %>% ggplot(aes(.value, color=.variable)) + geom_density()
