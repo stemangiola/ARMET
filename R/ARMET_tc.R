@@ -557,26 +557,26 @@ run_model = function(reference_filtered,
 
 }
 
-lower_triangular = function(.data){
-	
-	levs = .data$`Cell type category_1` %>% levels
-	
-	.data %>%
-		select(`Cell type category_1`, `Cell type category_2`,    prob) %>%
-		spread(`Cell type category_2` ,   prob) %>% 
-		as_matrix(rownames = "Cell type category_1") %>%
-		
-		# Drop upper triangular
-		{ ma = (.); ma[lower.tri(ma)] <- NA; ma} %>% 
-		
-		as_tibble(rownames = "Cell type category_1") %>% 
-		gather(`Cell type category_2`, prob, -`Cell type category_1`) %>% 
-		mutate(
-			`Cell type category_1` = factor(`Cell type category_1`, levels = levs), 
-			`Cell type category_2` = factor(`Cell type category_2`, levels = levs), 
-		) %>%
-		drop_na
-}
+# lower_triangular = function(.data){
+# 	
+# 	levs = .data$`Cell type category_1` %>% levels
+# 	
+# 	.data %>%
+# 		select(`Cell type category_1`, `Cell type category_2`,    prob) %>%
+# 		spread(`Cell type category_2` ,   prob) %>% 
+# 		as_matrix(rownames = "Cell type category_1") %>%
+# 		
+# 		# Drop upper triangular
+# 		{ ma = (.); ma[lower.tri(ma)] <- NA; ma} %>% 
+# 		
+# 		as_tibble(rownames = "Cell type category_1") %>% 
+# 		gather(`Cell type category_2`, prob, -`Cell type category_1`) %>% 
+# 		mutate(
+# 			`Cell type category_1` = factor(`Cell type category_1`, levels = levs), 
+# 			`Cell type category_2` = factor(`Cell type category_2`, levels = levs), 
+# 		) %>%
+# 		drop_na
+# }
 
 #' @export
 get_signatures = function(.data){
@@ -623,6 +623,72 @@ get_signatures = function(.data){
 		)) %>%
 		unnest( node)
 }
+
+plot_heatmap = function(.data){
+	
+	.data %>%
+		get_signatures %>%
+		filter(A==2, .variable %in% c("alpha_1", "alpha_a")) %>%
+		lower_triangular %>%
+		separate(`Cell type category_1`, c("l1"), sep="_", extra = "drop", remove = F) %>%
+		separate(`Cell type category_2`, c("l2"), sep="_", extra = "drop", remove = F) %>%
+		
+		mutate(
+			label = paste(
+				substr(`l2`, start = 0, stop = 3),
+				substr(`l1`, start = 0, stop = 3),
+				sep = "\n"
+			)
+		) %>%
+		ggplot(aes( `Cell type category_1`, `Cell type category_2`, fill=prob, label=label)) +
+		geom_tile() +
+		geom_text(angle = 45) +
+		#facet_wrap(~.variable, scale="free") +
+		scale_fill_distiller(palette = "Spectral", na.value="transparent", limits = c(-1,1) ) +
+		coord_fixed() +
+		scale_x_discrete(position = "top") +
+		theme(
+			plot.background = element_rect(fill = "transparent",colour = NA),
+			panel.grid=element_blank(),
+			panel.background=element_blank(),
+			panel.border = element_blank(),
+			plot.margin = unit(c(0, 0, 0, 0), "npc"),
+			axis.title.x = element_blank(),
+			axis.title.y = element_blank(),
+			axis.text = element_blank()
+			#,
+			#axis.text.x = element_text(angle = 90, hjust = 0)
+		)
+	
+	# plot_2 <- ARMET_TCGA_result_hierarchical_beta %>%
+	# 	get_signatures %>%
+	# 	filter(A==2) %>%
+	# 	nest(data = -.variable) %>%
+	# 	mutate(lower_tri = map(data, ~.x %>% lower_triangular)) %>%
+	# 	mutate(p = map(
+	# 		lower_tri,
+	# 		~.x %>%
+	# 			ggplot(aes( `Cell type category_1`, `Cell type category_2`, fill=prob)) +
+	# 			geom_tile() +
+	# 			#facet_wrap(~.variable, scale="free") +
+	# 			scale_fill_distiller(palette = "Spectral", na.value="transparent", limits = c(-1,1) ) +
+	# 			coord_fixed() +
+	# 			scale_x_discrete(position = "top") +
+	# 			theme(
+	# 				plot.background = element_rect(fill = "transparent",colour = NA),
+	# 				panel.grid=element_blank(),
+	# 				panel.background=element_blank(),
+	# 				panel.border = element_blank(),
+	# 				plot.margin = unit(c(0, 0, 0, 0), "npc"),
+	# 				axis.title.x = element_blank(),
+	# 				axis.title.y = element_blank(),
+	# 				axis.text.x = element_text(angle = 90, hjust = 0)
+	# 			)
+	# 	))
+	
+}
+
+
 
 #' @export
 test_differential_composition = function(.data, credible_interval = 0.90, cluster_CI = 0.55) {
