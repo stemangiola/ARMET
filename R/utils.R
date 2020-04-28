@@ -1708,20 +1708,38 @@ parse_formula <- function(fm) {
 }
 
 rebuild_last_component_sum_to_zero = function(.){
+	
 	(.) %>%
-		group_by(.variable) %>%
-		do({
-			max_c = (.) %>% pull(C) %>% max
-			bind_rows(
-				(.) %>% filter(C < max_c | A > 1),
-				(.) %>%
-					filter(C < max_c & A == 1) %>%
-					group_by(.chain, .iteration, .draw , A, .variable ) %>%
-					summarise(.value = -sum(.value)) %>%
-					mutate(C = max_c)
-			)
-		}) %>%
-		ungroup()
+		nest(data = -c(.variable, A)) %>%
+		mutate(data = map(data, ~.x %>%
+												mutate(C = C +1) %>%
+												bind_rows({
+													my_sd = (.) %>% group_by(C) %>% summarise(sd(.value)) %>% pull(2) %>% mean
+													
+													(.) %>%
+														filter(C ==2) %>%
+														mutate(C = rep(1, n())) %>%
+														mutate(.value = rnorm(n(), 0, my_sd))
+													
+												})
+											
+											)) %>%
+		unnest(data)
+	
+	# (.) %>%
+	# 	group_by(.variable) %>%
+	# 	do({
+	# 		max_c = (.) %>% pull(C) %>% max
+	# 		bind_rows(
+	# 			(.) %>% filter(C < max_c | A > 1),
+	# 			(.) %>%
+	# 				filter(C < max_c & A == 1) %>%
+	# 				group_by(.chain, .iteration, .draw , A, .variable ) %>%
+	# 				summarise(.value = -sum(.value)) %>%
+	# 				mutate(C = max_c)
+	# 		)
+	# 	}) %>%
+	# 	ungroup()
 }
 
 get_relative_zero = function(fit_parsed){

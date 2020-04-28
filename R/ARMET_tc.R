@@ -184,6 +184,9 @@ ARMET_tc = function(.data,
 		
 		df_for_edgeR = df_for_edgeR %>% mutate(!!.cens_value_column := !!as.symbol(.cens_value_column) / sd_survival_months)
 		#surv_prior = .data %>% filter(!(!!as.symbol(.cens_column))) %>% select(sample, .cens_column, cov_columns) %>% distinct() %>% pull(cov_columns[1]) %>% gamma_alpha_beta ()
+
+		# Check cens right type
+		if(typeof(cens) %in% c("integer", "logical") %>% any %>% `!`) stop("ARMET says: censoring variable should be logical of integer (0,1)")
 	}
 	else{
 		cens = NULL
