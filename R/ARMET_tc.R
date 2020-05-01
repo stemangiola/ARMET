@@ -38,7 +38,7 @@ ARMET_tc_continue = function(armet_obj, levels, model = stanmodels$ARMET_tc_fix_
 				~ .x %>%
 					nest(proportions = -c(`Cell type category`, C, level)) %>%
 					left_join(
-						internals$alpha %>%	select(`Cell type category`, contains("alpha"), zero, level, draws, rng, .variable, Rhat),
+						internals$alpha %>%	select(`Cell type category`, contains("alpha"), level, draws, rng, .variable, Rhat),
 						by = c("Cell type category", "level")
 					)
 			),
@@ -110,9 +110,10 @@ ARMET_tc = function(.data,
 										cores = 14,
 										iterations = 250,
 										sampling_iterations = 100,
-										levels = 3,
+										levels = 1,
 										.n_markers = n_markers ,
 										do_regression = T, 
+										prior_survival_time = c(),
 										model = stanmodels$ARMET_tc_fix_hierarchical) {
 
 	# At the moment is not active
@@ -180,13 +181,18 @@ ARMET_tc = function(.data,
 	if(length(.cens_column) == 1) {
 		cens = .data %>% select(sample, .cens_column) %>% distinct %>% arrange(sample) %>% pull(2)
 		
-		sd_survival_months = 29.3
+		# Check cens right type
+		if(typeof(cens) %in% c("integer", "logical") %>% any %>% `!`) stop("ARMET says: censoring variable should be logical of integer (0,1)")
+		
+		if(length(prior_survival_time) == 0) stop("AMET says: you really need to provide third party survival time for your condition/disease")
+		
+		
+		sd_survival_months = .data %>%  select(sample, .cens_value_column) %>% distinct %>% pull(.cens_value_column) %>% sd
 		
 		df_for_edgeR = df_for_edgeR %>% mutate(!!.cens_value_column := !!as.symbol(.cens_value_column) / sd_survival_months)
 		#surv_prior = .data %>% filter(!(!!as.symbol(.cens_column))) %>% select(sample, .cens_column, cov_columns) %>% distinct() %>% pull(cov_columns[1]) %>% gamma_alpha_beta ()
+		prior_survival_time = prior_survival_time / sd_survival_months
 
-		# Check cens right type
-		if(typeof(cens) %in% c("integer", "logical") %>% any %>% `!`) stop("ARMET says: censoring variable should be logical of integer (0,1)")
 	}
 	else{
 		cens = NULL
@@ -286,7 +292,8 @@ ARMET_tc = function(.data,
 			mix = mix,
 			X = X,
 			cens = cens,
-			tree_properties = tree_propeties
+			tree_properties = tree_propeties,
+			prior_survival_time = prior_survival_time
 		) 
 	
 	internals = 
@@ -319,7 +326,7 @@ ARMET_tc = function(.data,
 				~ .x %>%
 					nest(proportions = -c(`Cell type category`, C, level)) %>%
 					left_join(
-						internals$alpha %>%	select(`Cell type category`, contains("alpha"), zero, level, draws, rng, .variable, Rhat),
+						internals$alpha %>%	select(`Cell type category`, contains("alpha"), level, draws, rng, .variable, Rhat),
 						by = c("Cell type category", "level")
 					)
 			),
@@ -351,7 +358,8 @@ run_model = function(reference_filtered,
 										 cens,
 										 tree_properties,
 										 Q,
-										 model = stanmodels$ARMET_tc_fix_hierarchical) {
+										 model = stanmodels$ARMET_tc_fix_hierarchical,
+										 prior_survival_time = c()) {
 	
 	Q = Q
 
@@ -490,12 +498,13 @@ run_model = function(reference_filtered,
 	fam_dirichlet = family == "dirichlet"
 
 	if(cens %>% is.null) cens =  rep(0, Q)
-	which_cens = which(cens == 1)
-	which_not_cens = which(cens == 0)
+	which_cens = which(cens == 1)  %>% as.array()
+	which_not_cens = which(cens == 0) %>% as.array()
 	how_many_cens = length(which_cens)
 
 	max_unseen = ifelse(how_many_cens>0, max(X[,2]), 0 )
-
+	if(is.null(prior_survival_time)) prior_survival_time = array(1)[0]
+	spt = length(prior_survival_time)
 
 	
 	# model  = stanmodels$ARMET_tc_fix_hierarchical
@@ -1341,7 +1350,8 @@ run_lv_1 = function(internals,
 		cens = internals$cens,
 		tree_properties = internals$tree_properties,
 		Q = internals$Q,
-		model = model
+		model = model,
+		prior_survival_time = internals$prior_survival_time
 	)
 	
 	df1 = res1[[1]]
@@ -1406,11 +1416,11 @@ run_lv_1 = function(internals,
 			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
 			
 			# Calculate relative 0 because of dirichlet relativity
-			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
+			#ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
 			
 			arrange(.chain, .iteration, .draw,     A) %>%
 			
-			nest(draws = -c(C, .variable, zero)) %>%
+			nest(draws = -c(C, .variable)) %>%
 			
 			# Attach convergence information
 			left_join(
@@ -1568,11 +1578,11 @@ run_lv_2 = function(internals,
 			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
 			
 			# Calculate relative 0 because of dirichlet relativity
-			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
+			#ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
 			
 			arrange(.chain, .iteration, .draw,     A) %>%
 			
-			nest(draws = -c(C, .variable, zero)) %>%
+			nest(draws = -c(C, .variable)) %>%
 			
 			# Attach convergence information
 			left_join(
@@ -1743,11 +1753,11 @@ run_lv_3 = function(internals,
 			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
 			
 			# Calculate relative 0 because of dirichlet relativity
-			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
+			#ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
 			
 			arrange(.chain, .iteration, .draw,     A) %>%
 			
-			nest(draws = -c(C, .variable, zero)) %>%
+			nest(draws = -c(C, .variable)) %>%
 			
 			# Attach convergence information
 			left_join(
@@ -1915,11 +1925,11 @@ run_lv_4 = function(internals,
 			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
 			
 			# Calculate relative 0 because of dirichlet relativity
-			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
+			#ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
 			
 			arrange(.chain, .iteration, .draw,     A) %>%
 			
-			nest(draws = -c(C, .variable, zero)) %>%
+			nest(draws = -c(C, .variable)) %>%
 			
 			# Attach convergence information
 			left_join(

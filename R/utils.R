@@ -2089,8 +2089,8 @@ identify_baseline_by_clustering = function(.data){
 				# Add sd
 				nest(comm_data = -community) %>%
 				mutate(
-					sd_community = map_dbl( comm_data, ~ .x %>% unnest(draws) %>% pull(.value) %>% sd ),
-					mean_community = map_dbl( comm_data, ~ .x %>% unnest(draws) %>% pull(.value) %>% mean )
+					sd_community = map_dbl( comm_data, ~ .x %>% unnest(draws) %>% filter(A ==2) %>% pull(.value) %>% sd ),
+					mean_community = map_dbl( comm_data, ~ .x %>% unnest(draws) %>% filter(A ==2) %>% pull(.value) %>% mean )
 				) %>%
 				unnest(comm_data) %>%
 				
@@ -2101,11 +2101,15 @@ identify_baseline_by_clustering = function(.data){
 					(.) %>% distinct(fold_change_ancestor) %>% pull(1) %>% equals(0) %>% `!`,
 					(.) %>% distinct(community) %>% nrow %>% `>` (1),
 					
-					# No nothing
+					# If I have just one community
 					~ .x %>% mutate(baseline = TRUE),
 					
 					# Majority roule
-					~ .x %>% mutate(baseline = n == max(n)),
+					~ .x %>% mutate(baseline = n == max(n)) %>%
+						
+						# and if I have 2+ major communities pick the one closest to the center. Quite dirty implementation
+						mutate(absolut_zero = mean(.value_alpha2 )) %>% 
+						mutate( dist_from_middle = ifelse(baseline, abs(.value_alpha2 - absolut_zero), 9999)) %>% mutate(baseline = dist_from_middle == min(dist_from_middle)),
 					
 					# If ancestor changed
 					~ .x %>% mutate(baseline = ifelse(fold_change_ancestor > 0, mean_community == min(mean_community), mean_community == max(mean_community))),
