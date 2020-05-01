@@ -7,10 +7,8 @@ library(furrr)
 library(data.tree)
 library(foreach)
 library(ARMET)
-library(broom)
-# source("~/PostDoc/ppcSeq/R/do_parallel.R")
-# n_cores = 20
-# S = 30
+#source("~/PhD/deconvolution/ARMET/R/utils.R")
+#source("~/PostDoc/ppcSeq/R/do_parallel.R")
 
 my_theme =
 	theme_bw() +
@@ -38,17 +36,34 @@ my_theme =
 		axis.text.x = element_text(angle = 90, hjust = 1)
 	)
 
-noise_test = function(which_is_up_down, do_regression = F) {
-	# intercept = rnorm(16)
-	intercept = rep(1, 16)
-	intercept = intercept - sum(intercept) / length(intercept)
-	slope = rep(0, 16)
-	slope[which_is_up_down[1]] = 2
-	slope[which_is_up_down[2]] = -4
-	slope[which_is_up_down[3]] = 1
-	slope[which_is_up_down[4]] = 0.5
-	alpha = matrix(intercept %>%	c(slope), ncol = 2)
+get_alpha = function(slope, which_changing, cell_types){
+	
+	# Get the alpha matrix
+	
+	intercept = rep(0, length(cell_types))
+	slope = rep(0, length(cell_types))
 
+	slope[which_changing] = slope
+	matrix(intercept %>%	c(slope), ncol = 2)
+	
+}
+
+get_survival_X = function(S){
+	readRDS("dev/PFI_all_cancers.rds") %>%
+		filter(PFI.2 == 1 & !is.na(PFI.time.2)) %>%
+		select(real_days = PFI.time.2) %>%
+		sample_n(S) %>%
+		mutate(sample = sprintf("S%s", 1:n())) %>%
+		mutate(alive = sample(0:1, n(), replace = T)) %>%
+		mutate(days = ifelse(alive==1, real_days/2, real_days) %>% as.integer) %>%
+		mutate(intercept = 1)
+}
+
+noiseles_test = function(slope, which_changing, cell_types, S) {
+	
+	alpha = get_alpha(slope, which_changing, cell_types)
+	X = get_survival_X(S)
+	
 	mix = mix_base %>% generate_mixture(15, alpha)
 
 	rr =
@@ -60,17 +75,55 @@ noise_test = function(which_is_up_down, do_regression = F) {
 		ARMET_tc(
 			~ covariate_2,
 			do_regression = do_regression,
-			iterations = ifelse(do_regression, 2400, 700),
-			sampling_iterations = ifelse(do_regression, 2000, 300)
+			iterations = 700,
+			sampling_iterations = 200
 		)
 
 	list(mix = mix, result = rr)
 	#%>% saveRDS(sprintf("dev/test_student_noisless_%s", which_is_up_down %>% paste(collapse="_")))
 }
 
-mix_base = readRDS("dev/mix_base.RDS") %>% filter(level==3)
+get_noiseless_harmonised = function(){
 
-generate_mixture = function(.data, samples_per_condition, alpha) {
+	mix_base_unharmonized = readRDS("dev/mix_base_noiseless.RDS")
+
+	my_markers =
+		ARMET::ARMET_ref %>%
+
+		left_join(ARMET::my_n_markers, by = c("ct1", "ct2")) %>%
+		filter_reference(
+			mix_base_unharmonized %>%
+				filter(level == 3) %>%
+				distinct(`Cell type category`, symbol, `count normalised bayes`) %>%
+				spread(symbol, `count normalised bayes`),
+			ARMET::my_n_markers
+		) %>% distinct(level, symbol)
+
+	# level 1
+	abundance_1 =
+		my_markers %>% filter(level == 1) %>%
+		left_join(mix_base_unharmonized) %>%
+		select(level_2, symbol,  `count normalised bayes 1` =`count normalised bayes`)
+
+	abundance_2 =
+		my_markers %>% filter(level == 2) %>%
+		left_join(mix_base_unharmonized) %>%
+		select(level_3, symbol,  `count normalised bayes 2` =`count normalised bayes`)
+
+	# Now this is noiseless for the ancestor markers so also for ARMET that rely on hierarchy
+	mix_base_unharmonized %>%
+	filter(level==3) %>%
+	left_join(abundance_2) %>%
+	left_join(abundance_1) %>%
+	mutate(`count normalised bayes 2` = ifelse(`count normalised bayes 1` %>% is.na, `count normalised bayes 2`, `count normalised bayes 1`)) %>%
+	mutate(`count normalised bayes` = ifelse(`count normalised bayes 2` %>% is.na, `count normalised bayes`, `count normalised bayes 2`)) %>%
+		select(level_2, level_3, level_4, `Cell type category`, level, sample, symbol, `count normalised bayes`, `house keeping`)
+
+}
+
+mix_base = get_noiseless_harmonised()
+
+generate_mixture = function(.data, S, alpha) {
 	add_attr = function(var, attribute, name) {
 		attr(var, name) <- attribute
 		var
@@ -85,7 +138,6 @@ generate_mixture = function(.data, samples_per_condition, alpha) {
 		exp(x - logsumexp(x))
 	}
 
-	S = samples_per_condition * 2
 
 	X = matrix(rep(1, S) %>%
 						 	c(rep(0, S / 2)) %>%
@@ -161,14 +213,14 @@ which_is_up_down = 1:16 %>% map( ~ c(
 ))
 
 # which_is_up_down %>%
-# 	map( ~ .x %>% noise_test) %>%
-# 	saveRDS("dev/test_dirichlet_with_noise.rds")
+# 	map( ~ .x %>% noiseles_test) %>%
+# 	saveRDS("dev/test_student_noisless.rds")
 #
-which_is_up_down %>%
-	map( ~ .x %>% noise_test(do_regression = T)) %>%
-# 	saveRDS("dev/test_dirichlet_with_noise_regression.rds")
+# which_is_up_down %>%
+# 	map( ~ .x %>% noiseles_test(do_regression = T)) %>%
+# 	saveRDS("dev/test_student_noisless_regression.rds")
 
-res = readRDS("dev/test_dirichlet_with_noise.rds")
+res = readRDS("dev/test_student_noisless.rds")
 
 
 # my_res = res[[1]]
@@ -186,8 +238,6 @@ res[[1]]$mix %>% attr("proportions") %>%
 	geom_smooth(method = "lm") +
 	geom_errorbar(aes(ymin = .value.lower, ymax = .value.upper), alpha = 0.2) +
 	geom_point()
-
-res_regression[[8]]$result$fit[[3]] %>% tidybayes::gather_draws(alpha_3[A,C]) %>% filter(A==2) %>% ggplot(aes(.value, color=factor(C))) + geom_density() + geom_vline(xintercept = 0.232)
 
 # Calculate tpr
 res %>%
@@ -215,7 +265,6 @@ res %>%
 	my_theme
 
 
-
 # get reference from ARMET
 ref =
 	res[[1]]$result$signatures[[3]] %>%
@@ -226,7 +275,7 @@ ref =
 	spread(`Cell type category`, count) %>%
 	ttBulk::as_matrix(rownames = "symbol")
 
-noise_test_ttBulk = function(which_is_up_down, ref, method = "cibersort") {
+noiseles_test_ttBulk = function(which_is_up_down, ref, method = "cibersort") {
 	# intercept = rnorm(16)
 	intercept = rep(1, 16)
 	intercept = intercept - sum(intercept) / length(intercept)
@@ -283,7 +332,7 @@ noise_test_ttBulk = function(which_is_up_down, ref, method = "cibersort") {
 
 res_cibersort =
 	which_is_up_down %>%
-	map( ~ .x %>% noise_test_ttBulk(ref))
+	map( ~ .x %>% noiseles_test_ttBulk(ref))
 
 res_cibersort[[1]]$mix %>% attr("proportions") %>%
 	mutate(run = run %>% as.character) %>%
@@ -322,62 +371,72 @@ res_cibersort %>%
 # Same run with LLSR
 res_llsr =
 	which_is_up_down %>%
-	map( ~ .x %>% noise_test_ttBulk(ref, method="llsr"))
+	map( ~ .x %>% noiseles_test_ttBulk(ref, method="llsr"))
+
+res_llsr[[1]]$mix %>% attr("proportions") %>%
+	mutate(run = run %>% as.character) %>%
+	dplyr::select(-contains("alpha")) %>%
+	left_join(res_llsr[[1]]$result) %>%
+	ggplot(aes(x = p, y = .value, color = `Cell type category`)) +
+	geom_abline(intercept = 0 , slope = 1) +
+	geom_smooth(method = "lm") +
+	geom_point()
 
 
 # Create boxplot of errors
+library(broom)
 all_results =
 	res_llsr %>%
-		map_dfr(
-			~ .x$mix %>% attr("proportions") %>%
-				mutate(run = run %>% as.character) %>%
-				dplyr::select(-contains("alpha")) %>%
-				left_join(.x$result, by = c("Cell type category", "run", "covariate_2"))
-		) %>%
-		mutate(.value = ifelse(.value == 0, min(.value[.value!=0]), .value)) %>%
-		mutate(model = "lm") %>%
+	map_dfr(
+		~ .x$mix %>% attr("proportions") %>%
+			mutate(run = run %>% as.character) %>%
+			dplyr::select(-contains("alpha")) %>%
+			left_join(.x$result, by = c("Cell type category", "run", "covariate_2"))
+	) %>%
+	mutate(.value = ifelse(.value == 0, min(.value[.value!=0]), .value)) %>%
+	mutate(model = "lm") %>%
 
-		# Cibersort
-		bind_rows(
-			res_cibersort %>%
+	# Cibersort
+	bind_rows(
+		res_cibersort %>%
 			map_dfr(
 				~ .x$mix %>% attr("proportions") %>%
 					mutate(run = run %>% as.character) %>%
 					dplyr::select(-contains("alpha")) %>%
 					left_join(.x$result, by = c("Cell type category", "run", "covariate_2"))
 			) %>%
-				mutate(.value = ifelse(.value == 0, min(.value[.value!=0]), .value)) %>%
-				mutate(model = "cibersort")
-		) %>%
+			mutate(.value = ifelse(.value == 0, min(.value[.value!=0]), .value)) %>%
+			mutate(model = "cibersort")
+	) %>%
 
-		# ARMET
-		bind_rows(
-			res %>%
-				map_dfr(
-					~ 	.x$mix %>% attr("proportions") %>%
-				mutate(sample = run %>% as.character) %>%
-				dplyr::select(-contains("alpha")) %>%
-				left_join(.x$result$proportions, by = c("Cell type category", "sample"))
-				)%>%
-				mutate(run = as.character(run)) %>%
-				mutate(model = "ARMET")
-		) %>%
+	# ARMET
+	bind_rows(
+		res %>%
+			map_dfr(
+				~ 	.x$mix %>% attr("proportions") %>%
+					mutate(sample = run %>% as.character) %>%
+					dplyr::select(-contains("alpha")) %>%
+					left_join(.x$result$proportions, by = c("Cell type category", "sample"))
+			)%>%
+			mutate(run = as.character(run)) %>%
+			mutate(model = "ARMET")
+	) %>%
 
-		# Add error
-		mutate(error_logit_space = abs(gtools::logit(p) - gtools::logit(.value))) %>%
+	# Add error
+	mutate(error_logit_space = abs( gtools::logit(p) -  gtools::logit(.value))) %>%
 
-		# Add regression
-		nest(data = -c(run, `Cell type category`, model)) %>%
-		mutate(
-			fit = map(data, ~ lm(p ~ .value , data = .x)),
-			tidied = map(fit, tidy),
-			glanced = map(fit, glance)
-		)
+	# Add regression
+	nest(data = -c(run, `Cell type category`, model)) %>%
+	mutate(
+		fit = map(data, ~ lm(p ~ .value , data = .x)),
+		tidied = map(fit, tidy),
+		glanced = map(fit, glance)
+	)
 
 # Plot error
 all_results %>%
 	unnest(data) %>%
-	ggplot(aes(x = model, y = error_gtools::logit_space)) +
+	ggplot(aes(x = model, y = error_logit_space)) +
 	geom_boxplot() +
 	facet_wrap(~ `Cell type category`)
 
@@ -396,33 +455,34 @@ all_results %>%
 	geom_boxplot() +
 	facet_wrap(~ `Cell type category`) + scale_y_log10()
 
+
 #------------------------------------#
 # REGRESSION
 #------------------------------------#
 
-res_regression = readRDS("dev/test_dirichlet_with_noise_regression.rds")
+res_regression = readRDS("dev/test_student_noisless_regression.rds")
 
 CI_to_ARMET = function(.data, CI){
-		.data %>%
+	.data %>%
 		map_dfr(
-		~
-			# Integrate
-			.x$result %>%
+			~
+				# Integrate
+				.x$result %>%
 
-			test_differential_composition(credible_interval = CI) %>%
-			filter(level == 3) %>%
-			left_join(
-				.x$mix %>% attr("proportions") %>% dplyr::distinct(`Cell type category`, alpha_2),
-				by = "Cell type category"
-			) %>%
-			drop_na  %>%
+				test_differential_composition(credible_interval = CI) %>%
+				filter(level == 3) %>%
+				left_join(
+					.x$mix %>% attr("proportions") %>% dplyr::distinct(`Cell type category`, alpha_2),
+					by = "Cell type category"
+				) %>%
+				drop_na  %>%
 
-			# Calculate
-			mutate(fp = alpha_2 == 0 & significant) %>%
-			mutate(fn = alpha_2 != 0 & !significant)
+				# Calculate
+				mutate(fp = alpha_2 == 0 & significant) %>%
+				mutate(fn = alpha_2 != 0 & !significant)
 
-	)
-	}
+		)
+}
 
 CI_to_others = function(.data, pvalue){
 	.data %>%
@@ -455,7 +515,7 @@ regression_ARMET =
 			x = CI_to_ARMET(res_regression, .x)
 
 			x %>% filter(alpha_2 != 0) %>% group_by(alpha_2) %>%
-					summarise(fnr = sum(fn) / n()) %>%
+				summarise(fnr = sum(fn) / n()) %>%
 				mutate(
 					fpr =
 						x %>% filter(alpha_2 == 0) %>% select(-alpha_2) %>%
