@@ -632,28 +632,27 @@ if(dim_4[1] > 0) {
 
 	real dirichlet_regression_lpdf(vector p, row_vector X, matrix alpha, real phi, real plateau){
 
-		// Build sum to zero variable
-		int c = cols(alpha);
-		int r = rows(alpha);
-		matrix[r, c]  alpha_ = alpha;
-		alpha_[1,c] = -sum(alpha_[1, 1:(c-1)]);
-
+		// // Build sum to zero variable
+		// int c = cols(alpha);
+		// int r = rows(alpha);
+		// matrix[r, c]  alpha_ = alpha;
+		// alpha_[1,c] = -sum(alpha_[1, 1:(c-1)]);
 
 		// Calculate log prob
-		return (dirichlet_lpdf(p | softmax( to_vector(X * alpha_ ))  * exp( phi) + plateau ));
+		return (dirichlet_lpdf(p | softmax( append_row([0]', to_vector(X * alpha))) * exp( phi) + plateau ));
 	}
 
 	vector dirichlet_regression_rng( row_vector X, matrix alpha, real phi, real plateau){
 
-		// Build sum to zero variable
-		int c = cols(alpha);
-		int r = rows(alpha);
-		matrix[r, c]  alpha_ = alpha;
-		alpha_[1,c] = -sum(alpha_[1, 1:(c-1)]);
+		// // Build sum to zero variable
+		// int c = cols(alpha);
+		// int r = rows(alpha);
+		// matrix[r, c]  alpha_ = alpha;
+		// alpha_[1,c] = -sum(alpha_[1, 1:(c-1)]);
 
 
 		// Calculate log prob
-		return (dirichlet_rng(softmax( to_vector(X * alpha_ ))  * exp( phi) + plateau));
+		return (dirichlet_rng( softmax( append_row([0]', to_vector(X * alpha))) * exp( phi) + plateau ));
 	}
 
 real beta_regression_lpdf(vector[] p, matrix X, matrix alpha, real[] phi){
@@ -883,24 +882,24 @@ parameters {
 
 	// Dirichlet regression
   // lv1
-  matrix[A * (lv == 1) * do_regression,ct_in_nodes[1]]  alpha_1; // Root
+  matrix[A * (lv == 1) * do_regression,ct_in_nodes[1]-1]  alpha_1; // Root
 
 	// lv2
-  matrix[A * (lv == 2) * do_regression,ct_in_nodes[2]]  alpha_a; // Immune cells
+  matrix[A * (lv == 2) * do_regression,ct_in_nodes[2]-1]  alpha_a; // Immune cells
 
   // lv3
-  matrix[A * (lv == 3) * do_regression,ct_in_nodes[3]]  alpha_b; // b cells
-  matrix[A * (lv == 3) * do_regression,ct_in_nodes[4]]  alpha_c; // granulocyte
-  matrix[A * (lv == 3) * do_regression,ct_in_nodes[5]]  alpha_d; // mono_derived
-  matrix[A * (lv == 3) * do_regression,ct_in_nodes[6]]  alpha_e; // natural_killer
-  matrix[A * (lv == 3) * do_regression,ct_in_nodes[7]]  alpha_f; // t_cell
+  matrix[A * (lv == 3) * do_regression,ct_in_nodes[3]-1]  alpha_b; // b cells
+  matrix[A * (lv == 3) * do_regression,ct_in_nodes[4]-1]  alpha_c; // granulocyte
+  matrix[A * (lv == 3) * do_regression,ct_in_nodes[5]-1]  alpha_d; // mono_derived
+  matrix[A * (lv == 3) * do_regression,ct_in_nodes[6]-1]  alpha_e; // natural_killer
+  matrix[A * (lv == 3) * do_regression,ct_in_nodes[7]-1]  alpha_f; // t_cell
 
 	// lv4
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[8]]  alpha_g; // dendritic myeloid
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[9]]  alpha_h; // macrophage
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[10]]  alpha_i; // NK
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[11]] alpha_l; // CD4
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[12]] alpha_m; // CD8
+  matrix[A * (lv == 4) * do_regression,ct_in_nodes[8]-1]  alpha_g; // dendritic myeloid
+  matrix[A * (lv == 4) * do_regression,ct_in_nodes[9]-1]  alpha_h; // macrophage
+  matrix[A * (lv == 4) * do_regression,ct_in_nodes[10]-1]  alpha_i; // NK
+  matrix[A * (lv == 4) * do_regression,ct_in_nodes[11]-1] alpha_l; // CD4
+  matrix[A * (lv == 4) * do_regression,ct_in_nodes[12]-1] alpha_m; // CD8
 
 	real<lower=0, upper=(lv==1 ? 8 : 6)> phi[12]; //[fam_dirichlet ? 10 : ct_in_levels[lv]];
 
@@ -1016,7 +1015,7 @@ model {
 
   	if(fam_dirichlet) for(q in 1:Q) prop_1[q] ~ dirichlet_regression( X_[q], alpha_1, phi[1], 0.01 );
   	else  prop_1 ~ beta_regression(X_, alpha_1, phi[1:4]);
-  	 alpha_1[1] ~ normal(0,1);
+  	 alpha_1[1] ~ normal(0,2);
   	 to_vector( alpha_1[2:] ) ~ normal(0,2.5);
 
 
@@ -1029,7 +1028,7 @@ model {
 
   	if(fam_dirichlet) for(q in 1:Q) prop_a[q] ~ dirichlet_regression( X_[q], alpha_a, phi[1], 0.2 );
   	else  prop_a ~ beta_regression(X_, alpha_a, phi[1:6]);
-  	alpha_a[1] ~ normal(0,1);
+  	alpha_a[1] ~ normal(0,2);
   	to_vector( alpha_a[2:] ) ~ normal(0,2.5);
 
   }
@@ -1053,15 +1052,15 @@ model {
   		 prop_e ~ beta_regression(X_, alpha_e, phi[8:9]);
   		 prop_f ~ beta_regression(X_, alpha_f, phi[9:11]);
   	}
-		alpha_b[1] ~ normal(0,1);
+		alpha_b[1] ~ normal(0,2);
   	to_vector( alpha_b[2:] ) ~ normal(0,2.5);
-		alpha_c[1] ~ normal(0,1);
+		alpha_c[1] ~ normal(0,2);
   	to_vector( alpha_c[2:] ) ~ normal(0,2.5);
-		alpha_d[1] ~ normal(0,1);
+		alpha_d[1] ~ normal(0,2);
   	to_vector( alpha_d[2:] ) ~ normal(0,2.5);
-		alpha_e[1] ~ normal(0,1);
+		alpha_e[1] ~ normal(0,2);
   	to_vector( alpha_e[2:] ) ~ normal(0,2.5);
-		alpha_f[1] ~ normal(0,1);
+		alpha_f[1] ~ normal(0,2);
   	to_vector( alpha_f[2:] ) ~ normal(0,2.5);
   }
   if(lv == 3 && !do_regression) for(q in 1:Q){
@@ -1097,15 +1096,15 @@ model {
   		 prop_m ~ beta_regression(X_, alpha_m, phi[9:10]);
   	}
   	// else  prop_4 ~ beta_regression(X_, alpha_4, phi);
-		alpha_g[1] ~ normal(0,1);
+		alpha_g[1] ~ normal(0,2);
   	to_vector( alpha_g[2:] ) ~ normal(0,2.5);
-		alpha_h[1] ~ normal(0,1);
+		alpha_h[1] ~ normal(0,2);
   	to_vector( alpha_h[2:] ) ~ normal(0,2.5);
-		alpha_i[1] ~ normal(0,1);
+		alpha_i[1] ~ normal(0,2);
   	to_vector( alpha_i[2:] ) ~ normal(0,2.5);
-		alpha_l[1] ~ normal(0,1);
+		alpha_l[1] ~ normal(0,2);
   	to_vector( alpha_l[2:] ) ~ normal(0,2.5);
-		alpha_m[1] ~ normal(0,1);
+		alpha_m[1] ~ normal(0,2);
   	to_vector( alpha_m[2:] ) ~ normal(0,2.5);
 
   }
