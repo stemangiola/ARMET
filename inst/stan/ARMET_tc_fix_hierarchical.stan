@@ -810,7 +810,8 @@ data {
 	int which_cens[how_many_cens];
 	int which_not_cens[Q-how_many_cens];
 	real<lower=0> max_unseen;
-
+	int spt;
+	real prior_survival_time[spt];
 
 }
 transformed data{
@@ -1158,8 +1159,13 @@ model {
 	 	target += gamma_lccdf(	X[which_cens,2] | prior_unseen_alpha[1], mu);
 	 	
 	 	// Hyperprior
-	 	prior_unseen_alpha ~ normal(1.28, 0.1); // sd is increased on 2.5x
-		prior_unseen_beta ~ normal(-0.717, 0.05); // sd is increased on 2.5x
+	 	prior_survival_time ~ gamma( prior_unseen_alpha[1], mu);
+	 	
+	 	prior_unseen_beta[1] ~ student_t(3, 6, 10);
+  	prior_unseen_alpha[1] ~  gamma(0.01, 0.01);
+  
+	 	// prior_unseen_alpha ~ normal(1.28, 0.1); // sd is increased on 2.5x
+	 	// prior_unseen_beta ~ normal(-0.717, 0.05); // sd is increased on 2.5x
 
 	}
 }
