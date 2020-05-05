@@ -131,6 +131,10 @@ ARMET_tc = function(.data,
 	.transcript = col_names$.transcript
 	.abundance = col_names$.abundance
 
+	# Warning is sensitive names in columns
+	names_taken = c("level") 
+	if(.data %>% colnames %in% names_taken) stop(sprintf("ARMET says: your input data frame includes reserved column names: %s", names_taken))
+	
 	# Rename columns mix
 	.data = .data %>% rename( sample = !!.sample, symbol = !!.transcript ,  count = !!.abundance)
 	input$.data = .data
@@ -1495,7 +1499,8 @@ run_lv_2 = function(internals,
 		cens = internals$cens,
 		tree_properties = internals$tree_properties,
 		Q = internals$Q,
-		model = model
+		model = model,
+		prior_survival_time = internals$prior_survival_time
 	)
 	
 	
@@ -1675,7 +1680,7 @@ run_lv_3 = function(internals,
 		cens = internals$cens,
 		tree_properties = internals$tree_properties,
 		Q = internals$Q,
-		model = model
+		model = model,prior_survival_time = internals$prior_survival_time
 	)
 	
 	df3 = res3[[1]]
@@ -1850,7 +1855,7 @@ run_lv_4 = function(internals,
 		cens = internals$cens,
 		tree_properties = internals$tree_properties,
 		Q = internals$Q,
-		model = model
+		model = model,prior_survival_time = internals$prior_survival_time
 	)
 	
 	df = res[[1]]
