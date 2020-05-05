@@ -1413,7 +1413,7 @@ run_lv_1 = function(internals,
 			ungroup() %>%
 			
 			# rebuild the last component sum-to-zero
-			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
+			#ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
 			
 			# Calculate relative 0 because of dirichlet relativity
 			#ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
@@ -1575,7 +1575,7 @@ run_lv_2 = function(internals,
 			ungroup() %>%
 			
 			# rebuild the last component sum-to-zero
-			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
+			#ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
 			
 			# Calculate relative 0 because of dirichlet relativity
 			#ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
@@ -1750,7 +1750,7 @@ run_lv_3 = function(internals,
 			arrange(.variable) %>%
 			
 			# rebuild the last component sum-to-zero
-			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
+			#ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
 			
 			# Calculate relative 0 because of dirichlet relativity
 			#ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
@@ -1922,7 +1922,7 @@ run_lv_4 = function(internals,
 			ungroup() %>%
 			
 			# rebuild the last component sum-to-zero
-			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
+			#ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
 			
 			# Calculate relative 0 because of dirichlet relativity
 			#ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
