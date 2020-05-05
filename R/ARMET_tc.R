@@ -1124,14 +1124,22 @@ plot_scatter = function(.data){
 		select(-proportions, -.variable) %>%
 		#unnest(draws) %>%
 		select( -draws) %>%
-		unnest(rng)  %>% group_by(zero, C, Q, .variable, level, `Cell type category`, Rhat) %>% tidybayes::median_qi() %>% ungroup() %>%
+		unnest(rng)  %>% 
+		group_by( C, Q, .variable, level, `Cell type category`, Rhat) %>% 
+		tidybayes::median_qi() %>%
+		ungroup() %>%
 		left_join(
 			.data$proportions %>%
 				select(-draws, -.variable) %>%
 				unnest(proportions) %>% distinct(Q,  DFS_MONTHS)
 		) %>%
 		select(level,  `Cell type category`, Q, .upper, .lower)
-	
+
+		inferred_y = 	
+			.data$proportions %>%
+			select(-draws, -rng, -.variable) %>%
+			unnest(proportions) %>% select(-.value_relative, -.value) %>% unnest(.draws) %>% 
+			rename(inferred_y = .value_relative)
 
 		inferred_x = 
 			map2_dfr(
@@ -1139,18 +1147,20 @@ plot_scatter = function(.data){
 			1:length(.data$internals$fit),
 			~ .x %>%
 				tidybayes::gather_draws(X_[Q, A]) %>% 
-				tidybayes::median_qi() %>% 
+				#tidybayes::median_qi() %>% 
 				ungroup() %>% 
 				filter(A==2) %>% 
 				mutate(level = .y)
-		) %>% rename(inferred_x = .value)
+		) %>%
+			rename(inferred_x = .value)
 	
 	.data$proportions %>%
 		select(-draws, -.variable) %>%
 		unnest(proportions) %>%
 		left_join(data_CI) %>%
-		left_join(inferred_x %>% select(level, Q, inferred_x)) %>%
-		ggplot(aes(x = inferred_x, y = `.value_relative`, label=sample)) +
+		left_join(inferred_x %>% select(level, Q, inferred_x, .chain, .iteration, .draw )) %>%
+		left_join( inferred_y %>% select(`Cell type category`, sample, inferred_y,.chain ,.iteration ,.draw ) ) %>%
+		ggplot(aes(x = inferred_x, y = inferred_y, label=sample, group=sample)) +
 		# geom_point(
 		# 	data =
 		# 		res$proportions %>% filter(level ==1) %>%
@@ -1167,8 +1177,9 @@ plot_scatter = function(.data){
 	# 	aes(x = DFS_MONTHS, y = .value),
 	# 	color="black",
 	# 	alpha=0.1) +
-	geom_errorbar( aes(ymin=.lower, ymax=.upper) ) +
-	geom_point(aes(color = alive)) +
+	#geom_errorbar( aes(ymin=.lower, ymax=.upper) ) +
+	geom_density_2d(bins=3) +
+	#geom_point(aes(color = alive)) +
 	facet_wrap(~`Cell type category`, scale="free")
 }
 
