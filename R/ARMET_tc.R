@@ -3,38 +3,71 @@
 #' @description This function
 #' 
 #' @export
-ARMET_tc_continue = function(armet_obj, levels, model = stanmodels$ARMET_tc_fix_hierarchical){
+ARMET_tc_continue = function(armet_obj, level, model = stanmodels$ARMET_tc_fix_hierarchical){
 	
-	run_lv = switch(	levels,run_lv_1,	run_lv_2,	run_lv_3,	run_lv_4)
+	internals = armet_obj$internals
+	input = armet_obj$input
 	
 	
-	internals = 
-		run_lv(
-			armet_obj$internals,
-			shards = armet_obj$input$cores,
-			level = levels,
-			full_bayesian = armet_obj$input$full_bayesian,
-			approximate_posterior = armet_obj$input$approximate_posterior,
-			iterations = armet_obj$input$iterations,
-			sampling_iterations = armet_obj$input$sampling_iterations	,
-			do_regression = armet_obj$input$do_regression,
-			family = armet_obj$input$family,
-			.formula = armet_obj$input$.formula,
-			model = model
-		)
+	res = run_model(
+		reference_filtered = internals$reference_filtered,
+		mix = internals$mix,
+		shards = input$cores,
+		lv = level,
+		full_bayesian = input$full_bayesian,
+		approximate_posterior = input$approximate_posterior,
+		internals$prop_posterior,
+		exposure_posterior = when(
+			level,
+			(.)==1 ~ tibble(.mean = 0, .sd = 0)[0,], 
+			~ draws_to_exposure(internals$fit[[1]])
+		),
+		iterations = input$iterations,
+		sampling_iterations = input$sampling_iterations	,
+		X = internals$X,
+		do_regression = input$do_regression,
+		family = input$family,
+		cens = internals$cens,
+		tree_properties = internals$tree_properties,
+		Q = internals$Q,
+		model = model,
+		prior_survival_time = internals$prior_survival_time
+	)
 	
+	df = res[[1]]
+	fit = res[[2]]
+	
+	fit_prop_parsed = 
+		fit %>%
+		draws_to_tibble("prop_", "Q", "C") %>%
+		filter(!grepl("_UFO|_rng", .variable))  %>%
+		mutate(Q = Q %>% as.integer)
+	
+	draws = get_draws(fit_prop_parsed, level, internals)	
+	
+	prop = get_props(draws, level, df, input$approximate_posterior)	
+	
+	internals$prop = bind_rows(internals$prop , prop) 
+	internals$fit = internals$fit %>% c(list(fit))
+	internals$df = internals$df %>% c(list(df))
+	internals$prop_posterior[sprintf("%s_prior", fit_prop_parsed %>% distinct(.variable) %>% pull())] = fit_prop_parsed %>% group_by(Q, C, .variable) %>% prop_to_list
+	internals$draws = internals$draws %>% c(list(draws))
+	
+	if (input$do_regression && length(parse_formula(input$.formula)$covariates) >0 )
+		internals$alpha = internals$alpha  %>% bind_rows( get_alpha(fit, level, input$family) )
+	 
 	# Return
 	list(
 		# Matrix of proportions
 		proportions =	
-			armet_obj$input$.data %>%
+			input$.data %>%
 			select(c(sample, (.) %>% get_specific_annotation_columns(sample))) %>%
 			distinct() %>%
 			left_join(internals$prop) %>%
 			
 			# Attach alpha if regression
 			ifelse_pipe(
-				armet_obj$input$do_regression && length(parse_formula(armet_obj$input$.formula)$covariates) >0 ,
+				input$do_regression && length(parse_formula(input$.formula)$covariates) >0 ,
 				~ .x %>%
 					nest(proportions = -c(`Cell type category`, C, level)) %>%
 					left_join(
@@ -44,7 +77,7 @@ ARMET_tc_continue = function(armet_obj, levels, model = stanmodels$ARMET_tc_fix_
 			),
 		
 		# # Return the input itself
-		input = armet_obj$input,
+		input = input,
 		
 		# Return the fitted object
 		internals = internals
@@ -131,13 +164,14 @@ ARMET_tc = function(.data,
 	.transcript = col_names$.transcript
 	.abundance = col_names$.abundance
 
-	# Warning is sensitive names in columns
-	names_taken = c("level") 
-	if(.data %>% colnames %in% names_taken) stop(sprintf("ARMET says: your input data frame includes reserved column names: %s", names_taken))
-	
 	# Rename columns mix
 	.data = .data %>% rename( sample = !!.sample, symbol = !!.transcript ,  count = !!.abundance)
 	input$.data = .data
+	
+	
+	# Warning is sensitive names in columns
+	names_taken = c("level") 
+	if(.data %>% colnames %in% names_taken) stop(sprintf("ARMET says: your input data frame includes reserved column names: %s", names_taken))
 	
 	# Checkif count is integer
 	if(.data %>% select(count) %>% lapply(class) %>% unlist() %>% equals("integer") %>% `!`)
@@ -187,20 +221,15 @@ ARMET_tc = function(.data,
 		
 		# Check cens right type
 		if(typeof(cens) %in% c("integer", "logical") %>% any %>% `!`) stop("ARMET says: censoring variable should be logical of integer (0,1)")
-		
 		if(length(prior_survival_time) == 0) stop("AMET says: you really need to provide third party survival time for your condition/disease")
 		
-		
 		sd_survival_months = .data %>%  select(sample, .cens_value_column) %>% distinct %>% pull(.cens_value_column) %>% sd
-		
 		df_for_edgeR = df_for_edgeR %>% mutate(!!.cens_value_column := !!as.symbol(.cens_value_column) / sd_survival_months)
-		#surv_prior = .data %>% filter(!(!!as.symbol(.cens_column))) %>% select(sample, .cens_column, cov_columns) %>% distinct() %>% pull(cov_columns[1]) %>% gamma_alpha_beta ()
 		prior_survival_time = prior_survival_time / sd_survival_months
 
 	}
 	else{
 		cens = NULL
-		#surv_prior = c()
 	} 
 	
 	# Create design matrix
@@ -213,14 +242,9 @@ ARMET_tc = function(.data,
 			data = df_for_edgeR %>% select(sample, one_of(cov_columns)) %>% distinct %>% arrange(sample)
 		)
 
-
-
 	mix =
 		.data %>%
-		select(sample,
-					 symbol,
-					 count,
-					 one_of(parse_formula(.formula)$covariates)) %>%
+		select(sample, symbol, count, one_of(parse_formula(.formula)$covariates)) %>%
 		distinct() %>%
 		spread(symbol, count)
 
@@ -228,16 +252,6 @@ ARMET_tc = function(.data,
 	is_level_in = shards %>% `>` (0) %>% as.integer
 
 	tree = 	data.tree::Clone(ARMET::tree) 
-	# %>%	{
-	# 	# Filter selected levels
-	# 	data.tree::Prune(., function(x)
-	# 		x$level <= max(levels_in_the_tree) + 1)
-	# 
-	# 	# Filter if not in referenc
-	# 	#data.tree::Prune(., function(x) ( x$name %in% (ARMET::ARMET_ref %>% distinct(`Cell type category`) %>% pull(1) %>% as.character) ))
-	# 	.
-	# }
-
 
 	
 	# Print overlap descriptive stats
@@ -279,8 +293,6 @@ ARMET_tc = function(.data,
 		by = "symbol"
 	)
 
-	run_lv = switch(	levels,run_lv_1,	run_lv_2,	run_lv_3,	run_lv_4)
-	
 	tree_propeties = get_tree_properties(tree)
 	
 	# Default internals
@@ -301,7 +313,7 @@ ARMET_tc = function(.data,
 		) 
 	
 	internals = 
-		run_lv(
+		run_lv_1(
 			internals,
 			shards,
 			levels,
@@ -573,27 +585,6 @@ run_model = function(reference_filtered,
 
 }
 
-# lower_triangular = function(.data){
-# 	
-# 	levs = .data$`Cell type category_1` %>% levels
-# 	
-# 	.data %>%
-# 		select(`Cell type category_1`, `Cell type category_2`,    prob) %>%
-# 		spread(`Cell type category_2` ,   prob) %>% 
-# 		as_matrix(rownames = "Cell type category_1") %>%
-# 		
-# 		# Drop upper triangular
-# 		{ ma = (.); ma[lower.tri(ma)] <- NA; ma} %>% 
-# 		
-# 		as_tibble(rownames = "Cell type category_1") %>% 
-# 		gather(`Cell type category_2`, prob, -`Cell type category_1`) %>% 
-# 		mutate(
-# 			`Cell type category_1` = factor(`Cell type category_1`, levels = levs), 
-# 			`Cell type category_2` = factor(`Cell type category_2`, levels = levs), 
-# 		) %>%
-# 		drop_na
-# }
-
 #' @export
 get_signatures = function(.data){
 	.data$proportions %>%
@@ -608,7 +599,7 @@ get_signatures = function(.data){
 			~ .x %>%
 
 				# Build combination of cell types
-				permute_nest(
+				nanny::permute_nest(
 					.names_from = `Cell type category`,
 					.values_from = c(.value)
 				) %>% 
@@ -1119,28 +1110,31 @@ plot_polar = function(	.data,
 #' 
 plot_scatter = function(.data){
 	
-	data_CI = 
-		.data$proportions %>%
-		select(-proportions, -.variable) %>%
-		#unnest(draws) %>%
-		select( -draws) %>%
-		unnest(rng)  %>% 
-		group_by( C, Q, .variable, level, `Cell type category`, Rhat) %>% 
-		tidybayes::median_qi() %>%
-		ungroup() %>%
-		left_join(
-			.data$proportions %>%
-				select(-draws, -.variable) %>%
-				unnest(proportions) %>% distinct(Q,  DFS_MONTHS)
-		) %>%
-		select(level,  `Cell type category`, Q, .upper, .lower)
+	# data_CI = 
+	# 	.data$proportions %>%
+	# 	select(-proportions, -.variable) %>%
+	# 	#unnest(draws) %>%
+	# 	select( -draws) %>%
+	# 	unnest(rng)  %>% 
+	# 	group_by( C, Q, .variable, level, `Cell type category`, Rhat) %>% 
+	# 	tidybayes::median_qi() %>%
+	# 	ungroup() %>%
+	# 	left_join(
+	# 		.data$proportions %>%
+	# 			select(-draws, -.variable) %>%
+	# 			unnest(proportions) %>% distinct(Q,  DFS_MONTHS)
+	# 	) %>%
+	# 	select(level,  `Cell type category`, Q, .upper, .lower)
 
 		inferred_y = 	
 			.data$proportions %>%
-			select(-draws, -rng, -.variable) %>%
-			unnest(proportions) %>% select(-.value_relative, -.value) %>% unnest(.draws) %>% 
+			select(level, `Cell type category`, proportions) %>%
+			unnest(proportions) %>% 
+			select(level, `Cell type category`, Q, .draws) %>%
+			unnest(.draws) %>%
 			rename(inferred_y = .value_relative)
-
+		
+		
 		inferred_x = 
 			map2_dfr(
 			.data$internals$fit,
@@ -1154,33 +1148,60 @@ plot_scatter = function(.data){
 		) %>%
 			rename(inferred_x = .value)
 	
-	.data$proportions %>%
-		select(-draws, -.variable) %>%
-		unnest(proportions) %>%
-		left_join(data_CI) %>%
-		left_join(inferred_x %>% select(level, Q, inferred_x, .chain, .iteration, .draw )) %>%
-		left_join( inferred_y %>% select(`Cell type category`, sample, inferred_y,.chain ,.iteration ,.draw ) ) %>%
-		ggplot(aes(x = inferred_x, y = inferred_y, label=sample, group=sample)) +
-		# geom_point(
-		# 	data =
-		# 		res$proportions %>% filter(level ==1) %>%
-		# 		select(-proportions, -.variable) %>%
-		# 		#unnest(draws) %>%
-		# 		select( -draws) %>%
-		# 		unnest(rng) %>%
-		# left_join(
-		# 	res$proportions %>%
-		# 		filter(level ==1) %>%
-		# 		select(-draws, -.variable) %>%
-	# 		unnest(proportions) %>% distinct(Q,  DFS_MONTHS)
-	# ),
-	# 	aes(x = DFS_MONTHS, y = .value),
-	# 	color="black",
-	# 	alpha=0.1) +
-	#geom_errorbar( aes(ymin=.lower, ymax=.upper) ) +
-	geom_density_2d(bins=3) +
-	#geom_point(aes(color = alive)) +
-	facet_wrap(~`Cell type category`, scale="free")
+		plot_data = 
+			inferred_y %>%
+			left_join(inferred_x) %>%
+			sample_frac(0.1) %>%
+			left_join( .data$proportions %>% select(proportions) %>% unnest(proportions) %>% distinct(sample, Q, alive) ) %>%
+			#filter(`Cell type category` == "epithelial") %>%
+			#mutate(inferred_x = inferred_x + rnorm(n(), 0, 0.01) %>% abs) %>%
+			filter(inferred_y %>% is.na %>% `!`) %>%
+			group_by(`Cell type category`, sample, alive) %>%
+			summarise(
+				xmin= quantile(inferred_x, 0.05), xmax = quantile(inferred_x, 0.95), x = mean(inferred_x),
+				ymin= quantile(inferred_y, 0.05), ymax = quantile(inferred_y, 0.95), y = mean(inferred_y)
+			) %>%
+			mutate(area = (xmax-xmin) * (ymax-ymin))
+			
+	ggplot(plot_data, aes(x, y)) +
+		
+		geom_rect(aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax =ymax, alpha = -area), data =  plot_data %>% filter(alive)) +
+		geom_errorbar( aes(ymin =ymin, ymax = ymax), data = plot_data %>% filter(!alive), color = "red" ) +
+		geom_point( data =  plot_data %>% filter(alive), color="blue", shape=".") +
+		
+		#geom_density_2d(bins=3, fill = after_stat(density), geom = "polygon") +
+		#geom_point(aes(color = alive)) +
+		facet_wrap(~`Cell type category`, scale="free") +
+		scale_alpha(range = c(0.1, 0.3)) +
+		
+		theme_bw() +
+		theme(
+			panel.border = element_blank(),
+			axis.line = element_line(),
+			panel.grid.major = element_line(size = 0.2),
+			panel.grid.minor = element_line(size = 0.1),
+			text = element_text(size = 12),
+			legend.position = "bottom",
+			axis.text.x = element_text(
+				angle = 90,
+				hjust = 1,
+				vjust = 0.5
+			),
+			strip.background = element_blank(),
+			axis.title.x  = element_text(margin = margin(
+				t = 10,
+				r = 10,
+				b = 10,
+				l = 10
+			)),
+			axis.title.y  = element_text(margin = margin(
+				t = 10,
+				r = 10,
+				b = 10,
+				l = 10
+			))
+		)
+	
 }
 
 #' This is a generalisation of ifelse that acceots an object and return an objects
@@ -1369,27 +1390,30 @@ run_lv_1 = function(internals,
 		prior_survival_time = internals$prior_survival_time
 	)
 	
-	df1 = res1[[1]]
-	fit1 = res1[[2]]
+	df = res1[[1]]
+	fit = res1[[2]]
 	
-	fit_prop_parsed = fit1 %>%
-		tidybayes::gather_draws(prop_1[Q, C])
+	fit_prop_parsed = 
+		fit %>%
+		draws_to_tibble("prop_", "Q", "C") %>%
+		filter(!grepl("_UFO|_rng", .variable))  %>%
+		mutate(Q = Q %>% as.integer)
 	
-	draws_1 =
+	draws =
 		fit_prop_parsed %>%
 		ungroup() %>%
 		select(-.variable) %>%
 		mutate(.value_relative = .value)
 	
-	prop_1 =
-		fit1 %>%
+	prop =
+		fit %>%
 		tidybayes::gather_draws(`prop_[1]`[Q, C], regex = T) %>%
 		drop_na  %>%
 		ungroup() %>%
 		
 		# Add relative proportions
 		mutate(.value_relative = .value) %>%
-		
+		 
 		# Add tree information
 		left_join(
 			tree %>% data.tree::ToDataFrameTree("name", "C1", "C2", "C3", "C4") %>%
@@ -1404,7 +1428,7 @@ run_lv_1 = function(internals,
 		) %>%
 		
 		# add sample annotation
-		left_join(df1 %>% distinct(Q, sample), by = "Q")	%>%
+		left_join(df %>% distinct(Q, sample), by = "Q")	%>%
 		
 		# If MCMC is used check divergencies as well
 		ifelse_pipe(
@@ -1417,62 +1441,18 @@ run_lv_1 = function(internals,
 		separate(.variable, c(".variable", "level"), convert = T) %>%
 		
 		# Add sample information
-		left_join(df1 %>%
+		left_join(df %>%
 								filter(`query`) %>%
 								distinct(Q, sample))
 	
-	if (do_regression && length(parse_formula(.formula)$covariates) >0 ) {
-		alpha_1 =
-			fit1 %>%
-			tidybayes::gather_draws(`alpha_[1]`[A, C], regex = T) %>%
-			ungroup() %>%
-			
-			# rebuild the last component sum-to-zero
-			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
-			
-			# Calculate relative 0 because of dirichlet relativity
-			#ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
-			
-			arrange(.chain, .iteration, .draw,     A) %>%
-			
-			nest(draws = -c(C, .variable)) %>%
-			
-			# Attach convergence information
-			left_join(
-				rstan::summary(fit1, pars=c("alpha_1"))$summary %>% 
-					as_tibble(rownames=".variable") %>% 
-					separate(.variable, c(".variable", "A", "C"), sep="\\[|\\]|,", extra = "drop") %>% 
-					mutate(A = as.integer(A), C = as.integer(C)) %>% filter(A == 2) %>% 
-					select(.variable, C, Rhat),
-				by = c(".variable", "C")
-			) %>%
-			
-			left_join(
-				tree %>%
-					ToDataFrameTree("name", "level", sprintf("C%s", 1)) %>%
-					filter(level == 1 + 1) %>%
-					arrange(C1) %>%
-					mutate(C = 1:n()) %>%
-					select(name, C)  %>%
-					rename(`Cell type category` = name)
-			)
-		
-		alpha_1 = alpha_1 %>%
-			separate(.variable, c("par", "node"), remove = F) %>%
-			left_join(
-				fit1 %>% tidybayes::gather_draws(`prop_[1a-z]_rng`[Q, C], regex = T) %>% ungroup() %>% mutate(.variable = gsub("_rng", "", .variable)) %>% separate(.variable, c("par", "node"), remove = F)  %>% select(-par) %>% nest(rng = -c(node, C)) 
-			)
-		
-		internals$alpha = alpha_1 %>% mutate(level = 1)
-		
-		
-	}
-	
-	internals$prop = prop_1
-	internals$fit = list(fit1)
-	internals$df = list(df1)
-	internals$draws = list(draws_1)
-	internals$prop_posterior[[1]] = fit_prop_parsed %>% prop_to_list %>% `[[` ("prop_1") 
+	if (do_regression && length(parse_formula(.formula)$covariates) >0 ) 
+		internals$alpha = get_alpha(fit, level, family) 
+
+	internals$prop = prop
+	internals$fit = list(fit)
+	internals$df = list(df)
+	internals$draws = list(draws)
+	internals$prop_posterior[[1]] = fit_prop_parsed %>% group_by(.variable, Q, C) %>% prop_to_list %>% `[[` ("prop_1") 
 
 	internals
 	
@@ -1484,6 +1464,7 @@ run_lv_1 = function(internals,
 
 #------------------------------------#
 run_lv_2 = function(internals,
+										res2,
 										shards,
 										level = 2,
 										full_bayesian,
@@ -1493,26 +1474,26 @@ run_lv_2 = function(internals,
 										do_regression = do_regression,
 										family = family,
 										.formula = .formula, model = stanmodels$ARMET_tc_fix_hierarchical){
-	res2 = run_model(
-		internals$reference_filtered,
-		internals$mix,
-		shards,
-		level,
-		full_bayesian,
-		approximate_posterior,
-		internals$prop_posterior,
-		draws_to_exposure(internals$fit[[1]])	,
-		iterations = iterations,
-		sampling_iterations = sampling_iterations,
-		X = internals$X,
-		do_regression = do_regression,
-		family = family,
-		cens = internals$cens,
-		tree_properties = internals$tree_properties,
-		Q = internals$Q,
-		model = model,
-		prior_survival_time = internals$prior_survival_time
-	)
+	# res2 = run_model(
+	# 	internals$reference_filtered,
+	# 	internals$mix,
+	# 	shards,
+	# 	level,
+	# 	full_bayesian,
+	# 	approximate_posterior,
+	# 	internals$prop_posterior,
+	# 	draws_to_exposure(internals$fit[[1]])	,
+	# 	iterations = iterations,
+	# 	sampling_iterations = sampling_iterations,
+	# 	X = internals$X,
+	# 	do_regression = do_regression,
+	# 	family = family,
+	# 	cens = internals$cens,
+	# 	tree_properties = internals$tree_properties,
+	# 	Q = internals$Q,
+	# 	model = model,
+	# 	prior_survival_time = internals$prior_survival_time
+	# )
 	
 	
 	
@@ -1664,6 +1645,7 @@ gather_graws_multi = function(.fit, pars){
 #------------------------------------#
 
 run_lv_3 = function(internals,
+										res3,
 										shards,
 										level,
 										full_bayesian,
@@ -1674,25 +1656,25 @@ run_lv_3 = function(internals,
 										family = family,
 										.formula = .formula, model = stanmodels$ARMET_tc_fix_hierarchical){
 	# browser()
-	res3 = run_model(
-		internals$reference_filtered,
-		internals$mix,
-		shards,
-		level,
-		full_bayesian,
-		approximate_posterior,
-		internals$prop_posterior,
-		draws_to_exposure(internals$fit[[1]]),
-		iterations = iterations,
-		sampling_iterations = sampling_iterations	,
-		X = internals$X,
-		do_regression = do_regression,
-		family = family,
-		cens = internals$cens,
-		tree_properties = internals$tree_properties,
-		Q = internals$Q,
-		model = model,prior_survival_time = internals$prior_survival_time
-	)
+	# res3 = run_model(
+	# 	internals$reference_filtered,
+	# 	internals$mix,
+	# 	shards,
+	# 	level,
+	# 	full_bayesian,
+	# 	approximate_posterior,
+	# 	internals$prop_posterior,
+	# 	draws_to_exposure(internals$fit[[1]]),
+	# 	iterations = iterations,
+	# 	sampling_iterations = sampling_iterations	,
+	# 	X = internals$X,
+	# 	do_regression = do_regression,
+	# 	family = family,
+	# 	cens = internals$cens,
+	# 	tree_properties = internals$tree_properties,
+	# 	Q = internals$Q,
+	# 	model = model,prior_survival_time = internals$prior_survival_time
+	# )
 	
 	df3 = res3[[1]]
 	fit3 = res3[[2]]
@@ -1838,172 +1820,41 @@ run_lv_3 = function(internals,
 
 #------------------------------------#
 
-run_lv_4 = function(internals,
-										shards,
-										level,
-										full_bayesian,
-										approximate_posterior,
-										iterations = iterations,
-										sampling_iterations = sampling_iterations	,
-										do_regression = do_regression,
-										family = family,
-										.formula = .formula, model = stanmodels$ARMET_tc_fix_hierarchical){
-	# browser()
-	res = run_model(
-		internals$reference_filtered,
-		internals$mix,
-		shards,
-		level,
-		full_bayesian,
-		approximate_posterior,
-		internals$prop_posterior,
-		draws_to_exposure(internals$fit[[1]]),
-		iterations = iterations,
-		sampling_iterations = sampling_iterations	,
-		X = internals$X,
-		do_regression = do_regression,
-		family = family,
-		cens = internals$cens,
-		tree_properties = internals$tree_properties,
-		Q = internals$Q,
-		model = model,prior_survival_time = internals$prior_survival_time
-	)
+run_my_lv = function(internals,
+										 res,
+										 shards,
+										 level,
+										 full_bayesian,
+										 approximate_posterior,
+										 iterations = iterations,
+										 sampling_iterations = sampling_iterations	,
+										 do_regression = do_regression,
+										 family = family,
+										 .formula = .formula, model = stanmodels$ARMET_tc_fix_hierarchical){
 	
 	df = res[[1]]
 	fit = res[[2]]
 	
-	fit_prop_parsed = fit %>%
-		######## ALTERED WITH TREE
-		tidybayes::gather_draws(prop_g[Q, C], prop_h[Q, C], prop_i[Q, C], prop_l[Q, C], prop_m[Q, C])
-		#########################
-		
-	draws =
-		internals$draws[[level-1]] %>%
-		left_join(
-			fit_prop_parsed %>%
-			drop_na %>%
-				ungroup() %>%
-				left_join(
-					######## ALTERED WITH TREE
-					tibble(
-						.variable = c("prop_g", "prop_h", "prop_i", "prop_l", "prop_m"),
-						C3 = internals$tree_properties$parents_lv4
-					)
-					#########################
-				) %>%
-				select(-.variable) %>%
-				rename(.value4 = .value, C4 = C),
-			by = c(".chain", ".iteration", ".draw", "Q",  "C3")
-		) %>%
-		group_by(.chain, .iteration, .draw, Q) %>%
-		arrange(C1, C2, C3, C4) %>%
-		mutate(
-			C4 = tree$Get(sprintf("C%s", level)) %>% na.omit,
-			`Cell type category` = tree$Get(sprintf("C%s", level)) %>% na.omit %>% names
-		) %>%
-		ungroup() %>%
-		mutate(.value_relative = .value4) %>%
-		mutate(.value4 = ifelse(.value4 %>% is.na, .value2, .value3 * .value4))
+	fit_prop_parsed = 
+		fit %>%
+		draws_to_tibble("prop_", "Q", "C") %>%
+		filter(!grepl("_UFO|_rng", .variable))  %>%
+		mutate(Q = Q %>% as.integer)
 	
-	prop =
-		draws %>%
-		select(.chain,
-					 .iteration,
-					 .draw,
-					 Q,
-					 C4 ,
-					 `Cell type category`,
-					 .value4,
-					 .value_relative) %>%
-		rename(C = C4, .value = .value4) %>%
-		mutate(.variable = sprintf("prop_%s", level)) %>%
-		mutate(level := !!level) %>%
-		
-		# add sample annotation
-		left_join(df %>% distinct(Q, sample), by = "Q")	%>%
-		
-		# If MCMC is used check divergencies as well
-		ifelse_pipe(
-			!approximate_posterior,
-			~ .x %>% parse_summary_check_divergence(),
-			~ .x %>% parse_summary() %>% rename(.value = mean)
-		) %>%
-		
-		left_join(df %>% distinct(Q, sample))
+	draws = get_draws(fit_prop_parsed, level, internals)	
 	
-	if (do_regression && length(parse_formula(.formula)$covariates) >0 ){
-		alpha_4 =
-			fit %>%
-			tidybayes::gather_draws(alpha_g[A, C], alpha_h[A, C], alpha_i[A, C], alpha_l[A, C], alpha_m[A, C]) %>%
-			ungroup() %>%
-			
-			# rebuild the last component sum-to-zero
-			ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
-			
-			# Calculate relative 0 because of dirichlet relativity
-			#ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
-			
-			arrange(.chain, .iteration, .draw,     A) %>%
-			
-			nest(draws = -c(C, .variable)) %>%
-			
-			# Attach convergence information
-			left_join(
-				rstan::summary(fit, pars=sprintf("alpha_%s", c("g", "h", "i", "l", "m")))$summary %>% 
-					as_tibble(rownames=".variable") %>% 
-					separate(.variable, c(".variable", "A", "C"), sep="\\[|\\]|,", extra = "drop") %>% 
-					mutate(A = as.integer(A), C = as.integer(C)) %>% filter(A == 2) %>% 
-					select(.variable, C, Rhat),
-				by = c(".variable", "C")
-			) %>%
-			
-			# FOR HIERARCHICAL
-			mutate(C = 1:n()) %>%
-			
-			left_join(
-				
-				tree %>%
-					ToDataFrameTree("name", "level", sprintf("C%s", 4)) %>%
-					filter(level == 4+1) %>%
-					arrange(C4) %>%
-					mutate(C = 1:n()) %>%
-					select(name, C) %>%
-					rename(`Cell type category` = name)
-				
-				# tree %>%
-				# 	ToDataFrameTree("name", "level", sprintf("C%s", 4)) %>%
-				# 	arrange(C4) %>%
-				# 	drop_na() %>%
-				# 	select(name, C4) %>%
-				# 	rename(`Cell type category` = name) %>%
-				# 	rename(C = C4)
-			)
-		
-		alpha_4 = alpha_4 %>%
-			separate(.variable, c("par", "node"), remove = F) %>%
-			left_join(
-				fit %>% 
-					tidybayes::gather_draws(prop_g_rng[Q, C], prop_h_rng[Q, C], prop_i_rng[Q, C], prop_l_rng[Q, C], prop_m_rng[Q, C]) %>% 
-					ungroup() %>% mutate(.variable = gsub("_rng", "", .variable)) %>% 
-					separate(.variable, c("par", "node"), remove = F)  %>% 
-					select(-par) %>% drop_na() %>% nest(rng = -c(node, C)) %>%
-					mutate(C = 1:n()) 
-			)
-		
-		
-		internals$alpha = 	internals$alpha  %>% bind_rows(alpha_4 %>% mutate(level = 4))
-		
-		
-		
-	}
+	prop = get_props(draws, level, df, approximate_posterior)	
 	
 	internals$prop = bind_rows(internals$prop , prop) 
 	internals$fit = internals$fit %>% c(list(fit))
 	internals$df = internals$df %>% c(list(df))
+	internals$prop_posterior[sprintf("%s_prior", fit_prop_parsed %>% distinct(.variable) %>% pull())] = fit_prop_parsed %>% group_by(Q, C, .variable) %>% prop_to_list
 	internals$draws = internals$draws %>% c(list(draws))
 	
+	if (do_regression && length(parse_formula(.formula)$covariates) >0 )
+		internals$alpha = internals$alpha  %>% bind_rows( get_alpha(fit, level, family) )
 	
 	internals
-
+	
 	
 }

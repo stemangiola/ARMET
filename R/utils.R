@@ -1714,32 +1714,21 @@ rebuild_last_component_sum_to_zero = function(.){
 		mutate(data = map(data, ~.x %>%
 												mutate(C = C +1) %>%
 												bind_rows({
-													my_sd = (.) %>% group_by(C) %>% summarise(sd(.value)) %>% pull(2) %>% mean
 													
 													(.) %>%
 														filter(C ==2) %>%
 														mutate(C = rep(1, n())) %>%
-														mutate(.value = rnorm(n(), 0, my_sd))
+														mutate(.value = rep(0, n())) 
 													
-												})
+												})  %>%
+												group_by(.chain ,.iteration, .draw) %>%
+												mutate(.value = .value - mean(.value)) %>%
+												ungroup  %>%
+												arrange(C)
 											
-											)) %>%
+		)) %>%
 		unnest(data)
 	
-	# (.) %>%
-	# 	group_by(.variable) %>%
-	# 	do({
-	# 		max_c = (.) %>% pull(C) %>% max
-	# 		bind_rows(
-	# 			(.) %>% filter(C < max_c | A > 1),
-	# 			(.) %>%
-	# 				filter(C < max_c & A == 1) %>%
-	# 				group_by(.chain, .iteration, .draw , A, .variable ) %>%
-	# 				summarise(.value = -sum(.value)) %>%
-	# 				mutate(C = max_c)
-	# 		)
-	# 	}) %>%
-	# 	ungroup()
 }
 
 get_relative_zero = function(fit_parsed){
@@ -2077,9 +2066,9 @@ cluster_posterior_slopes = function(.data, credible_interval = 0.67){
 }
 
 identify_baseline_by_clustering = function(.data){
-	
+	  
 	.data %>%
-		nest(node = -c(.variable)) %>%
+		nest(node = -.variable) %>%
 		
 		mutate(node = map(
 			node, ~ .x %>%
@@ -2094,36 +2083,41 @@ identify_baseline_by_clustering = function(.data){
 				) %>%
 				unnest(comm_data) %>%
 				
-				# If we have a unique bigger community
-				ifelse4_pipe(
-					(.) %>% distinct(community) %>% nrow %>% equals(1),
-					(.) %>% distinct(n) %>% nrow %>% `>` (1),
-					(.) %>% distinct(fold_change_ancestor) %>% pull(1) %>% equals(0) %>% `!`,
-					(.) %>% distinct(community) %>% nrow %>% `>` (1),
+				purrr::when(
 					
-					# If I have just one community
-					~ .x %>% mutate(baseline = TRUE),
+					# # If I have a reference change make zero frm it
+					# (.) %>% distinct(fold_change_ancestor) %>% pull(1) %>% `!=` (0) ~ 
+					# 	(.) %>% mutate(zero = -fold_change_ancestor),
 					
-					# Majority roule
-					~ .x %>% mutate(baseline = n == max(n)) %>%
-						
-						# and if I have 2+ major communities pick the one closest to the center. Quite dirty implementation
-						mutate(absolut_zero = mean(.value_alpha2 )) %>% 
-						mutate( dist_from_middle = ifelse(baseline, abs(.value_alpha2 - absolut_zero), 9999)) %>% mutate(baseline = dist_from_middle == min(dist_from_middle)),
+					# Otherwise, if I have a consensus of overlapping posteriors make that zero
+					(.) %>% distinct(community, n) %>% count(n) %>% arrange(n %>% desc) %>% slice(1) %>% pull(nn) %>% equals(1) ~ 
+						(.) %>% mutate(zero = (.) %>% filter( n == max(n)) %>% pull(mean_community) %>% unique),
 					
-					# If ancestor changed
-					~ .x %>% mutate(baseline = ifelse(fold_change_ancestor > 0, mean_community == min(mean_community), mean_community == max(mean_community))),
-					
-					# If equally sized clusters take the most variable
-					~ .x %>% mutate(baseline = sd_community == max(sd_community))
+					# Otherwise make zero the 0
+					~ (.) %>% mutate(zero = 0)
 				)
-			
-		)) %>% 
-		unnest(node)  %>%
-		
-		# Select zero
-		nest(node = -.variable) %>%
-		mutate(zero = map_dbl(node, ~ .x %>% filter(baseline) %>% pull(mean_community) %>% unique)) %>%
+		)) %>%
+				
+		# 		
+		# 		# If we have a unique bigger community
+		# 		ifelse2_pipe(
+		# 			(.) %>% distinct(community) %>% nrow %>% equals(1),
+		# 			(.) %>% distinct(community, n) %>% count(n) %>% arrange(n %>% desc) %>% slice(1) %>% pull(nn) %>% equals(1) ,
+		# 			
+		# 			# If I have just one community
+		# 			~ .x %>% mutate(baseline = TRUE),
+		# 			
+		# 			# Majority roule
+		# 			~ .x %>% mutate(baseline = n == max(n)) ,
+		# 			
+		# 			# If ancestor changed, if no consensus the zero will be absolute 0 
+		# 			~ .x %>% mutate(baseline = FALSE)
+		# 		)
+		# 	
+		# )) %>% 
+		# 
+		# # Select zero. If I hav comunity select mean otherwise select 0
+		# mutate(zero = map_dbl(node, ~ .x %>% filter(baseline) %>% ifelse_pipe( (.) %>% distinct(community) %>% nrow %>% equals(1), ~.x %>% pull(mean_community) %>% unique, ~ 0) )) %>%
 		unnest(node)
 	
 	
@@ -2182,3 +2176,163 @@ calculate_x_for_polar = function(.data){
 		mutate(branch_length =  ifelse(	isLeaf, branch_length + ((max(level) - level) * internal_branch_length),	branch_length	)) 
 	
 }
+
+get_draws = function(fit_prop_parsed, level, internals){
+	
+	my_c = as.symbol(sprintf("C%s", level))
+	ancestor_c = as.symbol(sprintf("C%s", level-1))
+	
+	my_value_column = as.symbol(sprintf(".value%s", level) )
+	ancestor_value_column = as.symbol(sprintf(".value%s", level-1) )
+	
+	internals$draws[[level-1]] %>%
+		# Temporary I have to fix!!!
+		when(level ==2 ~ (.) %>% rename(C1 = C, !!ancestor_value_column := .value), ~ (.)) %>%
+		#
+		left_join(
+			fit_prop_parsed %>%
+				left_join(
+					######## ALTERED WITH TREE
+					tibble(
+						.variable = (.) %>% distinct(.variable) %>% pull(),
+						!!ancestor_c := internals$tree_properties[[sprintf("parents_lv%s", level)]]
+					)
+					#
+				) %>%
+				select(-.variable) %>%
+				rename(!!my_value_column := .value, !!my_c  := C) ,
+			by = c( ".chain", ".iteration", ".draw", "Q", sprintf("C%s", level -1) )
+		) %>%
+		group_by(.chain, .iteration, .draw, Q) %>%
+		arrange_at(vars(contains("C1"), contains("C2"), contains("C3"), contains("C4"), contains("C5"))) %>% 
+		mutate(
+			!!my_c := tree$Get(sprintf("C%s", level)) %>% na.omit,
+			`Cell type category` = tree$Get(sprintf("C%s", level)) %>% na.omit %>% names
+		) %>%
+		ungroup() %>%
+		mutate(.value_relative := !!my_value_column) %>%
+		mutate(!!my_value_column := ifelse(!!my_value_column %>% is.na, !!ancestor_value_column, !!ancestor_value_column * !!my_value_column))
+}
+
+get_props = function(draws, level, df, approximate_posterior){
+	
+	my_c = as.symbol(sprintf("C%s", level))
+
+	my_value_column = as.symbol(sprintf(".value%s", level) )
+
+	draws %>%
+		#when(level ==1 ~ (.) %>% rename(C1 = C), ~ (.)) %>%
+		select(.chain,
+					 .iteration,
+					 .draw,
+					 Q,
+					 !!my_c ,
+					 `Cell type category`,
+					 !!my_value_column,
+					 .value_relative) %>%
+		rename(C := !!my_c, .value = !!my_value_column) %>%
+		mutate(.variable = sprintf("prop_%s", level)) %>%
+		mutate(level := !!level) %>%
+		
+		# add sample annotation
+		left_join(df %>% distinct(Q, sample), by = "Q")	%>%
+		
+		# If MCMC is used check divergencies as well
+		ifelse_pipe(
+			!approximate_posterior,
+			~ .x %>% parse_summary_check_divergence(),
+			~ .x %>% parse_summary() %>% rename(.value = mean)
+		) %>%
+		
+		left_join(df %>% distinct(Q, sample))
+	
+}
+
+get_alpha = function(fit, level, family){
+	
+	my_c = as.symbol(sprintf("C%s", level))
+	
+	fit %>%
+		draws_to_tibble("alpha_", "A", "C") %>%
+
+		# rebuild the last component sum-to-zero
+		ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
+		
+		# Calculate relative 0 because of dirichlet relativity
+		#ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
+		
+		arrange(.chain, .iteration, .draw,     A) %>%
+		
+		nest(draws = -c(C, .variable)) %>%
+		
+		# Attach convergence information
+		left_join(
+			fit %>% summary_to_tibble("alpha_", "A", "C") %>% filter(A == 2) %>% 
+				select(.variable, C, Rhat),
+			by = c(".variable", "C")
+		) %>%
+		
+		# FOR HIERARCHICAL
+		mutate(C = 1:n()) %>%
+		
+		left_join(
+			
+			tree %>%
+				ToDataFrameTree("name", "level", sprintf("C%s", level)) %>%
+				filter(level == !!level+1) %>%
+				arrange(!!my_c) %>%
+				mutate(C = 1:n()) %>%
+				select(name, C) %>%
+				rename(`Cell type category` = name)
+			
+		) %>%
+		
+		# Attach generated quantities
+		separate(.variable, c("par", "node"), remove = F) %>%
+		left_join(
+			fit %>% 
+				draws_to_tibble("prop_", "Q", "C") %>%
+				filter(grepl("_rng", .variable)) %>% 
+				mutate(Q = as.integer(Q)) %>%
+				mutate(.variable = gsub("_rng", "", .variable)) %>% 
+				separate(.variable, c("par", "node"), remove = F)  %>% 
+				select(-par) %>% drop_na() %>% nest(rng = -c(node, C)) %>%
+				mutate(C = 1:n()) 
+		) %>%
+		
+		# Add level label
+		mutate(level = !!level)
+	
+}
+
+draws_to_tibble = function(fit, par, x, y) {
+	
+	par_names = names(fit) %>% grep(sprintf("%s", par), ., value = T)
+	
+	fit %>%
+		rstan::extract(par_names, permuted=F) %>% 
+		as.data.frame %>% 
+			as_tibble() %>%
+			mutate(.iteration = 1:n()) %>% 
+			pivot_longer(names_to = c("dummy", ".chain", ".variable", x, y),  cols = contains(par), names_sep = "\\.|\\[|,|\\]|:", names_ptypes = list(".chain" = integer(), ".variable" = character(), "A" = integer(), "C" = integer()), values_to = ".value") %>%
+		select(-dummy) %>%
+			arrange(.variable, !!as.symbol(x), !!as.symbol(y), .chain) %>%
+		group_by(.variable, !!as.symbol(x), !!as.symbol(y)) %>%
+		mutate(.draw = 1:n()) %>%
+		ungroup() %>%
+		select(!!as.symbol(x), !!as.symbol(y), .chain, .iteration, .draw ,.variable ,     .value)
+		
+}
+
+summary_to_tibble = function(fit, par, x, y) {
+	
+	par_names = names(fit) %>% grep(sprintf("%s", par), ., value = T)
+	
+	fit %>%
+		rstan::summary(par_names) %$%
+		summary %>%
+		as_tibble(rownames = ".variable") %>% tidyr::extract(col = .variable, into = c(".variable", x, y), "(.+)\\[(.+),(.+)\\]", convert = T) 
+	
+	
+}
+
