@@ -181,26 +181,26 @@ res %>%
 test_that("censoring",{
 
 	res =
-		readRDS("dev/noiseless_mix.rds") %>%
-		mutate(alive = as.integer(sample(c(0,1), n(), replace=T))) %>%
-		mutate(covariate_2 = covariate_2 + 1) %>%
-		gather(transcript, count, -sample, -covariate_2, -alive) %>%
+		readRDS("mix_for_package_test.rds") %>%
+		mutate(`count mix` = as.integer(`count mix`)) %>%
+		mutate(run = as.character(run)) %>%
+		select(-level) %>%
+	
 		ARMET_tc(
-			 ~ censored(covariate_2, alive),
-			sample,
-			transcript,
-			count,
-			do_regression = T,
+			 ~ censored(days, alive),
+			run,
+			symbol,
+			`count mix`,
 			iterations = 600,
 			sampling_iterations = 400,
-			prior_survival_time = sample(1, 2, 30, replace = T)
+			prior_survival_time = mixes[[1]] %>% distinct(run, real_days) %>% pull(real_days) 
 		
 		) %>%
 		ARMET_tc_continue(2) %>%
 		ARMET_tc_continue(3)
 
 	expect_equal(
-		c("b_cell" ,  "mast_cell" , "b_memory",   "granulocyte") %in%
+		c("immune_cell", "b_cell" ,     "b_memory" ,   "b_naive" ) %in%
 			(res %>%
 			 	test_differential_composition() %>%
 			 	filter(significant) %>%

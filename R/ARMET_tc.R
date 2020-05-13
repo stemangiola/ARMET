@@ -171,7 +171,7 @@ ARMET_tc = function(.data,
 	
 	# Warning is sensitive names in columns
 	names_taken = c("level") 
-	if(.data %>% colnames %in% names_taken) stop(sprintf("ARMET says: your input data frame includes reserved column names: %s", names_taken))
+	if(.data %>% colnames %in% names_taken %>% any) stop(sprintf("ARMET says: your input data frame includes reserved column names: %s", names_taken))
 	
 	# Checkif count is integer
 	if(.data %>% select(count) %>% lapply(class) %>% unlist() %>% equals("integer") %>% `!`)
@@ -326,7 +326,7 @@ ARMET_tc = function(.data,
 			.formula = .formula,
 			model = model
 		)
-	
+	 
 	# Return
 	list(
 		# Matrix of proportions
