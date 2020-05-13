@@ -659,14 +659,21 @@ if(dim_4[1] > 0) {
 real beta_regression_lpdf(vector[] p, matrix X, matrix alpha, real[] phi){
 
 		real lp = 0;
-		matrix[num_elements(p[,1]), num_elements(p[1])] mu;
-		real phi_exp[num_elements(phi)] = exp(phi);
+		//matrix[num_elements(p[,1]), num_elements(p[1])] mu;
+		vector[num_elements(phi)]  phi_exp= exp(1.0 ./ to_vector(phi));
 
-		mu  = inv_logit(X * alpha);
+		// Build sum to zero variable
+		int c = cols(alpha);
+		int r = rows(alpha);
+		matrix[r, c]  alpha_ = alpha;
+		alpha_[1,c] = -sum(alpha_[1, 1:(c-1)]);
+		
+		
+		for(j in 1:num_elements(p[,1])) {
 
-		for(j in 1:num_elements(p[1])) {
+			vector[num_elements(p[1])] mu  = softmax( to_vector(X[j] * alpha_));
 
-      	 lp += beta_lpdf(p[,j] | (mu[,j] * phi_exp[j]) +1, ((1.0 - mu[,j]) * phi_exp[j]) + 1);
+     	lp += beta_lpdf(p[j] | (mu .* phi_exp) +1, ((1.0 - mu) .* phi_exp) + 1);
 
 		}
 		return (lp);
@@ -675,15 +682,22 @@ real beta_regression_lpdf(vector[] p, matrix X, matrix alpha, real[] phi){
 vector[] beta_regression_rng( matrix X, matrix alpha, real[] phi){
 
 		real lp = 0;
-		matrix[rows(X), cols(alpha)] mu;
 		vector[cols(alpha)] p[rows(X)];
-		real phi_exp[num_elements(phi)] = exp(phi);
 
-		mu  = inv_logit(X * alpha);
+		//matrix[num_elements(p[,1]), num_elements(p[1])] mu;
+		vector[num_elements(phi)]  phi_exp= exp( 1.0 ./ to_vector(phi));
 
-		for(j in 1:num_elements(p[1])) {
+		// Build sum to zero variable
+		int c = cols(alpha);
+		int r = rows(alpha);
+		matrix[r, c]  alpha_ = alpha;
+		alpha_[1,c] = -sum(alpha_[1, 1:(c-1)]);
 
-      	 p[,j] = beta_rng((mu[,j] * phi_exp[j]) +1, ((1.0 - mu[,j]) * phi_exp[j]) + 1);
+		for(j in 1:num_elements(p[,1])) {
+
+			vector[num_elements(p[1])] mu  = softmax( to_vector(X[j] * alpha_));
+
+      	 p[j] = to_vector(beta_rng((mu .* phi_exp) +1, ((1.0 - mu) .* phi_exp) + 1));
 
 		}
 		return (p);
@@ -851,24 +865,24 @@ parameters {
 
   // Proportions
   // lv1
-  simplex[ct_in_nodes[1]]  prop_1[Q * (lv >= 1)]; // Root
+  simplex[ct_in_nodes[1]]  prop_1[Q * (lv == 1)]; // Root
 
   // lv2
-  simplex[ct_in_nodes[2]]  prop_a[Q * (lv >= 2)]; // Immune cells childrens
+  simplex[ct_in_nodes[2]]  prop_a[Q * (lv == 2)]; // Immune cells childrens
 
   // lv3
-  simplex[ct_in_nodes[3]]  prop_b[Q * (lv >= 3)]; // b cells childrens
-  simplex[ct_in_nodes[4]]  prop_c[Q * (lv >= 3)]; // granulocyte childrens
-  simplex[ct_in_nodes[5]]  prop_d[Q * (lv >= 3)]; // mono_derived childrens
-  simplex[ct_in_nodes[6]]  prop_e[Q * (lv >= 3)]; // natural_killer childrens
-  simplex[ct_in_nodes[7]]  prop_f[Q * (lv >= 3)]; // t_cell childrens
+  simplex[ct_in_nodes[3]]  prop_b[Q * (lv == 3)]; // b cells childrens
+  simplex[ct_in_nodes[4]]  prop_c[Q * (lv == 3)]; // granulocyte childrens
+  simplex[ct_in_nodes[5]]  prop_d[Q * (lv == 3)]; // mono_derived childrens
+  simplex[ct_in_nodes[6]]  prop_e[Q * (lv == 3)]; // natural_killer childrens
+  simplex[ct_in_nodes[7]]  prop_f[Q * (lv == 3)]; // t_cell childrens
 
 	// lv4
-  simplex[ct_in_nodes[8]]  prop_g[Q * (lv >= 4)]; // dendritic myeloid childrens
-  simplex[ct_in_nodes[9]]  prop_h[Q * (lv >= 4)]; // macrophage childrens
-  simplex[ct_in_nodes[10]] prop_i[Q * (lv >= 4)]; // nk primed
-  simplex[ct_in_nodes[11]] prop_l[Q * (lv >= 4)]; // CD4 childrens
-  simplex[ct_in_nodes[12]] prop_m[Q * (lv >= 4)]; // CD8 childrens
+  simplex[ct_in_nodes[8]]  prop_g[Q * (lv == 4)]; // dendritic myeloid childrens
+  simplex[ct_in_nodes[9]]  prop_h[Q * (lv == 4)]; // macrophage childrens
+  simplex[ct_in_nodes[10]] prop_i[Q * (lv == 4)]; // nk primed
+  simplex[ct_in_nodes[11]] prop_l[Q * (lv == 4)]; // CD4 childrens
+  simplex[ct_in_nodes[12]] prop_m[Q * (lv == 4)]; // CD8 childrens
 
 	// Dirichlet regression
   // lv1
@@ -884,15 +898,16 @@ parameters {
 	// lv4
   matrix[A * (lv == 4) * do_regression,ct_in_levels[4]]  alpha_4; // Root
 
-	real<lower=0, upper = 8> phi[fam_dirichlet ? 1 : ct_in_levels[lv]];
+	real<lower=0.05, upper=1> phi[fam_dirichlet ? 1 : ct_in_levels[lv]];
 
 	// Unknown population
 	vector<lower=0, upper = log(max(counts_linear))>[max(size_G_linear_MPI)/ct_in_levels[lv]] lambda_UFO[shards];
 	real<lower=0, upper=0.5> prop_UFO;
 
 	// Censoring
-	vector<lower=0, upper=max_unseen>[how_many_cens] unseen;
-	real<lower=0> prior_unseen[2 * (how_many_cens > 0)];
+	vector<lower=0>[how_many_cens] unseen;
+	real<lower=0> prior_unseen_alpha[how_many_cens > 0];
+	real<lower=0, upper=1> prior_unseen_beta[how_many_cens > 0];
 
 }
 transformed parameters{
@@ -908,8 +923,8 @@ transformed parameters{
 	if(lv >= 2)
 	prop_2 =
 		append_vector_array(
-			prop_1[,singles_lv2],
-			multiply_by_column(prop_a, prop_1[,parents_lv2[1]])
+			prop_1_prior[,singles_lv2],
+			multiply_by_column( (lv == 2 ? prop_a : prop_a_prior), prop_1_prior[,parents_lv2[1]])
 		);
 
 	// proportion of level 3
@@ -918,14 +933,14 @@ transformed parameters{
 		append_vector_array(
 			prop_2[,singles_lv3],
 			append_vector_array(
-				multiply_by_column(prop_b, prop_2[,parents_lv3[1]]),
+				multiply_by_column((lv == 3 ? prop_b : prop_b_prior), prop_2[,parents_lv3[1]]),
 				append_vector_array(
-					multiply_by_column(prop_c, prop_2[,parents_lv3[2]]),
+					multiply_by_column((lv == 3 ? prop_c : prop_c_prior), prop_2[,parents_lv3[2]]),
 					append_vector_array(
-						multiply_by_column(prop_d, prop_2[,parents_lv3[3]]),
+						multiply_by_column((lv == 3 ? prop_d : prop_d_prior), prop_2[,parents_lv3[3]]),
 						append_vector_array(
-							multiply_by_column(prop_e, prop_2[,parents_lv3[4]]),
-							multiply_by_column(prop_f, prop_2[,parents_lv3[5]])
+							multiply_by_column((lv == 3 ? prop_e : prop_e_prior), prop_2[,parents_lv3[4]]),
+							multiply_by_column((lv == 3 ? prop_f : prop_f_prior), prop_2[,parents_lv3[5]])
 						)
 					)
 				)
@@ -988,29 +1003,33 @@ model {
 
   	if(fam_dirichlet) for(q in 1:Q) prop_1[q] ~ dirichlet_regression( X_[q], alpha_1, phi[1] );
   	else  prop_1 ~ beta_regression(X_, alpha_1, phi);
-  	to_vector( alpha_1 ) ~ normal(0,1);
+  	 alpha_1[1] ~ normal(0,1);
+  	 to_vector( alpha_1[2:] ) ~ normal(0,2.5);
+
 
   }
 	if(lv == 1 && !do_regression) for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | rep_vector(1, num_elements(prop_1[1])));
-	if(lv > 1)  for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | prop_1_prior[q]);
+	//if(lv > 1)  for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | prop_1_prior[q]);
 
 	// lv 2
   if(lv == 2 && do_regression) {
 
   	if(fam_dirichlet) for(q in 1:Q) prop_2[q] ~ dirichlet_regression( X_[q], alpha_2, phi[1] );
   	else  prop_2 ~ beta_regression(X_, alpha_2, phi);
-  	to_vector( alpha_2 ) ~ normal(0,1);
+  	alpha_2[1] ~ normal(0,1);
+  	to_vector( alpha_2[2:] ) ~ normal(0,2.5);
 
   }
 	if(lv == 2 && !do_regression) for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | rep_vector(1, num_elements(prop_a[1])));
-	if(lv > 2)  for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | prop_a_prior[q]);
+	//if(lv > 2)  for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | prop_a_prior[q]);
 
 	// lv 3
   if(lv == 3 && do_regression){
 
   	if(fam_dirichlet) for(q in 1:Q) prop_3[q] ~ dirichlet_regression( X_[q], alpha_3, phi[1] );
   	 else  prop_3 ~ beta_regression(X_, alpha_3, phi);
-  	to_vector( alpha_3 ) ~ normal(0,1);
+		alpha_3[1] ~ normal(0,1);
+  	to_vector( alpha_3[2:] ) ~ normal(0,2.5);
 
   }
   if(lv == 3 && !do_regression) for(q in 1:Q){
@@ -1020,20 +1039,21 @@ model {
 		 target += dirichlet_lpdf(prop_e[q] | rep_vector(1, num_elements(prop_e[1])));
 		 target += dirichlet_lpdf(prop_f[q] | rep_vector(1, num_elements(prop_f[1])));
   }
-  if(lv > 3){
-    for(q in 1:Q) target += dirichlet_lpdf(prop_b[q] | prop_b_prior[q]);
-    for(q in 1:Q) target += dirichlet_lpdf(prop_c[q] | prop_c_prior[q]);
-    for(q in 1:Q) target += dirichlet_lpdf(prop_d[q] | prop_d_prior[q]);
-    for(q in 1:Q) target += dirichlet_lpdf(prop_e[q] | prop_e_prior[q]);
-    for(q in 1:Q) target += dirichlet_lpdf(prop_f[q] | prop_f_prior[q]);
-  }
+  // if(lv > 3){
+  //   for(q in 1:Q) target += dirichlet_lpdf(prop_b[q] | prop_b_prior[q]);
+  //   for(q in 1:Q) target += dirichlet_lpdf(prop_c[q] | prop_c_prior[q]);
+  //   for(q in 1:Q) target += dirichlet_lpdf(prop_d[q] | prop_d_prior[q]);
+  //   for(q in 1:Q) target += dirichlet_lpdf(prop_e[q] | prop_e_prior[q]);
+  //   for(q in 1:Q) target += dirichlet_lpdf(prop_f[q] | prop_f_prior[q]);
+  // }
 
 	// lv 4
   if(lv == 4 && do_regression){
 
   	if(fam_dirichlet) for(q in 1:Q) prop_4[q] ~ dirichlet_regression( X_[q], alpha_4, phi[1] );
   	 else  prop_4 ~ beta_regression(X_, alpha_4, phi);
-  	to_vector( alpha_4 ) ~ normal(0,1);
+  	alpha_4[1] ~ normal(0,1);
+  	to_vector( alpha_4[2:] ) ~ normal(0,2.5);
 
   }
   if(lv == 4 && !do_regression) for(q in 1:Q){
@@ -1074,7 +1094,7 @@ model {
 	// Dirichlet regression
 	if(fam_dirichlet) phi ~ normal(0,1);
 	// Beta regression
-	else phi ~ normal(0,1);
+	else phi ~ beta(1,20);
 
 	// lambda UFO
 	for(i in 1:shards) lambda_UFO[i] ~ skew_normal(6.2, 3.3, -2.7);
@@ -1082,8 +1102,9 @@ model {
 
 	// Censoring
 	if(how_many_cens > 0){
-		X_[,2] ~ gamma(prior_unseen[1] + 1, 1/prior_unseen[2]);
-		prior_unseen ~ normal(0,1);
+		X_[,2] ~ gamma(prior_unseen_alpha[1], 1.0/prior_unseen_beta[1]);
+		prior_unseen_alpha ~ normal(0,1);
+		prior_unseen_beta ~ beta(1,40);
 	}
 }
 generated quantities{

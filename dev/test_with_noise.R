@@ -164,8 +164,8 @@ which_is_up_down = 1:16 %>% map( ~ c(
 # 	map( ~ .x %>% noise_test) %>%
 # 	saveRDS("dev/test_dirichlet_with_noise.rds")
 #
-# which_is_up_down %>%
-# 	map( ~ .x %>% noise_test(do_regression = T)) %>%
+which_is_up_down %>%
+	map( ~ .x %>% noise_test(do_regression = T)) %>%
 # 	saveRDS("dev/test_dirichlet_with_noise_regression.rds")
 
 res = readRDS("dev/test_dirichlet_with_noise.rds")

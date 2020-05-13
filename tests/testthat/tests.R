@@ -1,4 +1,3 @@
-context('Test if divergent')
 
 library(tidyverse)
 library(ARMET)
@@ -52,7 +51,7 @@ expect_equal(
 
 })
 
-my_mix = ARMET_ref %>% inner_join( (.) %>% distinct(sample) %>% slice(1))
+my_mix = ARMET_ref %>% inner_join( (.) %>% distinct(sample) %>% slice(1)) %>% select(-level)
 
 
 test_that("check simple run",{
@@ -65,8 +64,7 @@ result_fix =
 		.abundance = count,
 		iterations = 50,
 		sampling_iterations = 5,
-		cores = 2,
-		levels = 3
+		cores = 2
 	)
 
 
@@ -79,16 +77,28 @@ test_that("check nk dataset run",{
 	result_nk_fix =
 		ARMET_ref %>%
 		inner_join( (.) %>% filter(`Cell type category` == "nk_primed") %>% distinct(sample) %>% slice(1)) %>%
+		select(-level) %>%
 		ARMET_tc(
 			.sample = sample,
 			.transcript = symbol,
 			.abundance = count,
-			cores = 2,
-			levels = 3
-		) %$%
+			cores = 2
+		)  %>%
+		ARMET_tc_continue(2) %>%
+		ARMET_tc_continue(3) %$%
 		proportions %>%
 		filter(level==3) %>%
-		filter(`Cell type category` == "nk_primed")
+		filter(`Cell type category` == "nk_primed") 
+	
+	expect_gt(
+		result_nk_fix %>%
+			select(-.variable) %>%
+			unnest(proportions) %>%
+			pull(.value),
+		0.95
+	)
+	
+	
 
 	})
 
@@ -97,57 +107,41 @@ test_that("Check accuracy N52",{
 
 	N52_ARMET_T =
 		filter(
-			readRDS("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/N52.rds"),
+			readRDS("dev/N52.rds"),
 			ct == "T"
 		) %>%
+		mutate(count = as.integer(count)) %>%
 		ARMET_tc(
 			.sample = sample,
 			.transcript = symbol,
 			.abundance = count,
 			cores = 20,
-			levels = 3, do_regression = T
-		)
+			do_regression = T
+		) %>%
+		ARMET_tc_continue(2) %>%
+		ARMET_tc_continue(3)
 
 	expect_gt(
-		N52_ARMET_T$proportions %>% filter(`Cell type category` == "immune_cell") %>% summarise(.value %>% min),
-		0.95
+		N52_ARMET_T$proportions %>% filter(`Cell type category` == "immune_cell") %>% select(-.variable) %>%  unnest(proportions) %>% summarise(.value %>% min),
+		0.975
 	)
 
 	expect_gt(
-		N52_ARMET_T$proportions %>% filter(`Cell type category` == "t_cell") %>% summarise(.value %>% min),
+		N52_ARMET_T$proportions %>% filter(`Cell type category` == "t_cell") %>% select(-.variable) %>%  unnest(proportions) %>% summarise(.value %>% min),
 		0.7
 	)
 
 	expect_lt(
-		N52_ARMET_T$proportions %>% filter(!converged) %>% nrow,
+		N52_ARMET_T$proportions %>% select(-.variable) %>%  unnest(proportions) %>% filter(!converged) %>% nrow,
 		7
 	)
-
-
-	N52_ARMET_E =
-	ARMET_tc(
-		filter(
-			readRDS("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/N52.rds"),
-			ct == "E"
-		),
-		.sample = sample,
-		.transcript = symbol,
-		.abundance = count,
-		cores = 20,
-		levels = 3, do_regression = T
-	)
-
-expect_gt(
-	N52_ARMET_E$proportions %>% filter(`Cell type category` == "epithelial") %>% summarise(.value %>% min),
-	0.94
-)
 
 })
 
 
 
 
-test_that("Simulated data",{
+test_that("Simulated data and plot",{
 
 res =
 	readRDS("dev/noiseless_mix.rds") %>%
@@ -158,20 +152,24 @@ res =
 		transcript,
 		count,
 		do_regression = T,
-		iterations = 400,
-		sampling_iterations = 200
-	)
+		iterations = 600,
+		sampling_iterations = 400
+	)  %>%
+	ARMET_tc_continue(2) %>%
+	ARMET_tc_continue(3)
 
 expect_equal(
-	res %>%
+	c("b_cell" ,  "mast_cell" , "b_memory",   "neutrophil") %in%
+	(res %>%
 		test_differential_composition() %>%
 		filter(significant) %>%
 		pull(`Cell type category`) %>%
-		unique %in%
-		c("b_cell" ,  "mast_cell" , "b_memory",   "eosinophil") %>%
+		unique
+	) %>%
 		all(),
 	TRUE
 )
+
 
 # Test plotting
 res %>%
@@ -183,52 +181,37 @@ res %>%
 test_that("censoring",{
 
 	res =
-		readRDS("dev/noiseless_mix.rds") %>%
-		mutate(alive = sample(c(0,1), n(), replace=T)) %>%
-		gather(transcript, count, -sample, -covariate_2, -alive) %>%
+		readRDS("mix_for_package_test.rds") %>%
+		mutate(`count mix` = as.integer(`count mix`)) %>%
+		mutate(run = as.character(run)) %>%
+		select(-level) %>%
+	
 		ARMET_tc(
-			 ~ censored(covariate_2, alive),
-			sample,
-			transcript,
-			count,
-			do_regression = T,
-			iterations = 400,
-			sampling_iterations = 200,
-			family = "beta"
-		)
+			 ~ censored(days, alive),
+			run,
+			symbol,
+			`count mix`,
+			iterations = 600,
+			sampling_iterations = 400,
+			prior_survival_time = mixes[[1]] %>% distinct(run, real_days) %>% pull(real_days) 
+		
+		) %>%
+		ARMET_tc_continue(2) %>%
+		ARMET_tc_continue(3)
 
 	expect_equal(
-		res %>%
-			test_differential_composition() %>%
-			filter(significant) %>%
-			pull(`Cell type category`) %>%
-			unique %in%
-			c("b_cell" ,  "mast_cell" , "b_memory",   "eosinophil") %>%
+		c("immune_cell", "b_cell" ,     "b_memory" ,   "b_naive" ) %in%
+			(res %>%
+			 	test_differential_composition() %>%
+			 	filter(significant) %>%
+			 	pull(`Cell type category`) %>%
+			 	unique
+			) %>%
 			all(),
 		TRUE
 	)
 
-	# Test plotting
-	res %>%
-		test_differential_composition() %>%
-		plot_polar()
-
 })
 
 
-# # Melanoma
-#
-# mela =
-# 	readRDS("dev/melanoma_2_samples.rds") %>%
-# 	ARMET_tc(
-# 		full_bayesian  = F,
-# 		cores = 30,
-# 		levels = 3
-# 	)
-#
-# expect_equal(
-# 	mela$proportions %>% filter(!converged) %>% nrow,
-# 	0
-# )
 
-# Test regression noiseless
