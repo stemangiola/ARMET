@@ -1,4 +1,3 @@
-context('Test if divergent')
 
 library(tidyverse)
 library(ARMET)
@@ -52,7 +51,7 @@ expect_equal(
 
 })
 
-my_mix = ARMET_ref %>% inner_join( (.) %>% distinct(sample) %>% slice(1))
+my_mix = ARMET_ref %>% inner_join( (.) %>% distinct(sample) %>% slice(1)) %>% select(-level)
 
 
 test_that("check simple run",{
@@ -78,6 +77,7 @@ test_that("check nk dataset run",{
 	result_nk_fix =
 		ARMET_ref %>%
 		inner_join( (.) %>% filter(`Cell type category` == "nk_primed") %>% distinct(sample) %>% slice(1)) %>%
+		select(-level) %>%
 		ARMET_tc(
 			.sample = sample,
 			.transcript = symbol,
@@ -107,9 +107,10 @@ test_that("Check accuracy N52",{
 
 	N52_ARMET_T =
 		filter(
-			readRDS("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/N52.rds"),
+			readRDS("dev/N52.rds"),
 			ct == "T"
 		) %>%
+		mutate(count = as.integer(count)) %>%
 		ARMET_tc(
 			.sample = sample,
 			.transcript = symbol,
@@ -121,17 +122,17 @@ test_that("Check accuracy N52",{
 		ARMET_tc_continue(3)
 
 	expect_gt(
-		N52_ARMET_T$proportions %>% filter(`Cell type category` == "immune_cell") %>% summarise(.value %>% min),
-		0.95
+		N52_ARMET_T$proportions %>% filter(`Cell type category` == "immune_cell") %>% select(-.variable) %>%  unnest(proportions) %>% summarise(.value %>% min),
+		0.975
 	)
 
 	expect_gt(
-		N52_ARMET_T$proportions %>% filter(`Cell type category` == "t_cell") %>% summarise(.value %>% min),
+		N52_ARMET_T$proportions %>% filter(`Cell type category` == "t_cell") %>% select(-.variable) %>%  unnest(proportions) %>% summarise(.value %>% min),
 		0.7
 	)
 
 	expect_lt(
-		N52_ARMET_T$proportions %>% filter(!converged) %>% nrow,
+		N52_ARMET_T$proportions %>% select(-.variable) %>%  unnest(proportions) %>% filter(!converged) %>% nrow,
 		7
 	)
 
@@ -177,33 +178,29 @@ res %>%
 
 })
 
-
-
-
-
 test_that("censoring",{
 
 	res =
-		readRDS("dev/noiseless_mix.rds") %>%
-		mutate(alive = as.integer(sample(c(0,1), n(), replace=T))) %>%
-		mutate(covariate_2 = covariate_2 + 1) %>%
-		gather(transcript, count, -sample, -covariate_2, -alive) %>%
+		readRDS("mix_for_package_test.rds") %>%
+		mutate(`count mix` = as.integer(`count mix`)) %>%
+		mutate(run = as.character(run)) %>%
+		select(-level) %>%
+	
 		ARMET_tc(
-			 ~ censored(covariate_2, alive),
-			sample,
-			transcript,
-			count,
-			do_regression = T,
+			 ~ censored(days, alive),
+			run,
+			symbol,
+			`count mix`,
 			iterations = 600,
 			sampling_iterations = 400,
-			prior_survival_time = sample(1, 2, 30, replace = T)
+			prior_survival_time = mixes[[1]] %>% distinct(run, real_days) %>% pull(real_days) 
 		
 		) %>%
 		ARMET_tc_continue(2) %>%
 		ARMET_tc_continue(3)
 
 	expect_equal(
-		c("b_cell" ,  "mast_cell" , "b_memory",   "granulocyte") %in%
+		c("immune_cell", "b_cell" ,     "b_memory" ,   "b_naive" ) %in%
 			(res %>%
 			 	test_differential_composition() %>%
 			 	filter(significant) %>%
