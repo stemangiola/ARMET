@@ -1,4 +1,3 @@
-context('Test if divergent')
 
 library(tidyverse)
 library(ARMET)
@@ -52,7 +51,7 @@ expect_equal(
 
 })
 
-my_mix = ARMET_ref %>% inner_join( (.) %>% distinct(sample) %>% slice(1))
+my_mix = ARMET_ref %>% inner_join( (.) %>% distinct(sample) %>% slice(1)) %>% select(-level)
 
 
 test_that("check simple run",{
@@ -78,6 +77,7 @@ test_that("check nk dataset run",{
 	result_nk_fix =
 		ARMET_ref %>%
 		inner_join( (.) %>% filter(`Cell type category` == "nk_primed") %>% distinct(sample) %>% slice(1)) %>%
+		select(-level) %>%
 		ARMET_tc(
 			.sample = sample,
 			.transcript = symbol,
@@ -107,9 +107,10 @@ test_that("Check accuracy N52",{
 
 	N52_ARMET_T =
 		filter(
-			readRDS("/stornext/Home/data/allstaff/m/mangiola.s/PhD/deconvolution/ARMET/dev/N52.rds"),
+			readRDS("dev/N52.rds"),
 			ct == "T"
 		) %>%
+		mutate(count = as.integer(count)) %>%
 		ARMET_tc(
 			.sample = sample,
 			.transcript = symbol,
@@ -121,17 +122,17 @@ test_that("Check accuracy N52",{
 		ARMET_tc_continue(3)
 
 	expect_gt(
-		N52_ARMET_T$proportions %>% filter(`Cell type category` == "immune_cell") %>% summarise(.value %>% min),
-		0.95
+		N52_ARMET_T$proportions %>% filter(`Cell type category` == "immune_cell") %>% select(-.variable) %>%  unnest(proportions) %>% summarise(.value %>% min),
+		0.975
 	)
 
 	expect_gt(
-		N52_ARMET_T$proportions %>% filter(`Cell type category` == "t_cell") %>% summarise(.value %>% min),
+		N52_ARMET_T$proportions %>% filter(`Cell type category` == "t_cell") %>% select(-.variable) %>%  unnest(proportions) %>% summarise(.value %>% min),
 		0.7
 	)
 
 	expect_lt(
-		N52_ARMET_T$proportions %>% filter(!converged) %>% nrow,
+		N52_ARMET_T$proportions %>% select(-.variable) %>%  unnest(proportions) %>% filter(!converged) %>% nrow,
 		7
 	)
 
@@ -176,10 +177,6 @@ res %>%
 	plot_polar()
 
 })
-
-
-
-
 
 test_that("censoring",{
 
