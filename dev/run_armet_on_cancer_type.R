@@ -1,4 +1,5 @@
-# DTC_on_TCGA]$ makeflow -T torque -B "-l nodes=1:ppn=12,mem=12gb,walltime=02:00:00" -N DTC_TCGA --max-remote 100 --do-not-save-failed-output Makeflow
+#~/unix3XX/third_party_sofware/cctools-7.1.5-x86_64-centos6/bin/makeflow  -T torque -B '-l walltime=148:60:00' --do-not-save-failed-output dev/makefile_run_ARMET_on_TCGA
+
 args = commandArgs(trailingOnly=TRUE)
 library(tidyverse)
 library(ARMET)
@@ -74,28 +75,23 @@ input_df =
 	mutate(alive = PFI.2 == 0) 
 
 
-# Prior
-# my_clin_curated %>% filter(grepl("Recurred", DFS_STATUS)) %>% pull(DFS_MONTHS_scaled) %>% as.numeric() %>% fitdistrplus::fitdist(distr = "gamma", method = "mle")
-
 res = input_df %>%
-	inner_join((.) %>% distinct(sample) %>% slice(1:5)) %>%      # <----------------------------
+#	inner_join((.) %>% distinct(sample) %>% slice(1:5)) %>%      # <----------------------------
 ARMET_tc(
 	~ censored(PFI.time.2, alive),
 	sample,
 	transcript, 
 	count, 
 	levels = 1,
-	do_regression = T		,
-	# iterations = 1500,                     # <----------------------------
-	# sampling_iterations = 500,                # <----------------------------
+	iterations = 1500,                     # <----------------------------
+	sampling_iterations = 500,                # <----------------------------
 	prior_survival_time = read_csv("dev/survival_TCGA_curated.csv") %>% filter(PFI.2==1 & !is.na(PFI.time.2) & PFI.time.2 != "#N/A") %>% pull(PFI.time.2) %>% as.numeric
 	# , 
 	# model = rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix_hierarchical.stan", auto_write = F)
-) 
-# %>%
-# 	ARMET_tc_continue(2) %>%
-# 	ARMET_tc_continue(3) %>%
-# 	ARMET_tc_continue(4)
+)  %>%
+	ARMET_tc_continue(2) %>%
+	ARMET_tc_continue(3) %>%
+	ARMET_tc_continue(4)
 
 
 save(res, file=sprintf("dev/armet_%s.rda", i), compress = "gzip")
@@ -108,7 +104,6 @@ save(res, file=sprintf("dev/armet_%s.rda", i), compress = "gzip")
 
 # Density
 # (res$proportions %>%
-# 		#filter(level ==3) %>%
 # 		unnest(draws) %>%
 # 		filter(A == 2) %>%
 # 		ggplot(aes(.value, color=`Cell type category`)) +
