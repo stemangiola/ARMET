@@ -4,7 +4,8 @@
 \alias{plot_densities}
 \title{Plots the densities distributions columnwise of a matrix}
 \usage{
-plot_densities(df, color = "0", fill = "0", alpha = 0.3, do_log = T)
+plot_densities(df, color = "0", fill = "0", alpha = 0.3,
+  do_log = T)
 }
 \arguments{
 \item{df}{A matrix}

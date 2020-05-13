@@ -1,36 +1,27 @@
 # Windows image file caches
 Thumbs.db
 ehthumbs.db
-
 # Folder config file
 Desktop.ini
-
 # Recycle Bin used on file shares
 $RECYCLE.BIN/
-
 # Windows Installer files
 *.cab
 *.msi
 *.msm
 *.msp
-
 # Windows shortcuts
 *.lnk
-
 # =========================
 # Operating System Files
 # =========================
-
 # OSX
 # =========================
-
 .DS_Store
 .AppleDouble
 .LSOverride
-
 # Thumbnails
 ._*
-
 # Files that might appear in the root of a volume
 .DocumentRevisions-V100
 .fseventsd
@@ -38,17 +29,45 @@ $RECYCLE.BIN/
 .TemporaryItems
 .Trashes
 .VolumeIcon.icns
-
 # Directories potentially created on remote AFP share
 .AppleDB
 .AppleDesktop
 Network Trash Folder
 Temporary Items
 .apdisk
-
 *.Rproj*
 *.o
 *.hpp
 .Rhistory
 .RData
+
 data/ref_array.rda
+.Rproj.user
+job_torque*
+#*.rds
+docs/*.RData
+docs/*.pdf
+docs/feature_selection*
+docs/ref_1_2_3.csv
+temp*
+*torque*
+dev/run*
+log*
+docs/RECOVERED_FILES/*
+src/ARMET.dll
+src/ARMET.so
+src/stanExports_ARMET_tc.h
+dev/ref_1_2_3_4.csv
+dev/ARMET_ref_Aug2019.RData
+last.dump.rda
+src/ARMET.so
+src/stanExports_ARMET_tc.h
+dev/OLD*
+dev/*.Rdata
+dev/*.RData
+dev/*.rda
+dev/*.rds
+dev/*.RDS
+dev/*.csv
+run_armet_on_cancer_type.sh.*
+

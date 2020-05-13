@@ -4,24 +4,43 @@
 \alias{ARMET_tc}
 \title{ARMET-tc main}
 \usage{
-ARMET_tc(mix, my_design = NULL, cov_to_test = NULL, is_mix_microarray = F,
-  ct_to_omit = c("t_CD4_naive", "adipocyte"), verbose = F,
-  save_report = F, custom_ref = NULL, multithread = T, do_debug = F,
-  cell_type_root = "TME", choose_internal_ref = NULL, omit_regression = F,
-  save_fit = F, seed = NULL)
+ARMET_tc(
+  .data,
+  .formula = ~1,
+  .sample = NULL,
+  .transcript = NULL,
+  .abundance = NULL,
+  family = "dirichlet",
+  reference = NULL,
+  approximate_posterior = F,
+  verbose = F,
+  save_fit = F,
+  seed = NULL,
+  cores = 14,
+  iterations = 250,
+  sampling_iterations = 100,
+  levels = 3,
+  .n_markers = n_markers,
+  do_regression = T,
+  model = stanmodels$ARMET_tc_fix_hierarchical
+)
 }
 \arguments{
+\item{verbose}{A boolean}
+
+\item{save_fit}{A boolean}
+
+\item{seed}{An integer}
+
 \item{mix}{A matrix}
 
 \item{my_design}{A matrix}
 
 \item{cov_to_test}{A character string}
 
+\item{fully_bayesian}{A boolean}
+
 \item{is_mix_microarray}{A boolean}
-
-\item{ct_to_omit}{A character string}
-
-\item{verbose}{A boolean}
 
 \item{save_report}{A boolean}
 
@@ -34,14 +53,6 @@ ARMET_tc(mix, my_design = NULL, cov_to_test = NULL, is_mix_microarray = F,
 \item{cell_type_root}{A character string}
 
 \item{choose_internal_ref}{A design matrix}
-
-\item{omit_regression}{A boolean}
-
-\item{save_fit}{A boolean}
-
-\item{seed}{An integer}
-
-\item{fully_bayesian}{A boolean}
 }
 \value{
 An ARMET object
