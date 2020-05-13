@@ -20,8 +20,9 @@ ARMET_tc(
   iterations = 250,
   sampling_iterations = 100,
   levels = 3,
-  n_markers = my_n_markers,
-  do_regression = F
+  .n_markers = n_markers,
+  do_regression = T,
+  model = stanmodels$ARMET_tc_fix_hierarchical
 )
 }
 \arguments{
