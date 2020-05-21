@@ -7,6 +7,7 @@ library(furrr)
 library(data.tree)
 library(foreach)
 library(ARMET)
+library(nanny)
 
 
 my_theme =
@@ -92,6 +93,8 @@ generate_mixture = function(.data, X_df, alpha) {
 	
 	alpha_df = alpha %>% as.data.frame %>% setNames(sprintf("alpha_%s", 1:2)) %>% mutate(`Cell type category`  = ct_names)
 	
+	ct_changing = alpha_df %>% filter(alpha_2 != 0) %>% pull(`Cell type category`)
+	
 	cell_type_proportions =
 		# Choose samples
 		samples_per_run %>%
@@ -120,6 +123,17 @@ generate_mixture = function(.data, X_df, alpha) {
 		mutate(p = gtools::rdirichlet(1, alpha)) %>%
 		ungroup()
 	
+	# Add fold increase decrease
+	fold_change = 
+		matrix(c(rep(1, 2), c(0, max(X,2))), ncol = 2)  %*% t(alpha) %>%
+		apply(1, softmax) %>%
+		t %>%
+		`*` (40) %>%
+		apply(1, softmax) %>%
+		.[ct_names == ct_changing,] %>%
+		{	max(.) / min(.)	} %>%
+		{ slope = alpha[,2][ alpha[,2]!=0]; ifelse(slope<0, -(.), (.)) }
+	
 	# Add counts
 	dirichlet_source =
 		cell_type_proportions %>%
@@ -135,7 +149,9 @@ generate_mixture = function(.data, X_df, alpha) {
 		left_join(dirichlet_source %>% nanny::subset(run) ) %>%
 		
 		# Add proportions
-		add_attr(cell_type_proportions, "proportions")
+		add_attr(cell_type_proportions, "proportions") %>%
+		
+		mutate(fold_change = fold_change)
 	
 }
 
@@ -204,15 +220,14 @@ noiseles_test = function(mix_base, slope, which_changing, S) {
 
 mix_base = get_noiseless_harmonised()
 
-
-
 which_is_up_down = 1:16
-
 
 map(which_is_up_down,  ~ noiseles_test(mix_base, 4, .x, 30)) %>%
 c(map(which_is_up_down,  ~ noiseles_test(mix_base, -4, .x, 30))) %>%
-saveRDS("dev/test_noisless_survival_regression.rds")
+saveRDS("dev/test_noisless_survival_regression_4_slope.rds")
 
 
-
+map(which_is_up_down,  ~ noiseles_test(mix_base, 2, .x, 30)) %>%
+	c(map(which_is_up_down,  ~ noiseles_test(mix_base, -2, .x, 30))) %>%
+	saveRDS("dev/test_noisless_survival_regression_2_slope.rds")
 
