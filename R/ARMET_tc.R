@@ -610,8 +610,8 @@ get_signatures = function(.data){
 						nest(data = -c(`Cell type category`)) %>% 
 						mutate(med = map_dbl(data, ~.x$.value %>% median )) %>% 
 						mutate(med = rev(med)) %>% 
-						mutate(frac_up = map2_dbl(data, med, ~ (.x$.value  > .y) %>% sum %>% divide_by(nrow(.x)))) %>% 
-						mutate(frac_down = map2_dbl(data, med, ~ (.x$.value  < .y) %>% sum %>% divide_by(nrow(.x)))) %>%
+						mutate(frac_up = map2_dbl(data, med, ~ (.x$.value  > .y) %>% sum %>% magrittr::divide_by(nrow(.x)))) %>% 
+						mutate(frac_down = map2_dbl(data, med, ~ (.x$.value  < .y) %>% sum %>% magrittr::divide_by(nrow(.x)))) %>%
 						mutate(prob = ifelse(frac_up > frac_down, frac_up, frac_down)) %>%
 						
 						# stretch to o 1 interval
@@ -633,13 +633,12 @@ get_signatures = function(.data){
 #' @export
 test_differential_composition = function(.data, credible_interval = 0.90, cluster_CI = 0.55) {
 
-
+ 
 	.d = 
 		.data$proportions %>%
 		filter(.variable %>% is.na %>% `!`) %>%
-		select(-one_of("zero")) %>%
 		cluster_posterior_slopes(credible_interval = cluster_CI) %>%
-		extract_CI
+		extract_CI(credible_interval)
 	
 	dx = list()	
 	
@@ -661,8 +660,8 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 				.d %>%
 		
 		filter(level ==2) %>%
-		left_join(ARMET::tree %>% get_ancesotr_child) %>%
-		left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) )  %>%
+		left_join(ancestor_child, by = "Cell type category") %>%
+		left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change),  by = "ancestor" )  %>%
 		identify_baseline_by_clustering( ) %>%
 		
 		mutate(significant = ((.lower_alpha2 - zero) * (.upper_alpha2 - zero)) > 0) %>%
@@ -676,8 +675,8 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 		.d %>%
 		
 		filter(level ==3) %>%
-		left_join(ARMET::tree %>% get_ancesotr_child) %>%
-		left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) )  %>%
+		left_join(ancestor_child, by = "Cell type category") %>%
+		left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) ,  by = "ancestor")  %>%
 		identify_baseline_by_clustering( ) %>%
 		
 		mutate(significant = ((.lower_alpha2 - zero) * (.upper_alpha2 - zero)) > 0) %>%
@@ -690,8 +689,8 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 			.d %>%
 				
 				filter(level ==4) %>%
-				left_join(ARMET::tree %>% get_ancesotr_child) %>%
-				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) )  %>%
+				left_join(ancestor_child, by = "Cell type category") %>%
+				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) ,  by = "ancestor")  %>%
 				identify_baseline_by_clustering( ) %>%
 				
 				mutate(significant = ((.lower_alpha2 - zero) * (.upper_alpha2 - zero)) > 0) %>%
@@ -734,7 +733,7 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 	# 	
 	# 	# Adjust ifancestor is significant
 	# 	# equential important becaue we hav toudatecildren on level at the time
-	# 	left_join(ARMET::tree %>% get_ancesotr_child)	%>%
+	# 	left_join(ancestor_child)	%>%
 	# 	left_join( (.) %>% distinct(ancestor = `Cell type category`, fold_change_ancestor = ifelse(significant, .value_alpha2, 0)) )	%>%
 	# 	group_by(.variable) %>%
 	# 	mutate(zero = ifelse(level == 2 & fold_change_ancestor > 0, min(.value_alpha2), zero)) %>%

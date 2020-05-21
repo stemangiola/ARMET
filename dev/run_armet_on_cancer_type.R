@@ -103,13 +103,13 @@ save(res, file=sprintf("dev/armet_%s.rda", i), compress = "gzip")
 # 
 
 # Density
-# (res$proportions %>%
-# 		unnest(draws) %>%
-# 		filter(A == 2) %>%
-# 		ggplot(aes(.value, color=`Cell type category`)) +
-# 		geom_density() +
-# 		facet_wrap(~.variable, scale="free_y")
-# ) %>% plotly::ggplotly()
+(res$proportions %>%
+		unnest(draws) %>%
+		filter(A == 2) %>%
+		ggplot(aes(.value, color=`Cell type category`)) +
+		geom_density() +
+		facet_wrap(~.variable, scale="free_y")
+) %>% plotly::ggplotly()
 #
 
 

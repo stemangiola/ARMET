@@ -4,6 +4,7 @@ library(furrr)
 library(tidybulk)
 library(dendextend)
 library(RColorBrewer)
+library(nanny)
 plan(multicore)
 
 my_theme =
@@ -67,41 +68,44 @@ cancer_sig =
 	dir("dev", pattern = "^armet_", full.names = T) %>%
 	#.[1:3] %>%
 	grep("rda", ., fixed = T, value = T) %>%
-	map_dfr(~ {
+	future_map_dfr(~ {
 		load(.x)
 		res %>%
 			get_signatures %>%
 			mutate(cancer = .x %>% gsub("dev/armet_", "", .) %>% gsub(".rda", "", ., fixed = T))
 	}) %>%
+	extract(col = cancer, into = "cancer_ID", regex = "([A-Z]+)\\.", remove = F) %>%
 	
+	# Add info cancer group
+	left_join(read_csv("dev/TCGA_supergroups.csv") %>% select(-cancer)) %>%
 	
-	# separate(cancer, sprintf("ccan%s", 1:3), sep="_", remove = F) %>%
-	# mutate_at(vars(starts_with("ccan")), function(x) substr(x, 1,1)) %>%
-	# unite(8:10, col="cancer_ID", sep="", na.rm=T) %>%
-	left_join(read_csv("dev/TCGA_supergroups.csv")) %>%
+	# Give color
 	nest(data = -group) %>%
 	arrange(group) %>%
 	mutate(color = colorRampPalette(brewer.pal(9, "Set1"))(n())) %>%
-	unnest(data)
+	unnest(data) %>%
 	
+	distinct()
+	
+saveRDS(cancer_sig, "dev/cancer_sig.rds", compress="gzip")
 
 (
 	bind_rows(
 	cancer_sig %>%
 		filter(A ==1)	%>%
 		unite(col="ct_pair", c(`Cell type category_1`, `Cell type category_2`)) %>%
-		#	nanny::reduce_dimensions(cancer, c(`Cell type category_1`, `Cell type category_2`), prob, method = "PCA")
-		nanny::reduce_dimensions(cancer, ct_pair, prob, method = "PCA") %>%
-		nanny::subset(cancer) %>%
+		#	nanny::reduce_dimensions(cancer_ID, c(`Cell type category_1`, `Cell type category_2`), prob, method = "PCA")
+		nanny::reduce_dimensions(cancer_ID, ct_pair, prob, method = "PCA") %>%
+		nanny::subset(cancer_ID) %>%
 		mutate(signature = "Tissue composition"),
 	cancer_sig %>%
 		filter(A ==2)	%>%
 		unite(col="ct_pair", c(`Cell type category_1`, `Cell type category_2`)) %>%
-		#	nanny::reduce_dimensions(cancer, c(`Cell type category_1`, `Cell type category_2`), prob, method = "PCA")
-		nanny::reduce_dimensions(cancer, ct_pair, prob, method = "PCA") %>%
-		nanny::subset(cancer) %>%
+		#	nanny::reduce_dimensions(cancer_ID, c(`Cell type category_1`, `Cell type category_2`), prob, method = "PCA")
+		nanny::reduce_dimensions(cancer_ID, ct_pair, prob, method = "PCA") %>%
+		nanny::subset(cancer_ID) %>%
 		mutate(signature = "Cell-type/Survival")
-) %>%
+	) %>%
 	mutate(signature = factor(signature, levels=c("Tissue composition", "Cell-type/Survival"))) %>%
 	ggplot(aes(PC1, PC2, label=cancer_ID)) +
 	geom_point(aes(fill = group), shape = 21, size=2) +
@@ -120,6 +124,37 @@ cancer_sig =
 		limitsize = FALSE
 	)
 
+# Heatmap 1
+library(doParallel)
+registerDoParallel(30)
+
+x = foreach(i = dir("dev/armet_TCGA_may19_before_log_days/", pattern = "^armet_", full.names = T), .combine = bind_rows) %dopar% {
+	load(i)
+	res %>% test_differential_composition() %>% select(.variable, community, level ,   `Cell type category`, C, .value_alpha1) %>%
+		mutate(file=i)
+}
+
+x %>%
+	extract(file, "cancer_ID", regex = ".*armet_([A-Z]+).*") %>%
+	left_join(read_csv("dev/TCGA_supergroups.csv") %>% select(-cancer)) %>% 
+	group_by(level) %>%
+	heatmap( `Cell type category`, cancer_ID, .value_alpha1, annotation = group, palette_discrete = list(unique(cancer_sig$color)))
+
+# Heatmap 2
+library(tidyHeatmap)
+cancer_sig %>%
+	filter(A == 1) %>%
+	nest(data = -c(cancer_ID, cancer, color)) %>%
+	mutate(data = map(data, ~ .x %>%
+											lower_triangular(`Cell type category_1`, `Cell type category_2`, prob)
+											)) %>%
+	unnest(data) %>%
+	unite("ct", c(`Cell type category_1`, `Cell type category_2`)) %>%
+	group_by(level) %>%
+	heatmap( ct, cancer_ID, prob, annotation = color, palette_discrete = list(unique(.$color)))
+
+
+
 # Dendrograms all features
 pdf("dev/TCGA_dendrogram.pdf", useDingbats = F)
 cancer_sig %>%
@@ -133,7 +168,7 @@ cancer_sig %>%
 					select(-level) %>%
 					pivot_wider(
 						names_from = c(.variable, `Cell type category_1`, `Cell type category_2`),
-						values_from = prob
+						values_from = prob, 
 					) %>%
 					as_matrix(rownames = "cancer_ID") %>%
 					dist() %>%
@@ -149,7 +184,7 @@ cancer_sig %>%
 			set("leaves_col",  .y %>% distinct(cancer_ID, color) %>% arrange(match(cancer_ID, .x %>% labels))  %>% pull(color)  ) )) %>%
 	pull(dendro) %>%
 	
-	{ tanglegram((.)[[1]], (.)[[2]]) }
+	{ tanglegram((.)[[1]], (.)[[2]], highlight_branches_lwd = F) }
 dev.off()
 
 # PCA

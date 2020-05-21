@@ -743,8 +743,12 @@ parse_summary_check_divergence = function(draws) {
 #'
 #' @export
 create_tree_object = function(my_ref = ARMET::ARMET_ref) {
+	
+
+	
 	#yaml:: yaml.load_file("~/PhD/deconvolution/ARMET/data/tree.yaml") %>%
-	yaml::yaml.load_file("data/tree.yaml") %>%
+	tree = 
+		yaml::yaml.load_file("data/tree.yaml") %>%
 		data.tree::as.Node() %>%
 
 		{
@@ -779,6 +783,12 @@ create_tree_object = function(my_ref = ARMET::ARMET_ref) {
 			.
 
 		}
+	
+	save(tree, file="data/tree.rda", compress = "gzip")
+	
+	ancestor_child = tree %>% get_ancestor_child
+	
+	save(ancestor_child, file="data/ancestor_child.rda", compress = "gzip")
 }
 
 #' as_matrix
@@ -926,18 +936,7 @@ ToDataFrameTypeColFull_old = function(tree, fill = T, ...) {
 		select(..., everything())
 }
 
-get_ancesotr_child = function(tree){
-	tree %>% ToDataFrameTypeColFull %>% distinct(level_1, level_2) %>% setNames(c("ancestor", "Cell type category")) %>% bind_rows(
-		tree %>% ToDataFrameTypeColFull %>% distinct(level_2, level_3) %>% setNames(c("ancestor", "Cell type category"))
-	) %>%
-		bind_rows(
-			tree %>% ToDataFrameTypeColFull %>% distinct(level_3, level_4) %>% setNames(c("ancestor", "Cell type category"))
-		) %>%
-		bind_rows(
-			tree %>% ToDataFrameTypeColFull %>% distinct(level_4, level_5) %>% setNames(c("ancestor", "Cell type category"))
-		) %>%
-		filter(ancestor != `Cell type category`)
-}
+
 
 #' vb_iterative
 #'
@@ -1913,7 +1912,7 @@ combine_nest = function(.data, .names_from, .values_from){
 	
 }
 
-get_ancesotr_child = function(tree){
+get_ancestor_child = function(tree){
 	tree %>% ToDataFrameTypeColFull %>% distinct(level_1, level_2) %>% setNames(c("ancestor", "Cell type category")) %>% bind_rows(
 		tree %>% ToDataFrameTypeColFull %>% distinct(level_2, level_3) %>% setNames(c("ancestor", "Cell type category"))
 	) %>%
@@ -2001,6 +2000,7 @@ get_tree_properties = function(tree){
 	)
 }
 
+#' @importFrom tidygraph tbl_graph
 cluster_posterior_slopes = function(.data, credible_interval = 0.67){
 	 
 	# Add cluster info to cell types per node
@@ -2010,31 +2010,25 @@ cluster_posterior_slopes = function(.data, credible_interval = 0.67){
 		mutate(node = map(
 			node,
 			~ {
-				.x %>%
+				.x %>% 
 					left_join(
 						
 						# Unnest data
-						(.) %>%
-							select(-proportions, -rng) %>%
-							unnest(draws) %>%
-							filter(A == 2) %>%
-							
-							# Calculate credible interval
-							group_by(C, `Cell type category` , A, Rhat) %>%
-							tidybayes::median_qi(.width = credible_interval) %>%
-							ungroup() %>%
+						(.) %>% 
+							extract_CI(credible_interval) %>%
+							select(-c(proportions  ,   draws ,      rng )) %>%
 							
 							# Build combination of cell types
 							combine_nest(
 								.names_from = `Cell type category`,
-								.values_from = c(.lower, .upper, Rhat)
+								.values_from = c(.lower_alpha2, .upper_alpha2, Rhat)
 							)  %>%
 							
 							# Check overlap of credible intervals
 							mutate(is_cluster = map_lgl(
 								data,
 								~ .x %>% 
-									summarise(ma = max(.lower), mi = min(.upper), converged = any(Rhat > 1.6)==F) %>% 
+									summarise(ma = max(.lower_alpha2), mi = min(.upper_alpha2), converged = any(Rhat > 1.6)==F) %>% 
 									mutate(is_cluster = ma < mi & converged) %>%
 									pull(is_cluster)
 							)) %>% 
@@ -2048,16 +2042,17 @@ cluster_posterior_slopes = function(.data, credible_interval = 0.67){
 								(.) %>%
 									filter(is_cluster) %>% 
 									select(1:2) %>%
-									tidygraph::tbl_graph(
+										tbl_graph(
 										edges = .,
 										nodes = data.frame(name = ct_levels)
-									) %>%
+									)%>%
 									mutate(community = as.factor(tidygraph::group_infomap())) 
 							}	%>%
 							
 							# Format for joining
 							as_tibble() %>%
-							rename(`Cell type category` = name)
+							rename(`Cell type category` = name),
+						by = "Cell type category"
 					)
 				
 			}	)) %>%
@@ -2065,7 +2060,7 @@ cluster_posterior_slopes = function(.data, credible_interval = 0.67){
 	
 }
 
-identify_baseline_by_clustering = function(.data){
+identify_baseline_by_clustering = function(.data, CI){
 	  
 	.data %>%
 		nest(node = -.variable) %>%
@@ -2090,8 +2085,8 @@ identify_baseline_by_clustering = function(.data){
 					# 	(.) %>% mutate(zero = -fold_change_ancestor),
 					
 					# Otherwise, if I have a consensus of overlapping posteriors make that zero
-					(.) %>% distinct(community, n) %>% count(n) %>% arrange(n %>% desc) %>% slice(1) %>% pull(nn) %>% equals(1) ~ 
-						(.) %>% mutate(zero = (.) %>% filter( n == max(n)) %>% pull(mean_community) %>% unique),
+					(.) %>% distinct(community, n) %>% count(n) %>% nrow %>% `>` (1) ~ 
+						(.) %>% mutate(zero = (.) %>% filter( n == max(n)) %>% pull(mean_community) %>% mean),
 					
 					# Otherwise make zero the 0
 					~ (.) %>% mutate(zero = 0)
@@ -2336,3 +2331,23 @@ summary_to_tibble = function(fit, par, x, y) {
 	
 }
 
+lower_triangular = function(.data){
+	
+	levs = .data$`Cell type category_1` %>% levels
+	
+	.data %>%
+		select(`Cell type category_1`, `Cell type category_2`,    prob) %>%
+		spread(`Cell type category_2` ,   prob) %>% 
+		as_matrix(rownames = "Cell type category_1") %>%
+		
+		# Drop upper triangular
+		{ ma = (.); ma[lower.tri(ma)] <- NA; ma} %>% 
+		
+		as_tibble(rownames = "Cell type category_1") %>% 
+		gather(`Cell type category_2`, prob, -`Cell type category_1`) %>% 
+		mutate(
+			`Cell type category_1` = factor(`Cell type category_1`, levels = levs), 
+			`Cell type category_2` = factor(`Cell type category_2`, levels = levs), 
+		) %>%
+		drop_na
+}

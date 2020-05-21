@@ -1,9 +1,6 @@
 
 library(tidyverse)
 library(ARMET)
-# library(data.tree)
-# library(foreach)
-# library(magrittr)
 
 test_that("check data set",{
 
@@ -180,8 +177,10 @@ res %>%
 
 test_that("censoring",{
 
+	mix = readRDS("dev/mix_for_package_test.rds")
+	
 	res =
-		readRDS("mix_for_package_test.rds") %>%
+		mix %>%
 		mutate(`count mix` = as.integer(`count mix`)) %>%
 		mutate(run = as.character(run)) %>%
 		select(-level) %>%
@@ -193,7 +192,7 @@ test_that("censoring",{
 			`count mix`,
 			iterations = 600,
 			sampling_iterations = 400,
-			prior_survival_time = mixes[[1]] %>% distinct(run, real_days) %>% pull(real_days) 
+			prior_survival_time = mix %>% distinct(run, real_days) %>% pull(real_days) 
 		
 		) %>%
 		ARMET_tc_continue(2) %>%
