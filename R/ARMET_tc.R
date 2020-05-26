@@ -17,6 +17,7 @@ ARMET_tc_continue = function(armet_obj, level, model = stanmodels$ARMET_tc_fix_h
 		full_bayesian = input$full_bayesian,
 		approximate_posterior = input$approximate_posterior,
 		internals$prop_posterior,
+		internals$prop_ancestor,
 		exposure_posterior = when(
 			level,
 			(.)==1 ~ tibble(.mean = 0, .sd = 0)[0,], 
@@ -302,6 +303,7 @@ ARMET_tc = function(.data,
 			fit = NULL,
 			df = NULL,
 			prop_posterior = get_null_prop_posterior(tree_propeties$ct_in_nodes),
+			prop_ancestor = get_null_prop_posterior(tree_propeties$ct_in_nodes),
 			alpha = NULL,
 			Q = Q,
 			reference_filtered = reference_filtered,
@@ -364,6 +366,7 @@ run_model = function(reference_filtered,
 										 full_bayesian,
 										 approximate_posterior,
 										 prop_posterior,
+										 prop_ancestor,
 										 exposure_posterior = tibble(.mean = 0, .sd = 0)[0,],
 										 iterations = 250,
 										 sampling_iterations = 100,
@@ -774,6 +777,7 @@ run_lv_1 = function(internals,
 		full_bayesian,
 		approximate_posterior,
 		internals$prop_posterior,
+		internals$prop_ancestor,
 		iterations = iterations,
 		sampling_iterations = sampling_iterations,
 		X = internals$X,
@@ -848,8 +852,9 @@ run_lv_1 = function(internals,
 	internals$fit = list(fit)
 	internals$df = list(df)
 	internals$draws = list(draws)
-	internals$prop_posterior[[1]] = fit_prop_parsed %>% group_by(.variable, Q, C) %>% prop_to_list %>% `[[` ("prop_1") 
-
+	internals$prop_ancestor[[1]] = fit_prop_parsed %>% group_by(.variable, Q, C) %>% prop_to_list %>% `[[` ("prop_1") 
+	internals$prop_posterior[[1]] = fit %>% draws_to_alphas("prop_1") %>% `[[` (1)
+ 
 	internals
 	
 	
