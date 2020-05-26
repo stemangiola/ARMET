@@ -685,12 +685,12 @@ vector[] beta_regression_rng( matrix X, matrix alpha, real[] phi){
 		//matrix[num_elements(p[,1]), num_elements(p[1])] mu;
 		vector[num_elements(phi)]  phi_exp= exp(  to_vector(phi));
 
-		// Build sum to zero variable
+// Build sum to zero variable
 		int c = cols(alpha);
 		int r = rows(alpha);
 		matrix[r, c]  alpha_ = alpha;
 		alpha_[1,c] = -sum(alpha_[1, 1:(c-1)]);
-
+		
 		for(j in 1:num_elements(p[,1])) {
 
 			vector[num_elements(p[1])] mu  = softmax( to_vector(X[j] * alpha_));
@@ -919,13 +919,13 @@ transformed parameters{
 
 
 	matrix[Q,A] X_ = X;
-	matrix[Q,A] X_scaled;
+	matrix[Q,A] X_scaled = X_;;
 	
 	if(how_many_cens > 0) {
 		X_[which_cens,2] = X_[which_cens,2] + unseen;
 		
 		// log and scale the survival days
-		X_scaled = X_;
+
 		X_scaled[,2] = log(X_scaled[,2]);
 		X_scaled[,2] = (X_scaled[,2] - mean(X_scaled[,2])) / sd(X_scaled[,2]);
 	} 
@@ -1103,7 +1103,7 @@ model {
   		 prop_l ~ beta_regression(X_scaled, alpha_l, phi[7:8]);
   		 prop_m ~ beta_regression(X_scaled, alpha_m, phi[9:10]);
   	}
-  	// else  prop_4 ~ beta_regression(X_scaled, alpha_4, phi);
+// else  prop_4 ~ beta_regression(X_scaled, alpha_4, phi);
 		alpha_g[1] ~ normal(0,2);
   	to_vector( alpha_g[2:] ) ~ normal(0,2.5);
 		alpha_h[1] ~ normal(0,2);
