@@ -2351,3 +2351,163 @@ lower_triangular = function(.data){
 		) %>%
 		drop_na
 }
+
+# get_alpha = function(slope, which_changing, cell_types){
+# 	
+# 	# Get the alpha matrix
+# 	
+# 	intercept = rep(0, length(cell_types))
+# 	slope_arr = rep(0, length(cell_types))
+# 	
+# 	slope_arr[which_changing] = slope
+# 	matrix(intercept %>%	c(slope_arr), ncol = 2)
+# 	
+# }
+
+get_survival_X = function(S){
+	readRDS("dev/PFI_all_cancers.rds") %>%
+		filter(PFI.2 == 1 & !is.na(PFI.time.2)) %>%
+		select(real_days = PFI.time.2 ) %>%
+		mutate(real_days = real_days %>% scale(center = F) %>% as.numeric) %>%
+		sample_n(S) %>%
+		mutate(sample = sprintf("S%s", 1:n())) %>%
+		mutate(alive = sample(0:1, n(), replace = T)) %>%
+		mutate(days = ifelse(alive==1, real_days/2, real_days) ) %>%
+		mutate(intercept = 1)
+}
+
+generate_mixture = function(.data, X_df, alpha) {
+	add_attr = function(var, attribute, name) {
+		attr(var, name) <- attribute
+		var
+	}
+	
+	logsumexp <- function (x) {
+		y = max(x)
+		y + log(sum(exp(x - y)))
+	}
+	
+	softmax <- function (x) {
+		exp(x - logsumexp(x))
+	}
+	
+	
+	X = X_df %>% select(intercept, real_days) %>% nanny::as_matrix()
+	
+	samples_per_run =
+		map_dfr(
+			1:nrow(X), ~ 
+				.data %>%
+				distinct(`Cell type category`, sample) %>%
+				group_by(`Cell type category`) %>%
+				sample_n(1) %>%
+				ungroup() %>%
+				mutate(run = .x)
+		)
+	
+	ct_names = .data %>% distinct(`Cell type category`) %>% pull(1)
+	
+	alpha_df = alpha %>% as.data.frame %>% setNames(sprintf("alpha_%s", 1:2)) %>% mutate(`Cell type category`  = ct_names)
+	
+	ct_changing = alpha_df %>% filter(alpha_2 != 0) %>% pull(`Cell type category`)
+	
+	cell_type_proportions =
+		# Choose samples
+		samples_per_run %>%
+		
+		# Choose proportions
+		left_join(
+			# Decide theoretical, noise-less proportions for each sample
+			X %*% t(alpha) %>%
+				apply(1, softmax) %>%
+				t %>%
+				`*` (40) %>%
+				as.data.frame() %>%
+				as_tibble() %>%
+				setNames(ct_names) %>%
+				mutate(run = 1:n()) %>%
+				gather(`Cell type category`, alpha, -run)
+		) %>%
+		
+		# Add X
+		left_join(X_df %>% select(-sample) %>% mutate(run = 1:n())) %>%
+		
+		# Add alpha
+		left_join(alpha_df) %>%
+		
+		group_by(run) %>%
+		mutate(p = gtools::rdirichlet(1, alpha)) %>%
+		ungroup()
+	
+	# Add fold increase decrease
+	fold_change = 
+		ct_changing %>% when(
+			length(.) > 0 ~ 	matrix(c(rep(1, 2), c(0, 1)), ncol = 2)  %*% t(alpha) %>%
+				apply(1, softmax) %>%
+				t %>%
+				`*` (40) %>%
+				apply(1, softmax) %>%
+				.[ct_names == ct_changing,] %>%
+				{	max(.) / min(.)	} %>%
+				{ slope = alpha[,2][ alpha[,2]!=0]; ifelse(slope<0, -(.), (.)) },
+			~ 0
+												 )
+	
+	# Add counts
+	dirichlet_source =
+		cell_type_proportions %>%
+		left_join(.data, by = c("Cell type category", "sample"))
+	
+	# Make mix
+	dirichlet_source %>%
+		mutate(c = `count normalised bayes` * p) %>%
+		group_by(run, symbol) %>%
+		summarise(`count mix` = c %>% sum) %>%
+		ungroup %>%
+		
+		left_join(dirichlet_source %>% nanny::subset(run) ) %>%
+		
+		mutate(fold_change = fold_change) %>%
+		
+		# Add proportions
+		add_attr(cell_type_proportions, "proportions") 
+	
+}
+
+get_noiseless_harmonised = function(){
+	
+	mix_base_unharmonized = readRDS("dev/mix_base_noiseless.RDS")
+	
+	my_markers =
+		ARMET::ARMET_ref %>%
+		
+		left_join(ARMET::n_markers, by = c("ct1", "ct2")) %>%
+		filter_reference(
+			mix_base_unharmonized %>%
+				filter(level == 3) %>%
+				distinct(`Cell type category`, symbol, `count normalised bayes`) %>%
+				spread(symbol, `count normalised bayes`),
+			ARMET::n_markers
+		) %>% distinct(level, symbol)
+	
+	# level 1
+	abundance_1 =
+		my_markers %>% filter(level == 1) %>%
+		left_join(mix_base_unharmonized) %>%
+		select(level_2, symbol,  `count normalised bayes 1` =`count normalised bayes`)
+	
+	abundance_2 =
+		my_markers %>% filter(level == 2) %>%
+		left_join(mix_base_unharmonized) %>%
+		select(level_3, symbol,  `count normalised bayes 2` =`count normalised bayes`)
+	
+	# Now this is noiseless for the ancestor markers so also for ARMET that rely on hierarchy
+	mix_base_unharmonized %>%
+		filter(level==3) %>%
+		left_join(abundance_2) %>%
+		left_join(abundance_1) %>%
+		mutate(`count normalised bayes 2` = ifelse(`count normalised bayes 1` %>% is.na, `count normalised bayes 2`, `count normalised bayes 1`)) %>%
+		mutate(`count normalised bayes` = ifelse(`count normalised bayes 2` %>% is.na, `count normalised bayes`, `count normalised bayes 2`)) %>%
+		select(level_2, level_3, level_4, `Cell type category`, level, sample, symbol, `count normalised bayes`, `house keeping`)
+	
+}

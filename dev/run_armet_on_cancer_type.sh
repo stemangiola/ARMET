@@ -1,3 +1,4 @@
+#!/bin/sh
 cd $PBS_O_WORKDIR;
 # rm -rf /tmp/*
 module load R/3.6.1;

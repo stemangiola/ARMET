@@ -96,7 +96,7 @@ ARMET_tc(
 
 save(res, file=sprintf("dev/armet_%s.rda", i), compress = "gzip")
 
-# res %>% plot_scatter() + geom_text()
+# res %>% plot_scatter() + scale_x_log10() + geom_text()
 # # 
 
 
