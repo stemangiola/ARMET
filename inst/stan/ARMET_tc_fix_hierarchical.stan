@@ -1029,11 +1029,11 @@ model {
 	// lv 1
   if(lv == 1 && do_regression) {
 
-		print(X_scaled[,2]);
+		//print(X_scaled[,2]);
   	if(fam_dirichlet) for(q in 1:Q) prop_1[q] ~ dirichlet_regression( X_scaled[q], alpha_1, phi[1], 0.01 );
   	else  prop_1 ~ beta_regression(X_scaled, alpha_1, phi[1:4]);
-  	 alpha_1[1] ~ normal(0,2);
-  	 to_vector( alpha_1[2:] ) ~ normal(0,2.5);
+  	 alpha_1[1] ~ normal(0,10);
+  	 to_vector( alpha_1[2:] ) ~ normal(0,1);
 
 
   }
@@ -1045,8 +1045,8 @@ model {
 
   	if(fam_dirichlet) for(q in 1:Q) prop_a[q] ~ dirichlet_regression( X_scaled[q], alpha_a, phi[1], 0.2 );
   	else  prop_a ~ beta_regression(X_scaled, alpha_a, phi[1:6]);
-  	alpha_a[1] ~ normal(0,2);
-  	to_vector( alpha_a[2:] ) ~ normal(0,2.5);
+  	alpha_a[1] ~ normal(0,10);
+  	to_vector( alpha_a[2:] ) ~ student_t(3, 0, 1);
 
   }
 	if(lv == 2 && !do_regression) for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | rep_vector(1, num_elements(prop_a[1])));
@@ -1069,16 +1069,16 @@ model {
   		 prop_e ~ beta_regression(X_scaled, alpha_e, phi[8:9]);
   		 prop_f ~ beta_regression(X_scaled, alpha_f, phi[9:11]);
   	}
-		alpha_b[1] ~ normal(0,2);
-  	to_vector( alpha_b[2:] ) ~ normal(0,2.5);
-		alpha_c[1] ~ normal(0,2);
-  	to_vector( alpha_c[2:] ) ~ normal(0,2.5);
-		alpha_d[1] ~ normal(0,2);
-  	to_vector( alpha_d[2:] ) ~ normal(0,2.5);
-		alpha_e[1] ~ normal(0,2);
-  	to_vector( alpha_e[2:] ) ~ normal(0,2.5);
-		alpha_f[1] ~ normal(0,2);
-  	to_vector( alpha_f[2:] ) ~ normal(0,2.5);
+		alpha_b[1] ~  normal(0,10);
+  	to_vector( alpha_b[2:] ) ~ student_t(3, 0, 1);
+		alpha_c[1] ~  normal(0,10);
+  	to_vector( alpha_c[2:] ) ~ student_t(3, 0, 1);
+		alpha_d[1] ~  normal(0,10);
+  	to_vector( alpha_d[2:] ) ~ student_t(3, 0, 1);
+		alpha_e[1] ~  normal(0,10);
+  	to_vector( alpha_e[2:] ) ~ student_t(3, 0, 1);
+		alpha_f[1] ~  normal(0,10);
+  	to_vector( alpha_f[2:] ) ~ student_t(3, 0, 1);
   }
   if(lv == 3 && !do_regression) for(q in 1:Q){
   	 target += dirichlet_lpdf(prop_b[q] | rep_vector(1, num_elements(prop_b[1])));
