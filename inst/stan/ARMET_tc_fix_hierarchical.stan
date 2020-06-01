@@ -456,13 +456,13 @@ if(dim_4[1] > 0) {
 	){
 		real threshold = -999;
 
-		int max_col =	max(size_G_linear_MPI) +	max(size_G_linear_MPI);
+		int max_col =	2 + max(size_G_linear_MPI) +	max(size_G_linear_MPI) ;
 
 		real real_pack[shards,max_col];
 
 		for(i in 1:shards){
 
-			int real_col = size_G_linear_MPI[i] + size_G_linear_MPI[i] ;
+			int real_col = 2 + size_G_linear_MPI[i] + size_G_linear_MPI[i];
 
 			real_pack[i] =
 				concatenate_real_array({
