@@ -2352,17 +2352,17 @@ lower_triangular = function(.data){
 		drop_na
 }
 
-# get_alpha = function(slope, which_changing, cell_types){
-# 	
-# 	# Get the alpha matrix
-# 	
-# 	intercept = rep(0, length(cell_types))
-# 	slope_arr = rep(0, length(cell_types))
-# 	
-# 	slope_arr[which_changing] = slope
-# 	matrix(intercept %>%	c(slope_arr), ncol = 2)
-# 	
-# }
+get_alpha_test = function(slope, which_changing, cell_types){
+
+	# Get the alpha matrix
+
+	intercept = rep(0, length(cell_types))
+	slope_arr = rep(0, length(cell_types))
+
+	slope_arr[which_changing] = slope
+	matrix(intercept %>%	c(slope_arr), ncol = 2)
+
+}
 
 get_survival_X = function(S){
 	readRDS("dev/PFI_all_cancers.rds") %>%
