@@ -199,7 +199,7 @@ noiseles_test = function(mix) {
 		ARMET_tc_continue(3)
 	
 	list(mix = mix, result = rr)
-	#%>% saveRDS(sprintf("dev/test_student_noisless_%s", which_is_up_down %>% paste(collapse="_")))
+	#%>% saveRDS(sprintf("dev/test_student_noiseless_%s", which_is_up_down %>% paste(collapse="_")))
 }
 
 get_mix = function(mix_base, slope, which_changing, S){
@@ -215,25 +215,22 @@ get_mix = function(mix_base, slope, which_changing, S){
 
 mix_base = get_noiseless_harmonised()
 
-which_is_up_down = 1:16
-
-mixes =
-	which_is_up_down %>%
-	map( ~ get_mix(mix_base, 4, .x, 30))
+# which_is_up_down = 1:16
+# 
+# mixes =
+# 	which_is_up_down %>%
+# 	map( ~ get_mix(mix_base, 4, .x, 30))
 
 #
 # which_is_up_down %>%
 # 	map( ~ .x %>% noiseles_test(do_regression = T)) %>%
-# 	saveRDS("dev/test_student_noisless_regression.rds")
+# 	saveRDS("dev/test_student_noiseless_regression.rds")
 
 #------------------------------------#
 # REGRESSION
 #------------------------------------#
 
-dir("dev", "test_noisless_survival_regression", full.names = T) %>%
-	map_dfr(~ .x %>% readRDS %>% mutate(file=.x))
-
-res_regression = readRDS("dev/test_noisless_survival_regression.rds")
+#res_regression = readRDS("dev/test_noiseless_survival_regression.rds")
 
 CI_to_ARMET = function(.data, CI){
 	
@@ -253,7 +250,10 @@ CI_to_ARMET = function(.data, CI){
 						my_all = purrr::when(length(my_cousin) > 2 ~ my_ancestors, ~ c(my_ancestors, my_cousin)) %>% unique
 						my_slope = (.) %>% filter(alpha_2!=0) %>% pull(alpha_2)
 						(.) %>% mutate(alpha_2 = if_else(`Cell type category`%in% my_all, my_slope, alpha_2))
-					}	,
+					} %>%
+					
+					# Add fold change
+					mutate(fold_change_run = x$mix$fold_change %>% unique),
 				by = "Cell type category"
 			) %>%
 		#	drop_na  %>%
@@ -269,39 +269,59 @@ CI_to_ARMET = function(.data, CI){
 
 }
 
-# Calculate fpr for regression
-regression_ARMET =
-	tibble(CI = c( seq(0.0, 0.85, 0.05), seq(0.85, 0.9999, 0.001))) %>%
-	#slice(1, 10, 30, 100) %>%
-	mutate(roc = map(
-		CI,
-		~ {
-			cat(".")
-			x = CI_to_ARMET(res_regression, .x)
-
-			slope_run = x %>% distinct(alpha_2, run) %>% filter(alpha_2 != 0) %>% rename(slope_run = alpha_2)
-			
-			x %>%
-				left_join(slope_run, by="run") %>%
-				nest(data = -slope_run) %>%
-				mutate(real_negative = map_dbl(data, ~ .x %>% filter(alpha_2==0) %>% nrow)) %>%
-				mutate(FP = map_dbl(data, ~ .x %>% filter(fp) %>% nrow)) %>%
-				mutate(real_positive = map_dbl(data, ~ .x %>% filter(alpha_2!=0) %>% nrow )) %>%
-				mutate(TP = map_dbl(data, ~ .x %>% filter(tp) %>% nrow) ) %>%
-				mutate(TP_rate = TP/real_positive, FP_rate = FP/real_negative) %>%
-			
-				select(-data)
+format_results = function(res_regression, CIs){
+	writeLines("-")
+	tibble(CI = CIs) %>%
+		mutate(roc = map(
+			CI,
+			~ {
+				cat(".")
+				x = CI_to_ARMET(res_regression, .x)
 				
-		}
-	))
+				slope_run = x %>% distinct(alpha_2, run) %>% filter(alpha_2 != 0) %>% rename(slope_run = alpha_2)
+				
+				x %>%
+					left_join(slope_run, by="run") %>%
+					nest(data = -c(slope_run, fold_change_run)) %>%
+					mutate(real_negative = map_dbl(data, ~ .x %>% filter(alpha_2==0) %>% nrow)) %>%
+					mutate(FP = map_dbl(data, ~ .x %>% filter(fp) %>% nrow)) %>%
+					mutate(real_positive = map_dbl(data, ~ .x %>% filter(alpha_2!=0) %>% nrow )) %>%
+					mutate(TP = map_dbl(data, ~ .x %>% filter(tp) %>% nrow) ) %>%
+					mutate(TP_rate = TP/real_positive, FP_rate = FP/real_negative) %>%
+					
+					select(-data)
+				
+			} 
+		))
+}
+
+
+# Calculate fpr for regression
+CIs = c(	seq(0.0, 0.85, 0.05), seq(0.85, 0.9999, 0.001))
+regression_ARMET4 = readRDS("dev/test_noiseless_survival_regression_4_slope.rds") %>% format_results(CIs)
+regression_ARMETm4 = readRDS("dev/test_noiseless_survival_regression_-4_slope.rds") %>% format_results(CIs)
+regression_ARMET2 = readRDS("dev/test_noiseless_survival_regression_2_slope.rds") %>% format_results(CIs)
+regression_ARMETm2 = readRDS("dev/test_noiseless_survival_regression_-4_slope.rds") %>% format_results(CIs)
+regression_ARMET1 = readRDS("dev/test_noiseless_survival_regression_1_slope.rds") %>% format_results(CIs)
+regression_ARMETm1 = readRDS("dev/test_noiseless_survival_regression_-1_slope.rds") %>% format_results(CIs)
+
+
+# 	dir("dev", "test_noiseless_survival_regression", full.names = T) %>% .[6] %>%
+# 	map(
+# 		~ .x %>%
+# 		readRDS %>%
+# 		format_results(c(	seq(0.0, 0.85, 0.05), seq(0.85, 0.9999, 0.001))) # %>% .[c(1, 10, 30, 100)]) 
+# 	)
+# 
 
 
 (
 	regression_ARMET %>%
+	do.call(bind_rows, .) %>%
 	mutate(method = "ARMET") %>%
 	unnest(roc) %>%
 	arrange(FP_rate) %>%
-	ggplot(aes(x=FP_rate, y=TP_rate)) +
+	ggplot(aes(x=FP_rate, y=TP_rate, color = fold_change_run %>% divide_by(10) %>% as.integer() %>% multiply_by(10) %>% factor)) +
 	geom_abline(intercept = 0, slope = 1, linetype="dotted", color="grey") +
 	geom_line() +
 	scale_color_brewer(palette = "Set1") +
@@ -311,7 +331,7 @@ regression_ARMET =
 	my_theme
 ) %>%
 	ggsave(
-		"dev/test_noisless_survival_ROC.pdf",
+		"dev/test_noiseless_survival_ROC.pdf",
 		plot = .,
 		useDingbats=FALSE,
 		units = c("mm"),

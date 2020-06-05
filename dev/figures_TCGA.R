@@ -130,15 +130,37 @@ registerDoParallel(30)
 
 x = foreach(i = dir("dev/armet_TCGA_may19_before_log_days/", pattern = "^armet_", full.names = T), .combine = bind_rows) %dopar% {
 	load(i)
-	res %>% test_differential_composition() %>% select(.variable, community, level ,   `Cell type category`, C, .value_alpha1) %>%
+	res %>% test_differential_composition() %>% select(.variable, community, level ,   `Cell type category`, C, .value_alpha1, .value_alpha2, zero) %>%
 		mutate(file=i)
 }
 
 x %>%
 	extract(file, "cancer_ID", regex = ".*armet_([A-Z]+).*") %>%
 	left_join(read_csv("dev/TCGA_supergroups.csv") %>% select(-cancer)) %>% 
+	mutate(.value_alpha2 = .value_alpha2 - zero) %>%
 	group_by(level) %>%
-	heatmap( `Cell type category`, cancer_ID, .value_alpha1, annotation = group, palette_discrete = list(unique(cancer_sig$color)))
+	heatmap(
+		cancer_ID, `Cell type category`,  .value_alpha2, 
+		annotation = group, 
+		palette_discrete = list(unique(cancer_sig$color)),
+		transform = NULL, 
+		#palette_abundance= circlize::colorRamp2(-2:2, brewer.pal(5, "Spectral")) , 
+		palette_abundance= circlize::colorRamp2(seq(-3,3, length.out=11),brewer.pal(11, "RdBu"))
+	)
+
+x %>%
+	extract(file, "cancer_ID", regex = ".*armet_([A-Z]+).*") %>%
+	left_join(read_csv("dev/TCGA_supergroups.csv") %>% select(-cancer)) %>% 
+	mutate(.value_alpha2 = .value_alpha2 - zero) %>%
+	group_by(level) %>%
+	heatmap(
+		cancer_ID, `Cell type category`,  .value_alpha1, 
+		annotation = group, 
+		palette_discrete = list(unique(cancer_sig$color)),
+		transform = NULL, 
+		#palette_abundance= circlize::colorRamp2(-2:2, brewer.pal(5, "Spectral")) , 
+		palette_abundance= circlize::colorRamp2(seq(-3,3, length.out=11),brewer.pal(11, "RdBu"))
+	)
 
 # Heatmap 2
 library(tidyHeatmap)
