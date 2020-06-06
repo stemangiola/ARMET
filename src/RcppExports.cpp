@@ -7,10 +7,16 @@
 using namespace Rcpp;
 
 
-RcppExport SEXP _rcpp_module_boot_stan_fit4ARMET_tc_mod();
+RcppExport SEXP _rcpp_module_boot_stan_fit4ARMET_ref_mod();
+RcppExport SEXP _rcpp_module_boot_stan_fit4ARMET_tc_fix_mod();
+RcppExport SEXP _rcpp_module_boot_stan_fit4ARMET_tc_fix_hierarchical_mod();
+RcppExport SEXP _rcpp_module_boot_stan_fit4proof_concept_mod();
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_rcpp_module_boot_stan_fit4ARMET_tc_mod", (DL_FUNC) &_rcpp_module_boot_stan_fit4ARMET_tc_mod, 0},
+    {"_rcpp_module_boot_stan_fit4ARMET_ref_mod", (DL_FUNC) &_rcpp_module_boot_stan_fit4ARMET_ref_mod, 0},
+    {"_rcpp_module_boot_stan_fit4ARMET_tc_fix_mod", (DL_FUNC) &_rcpp_module_boot_stan_fit4ARMET_tc_fix_mod, 0},
+    {"_rcpp_module_boot_stan_fit4ARMET_tc_fix_hierarchical_mod", (DL_FUNC) &_rcpp_module_boot_stan_fit4ARMET_tc_fix_hierarchical_mod, 0},
+    {"_rcpp_module_boot_stan_fit4proof_concept_mod", (DL_FUNC) &_rcpp_module_boot_stan_fit4proof_concept_mod, 0},
     {NULL, NULL, 0}
 };
 
