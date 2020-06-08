@@ -1,4 +1,4 @@
-# Create mix_base withn NA - imputed values
+# Create mix_base within NA - imputed values
 
 library(tidyverse)
 library(magrittr)
@@ -7,8 +7,7 @@ library(furrr)
 library(data.tree)
 library(foreach)
 library(ARMET)
-source("~/PhD/deconvolution/ARMET/R/utils.R")
-source("~/PostDoc/ppcSeq/R/do_parallel.R")
+
 n_cores = 20
 S = 30
 

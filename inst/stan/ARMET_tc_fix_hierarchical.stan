@@ -1046,7 +1046,7 @@ model {
   	if(fam_dirichlet) for(q in 1:Q) prop_a[q] ~ dirichlet_regression( X_scaled[q], alpha_a, phi[1], 0.2 );
   	else  prop_a ~ beta_regression(X_scaled, alpha_a, phi[1:6]);
   	alpha_a[1] ~ normal(0,10);
-  	to_vector( alpha_a[2:] ) ~ student_t(3, 0, 1);
+  	to_vector( alpha_a[2:] ) ~ student_t(3, 0, 2);
 
   }
 	if(lv == 2 && !do_regression) for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | rep_vector(1, num_elements(prop_a[1])));
@@ -1070,15 +1070,15 @@ model {
   		 prop_f ~ beta_regression(X_scaled, alpha_f, phi[9:11]);
   	}
 		alpha_b[1] ~  normal(0,10);
-  	to_vector( alpha_b[2:] ) ~ student_t(3, 0, 1);
+  	to_vector( alpha_b[2:] ) ~ student_t(3, 0, 2);
 		alpha_c[1] ~  normal(0,10);
-  	to_vector( alpha_c[2:] ) ~ student_t(3, 0, 1);
+  	to_vector( alpha_c[2:] ) ~ student_t(3, 0, 2);
 		alpha_d[1] ~  normal(0,10);
-  	to_vector( alpha_d[2:] ) ~ student_t(3, 0, 1);
+  	to_vector( alpha_d[2:] ) ~ student_t(3, 0, 2);
 		alpha_e[1] ~  normal(0,10);
-  	to_vector( alpha_e[2:] ) ~ student_t(3, 0, 1);
+  	to_vector( alpha_e[2:] ) ~ student_t(3, 0, 2);
 		alpha_f[1] ~  normal(0,10);
-  	to_vector( alpha_f[2:] ) ~ student_t(3, 0, 1);
+  	to_vector( alpha_f[2:] ) ~ student_t(3, 0, 2);
   }
   if(lv == 3 && !do_regression) for(q in 1:Q){
   	 target += dirichlet_lpdf(prop_b[q] | rep_vector(1, num_elements(prop_b[1])));
@@ -1113,16 +1113,16 @@ model {
   		 prop_m ~ beta_regression(X_scaled, alpha_m, phi[9:10]);
   	}
 // else  prop_4 ~ beta_regression(X_scaled, alpha_4, phi);
-		alpha_g[1] ~ normal(0,2);
-  	to_vector( alpha_g[2:] ) ~ normal(0,2.5);
-		alpha_h[1] ~ normal(0,2);
-  	to_vector( alpha_h[2:] ) ~ normal(0,2.5);
-		alpha_i[1] ~ normal(0,2);
-  	to_vector( alpha_i[2:] ) ~ normal(0,2.5);
-		alpha_l[1] ~ normal(0,2);
-  	to_vector( alpha_l[2:] ) ~ normal(0,2.5);
-		alpha_m[1] ~ normal(0,2);
-  	to_vector( alpha_m[2:] ) ~ normal(0,2.5);
+		alpha_g[1] ~ normal(0,10);
+  	to_vector( alpha_g[2:] ) ~ student_t(3, 0, 2);
+		alpha_h[1] ~ normal(0,10);
+  	to_vector( alpha_h[2:] ) ~ student_t(3, 0, 2);
+		alpha_i[1] ~ normal(0,10);
+  	to_vector( alpha_i[2:] ) ~ student_t(3, 0, 2);
+		alpha_l[1] ~ normal(0,10);
+  	to_vector( alpha_l[2:] ) ~ student_t(3, 0, 2);
+		alpha_m[1] ~ normal(0,10);
+  	to_vector( alpha_m[2:] ) ~ student_t(3, 0, 2);
 
   }
   if(lv == 4 && !do_regression) for(q in 1:Q){
