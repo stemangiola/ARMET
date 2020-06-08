@@ -40,6 +40,7 @@ Temporary Items
 *.hpp
 .Rhistory
 .RData
+
 data/ref_array.rda
 .Rproj.user
 job_torque*
