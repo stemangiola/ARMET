@@ -4,7 +4,7 @@
 \alias{ToDataFrameTypeColFull}
 \title{ToDataFrameTypeColFull}
 \usage{
-ToDataFrameTypeColFull(tree, ...)
+ToDataFrameTypeColFull(tree, fill = T, ...)
 }
 \description{
 Extension of data.tree package. It converts the tree into data frame

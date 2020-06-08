@@ -6,7 +6,7 @@
 \usage{
 ARMET_tc_continue(
   armet_obj,
-  levels,
+  level,
   model = stanmodels$ARMET_tc_fix_hierarchical
 )
 }

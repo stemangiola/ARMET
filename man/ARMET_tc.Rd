@@ -19,9 +19,10 @@ ARMET_tc(
   cores = 14,
   iterations = 250,
   sampling_iterations = 100,
-  levels = 3,
+  levels = 1,
   .n_markers = n_markers,
   do_regression = T,
+  prior_survival_time = c(),
   model = stanmodels$ARMET_tc_fix_hierarchical
 )
 }
