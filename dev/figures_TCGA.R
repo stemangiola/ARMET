@@ -17,7 +17,7 @@ my_theme =
 		axis.line = element_line(),
 		panel.grid.major = element_line(size = 0.2),
 		panel.grid.minor = element_line(size = 0.1),
-		text = element_text(size = 12),
+		text = element_text(size = 10),
 		legend.position = "bottom",
 		aspect.ratio = 1,
 		axis.text.x = element_text(
@@ -193,4 +193,35 @@ tanglegram(
 dev.off()
 # Heatmap signature
 
+# Association rank
+
+(
+	hmap_df %>%
+		extract(file, "cancer_ID", regex = ".*armet_([A-Z]+).*") %>%
+		nest(data = - cancer_ID) %>%
+		mutate(mean_association = map_dbl(data, ~ mean(abs(.x$alpha2_prob)))) %>%
+		arrange(desc(mean_association)) %>%
+		mutate(cancer_ID = factor(cancer_ID, levels = .$cancer_ID)) %>%
+		unnest(data) %>%
+		ggplot(aes(cancer_ID, abs(alpha2_prob), group=1)) +
+		geom_point() +
+		stat_summary(fun.y=mean, geom="line", color="red", size=2) +
+		scale_color_brewer(palette = "Set1") +
+		xlab("Cancer type") +
+		ylab("Association probability") +
+		my_theme
+) %>%
+	ggsave(
+		"dev/rank_for_cell_type_association.pdf",
+		plot = .,
+		useDingbats=FALSE,
+		units = c("mm"),
+		width = 89 ,
+		height = 100,
+		limitsize = FALSE
+	)
+
+
+
+	
 
