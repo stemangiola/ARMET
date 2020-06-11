@@ -1,11 +1,14 @@
 library(tidyverse)
 library(ARMET)
-library(furrr)
+# library(furrr)
 library(tidybulk)
 library(dendextend)
 library(RColorBrewer)
 library(nanny)
-plan(multicore)
+library(tidyHeatmap)
+# plan(multicore)
+library(doParallel)
+registerDoParallel(30)
 
 my_theme =
 	theme_bw() +
@@ -63,31 +66,6 @@ pol_p %>%
 	)
 
 
-# PCA
-cancer_sig =
-	dir("dev", pattern = "^armet_", full.names = T) %>%
-	#.[1:3] %>%
-	grep("rda", ., fixed = T, value = T) %>%
-	future_map_dfr(~ {
-		load(.x)
-		res %>%
-			get_signatures %>%
-			mutate(cancer = .x %>% gsub("dev/armet_", "", .) %>% gsub(".rda", "", ., fixed = T))
-	}) %>%
-	extract(col = cancer, into = "cancer_ID", regex = "([A-Z]+)\\.", remove = F) %>%
-	
-	# Add info cancer group
-	left_join(read_csv("dev/TCGA_supergroups.csv") %>% select(-cancer)) %>%
-	
-	# Give color
-	nest(data = -group) %>%
-	arrange(group) %>%
-	mutate(color = colorRampPalette(brewer.pal(9, "Set1"))(n())) %>%
-	unnest(data) %>%
-	
-	distinct()
-	
-saveRDS(cancer_sig, "dev/cancer_sig.rds", compress="gzip")
 
 (
 	bind_rows(
@@ -111,7 +89,7 @@ saveRDS(cancer_sig, "dev/cancer_sig.rds", compress="gzip")
 	geom_point(aes(fill = group), shape = 21, size=2) +
 	scale_fill_manual(values = cancer_sig %>% distinct(group, color) %>% arrange(group) %>% pull(color)) +
 	ggrepel::geom_text_repel(segment.alpha = 0.5, size=1) +
-	facet_wrap(~signature) +
+	facet_wrap(~signature, scales = "free") +
 	my_theme +
 	theme(legend.position="bottom")
 ) %>%
@@ -125,108 +103,94 @@ saveRDS(cancer_sig, "dev/cancer_sig.rds", compress="gzip")
 	)
 
 # Heatmap 1
-library(doParallel)
-registerDoParallel(30)
 
-x = foreach(i = dir("dev/armet_TCGA_may19_before_log_days/", pattern = "^armet_", full.names = T), .combine = bind_rows) %dopar% {
-	load(i)
-	res %>% test_differential_composition() %>% select(.variable, community, level ,   `Cell type category`, C, .value_alpha1) %>%
-		mutate(file=i)
-}
 
-x %>%
+hmap_df = 
+	foreach(i =
+						dir("dev", pattern = "^armet_", full.names = T) %>%
+						grep("rda$", ., value = T) ,
+					.combine = bind_rows
+				) %do% {
+		load(i)
+		res %>%
+			test_differential_composition() %>% 
+			
+			# Add relative probability of slope != 0
+			mutate(alpha2_prob =
+						 	map_dbl(
+						 		draws, 
+						 		~ .x %>% 
+						 			distinct() %>%
+						 			filter(A == 2) %>%
+						 			mutate(higher = .value > 0, lower = .value < 0) %>% 
+						 			count(higher) %>%
+						 			spread(higher, n) %>%
+						 			
+						 			# Create column if does not exist
+						 			purrr::when(
+						 				("TRUE" %in% colnames(.) %>% `!`) ~ mutate(., `TRUE` = 0),
+						 				("FALSE" %in% colnames(.) %>% `!`) ~ mutate(., `FALSE` = 0),
+						 				~ (.)
+						 			) %>%
+						 			
+						 			# Smaller probability
+						 			mutate(prob = min(`FALSE`, `TRUE`)/sum(`FALSE`, `TRUE`)) %>% 
+						 			
+						 			# Multiply by 2 and invert 
+						 			mutate(prob = 1 - (prob * 2)) %>%
+						 			
+						 			mutate(prob = ifelse(`FALSE`>`TRUE`, -prob, prob)) %>%
+						 			pull(prob)
+						 )) %>%
+			select(
+				.variable, community, level ,  
+				`Cell type category`, C, 
+				.value_alpha1, .value_alpha2,
+				alpha2_prob
+			) %>%
+			mutate(file=i)
+	}
+
+hmap_df %>% saveRDS("hmap_df.rds")
+
+hmap_composition = 
+	hmap_df %>%
 	extract(file, "cancer_ID", regex = ".*armet_([A-Z]+).*") %>%
 	left_join(read_csv("dev/TCGA_supergroups.csv") %>% select(-cancer)) %>% 
+	mutate(group = if_else(group %>% is.na, "other", group)) %>%
 	group_by(level) %>%
-	heatmap( `Cell type category`, cancer_ID, .value_alpha1, annotation = group, palette_discrete = list(unique(cancer_sig$color)))
-
-# Heatmap 2
-library(tidyHeatmap)
-cancer_sig %>%
-	filter(A == 1) %>%
-	nest(data = -c(cancer_ID, cancer, color)) %>%
-	mutate(data = map(data, ~ .x %>%
-											lower_triangular(`Cell type category_1`, `Cell type category_2`, prob)
-											)) %>%
-	unnest(data) %>%
-	unite("ct", c(`Cell type category_1`, `Cell type category_2`)) %>%
-	group_by(level) %>%
-	heatmap( ct, cancer_ID, prob, annotation = color, palette_discrete = list(unique(.$color)))
-
-
-
-# Dendrograms all features
-pdf("dev/TCGA_dendrogram.pdf", useDingbats = F)
-cancer_sig %>%
-	
-	nest(data = -A) %>%
-	mutate(
-		dendro =
-			map(
-				data,
-				~ .x %>%
-					select(-level) %>%
-					pivot_wider(
-						names_from = c(.variable, `Cell type category_1`, `Cell type category_2`),
-						values_from = prob, 
-					) %>%
-					as_matrix(rownames = "cancer_ID") %>%
-					dist() %>%
-					hclust() %>%
-					as.dendrogram()
-			)
-	) %>%
-	mutate(dendro = map2(
-		dendro, data,
-		~.x %>% 
-			set("nodes_cex", 2) %>%
-			set("nodes_pch", 19)  %>% 
-			set("leaves_col",  .y %>% distinct(cancer_ID, color) %>% arrange(match(cancer_ID, .x %>% labels))  %>% pull(color)  ) )) %>%
-	pull(dendro) %>%
-	
-	{ tanglegram((.)[[1]], (.)[[2]], highlight_branches_lwd = F) }
-dev.off()
-
-# PCA
-# pdf("dev/TCGA_dendrogram.pdf", useDingbats = F)
-cancer_sig %>%
-	nest(data = -A) %>%
-	mutate(
-		dendro =
-			map(
-				data,
-				~ .x %>%
-					unite(col="ct_pair", c(`Cell type category_1`, `Cell type category_2`)) %>%
-					nanny::reduce_dimensions(ct_pair, cancer_ID, prob, method = "PCA", scale=F) %>%
-					attr("internals") %$%
-					PCA %>%
-					tcR::pca2euclid(.num.comps = 5) %>%
-					as.dist %>%
-					hclust() %>%
-					as.dendrogram()
-			)
-	)%>%
-	mutate(dendro = map2(
-		dendro, data,
-		~.x %>% 
-			set("nodes_cex", 2) %>%
-			set("nodes_pch", 19)  %>% 
-			set("leaves_col",  .y %>% distinct(cancer_ID, color) %>% arrange(match(cancer_ID, .x %>% labels))  %>% pull(color)  ) )) %>%
-	pull(dendro) %>%
-	
-	{ tanglegram((.)[[1]], (.)[[2]], highlight_branches_lwd = F) } 
-# dev.off()
-
-# Legend
-(cancer_sig %>%
-		ggplot(aes(prob, level, color = group)) + geom_point() + scale_color_manual(values = cancer_sig %>% distinct(group, color) %>% arrange(group) %>% pull(color))
-)%>%
-	ggsave(
-		"dev/legend_groups.pdf",
-		plot = .,
-		useDingbats=FALSE,
-		units = c("mm"),
-		width = 183 ,
-		height = 183,
-		limitsize = FALSE
+	heatmap( 
+		cancer_ID, `Cell type category`, .value_alpha1, 
+		annotation = group, 
+		palette_discrete = list(unique(cancer_sig$color)),
+		palette_value = circlize::colorRamp2(c(-4, -2, 0, 2, 4)/3*2, brewer.pal(5, "RdBu")) , 
+		.scale = "column"
 	)
+
+hmap_association = 
+	hmap_df %>%
+	extract(file, "cancer_ID", regex = ".*armet_([A-Z]+).*") %>%
+	left_join(read_csv("dev/TCGA_supergroups.csv") %>% select(-cancer)) %>%
+	mutate(group = if_else(group %>% is.na, "other", group)) %>%
+	group_by(level) %>%
+	heatmap(
+		cancer_ID, `Cell type category`, alpha2_prob ,
+		annotation = group,
+		palette_discrete = list(unique(cancer_sig$color)),
+		palette_value = circlize::colorRamp2(c(-1, -0.5, 0, 0.5, 1), brewer.pal(5, "RdBu")),
+		.scale = "none"
+	)
+
+hmap_composition %>% save_pdf("hmap_composition.pdf", width = 89, height = 110, units = "mm")
+hmap_association %>% save_pdf("hmap_association.pdf", width = 89, height = 110, units = "mm")
+
+pdf("tanglegram.pdf")
+tanglegram(
+	hmap_composition %>% draw %>% row_dend, 
+	hmap_association %>% draw %>% row_dend,
+	highlight_branches_lwd = F, 
+)
+dev.off()
+# Heatmap signature
+
+
