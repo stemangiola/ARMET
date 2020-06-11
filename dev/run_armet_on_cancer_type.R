@@ -37,7 +37,7 @@ my_dir = "~/unix3XX/PhD/deconvolution/"   # <----------------------------
 # armet_Adrenocortical_Carcinoma_Primary_Tumor.rda:
 # 	dev/run_armet_on_cancer_type.sh Adrenocortical_Carcinoma_Primary_Tumor
 
-i = "ACC.tcga.harmonized.counts.allgenes.rds"
+i = "MESO.tcga.harmonized.counts.allgenes.rds"
 i = args[1]
 
 outliers = c("TCGA-12-3652", "TCGA-02-2485", "TCGA-12-0618", "TCGA-19-1390", "TCGA-15-1444", "TCGA-41-2571", "TCGA-28-2499")
@@ -72,7 +72,10 @@ input_df =
 	
 	# Aggregate duplcates
 	aggregate_duplicates(sample, transcript, count) %>%
-	mutate(alive = PFI.2 == 0) 
+	mutate(alive = PFI.2 == 0) %>%
+	
+	# Filter 0 time
+	filter(PFI.time.2 != 0)
 
 
 res = input_df %>%

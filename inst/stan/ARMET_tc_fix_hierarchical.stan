@@ -1033,7 +1033,7 @@ model {
   	if(fam_dirichlet) for(q in 1:Q) prop_1[q] ~ dirichlet_regression( X_scaled[q], alpha_1, phi[1], 0.01 );
   	else  prop_1 ~ beta_regression(X_scaled, alpha_1, phi[1:4]);
   	 alpha_1[1] ~ normal(0,10);
-  	 to_vector( alpha_1[2:] ) ~ normal(0,1);
+  	 to_vector( alpha_1[2:] ) ~ student_t(3, 0, 2);
 
 
   }

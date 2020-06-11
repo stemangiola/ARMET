@@ -181,10 +181,10 @@ hmap_association =
 		.scale = "none"
 	)
 
-hmap_composition %>% save_pdf("hmap_composition.pdf", width = 89, height = 110, units = "mm")
-hmap_association %>% save_pdf("hmap_association.pdf", width = 89, height = 110, units = "mm")
+hmap_composition %>% save_pdf("dev/hmap_composition.pdf", width = 183, height = 110, units = "mm")
+hmap_association %>% save_pdf("dev/hmap_association.pdf", width = 183, height = 110, units = "mm")
 
-pdf("tanglegram.pdf")
+pdf("dev/tanglegram.pdf")
 tanglegram(
 	hmap_composition %>% draw %>% row_dend, 
 	hmap_association %>% draw %>% row_dend,
