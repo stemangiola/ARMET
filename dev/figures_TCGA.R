@@ -87,7 +87,7 @@ pol_p %>%
 	mutate(signature = factor(signature, levels=c("Tissue composition", "Cell-type/Survival"))) %>%
 	ggplot(aes(PC1, PC2, label=cancer_ID)) +
 	geom_point(aes(fill = group), shape = 21, size=2) +
-	scale_fill_manual(values = cancer_sig %>% distinct(group, color) %>% arrange(group) %>% pull(color)) +
+	#scale_fill_manual(values = cancer_sig %>% distinct(group, color) %>% arrange(group) %>% pull(color)) +
 	ggrepel::geom_text_repel(segment.alpha = 0.5, size=1) +
 	facet_wrap(~signature, scales = "free") +
 	my_theme +
@@ -103,12 +103,15 @@ pol_p %>%
 	)
 
 # Heatmap 1
-
-
 hmap_df = 
 	foreach(i =
 						dir("dev", pattern = "^armet_", full.names = T) %>%
-						grep("rda$", ., value = T) ,
+						grep("rda$", ., value = T) %>%
+						
+						######
+						grep("rda$", ., value = T) %>% grep("PAAD", ., value = T) ,
+						######
+					
 					.combine = bind_rows
 				) %do% {
 		load(i)
@@ -117,12 +120,12 @@ hmap_df =
 			
 			# Add relative probability of slope != 0
 			mutate(alpha2_prob =
-						 	map_dbl(
-						 		draws, 
+						 	map2_dbl(
+						 		draws, zero,
 						 		~ .x %>% 
 						 			distinct() %>%
 						 			filter(A == 2) %>%
-						 			mutate(higher = .value > 0, lower = .value < 0) %>% 
+						 			mutate(higher = .value > .y, lower = .value < .y) %>% 
 						 			count(higher) %>%
 						 			spread(higher, n) %>%
 						 			
@@ -142,41 +145,68 @@ hmap_df =
 						 			mutate(prob = ifelse(`FALSE`>`TRUE`, -prob, prob)) %>%
 						 			pull(prob)
 						 )) %>%
-			select(
+			
+			mutate(file=i) %>%
+			nest(data = -file) %>%
+			# Polar plot
+			mutate(polar_plot = 
+						 	map(data, ~ .x %>%
+						 	plot_polar(size_geom_text = 2) +
+						 	theme(axis.title.x=element_blank()) +
+						 	ggtitle(i %>% gsub("dev/armet_", "", .) %>% gsub(".rda", "", ., fixed = T)) )) %>%
+			
+			# Subset for lowering memory
+			mutate(data = map(data, ~ .x %>% 			select(
 				.variable, community, level ,  
 				`Cell type category`, C, 
 				.value_alpha1, .value_alpha2,
 				alpha2_prob
-			) %>%
-			mutate(file=i)
+			)))
 	}
 
-hmap_df %>% saveRDS("hmap_df.rds")
+hmap_df %>% 
+	saveRDS("hmap_df.rds") 
 
-hmap_composition = 
+hmap_df_annotated =
 	hmap_df %>%
 	extract(file, "cancer_ID", regex = ".*armet_([A-Z]+).*") %>%
+	
+	# Add annotation
 	left_join(read_csv("dev/TCGA_supergroups.csv") %>% select(-cancer)) %>% 
+	mutate(imm_therapy = if_else(cancer_ID %in% c("LUAD", "LUSC", "SKCM", "KIRC", "KICH", "KIRP", "HNSC"), T, F)) %>%
+	left_join(
+		read_csv("dev/survival_TCGA_curated.csv") %>% 
+			filter(DSS_cr==1) %>%
+			group_by(type) %>%
+			summarise(median_DSS = median(as.numeric(DSS.time.cr), na.rm=T)) %>% 
+			arrange(median_DSS),
+		by=c("cancer_ID" = "type")
+	)
+
+hmap_composition = 
+	hmap_df_annotated  %>%
+	
 	mutate(group = if_else(group %>% is.na, "other", group)) %>%
 	group_by(level) %>%
 	heatmap( 
 		cancer_ID, `Cell type category`, .value_alpha1, 
-		annotation = group, 
-		palette_discrete = list(unique(cancer_sig$color)),
+		annotation = c(group, imm_therapy, median_DSS),
+		type = c("tile", "tile", "point"),
+		#palette_discrete = list(unique(cancer_sig$color)),
 		palette_value = circlize::colorRamp2(c(-4, -2, 0, 2, 4)/3*2, brewer.pal(5, "RdBu")) , 
 		.scale = "column"
 	)
 
 hmap_association = 
-	hmap_df %>%
-	extract(file, "cancer_ID", regex = ".*armet_([A-Z]+).*") %>%
-	left_join(read_csv("dev/TCGA_supergroups.csv") %>% select(-cancer)) %>%
+	hmap_df_annotated %>%
 	mutate(group = if_else(group %>% is.na, "other", group)) %>%
+	unnest(data) %>%
 	group_by(level) %>%
-	heatmap(
+	heatmap( 
 		cancer_ID, `Cell type category`, alpha2_prob ,
-		annotation = group,
-		palette_discrete = list(unique(cancer_sig$color)),
+		annotation = c(group, imm_therapy, median_DSS),
+		type = c("tile", "tile", "point"),
+		#palette_discrete = list(unique(cancer_sig$color)),
 		palette_value = circlize::colorRamp2(c(-1, -0.5, 0, 0.5, 1), brewer.pal(5, "RdBu")),
 		.scale = "none"
 	)

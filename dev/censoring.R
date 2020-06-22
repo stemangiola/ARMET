@@ -41,7 +41,7 @@ frml <- bf(proportions ~ .)
 
 fit <- brm(frml,
 					 data = R80_data,
-					 family = dirichlet(link = ‘logit’, link_phi = ‘log’),
+					 family = dirichlet(link = 'logit', link_phi = 'log'),
 					 future = TRUE)
 
 
@@ -52,6 +52,24 @@ A = rbind(
 df = data.frame(x = rnorm(2))
 df$A = A
 m = brm(A ~ 1 + x, data = df, family = dirichlet())
+
+DF = 
+	res_4$proportions %>%
+	select(-.variable) %>% 
+	filter(alive==0) %>% 
+	select(`Cell type category`, sample, PFI.time.2, .value) %>% 
+	mutate(time = scale(log(PFI.time.2))) %>% 
+	select(-PFI.time.2) %>% 
+	group_by(sample) %>%
+	mutate(.value = .value/sum(.value)) %>%
+	ungroup() %>%
+	spread(`Cell type category`, .value) %>%
+	select(x = time, A.1 = endothelial , A.2 = epithelial, A.3 = fibroblast, A.4 = immune_cell)
+
+my_df = DF[,1, drop=F]
+my_df$A = DF[,2:5, drop=F] %>% as.matrix() 
+
+m = brm(A ~ x, data = my_df, family = dirichlet())
 
 
 m_censored = brm(A | cens(censor_variable) ~ 1 + x, data = df %>% mutate(censored = sample(c(1,0), replace = T, size = n())), family = dirichlet())
@@ -69,5 +87,18 @@ m = brm(A ~ 1 + x, data = df, family = "beta")
 
 data = df %>% mutate(censored = sample(c(1,0), replace = T, size = n()))
 
-m_censored = brm(A | cens(censored) ~ 1 , data = data, family = "beta")
+DF = 
+	res_4$proportions %>%
+	select(-.variable) %>% 
+	select(`Cell type category`, sample, PFI.time.2, .value, alive) %>% 
+	mutate(time = scale(log(PFI.time.2))) %>% 
+	select(-PFI.time.2) %>% 
+	group_by(sample) %>%
+	mutate(.value = .value/sum(.value)) %>%
+	ungroup() %>%
+	mutate(.value = boot::logit(.value)) %>%
+	spread(`Cell type category`, .value) %>%
+	select(time = time, alive,  endothelial ,  epithelial,  fibroblast,  immune_cell)
+
+m_censored = brm(time | cens(alive) ~ epithelial , data = DF, family = "normal", cores = 4)
 

@@ -56,7 +56,7 @@ input_df =
 			filter(definition == "Primary solid Tumor") %>%
 			tidyr::extract(sample, into = "sample", regex = "([a-zA-Z0-9]+-[a-zA-Z0-9]+-[a-zA-Z0-9]+)") 
 	) %>%
-
+	
 	ensembl_to_symbol(ens) %>%
 	left_join(
 		read_csv("dev/survival_TCGA_curated.csv") %>% 
@@ -77,46 +77,41 @@ input_df =
 	# Filter 0 time
 	filter(PFI.time.2 != 0)
 
+# Correct for 0 prop ##############################
+###################################################
+
+#https://www.rdocumentation.org/packages/DirichletReg/versions/0.3-0/topics/DR_data
+compless_0_proportions = function(proportion){
+	proportion = matrix(proportion, ncol=1)
+	
+	( proportion*(nrow(proportion)-1) + (1/ncol(proportion)) ) / nrow(proportion)
+}
+
+
 
 res = input_df %>%
-#	inner_join((.) %>% distinct(sample) %>% slice(1:5)) %>%      # <----------------------------
-ARMET_tc(
-	~ censored(PFI.time.2, alive),
-	sample,
-	transcript, 
-	count, 
-	levels = 1,
-	iterations = 1500,                     # <----------------------------
-	sampling_iterations = 500,                # <----------------------------
-	prior_survival_time = read_csv("dev/survival_TCGA_curated.csv") %>% filter(PFI.2==1 & !is.na(PFI.time.2) & PFI.time.2 != "#N/A") %>% pull(PFI.time.2) %>% as.numeric
-	# , 
-	# model = rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix_hierarchical.stan", auto_write = F)
-)  %>%
-	ARMET_tc_continue(2) %>%
-	ARMET_tc_continue(3) %>%
-	ARMET_tc_continue(4)
+	tidybulk::deconvolve_cellularity(sample, transcript, count) 
 
 
-save(res, file=sprintf("dev/armet_%s.rda", i), compress = "gzip")
+x =	res %>%
+		nanny::subset(sample) %>%
+		pivot_longer(names_prefix = "cibersort: ", cols = starts_with("cibersort"), names_to = "cell_type", values_to = "proportion") %>%
+		nest(data = -cell_type) %>%
+		
+		# Test survival
+		mutate(surv_test = map(data, ~
+													 
+													 	.x %>% 
+				when(filter(., proportion!=0) %>% nrow %>% `>` (0) ~ 
+				(.) %>% 
+					mutate(dead = if_else(alive, 0, 1)) %>%
+					mutate(min_proportion = min(proportion[proportion!=0])) %>%
+					mutate(proportion = if_else(proportion==0, min_proportion, proportion)) %>%
+					mutate(proportion = proportion  %>% boot::logit()) %>%
+					coxph(Surv(PFI.time.2, dead) ~ proportion, .) %>%
+					broom::tidy()
+												)	 
+													 
+		)) %>%
+		unnest(surv_test)
 
-# res %>% plot_scatter() + scale_x_log10() + geom_text()
-# # 
-
-
-# 
-
-# Density
-(res$proportions %>%
-		unnest(draws) %>%
-		filter(A == 2) %>%
-		ggplot(aes(.value, color=`Cell type category`)) +
-		geom_density() +
-		facet_wrap(~.variable, scale="free_y")
-) %>% plotly::ggplotly()
-#
-
-
-res$proportions %>% 
-	select(-draws)%>%
-	unnest(proportions)
-	mutate(rng_summary = map(rng, ~ quantile(.x$.value, probs = c(0.025, 0.975)) %>% enframe() %>% spread(name, value))) %>% unnest(rng_summary)
