@@ -340,12 +340,28 @@ plot_scatter = function(.data){
 		) %>%
 		mutate(area = (xmax-xmin) * (ymax-ymin))
 	
-	ggplot(plot_data, aes(x, y)) +
+	outlier_df = 
+		.data$proportions %>%
+		filter(map_lgl(rng, ~!is.null(.)) ) %>%
+		mutate(rng_summary = map(rng, ~.x %>% group_by(Q, .variable) %>% tidybayes::mean_qi() %>% select(Q, .variable, .lower_rng = .lower, .upper_rng = .upper))) %>%
+		select(-draws, -rng) %>%
+		unnest(proportions, rng_summary) %>%
+		rowwise() %>% 
+		mutate(outlier = .value_relative %>% between(.lower_rng, .upper_rng) %>% `!`) %>%
+		select(sample, `Cell type category`, outlier, .lower_rng, .upper_rng )
+	
+	
+	plot_data  = 
+		plot_data%>%
+		left_join(outlier_df) 
+	
+		ggplot(plot_data, aes(x, y)) +
 		
 		geom_rect(aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax =ymax, alpha = -area), data =  plot_data %>% filter(alive)) +
-		geom_errorbar( aes(ymin =ymin, ymax = ymax), data = plot_data %>% filter(!alive), color = "red" ) +
+		geom_errorbar( aes(ymin =ymin, ymax = ymax, color = outlier), data = plot_data %>% filter(!alive)) +
 		geom_point( data =  plot_data %>% filter(alive), color="blue", shape=".") +
-		
+		geom_line(aes(x, .upper_rng)) +
+		geom_line(aes(x, .lower_rng)) +
 		#geom_density_2d(bins=3, fill = after_stat(density), geom = "polygon") +
 		#geom_point(aes(color = alive)) +
 		facet_wrap(~`Cell type category`, scale="free") +
