@@ -2028,7 +2028,7 @@ cluster_posterior_slopes = function(.data, credible_interval = 0.67){
 							mutate(is_cluster = map_lgl(
 								data,
 								~ .x %>% 
-									summarise(ma = max(.lower_alpha2), mi = min(.upper_alpha2), converged = any(Rhat > 1.6)==F) %>% 
+									summarise(ma = max(.lower_alpha2), mi = min(.upper_alpha2), converged = any(Rhat > 1.6 & !is.na(Rhat))==F) %>% 
 									mutate(is_cluster = ma < mi & converged) %>%
 									pull(is_cluster)
 							)) %>% 
@@ -2074,7 +2074,7 @@ identify_baseline_by_clustering = function(.data, CI){
 				nest(comm_data = -community) %>%
 				mutate(
 					sd_community = map_dbl( comm_data, ~ .x %>% unnest(draws) %>% filter(A ==2) %>% pull(.value) %>% sd ),
-					mean_community = map_dbl( comm_data, ~ .x %>% unnest(draws) %>% filter(A ==2) %>% pull(.value) %>% mean )
+					median_community = map_dbl( comm_data, ~ .x %>% unnest(draws) %>% filter(A ==2) %>% pull(.value) %>% median )
 				) %>%
 				unnest(comm_data) %>%
 				
@@ -2086,13 +2086,13 @@ identify_baseline_by_clustering = function(.data, CI){
 					
 					# Otherwise, if I have a consensus of overlapping posteriors make that zero
 					(.) %>% distinct(community, n) %>% count(n) %>% nrow %>% `>` (1) ~ 
-						(.) %>% mutate(zero = (.) %>% filter( n == max(n)) %>% pull(mean_community) %>% mean),
+						(.) %>% mutate(zero = (.) %>% filter( n == max(n)) %>% pull(median_community) %>% mean),
 					
 					# Otherwise make zero the 0
 					~ (.) %>% mutate(zero = 0)
 				)
 		)) %>%
-				
+				 
 		# 		
 		# 		# If we have a unique bigger community
 		# 		ifelse2_pipe(
