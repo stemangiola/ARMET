@@ -1,28 +1,5 @@
 functions{
 
- vector[] vector_to_0sum(vector[] v){
- 			// Build sum to zero variable
-		int C = rows(v[1]);
-		int R = size(v);
-		vector[C+1]  v_[R];
-			
-		for(r in 1:R) v_[r, 1:C] = v[r];
-		for(r in 1:R) v_[r,C+1] = -sum(v[r]);
-	
-		return(v_);
- }
- 
- vector[] vector_0sum_to_simplex(vector[] v){
- 		// Build sum to zero variable
-		int C = rows(v[1]);
-		int R = size(v);
-		vector[C]  v_[R];
-		
-		for(r in 1:R) v_[r] = softmax(v[r]);
-		
-		return(v_);
- }
-
 int[] rep_int(int x, int n){
 	int out_int[n];
 
@@ -894,10 +871,10 @@ parameters {
 
   // Proportions
   // lv1
-  vector[ct_in_nodes[1]-1]  prop_1_raw[Q * (lv == 1)]; // Root
+  simplex[ct_in_nodes[1]]  prop_1[Q * (lv == 1)]; // Root
 
   // lv2
-  vector[ct_in_nodes[2]]  prop_a[Q * (lv == 2)]; // Immune cells childrens
+  simplex[ct_in_nodes[2]]  prop_a[Q * (lv == 2)]; // Immune cells childrens
 
   // lv3
   simplex[ct_in_nodes[3]]  prop_b[Q * (lv == 3)]; // b cells childrens
@@ -947,9 +924,6 @@ parameters {
 
 }
 transformed parameters{
-
-	vector[ct_in_nodes[1]]  prop_1_[Q * (lv == 1)] = vector_to_0sum(prop_1_raw); // Root
-	vector[ct_in_nodes[1]]  prop_1[Q * (lv == 1)] = vector_0sum_to_simplex(prop_1_); // Root
 
 
 
@@ -1063,7 +1037,7 @@ model {
 
 
   }
-	if(lv == 1 && !do_regression) for(q in 1:Q) target +=  normal_lpdf(prop_1[q] | 0, 10);
+	if(lv == 1 && !do_regression) for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | rep_vector(1, num_elements(prop_1[1])));
 	//if(lv > 1)  for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | prop_1_prior[q]);
 
 	// lv 2
