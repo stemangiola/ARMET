@@ -710,15 +710,15 @@ vector[] beta_regression_rng( matrix X, matrix alpha, vector phi){
 		return (p);
 	}
 
-real censored_regression_lpdf(real time, row_vector prop_scaled, matrix alpha, vector phi, int is_censored){
+real censored_regression_lpdf(real time, row_vector prop, matrix alpha, vector phi, int is_censored){
 	
-	int C = cols(prop_scaled);
+	int C = cols(prop);
 	vector[C] mu;
 	real lp = 0;
 
 	// For each cell type
 	for(c in 1:C) {
-		mu[c] = [1,prop_scaled[c]] * alpha[,c];
+		mu[c] = [1,logit(prop[c])] * alpha[,c];
 	}
 
   // special treatment of censored data
@@ -964,10 +964,6 @@ parameters {
 }
 transformed parameters{
 
-
-  vector[ct_in_nodes[1]]  prop_1_logit[Q * (lv == 1)] ; // Root
-  vector[ct_in_nodes[2]]  prop_a_logit[Q * (lv == 2)]; // Immune cells childrens
-
 	matrix[Q,A] X_scaled = X;
 
 	if(how_many_cens > 0) {
@@ -978,11 +974,6 @@ transformed parameters{
 		X_scaled[,2] = (X_scaled[,2] - mean(X_scaled[,2])) / sd(X_scaled[,2]);
 	} 
 	
- if(lv==1) prop_1_logit = simplex_to_logit(prop_1);
- if(lv==2) prop_a_logit = simplex_to_logit(prop_a);
-
-// print(prop_1);
-// print(prop_1_logit);
 }
 model {
 
@@ -1074,8 +1065,8 @@ model {
   if(lv == 1 && do_regression) {
 
 
-  	if(fam_dirichlet) for(q in 1:Q)  X_scaled[q,2] ~ censored_regression(to_row_vector(prop_1_logit[q]), alpha_1, phi[1:4], cens[q]);
-  	else   for(q in 1:Q)  X_scaled[q,2] ~ censored_regression(to_row_vector(prop_1_logit[q]), alpha_1, phi[1:4], cens[q]);
+  	if(fam_dirichlet) for(q in 1:Q)  X_scaled[q,2] ~ censored_regression(to_row_vector(prop_1[q]), alpha_1, phi[1:4], cens[q]);
+  	else   for(q in 1:Q)  X_scaled[q,2] ~ censored_regression(to_row_vector(prop_1[q]), alpha_1, phi[1:4], cens[q]);
   	 alpha_1[1] ~ normal(0,10);
   	 to_vector( alpha_1[2:] ) ~ student_t(3, 0, 10);
 
@@ -1087,8 +1078,8 @@ model {
 	// lv 2
   if(lv == 2 && do_regression) {
 
-  	if(fam_dirichlet) for(q in 1:Q) X_scaled[q,2] ~ censored_regression(to_row_vector(prop_a_logit[q]), alpha_a, phi[1:6], cens[q]);  
-  	else  for(q in 1:Q) X_scaled[q,2] ~ censored_regression(to_row_vector(prop_a_logit[q]), alpha_a, phi[1:6], cens[q]);  
+  	if(fam_dirichlet) for(q in 1:Q) X_scaled[q,2] ~ censored_regression(to_row_vector(prop_a[q]), alpha_a, phi[1:6], cens[q]);  
+  	else  for(q in 1:Q) X_scaled[q,2] ~ censored_regression(to_row_vector(prop_a[q]), alpha_a, phi[1:6], cens[q]);  
   	alpha_a[1] ~ normal(0,10);
   	to_vector( alpha_a[2:] ) ~ student_t(3, 0, 10);
 
