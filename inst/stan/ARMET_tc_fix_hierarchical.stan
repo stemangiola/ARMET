@@ -655,7 +655,7 @@ if(dim_4[1] > 0) {
 		return (dirichlet_rng( softmax( append_row([0]', to_vector(X * alpha))) * exp( phi) + plateau ));
 	}
 
-real beta_regression_lpdf(vector[] p, matrix X, matrix alpha, real[] phi){
+real beta_regression_lpdf(vector[] p, matrix X, matrix alpha, vector phi){
 
 		real lp = 0;
 		//matrix[num_elements(p[,1]), num_elements(p[1])] mu;
@@ -685,7 +685,7 @@ real beta_regression_lpdf(vector[] p, matrix X, matrix alpha, real[] phi){
 		return (lp);
 	}
 
-vector[] beta_regression_rng( matrix X, matrix alpha, real[] phi){
+vector[] beta_regression_rng( matrix X, matrix alpha, vector phi){
 
 		vector[cols(alpha)+1] p[rows(X)];
 
@@ -709,6 +709,49 @@ vector[] beta_regression_rng( matrix X, matrix alpha, real[] phi){
 		}
 		return (p);
 	}
+
+real censored_regression_lpdf(real time, row_vector prop_scaled, matrix alpha, vector phi, int is_censored){
+	
+	int C = cols(prop_scaled);
+	vector[C] mu;
+	real lp = 0;
+
+	// For each cell type
+	for(c in 1:C) {
+		mu[c] = [1,prop_scaled[c]] * alpha[,c];
+	}
+
+  // special treatment of censored data
+  if (is_censored == 0) {
+    lp += normal_lpdf(rep_vector(time, C) | mu, phi);
+  } else if (is_censored == 1) {
+    lp += normal_lccdf(rep_vector(time, C) | mu, phi);
+  } 
+	
+	return(lp);
+    
+
+}
+
+vector[] simplex_to_logit(vector[] prop){
+	
+	int Q = size(prop);
+	int C = rows(prop[1]);
+	vector[C] prop_logit[Q] = prop;
+	
+	for(c in 1:C)  {
+		
+		real my_m = mean(prop_logit[,c]);
+		real my_s = sd(prop_logit[,c]);
+		prop_logit[,c] = logit(prop_logit[,c]);
+		
+		// print(prop_logit[,c]);
+		
+		for(q in 1:Q) prop_logit[q,c] = (prop_logit[q,c] - my_m) / my_s;
+	}
+	
+	return(prop_logit);
+}
 
 }
 data {
@@ -815,6 +858,7 @@ data {
 	int fam_dirichlet;
 
 	// Censoring
+	int cens[Q];
 	int how_many_cens;
 	int which_cens[how_many_cens];
 	int which_not_cens[Q-how_many_cens];
@@ -892,10 +936,10 @@ parameters {
 
 	// Dirichlet regression
   // lv1
-  matrix[A * (lv == 1) * do_regression,ct_in_nodes[1]-1]  alpha_1; // Root
+  matrix[A * (lv == 1) * do_regression,ct_in_nodes[1]]  alpha_1; // Root
 
 	// lv2
-  matrix[A * (lv == 2) * do_regression,ct_in_nodes[2]-1]  alpha_a; // Immune cells
+  matrix[A * (lv == 2) * do_regression,ct_in_nodes[2]]  alpha_a; // Immune cells
 
   // lv3
   matrix[A * (lv == 3) * do_regression,ct_in_nodes[3]-1]  alpha_b; // b cells
@@ -911,34 +955,34 @@ parameters {
   matrix[A * (lv == 4) * do_regression,ct_in_nodes[11]-1] alpha_l; // CD4
   matrix[A * (lv == 4) * do_regression,ct_in_nodes[12]-1] alpha_m; // CD8
 
-	real<lower=0, upper=(fam_dirichlet? 8 : 1)> phi[12]; //[fam_dirichlet ? 10 : ct_in_levels[lv]];
+	vector<lower=0, upper=(fam_dirichlet? 8 : 1)>[12] phi; //[fam_dirichlet ? 10 : ct_in_levels[lv]];
 
 	// Unknown population
 	vector<lower=0, upper = log(max(counts_linear))>[max(size_G_linear_MPI)/ct_in_levels[lv]] lambda_UFO[shards];
 	real<lower=0, upper=0.5> prop_UFO;
 
-	// Censoring
-	vector<lower=0>[how_many_cens] unseen;
-	real<lower=0> prior_unseen_alpha[how_many_cens > 0];
-	real prior_unseen_beta[how_many_cens > 0];
-
 }
 transformed parameters{
 
 
+  vector[ct_in_nodes[1]]  prop_1_logit[Q * (lv == 1)] ; // Root
+  vector[ct_in_nodes[2]]  prop_a_logit[Q * (lv == 2)]; // Immune cells childrens
 
-	matrix[Q,A] X_ = X;
-	matrix[Q,A] X_scaled = X_;;
-	
+	matrix[Q,A] X_scaled = X;
+
 	if(how_many_cens > 0) {
-		X_[which_cens,2] = X_[which_cens,2] + unseen;
-		
+
 		// log and scale the survival days
 
 		X_scaled[,2] = log(X_scaled[,2]);
 		X_scaled[,2] = (X_scaled[,2] - mean(X_scaled[,2])) / sd(X_scaled[,2]);
 	} 
+	
+ if(lv==1) prop_1_logit = simplex_to_logit(prop_1);
+ if(lv==2) prop_a_logit = simplex_to_logit(prop_a);
 
+// print(prop_1);
+// print(prop_1_logit);
 }
 model {
 
@@ -1029,9 +1073,9 @@ model {
 	// lv 1
   if(lv == 1 && do_regression) {
 
-		//print(X_scaled[,2]);
-  	if(fam_dirichlet) for(q in 1:Q) prop_1[q] ~ dirichlet_regression( X_scaled[q], alpha_1, phi[1], 0.01 );
-  	else  prop_1 ~ beta_regression(X_scaled, alpha_1, phi[1:4]);
+
+  	if(fam_dirichlet) for(q in 1:Q)  X_scaled[q,2] ~ censored_regression(to_row_vector(prop_1_logit[q]), alpha_1, phi[1:4], cens[q]);
+  	else   for(q in 1:Q)  X_scaled[q,2] ~ censored_regression(to_row_vector(prop_1_logit[q]), alpha_1, phi[1:4], cens[q]);
   	 alpha_1[1] ~ normal(0,10);
   	 to_vector( alpha_1[2:] ) ~ student_t(3, 0, 10);
 
@@ -1043,8 +1087,8 @@ model {
 	// lv 2
   if(lv == 2 && do_regression) {
 
-  	if(fam_dirichlet) for(q in 1:Q) prop_a[q] ~ dirichlet_regression( X_scaled[q], alpha_a, phi[1], 0.2 );
-  	else  prop_a ~ beta_regression(X_scaled, alpha_a, phi[1:6]);
+  	if(fam_dirichlet) for(q in 1:Q) X_scaled[q,2] ~ censored_regression(to_row_vector(prop_a_logit[q]), alpha_a, phi[1:6], cens[q]);  
+  	else  for(q in 1:Q) X_scaled[q,2] ~ censored_regression(to_row_vector(prop_a_logit[q]), alpha_a, phi[1:6], cens[q]);  
   	alpha_a[1] ~ normal(0,10);
   	to_vector( alpha_a[2:] ) ~ student_t(3, 0, 10);
 
@@ -1154,7 +1198,7 @@ model {
 	));
 
 	// Dirichlet regression
-	if(fam_dirichlet) phi ~ normal(0,1); // normal((lv==1 ? 8 : 6), 2);
+	if(fam_dirichlet) phi ~ student_t(3, 0,10); // normal((lv==1 ? 8 : 6), 2);
 	// Beta regression
 	else phi ~ beta(1,20);// beta(1,20);
 
@@ -1163,27 +1207,7 @@ model {
 	prop_UFO ~ beta(1.001, 20);
 
 	// Censoring
-	if(how_many_cens > 0){
-		
-		real mu = prior_unseen_alpha[1] * exp(-prior_unseen_beta[1]);
-		
-		// unseen
-		X_[which_cens,2] ~ gamma( prior_unseen_alpha[1], mu);
 
-		// Priors
-		target += gamma_lpdf(X[which_not_cens,2] | prior_unseen_alpha[1], mu);
-	 	target += gamma_lccdf(	X[which_cens,2] | prior_unseen_alpha[1], mu);
-	 	
-	 	// Hyperprior
-	 	prior_survival_time ~ gamma( prior_unseen_alpha[1], mu);
-	 	
-	 	prior_unseen_beta[1] ~ student_t(3, 6, 10);
-  	prior_unseen_alpha[1] ~  gamma(0.01, 0.01);
-  
-	 	// prior_unseen_alpha ~ normal(1.28, 0.1); // sd is increased on 2.5x
-	 	// prior_unseen_beta ~ normal(-0.717, 0.05); // sd is increased on 2.5x
-
-	}
 }
 generated quantities{
 	//vector[ct_in_levels[lv]]  prop_rng[Q];
