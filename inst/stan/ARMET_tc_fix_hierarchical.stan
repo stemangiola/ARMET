@@ -721,6 +721,14 @@ real censored_regression_lpdf(real time, row_vector prop, matrix alpha, vector p
 		mu[c] = [1,logit(prop[c])] * alpha[,c];
 	}
 
+// mu[1] = [1,logit(prop[1])] * [alpha[1,1],0]';
+// mu[2] = [1,logit(prop[2])] * [alpha[1,2],0]';
+
+// print(prop, " " , logit(prop));
+// print(mu);
+// print(time);
+// print(phi);
+// print("---");
   // special treatment of censored data
   if (is_censored == 0) {
     lp += normal_lpdf(rep_vector(time, C) | mu, phi);
@@ -936,26 +944,26 @@ parameters {
 
 	// Dirichlet regression
   // lv1
-  matrix[A * (lv == 1) * do_regression,ct_in_nodes[1]]  alpha_1; // Root
+  matrix[A * (lv == 1) * do_regression,ct_in_nodes[1]-(fam_dirichlet? 1 : 0)]  alpha_1; // Root
 
 	// lv2
-  matrix[A * (lv == 2) * do_regression,ct_in_nodes[2]]  alpha_a; // Immune cells
+  matrix[A * (lv == 2) * do_regression,ct_in_nodes[2]-(fam_dirichlet? 1 : 0)]  alpha_a; // Immune cells
 
   // lv3
-  matrix[A * (lv == 3) * do_regression,ct_in_nodes[3]-1]  alpha_b; // b cells
-  matrix[A * (lv == 3) * do_regression,ct_in_nodes[4]-1]  alpha_c; // granulocyte
-  matrix[A * (lv == 3) * do_regression,ct_in_nodes[5]-1]  alpha_d; // mono_derived
-  matrix[A * (lv == 3) * do_regression,ct_in_nodes[6]-1]  alpha_e; // natural_killer
-  matrix[A * (lv == 3) * do_regression,ct_in_nodes[7]-1]  alpha_f; // t_cell
+  matrix[A * (lv == 3) * do_regression,ct_in_nodes[3]-(fam_dirichlet? 1 : 0)]  alpha_b; // b cells
+  matrix[A * (lv == 3) * do_regression,ct_in_nodes[4]-(fam_dirichlet? 1 : 0)]  alpha_c; // granulocyte
+  matrix[A * (lv == 3) * do_regression,ct_in_nodes[5]-(fam_dirichlet? 1 : 0)]  alpha_d; // mono_derived
+  matrix[A * (lv == 3) * do_regression,ct_in_nodes[6]-(fam_dirichlet? 1 : 0)]  alpha_e; // natural_killer
+  matrix[A * (lv == 3) * do_regression,ct_in_nodes[7]-(fam_dirichlet? 1 : 0)]  alpha_f; // t_cell
 
 	// lv4
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[8]-1]  alpha_g; // dendritic myeloid
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[9]-1]  alpha_h; // macrophage
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[10]-1]  alpha_i; // NK
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[11]-1] alpha_l; // CD4
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[12]-1] alpha_m; // CD8
+  matrix[A * (lv == 4) * do_regression,ct_in_nodes[8]-(fam_dirichlet? 1 : 0)]  alpha_g; // dendritic myeloid
+  matrix[A * (lv == 4) * do_regression,ct_in_nodes[9]-(fam_dirichlet? 1 : 0)]  alpha_h; // macrophage
+  matrix[A * (lv == 4) * do_regression,ct_in_nodes[10]-(fam_dirichlet? 1 : 0)]  alpha_i; // NK
+  matrix[A * (lv == 4) * do_regression,ct_in_nodes[11]-(fam_dirichlet? 1 : 0)] alpha_l; // CD4
+  matrix[A * (lv == 4) * do_regression,ct_in_nodes[12]-(fam_dirichlet? 1 : 0)] alpha_m; // CD8
 
-	vector<lower=0, upper=(fam_dirichlet? 8 : 1)>[12] phi; //[fam_dirichlet ? 10 : ct_in_levels[lv]];
+	vector<lower=0>[12] phi; //[fam_dirichlet ? 10 : ct_in_levels[lv]];
 
 	// Unknown population
 	vector<lower=0, upper = log(max(counts_linear))>[max(size_G_linear_MPI)/ct_in_levels[lv]] lambda_UFO[shards];
@@ -1065,8 +1073,11 @@ model {
   if(lv == 1 && do_regression) {
 
 
-  	if(fam_dirichlet) for(q in 1:Q)  X_scaled[q,2] ~ censored_regression(to_row_vector(prop_1[q]), alpha_1, phi[1:4], cens[q]);
-  	else   for(q in 1:Q)  X_scaled[q,2] ~ censored_regression(to_row_vector(prop_1[q]), alpha_1, phi[1:4], cens[q]);
+  	if(fam_dirichlet) for(q in 1:Q)  prop_1[q] ~ dirichlet_regression( X_scaled[q], alpha_1, phi[1], 0.01 );
+  	else {
+  		 for(q in 1:Q)  X_scaled[q,2] ~ censored_regression(to_row_vector(prop_1[q]), alpha_1, phi[1:4], cens[q]);
+  		 for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | rep_vector(1, num_elements(prop_1[1])));
+  	} 
   	 alpha_1[1] ~ normal(0,10);
   	 to_vector( alpha_1[2:] ) ~ student_t(3, 0, 10);
 
@@ -1078,8 +1089,11 @@ model {
 	// lv 2
   if(lv == 2 && do_regression) {
 
-  	if(fam_dirichlet) for(q in 1:Q) X_scaled[q,2] ~ censored_regression(to_row_vector(prop_a[q]), alpha_a, phi[1:6], cens[q]);  
-  	else  for(q in 1:Q) X_scaled[q,2] ~ censored_regression(to_row_vector(prop_a[q]), alpha_a, phi[1:6], cens[q]);  
+  	if(fam_dirichlet) for(q in 1:Q)  prop_a[q] ~ dirichlet_regression( X_scaled[q], alpha_a, phi[1], 0.2 );
+  	else {
+  		for(q in 1:Q) X_scaled[q,2] ~ censored_regression(to_row_vector(prop_a[q]), alpha_a, phi[1:6], cens[q]);  
+  		for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | rep_vector(1, num_elements(prop_a[1])));
+  	} 
   	alpha_a[1] ~ normal(0,10);
   	to_vector( alpha_a[2:] ) ~ student_t(3, 0, 10);
 
@@ -1098,11 +1112,20 @@ model {
   		for(q in 1:Q) prop_f[q] ~ dirichlet_regression( X_scaled[q], alpha_f, phi[5] , 1);
   	}
   	else {
-  		prop_b ~ beta_regression(X_scaled, alpha_b, phi[1:2]);
-  		 prop_c ~ beta_regression(X_scaled, alpha_c, phi[3:4]);
-  		 prop_d ~ beta_regression(X_scaled, alpha_d, phi[5:7]);
-  		 prop_e ~ beta_regression(X_scaled, alpha_e, phi[8:9]);
-  		 prop_f ~ beta_regression(X_scaled, alpha_f, phi[9:11]);
+
+  	 	for(q in 1:Q) {   X_scaled[q,2] ~ censored_regression(to_row_vector(prop_b[q]), alpha_b, phi[1:2], cens[q]); }
+  		// for(q in 1:Q) X_scaled[q,2] ~ censored_regression(to_row_vector(prop_c[q]), alpha_c, phi[3:4], cens[q]);
+  		// for(q in 1:Q) X_scaled[q,2] ~ censored_regression(to_row_vector(prop_d[q]), alpha_d, phi[5:7], cens[q]);
+  		// for(q in 1:Q) X_scaled[q,2] ~ censored_regression(to_row_vector(prop_e[q]), alpha_e, phi[8:9], cens[q]);
+  		// for(q in 1:Q) X_scaled[q,2] ~ censored_regression(to_row_vector(prop_f[q]), alpha_f, phi[9:11], cens[q]);
+
+  		for(q in 1:Q){
+		  	 target += dirichlet_lpdf(prop_b[q] | rep_vector(1, num_elements(prop_b[1])));
+				 target += dirichlet_lpdf(prop_c[q] | rep_vector(1, num_elements(prop_c[1])));
+				 target += dirichlet_lpdf(prop_d[q] | rep_vector(1, num_elements(prop_d[1])));
+				 target += dirichlet_lpdf(prop_e[q] | rep_vector(1, num_elements(prop_e[1])));
+				 target += dirichlet_lpdf(prop_f[q] | rep_vector(1, num_elements(prop_f[1])));
+		  }
   	}
 		alpha_b[1] ~  normal(0,10);
   	to_vector( alpha_b[2:] ) ~ student_t(3, 0, 10);
@@ -1141,11 +1164,20 @@ model {
   		for(q in 1:Q) prop_m[q] ~ dirichlet_regression( X_scaled[q], alpha_m, phi[5] , 1);
   	}
   	else {
-  		 prop_g ~ beta_regression(X_scaled, alpha_g, phi[1:2]);
-  		 prop_h ~ beta_regression(X_scaled, alpha_h, phi[3:4]);
-  		 prop_i ~ beta_regression(X_scaled, alpha_i, phi[5:6]);
-  		 prop_l ~ beta_regression(X_scaled, alpha_l, phi[7:8]);
-  		 prop_m ~ beta_regression(X_scaled, alpha_m, phi[9:10]);
+  		for(q in 1:Q) X_scaled[q,2] ~ censored_regression(to_row_vector(prop_g[q]), alpha_g, phi[1:2], cens[q]);  
+  		for(q in 1:Q) X_scaled[q,2] ~ censored_regression(to_row_vector(prop_h[q]), alpha_h, phi[3:4], cens[q]);  
+  		for(q in 1:Q) X_scaled[q,2] ~ censored_regression(to_row_vector(prop_i[q]), alpha_i, phi[5:6], cens[q]);  
+  		for(q in 1:Q) X_scaled[q,2] ~ censored_regression(to_row_vector(prop_l[q]), alpha_l, phi[7:8], cens[q]);  
+  		for(q in 1:Q) X_scaled[q,2] ~ censored_regression(to_row_vector(prop_m[q]), alpha_m, phi[9:10], cens[q]); 
+  		
+  		for(q in 1:Q){
+		  	 target += dirichlet_lpdf(prop_g[q] | rep_vector(1, num_elements(prop_g[1])));
+				 target += dirichlet_lpdf(prop_h[q] | rep_vector(1, num_elements(prop_h[1])));
+				 target += dirichlet_lpdf(prop_i[q] | rep_vector(1, num_elements(prop_i[1])));
+				 target += dirichlet_lpdf(prop_l[q] | rep_vector(1, num_elements(prop_l[1])));
+				 target += dirichlet_lpdf(prop_m[q] | rep_vector(1, num_elements(prop_m[1])));
+		  }
+  		
   	}
 // else  prop_4 ~ beta_regression(X_scaled, alpha_4, phi);
 		alpha_g[1] ~ normal(0,10);
@@ -1189,9 +1221,10 @@ model {
 	));
 
 	// Dirichlet regression
-	if(fam_dirichlet) phi ~ student_t(3, 0,10); // normal((lv==1 ? 8 : 6), 2);
+	if(fam_dirichlet) phi ~ normal((lv==1 ? 8 : 6), 2);
 	// Beta regression
-	else phi ~ beta(1,20);// beta(1,20);
+	//else phi ~ student_t(3, 0,10);
+	else phi ~ normal( 0,1);
 
 	// lambda UFO
 	for(i in 1:shards) lambda_UFO[i] ~ skew_normal(6.2, 3.3, -2.7);
@@ -1225,50 +1258,54 @@ generated quantities{
   
 	if(lv == 1 && do_regression) {
 
-  	if(fam_dirichlet) for(q in 1:Q) prop_1_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_1, phi[1] , 0.01);
-  	else  prop_1_rng = beta_regression_rng(X_scaled, alpha_1, phi[1:4]);
+  	//if(fam_dirichlet) 
+  	for(q in 1:Q) prop_1_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_1, phi[1] , 0.01);
+  	//else  prop_1_rng = beta_regression_rng(X_scaled, alpha_1, phi[1:4]);
 
   }
 	if(lv == 2 && do_regression) {
 
-  	if(fam_dirichlet) for(q in 1:Q) prop_a_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_a, phi[1] , 0.2);
-  	else  prop_a_rng = beta_regression_rng(X_scaled, alpha_a, phi[1:6]);
+  //	if(fam_dirichlet) 
+  	for(q in 1:Q) prop_a_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_a, phi[1] , 0.2);
+  	//else  prop_a_rng = beta_regression_rng(X_scaled, alpha_a, phi[1:6]);
 
   }
   	if(lv == 3 && do_regression) {
 
-  	if(fam_dirichlet) {
-  		for(q in 1:Q) prop_b_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_b, phi[1] , 1);
-  		for(q in 1:Q) prop_c_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_c, phi[2] , 1);
-  		for(q in 1:Q) prop_d_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_d, phi[3] , 1);
-  		for(q in 1:Q) prop_e_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_e, phi[4] , 1);
-  		for(q in 1:Q) prop_f_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_f, phi[5] , 1);
+  //	if(fam_dirichlet)
+  	{
+  		for(q in 1:Q) prop_b_rng[q] = rep_vector(0, ct_in_nodes[3]); // dirichlet_regression_rng( X_scaled[q], alpha_b, phi[1] , 1);
+  		for(q in 1:Q) prop_c_rng[q] = rep_vector(0, ct_in_nodes[4]); //dirichlet_regression_rng( X_scaled[q], alpha_c, phi[2] , 1);
+  		for(q in 1:Q) prop_d_rng[q] = rep_vector(0, ct_in_nodes[5]); //dirichlet_regression_rng( X_scaled[q], alpha_d, phi[3] , 1);
+  		for(q in 1:Q) prop_e_rng[q] = rep_vector(0, ct_in_nodes[6]); //dirichlet_regression_rng( X_scaled[q], alpha_e, phi[4] , 1);
+  		for(q in 1:Q) prop_f_rng[q] = rep_vector(0, ct_in_nodes[7]); //dirichlet_regression_rng( X_scaled[q], alpha_f, phi[5] , 1);
   	}
-  	else {
-  		 prop_b_rng = beta_regression_rng(X_scaled, alpha_b, phi[1:2]);
-  		 prop_c_rng = beta_regression_rng(X_scaled, alpha_c, phi[3:4]);
-  		 prop_d_rng = beta_regression_rng(X_scaled, alpha_d, phi[5:7]);
-  		 prop_e_rng = beta_regression_rng(X_scaled, alpha_e, phi[8:9]);
-  		 prop_f_rng = beta_regression_rng(X_scaled, alpha_f, phi[9:11]);
-  	}
+  	// else {
+  	// 	 prop_b_rng = beta_regression_rng(X_scaled, alpha_b, phi[1:2]);
+  	// 	 prop_c_rng = beta_regression_rng(X_scaled, alpha_c, phi[3:4]);
+  	// 	 prop_d_rng = beta_regression_rng(X_scaled, alpha_d, phi[5:7]);
+  	// 	 prop_e_rng = beta_regression_rng(X_scaled, alpha_e, phi[8:9]);
+  	// 	 prop_f_rng = beta_regression_rng(X_scaled, alpha_f, phi[9:11]);
+  	// }
 
   }
   	if(lv == 4 && do_regression) {
 
-  		if(fam_dirichlet) {
+  	//	if(fam_dirichlet)
+  	{
   		for(q in 1:Q) prop_g_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_g, phi[1] , 1);
   		for(q in 1:Q) prop_h_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_h, phi[2] , 1);
   		for(q in 1:Q) prop_i_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_i, phi[3] , 1);
   		for(q in 1:Q) prop_l_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_l, phi[4] , 1);
   		for(q in 1:Q) prop_m_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_m, phi[5] , 1);
   	}
-  	else {
-  		 prop_g_rng = beta_regression_rng(X_scaled, alpha_g, phi[1:2]);
-  		 prop_h_rng = beta_regression_rng(X_scaled, alpha_h, phi[3:4]);
-  		 prop_i_rng = beta_regression_rng(X_scaled, alpha_i, phi[5:6]);
-  		 prop_l_rng = beta_regression_rng(X_scaled, alpha_l, phi[7:8]);
-  		 prop_m_rng = beta_regression_rng(X_scaled, alpha_m, phi[9:10]);
-  	}
+  	// else {
+  	// 	 prop_g_rng = beta_regression_rng(X_scaled, alpha_g, phi[1:2]);
+  	// 	 prop_h_rng = beta_regression_rng(X_scaled, alpha_h, phi[3:4]);
+  	// 	 prop_i_rng = beta_regression_rng(X_scaled, alpha_i, phi[5:6]);
+  	// 	 prop_l_rng = beta_regression_rng(X_scaled, alpha_l, phi[7:8]);
+  	// 	 prop_m_rng = beta_regression_rng(X_scaled, alpha_m, phi[9:10]);
+  	// }
 
   }
 }
