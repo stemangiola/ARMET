@@ -718,7 +718,7 @@ real censored_regression_lpdf(real time, row_vector prop, matrix alpha, vector p
 
 	// For each cell type
 	for(c in 1:C) {
-		mu[c] = [1,logit(prop[c])] * alpha[,c];
+		mu[c] = alpha[1,c] + (prop[c]) * alpha[2,c];
 	}
 
 // mu[1] = [1,logit(prop[1])] * [alpha[1,1],0]';
@@ -748,10 +748,12 @@ vector[] simplex_to_logit(vector[] prop){
 	vector[C] prop_logit[Q] = prop;
 	
 	for(c in 1:C)  {
-		
-		real my_m = mean(prop_logit[,c]);
-		real my_s = sd(prop_logit[,c]);
+		real my_m ;
+		real my_s ;
 		prop_logit[,c] = logit(prop_logit[,c]);
+		my_m = mean(prop_logit[,c]);
+		my_s	= sd(prop_logit[,c]);
+
 		
 		// print(prop_logit[,c]);
 		
@@ -972,6 +974,14 @@ parameters {
 }
 transformed parameters{
 
+vector[ct_in_nodes[1]]  prop_1_logit[Q * (lv == 1)] ; // Root
+  vector[ct_in_nodes[2]]  prop_a_logit[Q * (lv == 2)]; // Immune cells childrens
+ 
+  vector[ct_in_nodes[3]]  prop_b_logit[Q * (lv == 3)]; // Immune cells childrens
+  vector[ct_in_nodes[4]]  prop_c_logit[Q * (lv == 3)]; // Immune cells childrens
+  vector[ct_in_nodes[5]]  prop_d_logit[Q * (lv == 3)]; // Immune cells childrens
+
+
 	matrix[Q,A] X_scaled = X;
 
 	if(how_many_cens > 0) {
@@ -982,6 +992,13 @@ transformed parameters{
 		X_scaled[,2] = (X_scaled[,2] - mean(X_scaled[,2])) / sd(X_scaled[,2]);
 	} 
 	
+	 if(lv==1) prop_1_logit = simplex_to_logit(prop_1);
+ if(lv==2) prop_a_logit = simplex_to_logit(prop_a);
+	 if(lv==3) prop_b_logit = simplex_to_logit(prop_b);
+	 if(lv==3) prop_c_logit = simplex_to_logit(prop_c);
+	 if(lv==3) prop_d_logit = simplex_to_logit(prop_d);
+	 
+
 }
 model {
 
@@ -1113,9 +1130,9 @@ model {
   	}
   	else {
 
-  	 	for(q in 1:Q) {   X_scaled[q,2] ~ censored_regression(to_row_vector(prop_b[q]), alpha_b, phi[1:2], cens[q]); }
-  		// for(q in 1:Q) X_scaled[q,2] ~ censored_regression(to_row_vector(prop_c[q]), alpha_c, phi[3:4], cens[q]);
-  		// for(q in 1:Q) X_scaled[q,2] ~ censored_regression(to_row_vector(prop_d[q]), alpha_d, phi[5:7], cens[q]);
+  	 	//for(q in 1:Q) {   X_scaled[q,2] ~ censored_regression(to_row_vector(prop_b_logit[q]), alpha_b, phi[1:2], cens[q]); }
+  		 // for(q in 1:Q) X_scaled[q,2] ~ censored_regression(to_row_vector(prop_c_logit[q]), alpha_c, phi[3:4], cens[q]);
+  	//	 for(q in 1:Q) X_scaled[q,2] ~ censored_regression(to_row_vector(prop_d_logit[q]), alpha_d, phi[5:7], cens[q]);
   		// for(q in 1:Q) X_scaled[q,2] ~ censored_regression(to_row_vector(prop_e[q]), alpha_e, phi[8:9], cens[q]);
   		// for(q in 1:Q) X_scaled[q,2] ~ censored_regression(to_row_vector(prop_f[q]), alpha_f, phi[9:11], cens[q]);
 
@@ -1128,7 +1145,7 @@ model {
 		  }
   	}
 		alpha_b[1] ~  normal(0,10);
-  	to_vector( alpha_b[2:] ) ~ student_t(3, 0, 10);
+  	to_vector( alpha_b[2:] ) ~  student_t(3, 0, 10);
 		alpha_c[1] ~  normal(0,10);
   	to_vector( alpha_c[2:] ) ~ student_t(3, 0, 10);
 		alpha_d[1] ~  normal(0,10);
