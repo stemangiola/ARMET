@@ -178,7 +178,7 @@ ARMET_tc = function(.data,
 		stop(sprintf("ARMET says: the %s column must be integer as the deconvolution model is Negative Binomial", quo_name(.abundance)))
 
 	# Check family
-	if(family %in% c("dirichlet", "beta") %>% any %>% `!`) stop("ARMET says: Please choose between dirichlet or beta families")
+	#if(family %in% c("dirichlet", "beta") %>% any %>% `!`) stop("ARMET says: Please choose between dirichlet or beta families")
 
 	# Covariate column
 	cov_columns =
