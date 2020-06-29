@@ -323,7 +323,7 @@ plot_scatter = function(.data){
 				filter(A==2) %>% 
 				mutate(level = .y)
 		) %>%
-		rename(inferred_x = .value)
+		rename(inferred_x = .value) 
 	
 	plot_data = 
 		inferred_y %>%
@@ -333,29 +333,33 @@ plot_scatter = function(.data){
 		#filter(`Cell type category` == "epithelial") %>%
 		#mutate(inferred_x = inferred_x + rnorm(n(), 0, 0.01) %>% abs) %>%
 		filter(inferred_y %>% is.na %>% `!`) %>%
-		group_by(`Cell type category`, sample, alive) %>%
+		group_by(`Cell type category`, sample, Q, level, alive) %>%
 		summarise(
 			xmin= quantile(inferred_x, 0.05), xmax = quantile(inferred_x, 0.95), x = mean(inferred_x),
 			ymin= quantile(inferred_y, 0.05), ymax = quantile(inferred_y, 0.95), y = mean(inferred_y)
 		) %>%
+		ungroup() %>%
 		mutate(area = (xmax-xmin) * (ymax-ymin))
 	
-	outlier_df = 
+	outlier_df =
 		.data$proportions %>%
-		filter(map_lgl(rng, ~!is.null(.)) ) %>%
-		mutate(rng_summary = map(rng, ~.x %>% group_by(Q, .variable) %>% tidybayes::mean_qi() %>% select(Q, .variable, .lower_rng = .lower, .upper_rng = .upper))) %>%
-		select(-draws, -rng) %>%
-		unnest(proportions, rng_summary) %>%
-		rowwise() %>% 
-		mutate(outlier = .value_relative %>% between(.lower_rng, .upper_rng) %>% `!`) %>%
-		select(sample, `Cell type category`, outlier, .lower_rng, .upper_rng )
+		filter(map_lgl(rng, ~!is.null(.)) ) %>% 
+		select(level, `Cell type category`, C,rng) %>% 
+		unnest(rng) %>% 
+		group_by(level, `Cell type category`, C,Q, .variable) %>% 
+		tidybayes::median_qi(.width = 0.95) %>%
+		ungroup() %>%
+		rename( .lower_rng = .lower, .upper_rng = .upper, .median_rng = .value)
 	
+
+	plot_data = 
+		plot_data %>%
+		left_join(outlier_df) %>%
+		rowwise() %>%
+		mutate(outlier = y %>% between(.lower_rng, .upper_rng) %>% `!`) %>%
+		ungroup()
 	
-	plot_data  = 
-		plot_data%>%
-		left_join(outlier_df) 
-	
-		ggplot(plot_data, aes(x, y)) +
+	ggplot(plot_data, aes(x, y)) +
 		
 		geom_rect(aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax =ymax, alpha = -area), data =  plot_data %>% filter(alive)) +
 		geom_errorbar( aes(ymin =ymin, ymax = ymax, color = outlier), data = plot_data %>% filter(!alive)) +
