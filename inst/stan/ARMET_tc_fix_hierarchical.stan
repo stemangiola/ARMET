@@ -911,7 +911,7 @@ parameters {
   matrix[A * (lv == 4) * do_regression,ct_in_nodes[11]-1] alpha_l; // CD4
   matrix[A * (lv == 4) * do_regression,ct_in_nodes[12]-1] alpha_m; // CD8
 
-	real<lower=0, upper=(fam_dirichlet? 8 : 1)> phi[12]; //[fam_dirichlet ? 10 : ct_in_levels[lv]];
+	real<lower=0> phi[12]; //[fam_dirichlet ? 10 : ct_in_levels[lv]];
 
 	// Unknown population
 	vector<lower=0, upper = log(max(counts_linear))>[max(size_G_linear_MPI)/ct_in_levels[lv]] lambda_UFO[shards];
@@ -1156,7 +1156,7 @@ model {
 	// Dirichlet regression
 	if(fam_dirichlet) phi ~ normal(0,1); // normal((lv==1 ? 8 : 6), 2);
 	// Beta regression
-	else phi ~ beta(1,20);// beta(1,20);
+	else phi ~  normal(0,1); // beta(1,20);// beta(1,20);
 
 	// lambda UFO
 	for(i in 1:shards) lambda_UFO[i] ~ skew_normal(6.2, 3.3, -2.7);
