@@ -1030,8 +1030,7 @@ model {
   if(lv == 1 && do_regression) {
 
 		//print(X_scaled[,2]);
-  	if(fam_dirichlet) for(q in 1:Q) prop_1[q] ~ dirichlet_regression( X_scaled[q], alpha_1, phi[1], 0.01 );
-  	else  prop_1 ~ beta_regression(X_scaled, alpha_1, phi[1:4]);
+  	prop_1 ~ beta_regression(X_scaled, alpha_1, phi[1:4]);
   	 alpha_1[1] ~ normal(0,10);
   	 to_vector( alpha_1[2:] ) ~ student_t(3, 0, 10);
 
@@ -1043,8 +1042,7 @@ model {
 	// lv 2
   if(lv == 2 && do_regression) {
 
-  	if(fam_dirichlet) for(q in 1:Q) prop_a[q] ~ dirichlet_regression( X_scaled[q], alpha_a, phi[1], 0.2 );
-  	else  prop_a ~ beta_regression(X_scaled, alpha_a, phi[1:6]);
+  	prop_a ~ beta_regression(X_scaled, alpha_a, phi[1:6]);
   	alpha_a[1] ~ normal(0,10);
   	to_vector( alpha_a[2:] ) ~ student_t(3, 0, 10);
 
@@ -1055,20 +1053,12 @@ model {
 	// lv 3
   if(lv == 3 && do_regression){
 
-  	if(fam_dirichlet) {
   		for(q in 1:Q) prop_b[q] ~ dirichlet_regression( X_scaled[q], alpha_b, phi[1] , 1);
   		for(q in 1:Q) prop_c[q] ~ dirichlet_regression( X_scaled[q], alpha_c, phi[2] , 1);
   		for(q in 1:Q) prop_d[q] ~ dirichlet_regression( X_scaled[q], alpha_d, phi[3] , 1);
   		for(q in 1:Q) prop_e[q] ~ dirichlet_regression( X_scaled[q], alpha_e, phi[4] , 1);
   		for(q in 1:Q) prop_f[q] ~ dirichlet_regression( X_scaled[q], alpha_f, phi[5] , 1);
-  	}
-  	else {
-  		prop_b ~ beta_regression(X_scaled, alpha_b, phi[1:2]);
-  		 prop_c ~ beta_regression(X_scaled, alpha_c, phi[3:4]);
-  		 prop_d ~ beta_regression(X_scaled, alpha_d, phi[5:7]);
-  		 prop_e ~ beta_regression(X_scaled, alpha_e, phi[8:9]);
-  		 prop_f ~ beta_regression(X_scaled, alpha_f, phi[9:11]);
-  	}
+
 		alpha_b[1] ~  normal(0,10);
   	to_vector( alpha_b[2:] ) ~ student_t(3, 0, 10);
 		alpha_c[1] ~  normal(0,10);
@@ -1098,20 +1088,12 @@ model {
 	// lv 4
   if(lv == 4 && do_regression){
 
-	if(fam_dirichlet) {
   		for(q in 1:Q) prop_g[q] ~ dirichlet_regression( X_scaled[q], alpha_g, phi[1] , 1);
   		for(q in 1:Q) prop_h[q] ~ dirichlet_regression( X_scaled[q], alpha_h, phi[2] , 1);
   		for(q in 1:Q) prop_i[q] ~ dirichlet_regression( X_scaled[q], alpha_i, phi[3] , 1);
   		for(q in 1:Q) prop_l[q] ~ dirichlet_regression( X_scaled[q], alpha_l, phi[4] , 1);
   		for(q in 1:Q) prop_m[q] ~ dirichlet_regression( X_scaled[q], alpha_m, phi[5] , 1);
-  	}
-  	else {
-  		 prop_g ~ beta_regression(X_scaled, alpha_g, phi[1:2]);
-  		 prop_h ~ beta_regression(X_scaled, alpha_h, phi[3:4]);
-  		 prop_i ~ beta_regression(X_scaled, alpha_i, phi[5:6]);
-  		 prop_l ~ beta_regression(X_scaled, alpha_l, phi[7:8]);
-  		 prop_m ~ beta_regression(X_scaled, alpha_m, phi[9:10]);
-  	}
+
 // else  prop_4 ~ beta_regression(X_scaled, alpha_4, phi);
 		alpha_g[1] ~ normal(0,10);
   	to_vector( alpha_g[2:] ) ~ student_t(3, 0, 10);
@@ -1154,9 +1136,9 @@ model {
 	));
 
 	// Dirichlet regression
-	if(fam_dirichlet) phi ~ normal(0,1); // normal((lv==1 ? 8 : 6), 2);
+	if(lv > 2) phi ~ normal(0,1); // normal((lv==1 ? 8 : 6), 2);
 	// Beta regression
-	else phi ~  normal(0,1); // beta(1,20);// beta(1,20);
+	else phi ~  gamma(1,5); // beta(1,20);// beta(1,20);
 
 	// lambda UFO
 	for(i in 1:shards) lambda_UFO[i] ~ skew_normal(6.2, 3.3, -2.7);
@@ -1210,50 +1192,32 @@ generated quantities{
   
 	if(lv == 1 && do_regression) {
 
-  	if(fam_dirichlet) for(q in 1:Q) prop_1_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_1, phi[1] , 0.01);
-  	else  prop_1_rng = beta_regression_rng(X_scaled, alpha_1, phi[1:4]);
+  	prop_1_rng = beta_regression_rng(X_scaled, alpha_1, phi[1:4]);
 
   }
 	if(lv == 2 && do_regression) {
 
-  	if(fam_dirichlet) for(q in 1:Q) prop_a_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_a, phi[1] , 0.2);
-  	else  prop_a_rng = beta_regression_rng(X_scaled, alpha_a, phi[1:6]);
+  	prop_a_rng = beta_regression_rng(X_scaled, alpha_a, phi[1:6]);
 
   }
   	if(lv == 3 && do_regression) {
 
-  	if(fam_dirichlet) {
   		for(q in 1:Q) prop_b_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_b, phi[1] , 1);
   		for(q in 1:Q) prop_c_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_c, phi[2] , 1);
   		for(q in 1:Q) prop_d_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_d, phi[3] , 1);
   		for(q in 1:Q) prop_e_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_e, phi[4] , 1);
   		for(q in 1:Q) prop_f_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_f, phi[5] , 1);
-  	}
-  	else {
-  		 prop_b_rng = beta_regression_rng(X_scaled, alpha_b, phi[1:2]);
-  		 prop_c_rng = beta_regression_rng(X_scaled, alpha_c, phi[3:4]);
-  		 prop_d_rng = beta_regression_rng(X_scaled, alpha_d, phi[5:7]);
-  		 prop_e_rng = beta_regression_rng(X_scaled, alpha_e, phi[8:9]);
-  		 prop_f_rng = beta_regression_rng(X_scaled, alpha_f, phi[9:11]);
-  	}
+
 
   }
   	if(lv == 4 && do_regression) {
 
-  		if(fam_dirichlet) {
   		for(q in 1:Q) prop_g_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_g, phi[1] , 1);
   		for(q in 1:Q) prop_h_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_h, phi[2] , 1);
   		for(q in 1:Q) prop_i_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_i, phi[3] , 1);
   		for(q in 1:Q) prop_l_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_l, phi[4] , 1);
   		for(q in 1:Q) prop_m_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_m, phi[5] , 1);
-  	}
-  	else {
-  		 prop_g_rng = beta_regression_rng(X_scaled, alpha_g, phi[1:2]);
-  		 prop_h_rng = beta_regression_rng(X_scaled, alpha_h, phi[3:4]);
-  		 prop_i_rng = beta_regression_rng(X_scaled, alpha_i, phi[5:6]);
-  		 prop_l_rng = beta_regression_rng(X_scaled, alpha_l, phi[7:8]);
-  		 prop_m_rng = beta_regression_rng(X_scaled, alpha_m, phi[9:10]);
-  	}
+
 
   }
 }
