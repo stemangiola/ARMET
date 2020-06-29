@@ -1122,7 +1122,7 @@ model {
 		alpha_l[1] ~ normal(0,10);
   	to_vector( alpha_l[2:] ) ~ student_t(3, 0, 10);
 		alpha_m[1] ~ normal(0,10);
-  	to_vector( alpha_m[2:] ) ~ student_t(3, 0, 10s);
+  	to_vector( alpha_m[2:] ) ~ student_t(3, 0, 10);
 
   }
   if(lv == 4 && !do_regression) for(q in 1:Q){
