@@ -1042,7 +1042,7 @@ model {
 	// lv 2
   if(lv == 2 && do_regression) {
 
-  	prop_a ~ beta_regression(X_scaled, alpha_a, phi[1:6], 1);
+  	prop_a ~ beta_regression(X_scaled, alpha_a, phi[1:6], 0.5);
   	alpha_a[1] ~ normal(0,10);
   	to_vector( alpha_a[2:] ) ~ student_t(3, 0, 10);
 
@@ -1197,7 +1197,7 @@ generated quantities{
   }
 	if(lv == 2 && do_regression) {
 
-  	prop_a_rng = beta_regression_rng(X_scaled, alpha_a, phi[1:6], 1);
+  	prop_a_rng = beta_regression_rng(X_scaled, alpha_a, phi[1:6], 0.5);
 
   }
   	if(lv == 3 && do_regression) {
