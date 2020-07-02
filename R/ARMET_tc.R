@@ -40,7 +40,7 @@ ARMET_tc_continue = function(armet_obj, level, model = stanmodels$ARMET_tc_fix_h
 	fit_prop_parsed = 
 		fit %>%
 		draws_to_tibble("prop_", "Q", "C") %>%
-		filter(!grepl("_UFO|_rng", .variable))  %>%
+		filter(!grepl("_UFO|_rng|_logit", .variable))  %>%
 		mutate(Q = Q %>% as.integer)
 	
 	draws = get_draws(fit_prop_parsed, level, internals)	
@@ -853,5 +853,66 @@ run_lv_1 = function(internals,
 	internals
 	
 	
+}
+
+run_censored_model = function(.data, idx){
+	
+	S = .data %>% distinct(sample) %>% nrow
+	C = .data %>% distinct(C) %>% nrow
+	A = 2
+	
+	time = .data %>% distinct(sample, PFI.time.2) %>% mutate(time = PFI.time.2 %>% log1p %>% scale %>% as.numeric) %>% pull(time)
+	cens = .data %>% distinct(sample, alive) %>% pull(alive);
+	prop_logit_scaled  = 
+		.data %>% 
+		distinct(sample, C, .value_relative) %>%
+		group_by(C) %>% 
+		mutate(.value_relative = .value_relative %>% boot::logit() %>% scale) %>%
+		spread( C, .value_relative) %>%
+		nanny::as_matrix(rownames = sample)
+	
+	if(any(is.na(prop_logit_scaled))) return(NULL)
+	
+	which_censored = .data %>% distinct(sample, alive) %>% pull(alive) %>% which
+	which_non_censored = .data %>% distinct(sample, alive) %>% pull(alive) %>% `!` %>% which
+	n_cens = length(which_censored)
+	n_non_cens = length(which_non_censored)
+	
+	rstan::optimizing(
+		stanmodels$censored_regression,
+		data = list(
+			S = S,
+			C = C,
+			A = A,
+			time = time,
+			cens = cens,
+			prop_logit_scaled = prop_logit_scaled,
+			which_censored = which_censored,
+			which_non_censored = which_non_censored,
+			n_cens = n_cens,
+			n_non_cens = n_non_cens
+		)) %$%
+		par %>%
+		enframe() %>%
+		filter(grepl("alpha", name)) %>%
+		tidyr::extract(name, c("A", "C"), ".+\\[([0-9]),([0-9])\\]", convert = TRUE) %>%
+		filter(A ==2) %>%
+		mutate(C = colnames(prop_logit_scaled)) 
+	
+}
+
+
+
+censored_regression = function(.proportions){
+	
+	.proportions %>%
+
+		select(-.value, -.value_relative) %>%
+		unnest(.draws) %>%
+		filter(node %>% is.na %>% `!`) %>%
+		nanny::nest_subset(data = -c(node, .draw)) %>%
+		mutate(cens_regression = imap(data, ~ .x %>% arrange(sample) %>% run_censored_model(.y))) %>%
+		unnest(cens_regression) %>%
+		distinct(node, value, C, .chain, .iteration, .draw) 
 }
 

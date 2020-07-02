@@ -1136,7 +1136,7 @@ model {
 	));
 
 	// Dirichlet regression
-	if(lv > 2) phi ~ normal(0,1); // normal((lv==1 ? 8 : 6), 2);
+	if(lv > 2) phi ~ normal((lv==1 ? 8 : 6), 2);
 	// Beta regression
 	else phi ~  gamma(1,5); // beta(1,20);// beta(1,20);
 
