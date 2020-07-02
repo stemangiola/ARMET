@@ -655,7 +655,7 @@ if(dim_4[1] > 0) {
 		return (dirichlet_rng( softmax( append_row([0]', to_vector(X * alpha))) * exp( phi) + plateau ));
 	}
 
-real beta_regression_lpdf(vector[] p, matrix X, matrix alpha, real[] phi){
+real beta_regression_lpdf(vector[] p, matrix X, matrix alpha, real[] phi, real plateau){
 
 		real lp = 0;
 		//matrix[num_elements(p[,1]), num_elements(p[1])] mu;
@@ -679,13 +679,13 @@ real beta_regression_lpdf(vector[] p, matrix X, matrix alpha, real[] phi){
 	//	print((mu .* phi_exp) +1);
 
 
-     	lp += beta_lpdf(p[j] | (mu .* phi_exp) +1, ((1.0 - mu) .* phi_exp) + 1);
+     	lp += beta_lpdf(p[j] | (mu .* phi_exp) +plateau, ((1.0 - mu) .* phi_exp) + plateau);
 
 		}
 		return (lp);
 	}
 
-vector[] beta_regression_rng( matrix X, matrix alpha, real[] phi){
+vector[] beta_regression_rng( matrix X, matrix alpha, real[] phi, real plateau){
 
 		vector[cols(alpha)+1] p[rows(X)];
 
@@ -704,7 +704,7 @@ vector[] beta_regression_rng( matrix X, matrix alpha, real[] phi){
 
 			vector[num_elements(p[1])] mu  = softmax( append_row([0]', to_vector(X[j] * alpha)));
 
-      	 p[j] = to_vector(beta_rng((mu .* phi_exp) +1, ((1.0 - mu) .* phi_exp) + 1));
+      	 p[j] = to_vector(beta_rng((mu .* phi_exp) +plateau, ((1.0 - mu) .* phi_exp) + plateau));
 
 		}
 		return (p);
@@ -1030,7 +1030,7 @@ model {
   if(lv == 1 && do_regression) {
 
 		//print(X_scaled[,2]);
-  	prop_1 ~ beta_regression(X_scaled, alpha_1, phi[1:4]);
+  	prop_1 ~ beta_regression(X_scaled, alpha_1, phi[1:4], 0);
   	 alpha_1[1] ~ normal(0,10);
   	 to_vector( alpha_1[2:] ) ~ student_t(3, 0, 10);
 
@@ -1042,7 +1042,7 @@ model {
 	// lv 2
   if(lv == 2 && do_regression) {
 
-  	prop_a ~ beta_regression(X_scaled, alpha_a, phi[1:6]);
+  	prop_a ~ beta_regression(X_scaled, alpha_a, phi[1:6], 0.5);
   	alpha_a[1] ~ normal(0,10);
   	to_vector( alpha_a[2:] ) ~ student_t(3, 0, 10);
 
@@ -1192,12 +1192,12 @@ generated quantities{
   
 	if(lv == 1 && do_regression) {
 
-  	prop_1_rng = beta_regression_rng(X_scaled, alpha_1, phi[1:4]);
+  	prop_1_rng = beta_regression_rng(X_scaled, alpha_1, phi[1:4], 0);
 
   }
 	if(lv == 2 && do_regression) {
 
-  	prop_a_rng = beta_regression_rng(X_scaled, alpha_a, phi[1:6]);
+  	prop_a_rng = beta_regression_rng(X_scaled, alpha_a, phi[1:6], 1);
 
   }
   	if(lv == 3 && do_regression) {
