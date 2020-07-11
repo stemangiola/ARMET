@@ -25,14 +25,7 @@ model_cens <- brm(popular | cens(censored) ~ 1 + extrav,
 bf(y | cens(censor_variable) ~ predictors)
 
 
-for (n in 1:N) {
-	// special treatment of censored data
-	if (cens[n] == 0) {
-		target += normal_lpdf(Y[n] | mu[n], sigma);
-	} else if (cens[n] == 1) {
-		target += normal_lccdf(Y[n] | mu[n], sigma);
-	}
-}
+
 
 
 # Dirichlet
@@ -100,5 +93,5 @@ DF =
 	spread(`Cell type category`, .value) %>%
 	select(time = time, alive,  endothelial ,  epithelial,  fibroblast,  immune_cell)
 
-m_censored = brm(time | cens(alive) ~ epithelial , data = DF, family = "normal", cores = 4)
+m_censored = brm(x | cens(censored) ~ A , data = data, family = "normal", cores = 4)
 

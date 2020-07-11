@@ -26,6 +26,7 @@ plot_polar = function(	.data,
 	
 	xx  = 
 		.data %>%
+		select(-one_of("draws", "rng", "draws_cens")) %>%
 		calculate_x_for_polar %>%
 		
 		# Add angle text

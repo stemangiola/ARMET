@@ -40,47 +40,11 @@ my_dir = "~/unix3XX/PhD/deconvolution/"   # <----------------------------
 i = "MESO.tcga.harmonized.counts.allgenes.rds"
 i = args[1]
 
-outliers = c("TCGA-12-3652", "TCGA-02-2485", "TCGA-12-0618", "TCGA-19-1390", "TCGA-15-1444", "TCGA-41-2571", "TCGA-28-2499")
 
-input_df = 
-	readRDS(sprintf("%s/TCGA_harmonised/%s", my_dir, i)) %>%
-	as_tibble(rownames = "ens") %>%
-	gather(sample, count, -ens) %>%
-	mutate(count = as.integer(count)) %>%
-	tidyr::extract(sample, into = "sample", regex = "([a-zA-Z0-9]+-[a-zA-Z0-9]+-[a-zA-Z0-9]+)") %>%
-	
-	# Select primary tumour
-	inner_join(
-		dir(sprintf("%s/TCGA_harmonised_clinical", my_dir), full.names = T) %>% 
-			map_dfr(~ .x %>% readRDS %>% distinct(sample, definition))  %>% 
-			filter(definition == "Primary solid Tumor") %>%
-			tidyr::extract(sample, into = "sample", regex = "([a-zA-Z0-9]+-[a-zA-Z0-9]+-[a-zA-Z0-9]+)") 
-	) %>%
-
-	ensembl_to_symbol(ens) %>%
-	left_join(
-		read_csv("dev/survival_TCGA_curated.csv") %>% 
-			select(bcr_patient_barcode, type, PFI.2, PFI.time.2) %>%
-			mutate(PFI.2 = ifelse(PFI.2 == "#N/A", NA, PFI.2)) %>%
-			mutate(PFI.time.2 = ifelse(PFI.time.2 == "#N/A", NA, PFI.time.2)) %>%
-			mutate(PFI.2 = as.integer(PFI.2), PFI.time.2 = as.integer(PFI.time.2)), 
-		by = c("sample" = "bcr_patient_barcode")
-	) %>%
-	filter(PFI.time.2 %>% is.na %>% `!`) %>%
-	filter(sample %in% outliers %>% `!`) %>%
-	#mutate_if(is.character, as.factor) %>%
-	
-	# Aggregate duplcates
-	aggregate_duplicates(sample, transcript, count) %>%
-	mutate(alive = PFI.2 == 0) %>%
-	
-	# Filter 0 time
-	filter(PFI.time.2 != 0)
-
-
-res = input_df %>%
+res = i %>%
+	prepare_TCGA_input(my_dir) %>%
 #	inner_join((.) %>% distinct(sample) %>% slice(1:5)) %>%      # <----------------------------
-ARMET_tc(
+	ARMET_tc(
 	~ censored(PFI.time.2, alive),
 	sample,
 	transcript, 
@@ -106,17 +70,11 @@ save(res, file=sprintf("dev/armet_%s.rda", i), compress = "gzip")
 # 
 
 # Density
-(res$proportions %>%
-		unnest(draws) %>%
-		filter(A == 2) %>%
-		ggplot(aes(.value, color=`Cell type category`)) +
-		geom_density() +
-		facet_wrap(~.variable, scale="free_y")
-) %>% plotly::ggplotly()
+# (res$proportions %>%
+# 		unnest(draws) %>%
+# 		filter(A == 2) %>%
+# 		ggplot(aes(.value, color=`Cell type category`)) +
+# 		geom_density() +
+# 		facet_wrap(~.variable, scale="free_y")
+# ) %>% plotly::ggplotly()
 #
-
-
-res$proportions %>% 
-	select(-draws)%>%
-	unnest(proportions)
-	mutate(rng_summary = map(rng, ~ quantile(.x$.value, probs = c(0.025, 0.975)) %>% enframe() %>% spread(name, value))) %>% unnest(rng_summary)

@@ -8,7 +8,7 @@ library(nanny)
 library(tidyHeatmap)
 # plan(multicore)
 library(doParallel)
-registerDoParallel(30)
+registerDoParallel(20)
 
 my_theme =
 	theme_bw() +
@@ -40,14 +40,36 @@ my_theme =
 		))
 	)
 
+# # Test differential composition
+# load("dev/armet_MESO.tcga.harmonized.counts.allgenes.rds.rda")
+# dc1 = test_differential_composition(res) 
+# load("dev/armet_PAAD.tcga.harmonized.counts.allgenes.rds.rda")
+# dc2 = test_differential_composition(res) 
+# load("dev/armet_READ.tcga.harmonized.counts.allgenes.rds.rda")
+# dc3 = test_differential_composition(res) 
+# load("dev/armet_SARC.tcga.harmonized.counts.allgenes.rds.rda")
+# dc4 = test_differential_composition(res) 
+# load("dev/armet_SKCM.tcga.harmonized.counts.allgenes.rds.rda")
+# dc5 = test_differential_composition(res) 
+# load("dev/armet_TGCT.tcga.harmonized.counts.allgenes.rds.rda")
+# dc6 = test_differential_composition(res) 
+# load("dev/armet_THYM.tcga.harmonized.counts.allgenes.rds.rda")
+# dc7 = test_differential_composition(res) 
+# load("dev/armet_UCS.tcga.harmonized.counts.allgenes.rds.rda" )
+# dc8 = test_differential_composition(res) 
+
+dc = 
+	foreach(i =	dir("dev", pattern = "^armet_", full.names = T) %>%	grep("rda$", ., value = T) ) %dopar% {
+	load(i)
+	test_differential_composition(res) %>% saveRDS(sprintf("%s_regression.rds", i))
+}
+
 # Polar
 pol_p = 
-	dir("dev", pattern = "^armet_", full.names = T) %>%
-	grep(".rda", ., fixed = T, value = T) %>%
-	future_map(~ {
-		load(.x)
-		res %>%
-			test_differential_composition %>%
+	dir("dev", pattern = "^armet_", full.names = T) %>%	grep("regression.rds$", ., value = T) %>%
+	map(~ {
+		.x %>%
+			readRDS() %>%
 			plot_polar(size_geom_text = 2) +
 			theme(axis.title.x=element_blank()) +
 			ggtitle(.x %>% gsub("dev/armet_", "", .) %>% gsub(".rda", "", ., fixed = T)) 
@@ -64,8 +86,6 @@ pol_p %>%
 		height = 347,
 		limitsize = FALSE
 	)
-
-
 
 (
 	bind_rows(
@@ -104,28 +124,16 @@ pol_p %>%
 
 # Heatmap 1
 hmap_df = 
-	foreach(i =
-						dir("dev", pattern = "^armet_", full.names = T) %>%
-						grep("rda$", ., value = T) %>%
-						
-						######
-						grep("rda$", ., value = T) %>% grep("PAAD", ., value = T) ,
-						######
-					
-					.combine = bind_rows
-				) %do% {
-		load(i)
-		res %>%
-			test_differential_composition() %>% 
-			
+	dir("dev", pattern = "^armet_", full.names = T) %>%	grep("regression.rds$", ., value = T) %>%
+	map_dfr(~ readRDS(.x) %>%
 			# Add relative probability of slope != 0
 			mutate(alpha2_prob =
-						 	map2_dbl(
-						 		draws, zero,
+						 	map_dbl(
+						 		draws_cens, 
 						 		~ .x %>% 
 						 			distinct() %>%
-						 			filter(A == 2) %>%
-						 			mutate(higher = .value > .y, lower = .value < .y) %>% 
+						 			#filter(A == 2) %>%
+						 			mutate(higher = .value > 0, lower = .value < 0) %>% 
 						 			count(higher) %>%
 						 			spread(higher, n) %>%
 						 			
@@ -144,25 +152,26 @@ hmap_df =
 						 			
 						 			mutate(prob = ifelse(`FALSE`>`TRUE`, -prob, prob)) %>%
 						 			pull(prob)
-						 )) %>%
+						 	)) %>%
 			
-			mutate(file=i) %>%
+			mutate(file=.x) %>%
 			nest(data = -file) %>%
-			# Polar plot
-			mutate(polar_plot = 
-						 	map(data, ~ .x %>%
-						 	plot_polar(size_geom_text = 2) +
-						 	theme(axis.title.x=element_blank()) +
-						 	ggtitle(i %>% gsub("dev/armet_", "", .) %>% gsub(".rda", "", ., fixed = T)) )) %>%
+			# # Polar plot
+			# mutate(polar_plot = 
+			# 			 	map(data, ~ .x %>%
+			# 			 				plot_polar(size_geom_text = 2) +
+			# 			 				theme(axis.title.x=element_blank()) +
+			# 			 				ggtitle(.x %>% gsub("dev/armet_", "", .) %>% gsub(".rda", "", ., fixed = T)) )) %>%
 			
 			# Subset for lowering memory
 			mutate(data = map(data, ~ .x %>% 			select(
 				.variable, community, level ,  
 				`Cell type category`, C, 
-				.value_alpha1, .value_alpha2,
+				.value_alpha1, .value_alpha2, .value_alpha2_cens,
 				alpha2_prob
 			)))
-	}
+		
+		)
 
 hmap_df %>% 
 	saveRDS("hmap_df.rds") 
@@ -185,7 +194,7 @@ hmap_df_annotated =
 
 hmap_composition = 
 	hmap_df_annotated  %>%
-	
+	unnest(data) %>%
 	mutate(group = if_else(group %>% is.na, "other", group)) %>%
 	group_by(level) %>%
 	heatmap( 
@@ -199,11 +208,12 @@ hmap_composition =
 
 hmap_association = 
 	hmap_df_annotated %>%
-	mutate(group = if_else(group %>% is.na, "other", group)) %>%
 	unnest(data) %>%
+	mutate(group = if_else(group %>% is.na, "other", group)) %>%
+	mutate(alpha2_combined = .value_alpha2_cens * abs(alpha2_prob)) %>%
 	group_by(level) %>%
 	heatmap( 
-		cancer_ID, `Cell type category`, alpha2_prob ,
+		cancer_ID, `Cell type category`, alpha2_combined ,
 		annotation = c(group, imm_therapy, median_DSS),
 		type = c("tile", "tile", "point"),
 		#palette_discrete = list(unique(cancer_sig$color)),
@@ -228,7 +238,7 @@ dev.off()
 (
 	hmap_df %>%
 		extract(file, "cancer_ID", regex = ".*armet_([A-Z]+).*") %>%
-		nest(data = - cancer_ID) %>%
+	#	nest(data = - cancer_ID) %>%
 		mutate(mean_association = map_dbl(data, ~ mean(abs(.x$alpha2_prob)))) %>%
 		arrange(desc(mean_association)) %>%
 		mutate(cancer_ID = factor(cancer_ID, levels = .$cancer_ID)) %>%
@@ -251,7 +261,91 @@ dev.off()
 		limitsize = FALSE
 	)
 
-
-
+# Kaplan-Meyer curves
+km_curves =
+	dir("dev", pattern = "^armet_", full.names = T) %>%	grep("regression.rds$", ., value = T) %>%
 	
+	# Prepare data
+	map_dfr(
+		~ readRDS(.x) %>%
+			select(`Cell type category`, level, proportions) %>%
+			unnest(proportions) %>%
+			select(
+				type,
+				`Cell type category`,
+				level,
+				sample,
+				proportion = .value,
+				PFI.time.2,
+				dead = PFI.2
+			)
+	) %>%
+	
+	# Stratify the data
+	nanny::nest_subset(data = -c(type, `Cell type category`)) %>%
+	
+	# Define the split
+	mutate(data = map(data, ~ .x %>%
+											mutate(med_prop = median(proportion)) %>%
+											mutate(high = proportion > med_prop)
+											)) %>%
+	# Execute model
+	mutate(fit = imap(data,
+												 ~
+												 	survival::survfit(
+												 	survival::Surv(PFI.time.2, dead) ~ high,
+												 	data = .x
+												 )
+												 	)) %>%
+	
+	# Calculate pvalue
+	mutate(pvalue = map2(data, fit, ~survminer::surv_pvalue(.y, data = .x	)	)  ) %>%
+	unnest(pvalue) %>%
+
+	# Execute plot
+	mutate(plot = map2(
+		data,
+		fit,
+		~ survminer::ggsurvplot(
+			fit = .y,
+			.x,
+			risk.table = FALSE,
+			conf.int = T,
+			palette = c("#ed6f68",  "#5366A0"),
+			#legend = "none",
+			pval = T
+			#,
+			#ggtheme = my_theme + theme(text = element_text(size=8))
+		)
+	))
+
+
+
+(
+	hmap_df %>% 
+	unnest(data) %>%
+	extract( col = "file",into =  "type", regex = ".+armet_([A-Z]+)\\..*") %>%
+	select(type, `Cell type category`, level, alpha2_prob, .value_alpha2_cens) %>%
+	left_join(km_curves, by = c("type", "Cell type category", "level")) %>%
+	ggplot(aes(pval, .value_alpha2_cens * abs(alpha2_prob), label =type, ct = `Cell type category`)) +
+	geom_point()
+) %>% plotly::ggplotly()
+
+ 
+dd %>% filter(grepl("t_CD4$", `Cell type category`) & grepl("READ", file)) %>%
+	select(proportions) %>% unnest(proportions) %>% ggplot(aes(boot::logit(.value_relative), PFI.time.2)) + geom_point() + scale_y_log10()
+
+
+	survminer::arrange_ggsurvplots(print = FALSE, ncol = 1, nrow=1) %>%
+	ggsave(
+		"survival_plot_CAPRA_S_publication.pdf", 
+		plot = .,
+		device = "pdf",
+		useDingbats=FALSE,
+		units = c("mm"),
+		width = 183 ,
+		height = 183
+	)
+
+
 
