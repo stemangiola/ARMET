@@ -10,6 +10,10 @@ library(tidyHeatmap)
 library(doParallel)
 registerDoParallel(20)
 
+library(furrr)
+plan(multisession, workers=10)
+options(future.globals.maxSize = 50068 * 1024^2)
+
 my_theme =
 	theme_bw() +
 	theme(
@@ -261,6 +265,13 @@ dev.off()
 		limitsize = FALSE
 	)
 
+print_and_return = function(.data, string){
+	print(string)
+	.data
+}
+
+
+
 # Kaplan-Meyer curves
 km_curves =
 	dir("dev", pattern = "^armet_", full.names = T) %>%	grep("regression.rds$", ., value = T) %>%
@@ -277,46 +288,61 @@ km_curves =
 				sample,
 				proportion = .value,
 				PFI.time.2,
-				dead = PFI.2
-			)
+				dead = PFI.2,
+				.draws
+			) %>% 
+			unnest(.draws)
 	) %>%
+	print_and_return(".") %>%
 	
 	# Stratify the data
-	nanny::nest_subset(data = -c(type, `Cell type category`)) %>%
+	nanny::nest_subset(data = -c(type, `Cell type category`, .draw)) %>%
+	print_and_return(".") %>%
 	
 	# Define the split
 	mutate(data = map(data, ~ .x %>%
-											mutate(med_prop = median(proportion)) %>%
-											mutate(high = proportion > med_prop)
+											mutate(med_prop = median(.value_relative)) %>%
+											mutate(high = .value_relative > med_prop)
 											)) %>%
 	# Execute model
-	mutate(fit = imap(data,
+	mutate(fit = future_map(data,
 												 ~
 												 	survival::survfit(
 												 	survival::Surv(PFI.time.2, dead) ~ high,
 												 	data = .x
 												 )
-												 	)) %>%
+								)) %>%
+	print_and_return(".") %>%
 	
-	# Calculate pvalue
-	mutate(pvalue = map2(data, fit, ~survminer::surv_pvalue(.y, data = .x	)	)  ) %>%
-	unnest(pvalue) %>%
+	# Calculate p-value
+	nest(ct_data = -c(type, `Cell type category`)) %>%
+	mutate(pvalue = future_map(ct_data, ~ survminer::surv_pvalue(.x$fit, data = .x$data, combine=TRUE	)	)  ) %>%
+	print_and_return(".") %>%
+	
+	mutate(avg_pvalue = map_dbl(pvalue, ~ mean(.x$pval) )) %>%
 
 	# Execute plot
-	mutate(plot = map2(
-		data,
-		fit,
+	mutate(plot_df = future_map(
+		ct_data,
 		~ survminer::ggsurvplot(
-			fit = .y,
-			.x,
+			fit = .x$fit %>% setNames(as.character(1:length(.))) %>% .[1:500],
+			.x$data  %>% setNames(as.character(1:length(.))) %>% .[1:500],
 			risk.table = FALSE,
-			conf.int = T,
-			palette = c("#ed6f68",  "#5366A0"),
-			#legend = "none",
-			pval = T
-			#,
-			#ggtheme = my_theme + theme(text = element_text(size=8))
-		)
+			conf.int = F,
+			combine = TRUE,
+			legend = "none",
+			pval = F
+		)$plot$data
+	)) %>%
+	print_and_return(".") %>%
+	
+	mutate(plot = future_map(
+		plot_df, ~ .x %>%
+			separate(strata, c("id", "category"), sep="::", remove = F) %>% 
+			arrange( surv, id, category) %>%
+			ggplot(aes(time, surv,  color=category)) + 
+			geom_line(aes(group=strata), alpha=0.2) +
+			my_theme + theme(text = element_text(size=8))
 	))
 
 
