@@ -1030,7 +1030,7 @@ model {
   if(lv == 1 && do_regression) {
 
 		//print(X_scaled[,2]);
-  	prop_1 ~ beta_regression(X_scaled, alpha_1, phi[1:4], 0);
+  	prop_1 ~ beta_regression(X_scaled, alpha_1, phi[1:4], 0.5);
   	 alpha_1[1] ~ normal(0,10);
   	 to_vector( alpha_1[2:] ) ~ student_t(3, 0, 10);
 
@@ -1042,7 +1042,8 @@ model {
 	// lv 2
   if(lv == 2 && do_regression) {
 
-  	prop_a ~ beta_regression(X_scaled, alpha_a, phi[1:6], 0.5);
+  	//prop_a ~ beta_regression(X_scaled, alpha_a, phi[1:6], 1);
+  	for(q in 1:Q) prop_a[q] ~ dirichlet_regression( X_scaled[q], alpha_a, phi[1] , 0.1);
   	alpha_a[1] ~ normal(0,10);
   	to_vector( alpha_a[2:] ) ~ student_t(3, 0, 10);
 
@@ -1136,9 +1137,9 @@ model {
 	));
 
 	// Dirichlet regression
-	if(lv > 2) phi ~ normal((lv==1 ? 8 : 6), 2);
+	if(lv > 1) phi ~ normal(0, 3);
 	// Beta regression
-	else phi ~  gamma(1,5); // beta(1,20);// beta(1,20);
+	else phi ~  gamma(1.001,5); // beta(1,20);// beta(1,20);
 
 	// lambda UFO
 	for(i in 1:shards) lambda_UFO[i] ~ skew_normal(6.2, 3.3, -2.7);
@@ -1192,12 +1193,12 @@ generated quantities{
   
 	if(lv == 1 && do_regression) {
 
-  	prop_1_rng = beta_regression_rng(X_scaled, alpha_1, phi[1:4], 0);
+  	prop_1_rng = beta_regression_rng(X_scaled, alpha_1, phi[1:4], 0.5);
 
   }
 	if(lv == 2 && do_regression) {
 
-  	prop_a_rng = beta_regression_rng(X_scaled, alpha_a, phi[1:6], 0.5);
+  	prop_a_rng = beta_regression_rng(X_scaled, alpha_a, phi[1:6], 1);
 
   }
   	if(lv == 3 && do_regression) {
