@@ -2002,7 +2002,7 @@ get_tree_properties = function(tree){
 
 #' @importFrom tidygraph tbl_graph
 cluster_posterior_slopes = function(.data, credible_interval = 0.67){
-	 
+	  
 	# Add cluster info to cell types per node
 	.data %>%
 		filter(.variable %>% is.na %>% `!`) %>%
@@ -2119,7 +2119,9 @@ identify_baseline_by_clustering = function(.data, CI){
 }
 
 extract_CI =  function(.data, credible_interval = 0.90){
-	.data %>%
+	
+	non_cens = 
+		.data %>%
 		mutate(regression = map(draws,
 														~ .x %>%
 															group_by(A) %>%
@@ -2132,6 +2134,21 @@ extract_CI =  function(.data, credible_interval = 0.90){
 															) 
 		)) %>%
 		unnest(cols = c(regression))
+	
+	cens =
+	.data %>%
+		mutate(regression = map(draws_cens,
+														~ .x %>%
+															#group_by(.chain ,.iteration, .draw) %>%
+															tidybayes::median_qi(.width = credible_interval) %>%
+															ungroup() %>%
+															rename(.value_alpha2_cens = .value, .lower_alpha2_cens = .lower, .upper_alpha2_cens =   .upper)
+		)) %>%
+		unnest(cols = c(regression)) %>%
+		select(C, `Cell type category`,.value_alpha2_cens ,.lower_alpha2_cens, .upper_alpha2_cens)
+	
+	non_cens %>% left_join(cens)
+	
 }
 
 calculate_x_for_polar = function(.data){
@@ -2510,4 +2527,180 @@ get_noiseless_harmonised = function(){
 		mutate(`count normalised bayes` = ifelse(`count normalised bayes 2` %>% is.na, `count normalised bayes`, `count normalised bayes 2`)) %>%
 		select(level_2, level_3, level_4, `Cell type category`, level, sample, symbol, `count normalised bayes`, `house keeping`)
 	
+}
+
+
+run_censored_model_iterative = function(.data) {
+	res = NULL
+	i = 0
+	while (res %>% is.null | i > 5) {
+		res = tryCatch({
+			my_res =	rstan::optimizing(
+				stanmodels$censored_regression,
+				data = .data) %$%
+					
+					# Formate results
+					par %>%
+					enframe() %>%
+					filter(grepl("alpha", name)) %>%
+					tidyr::extract(name, c("A", "C"), ".+\\[([0-9]),([0-9])\\]", convert = TRUE) %>%
+					filter(A ==2) %>%
+					mutate(C = !!.data[["colnames_prop_logit_scaled"]] %>% as.integer) 
+			boolFalse <- T
+			return(my_res)
+		},
+		error = function(e) {
+			i = i + 1
+			writeLines(sprintf("Further attempt with optimise: %s", e))
+			return(NULL)
+		},
+		finally = {
+		})
+	}
+	
+	return(res)
+}
+
+run_censored_model = function(.data){
+
+	
+	tryCatch({	rstan::optimizing(
+		stanmodels$censored_regression,
+		data = .data) %$%
+			
+			# Formate results
+			par %>%
+			enframe() %>%
+			filter(grepl("alpha", name)) %>%
+			tidyr::extract(name, c("A", "C"), ".+\\[([0-9]),([0-9])\\]", convert = TRUE) %>%
+			filter(A ==2) %>%
+			mutate(C = !!.data[["colnames_prop_logit_scaled"]] %>% as.integer) }, 
+		error = function(c) {
+		print("error")
+		})
+	
+	
+
+	
+}
+
+make_cens_data = function(.data){
+	
+	
+	
+	# ELIMINATE I HAVE TO SOLVE THIS ISSUE
+	#####################
+	to_eliminate = 
+		.data %>% 
+		distinct(sample, C, .value_relative) %>%
+		group_by(C) %>% 
+		mutate(.value_relative = .value_relative %>% boot::logit() %>% scale) %>%
+		spread( C, .value_relative) %>%
+		nanny::as_matrix(rownames = sample) %>%
+		{ rownames(.)[apply(., 2, function(x) which(is.na(x))) %>% unlist() %>% as.numeric() %>% unique()] }
+	
+	.data = 
+		.data %>% 
+		
+		# Eliminate samples with NA
+		filter(sample %in% to_eliminate %>% `!`)
+	##########################
+	
+	.data = .data %>% arrange(sample)
+	
+	S = .data %>% distinct(sample) %>% nrow
+	C = .data %>% distinct(C) %>% nrow
+	A = 2
+	
+	prop_logit_scaled  = 
+		.data %>%
+		
+		distinct(sample, C, .value_relative) %>%
+		group_by(C) %>% 
+		mutate(.value_relative = .value_relative %>% boot::logit() %>% scale(scale = F)) %>%
+		spread( C, .value_relative) %>%
+		nanny::as_matrix(rownames = sample)
+	
+	sample_subset =  .data %>% distinct(sample, PFI.time.2, alive)
+	
+	time = sample_subset %>% mutate(time = PFI.time.2 %>% log1p %>% scale %>% as.numeric) %>% pull(time) %>% as.array()
+	cens =sample_subset %>% pull(alive) %>% as.array();
+	#	print(.y)
+	which_censored = sample_subset %>% pull(alive) %>% which %>% as.array()
+	which_non_censored = sample_subset %>% pull(alive) %>% `!` %>% which %>% as.array()
+	n_cens = length(which_censored)
+	n_non_cens = length(which_non_censored)
+	
+	list(
+		S = S,
+		C = C,
+		A = A,
+		time = time,
+		cens = cens,
+		prop_logit_scaled = prop_logit_scaled,
+		which_censored = which_censored,
+		which_non_censored = which_non_censored,
+		n_cens = n_cens,
+		n_non_cens = n_non_cens,
+		colnames_prop_logit_scaled = colnames(prop_logit_scaled)
+	)
+	
+}
+
+censored_regression = function(.proportions){
+	
+	.proportions %>%
+		
+		select(sample, PFI.time.2, level, alive, node, C, .draws) %>%
+		filter(node %>% is.na %>% `!`) %>%
+		unnest(.draws) %>%
+		nest(data = -c(node , level,  .chain, .iteration, .draw)) %>%
+		
+		# Create input for the model
+		mutate(input = imap(data, ~ { make_cens_data(.x)})) %>%
+		
+		# Run model
+		mutate(cens_regression = map(input, ~ run_censored_model_iterative(.x))) %>%
+		select(-data , - input) %>%
+		unnest(cens_regression) %>%
+		distinct(level, node, C, .chain, .iteration, .draw, value) %>%
+		rename(.value = value)
+}
+
+prepare_TCGA_input = function(file_name, my_dir){
+	outliers = c("TCGA-12-3652", "TCGA-02-2485", "TCGA-12-0618", "TCGA-19-1390", "TCGA-15-1444", "TCGA-41-2571", "TCGA-28-2499")
+	
+		readRDS(sprintf("%s/TCGA_harmonised/%s", my_dir, file_name)) %>%
+		as_tibble(rownames = "ens") %>%
+		gather(sample, count, -ens) %>%
+		mutate(count = as.integer(count)) %>%
+		tidyr::extract(sample, into = "sample", regex = "([a-zA-Z0-9]+-[a-zA-Z0-9]+-[a-zA-Z0-9]+)") %>%
+		
+		# Select primary tumour
+		inner_join(
+			dir(sprintf("%s/TCGA_harmonised_clinical", my_dir), full.names = T) %>% 
+				map_dfr(~ .x %>% readRDS %>% distinct(sample, definition))  %>% 
+				filter(definition == "Primary solid Tumor") %>%
+				tidyr::extract(sample, into = "sample", regex = "([a-zA-Z0-9]+-[a-zA-Z0-9]+-[a-zA-Z0-9]+)") 
+		) %>%
+		
+		ensembl_to_symbol(ens) %>%
+		left_join(
+			read_csv("dev/survival_TCGA_curated.csv") %>% 
+				select(bcr_patient_barcode, type, PFI.2, PFI.time.2) %>%
+				mutate(PFI.2 = ifelse(PFI.2 == "#N/A", NA, PFI.2)) %>%
+				mutate(PFI.time.2 = ifelse(PFI.time.2 == "#N/A", NA, PFI.time.2)) %>%
+				mutate(PFI.2 = as.integer(PFI.2), PFI.time.2 = as.integer(PFI.time.2)), 
+			by = c("sample" = "bcr_patient_barcode")
+		) %>%
+		filter(PFI.time.2 %>% is.na %>% `!`) %>%
+		filter(sample %in% outliers %>% `!`) %>%
+		#mutate_if(is.character, as.factor) %>%
+		
+		# Aggregate duplicates
+		aggregate_duplicates(sample, transcript, count) %>%
+		mutate(alive = PFI.2 == 0) %>%
+		
+		# Filter 0 time
+		filter(PFI.time.2 != 0)
 }

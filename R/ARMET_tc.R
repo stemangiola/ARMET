@@ -633,10 +633,20 @@ get_signatures = function(.data){
 #' @export
 test_differential_composition = function(.data, credible_interval = 0.90, cluster_CI = 0.55) {
 
- 
+	 
+	cens_alpha = 
+		.data$proportions %>% 
+		select(-draws, -rng) %>%
+		rename(node = .variable)  %>% 
+		unnest(proportions) %>%
+		ARMET:::censored_regression()  %>% 
+		rename(.variable = node) %>%
+		nest(draws_cens = -c(level, .variable  ,      C)) 
+	
 	.d = 
 		.data$proportions %>%
 		filter(.variable %>% is.na %>% `!`) %>%
+		left_join(cens_alpha, by = c("level", "C", ".variable")) %>%
 		cluster_posterior_slopes(credible_interval = cluster_CI) %>%
 		extract_CI(credible_interval)
 	
@@ -651,8 +661,8 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 		mutate(fold_change_ancestor = 0) %>%
 		identify_baseline_by_clustering( ) %>%
 		
-		mutate(significant = ((.lower_alpha2 - zero) * (.upper_alpha2 - zero)) > 0) %>%
-		mutate(fold_change  = ifelse(significant, .value_alpha2, 0))
+		mutate(significant = ((.lower_alpha2_cens - 0) * (.upper_alpha2_cens - 0)) > 0) %>%
+		mutate(fold_change  = ifelse(significant, .value_alpha2_cens, 0))
 		
 	# Level 2
 	if(.d %>% filter(level ==2) %>% nrow %>% `>` (0))
@@ -664,8 +674,8 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 		left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change),  by = "ancestor" )  %>%
 		identify_baseline_by_clustering( ) %>%
 		
-		mutate(significant = ((.lower_alpha2 - zero) * (.upper_alpha2 - zero)) > 0) %>%
-		mutate(fold_change  = ifelse(significant, .value_alpha2, 0))
+			mutate(significant = ((.lower_alpha2_cens - 0) * (.upper_alpha2_cens - 0)) > 0) %>%
+			mutate(fold_change  = ifelse(significant, .value_alpha2_cens, 0))
 		) 
 	
 	
@@ -679,8 +689,8 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 		left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) ,  by = "ancestor")  %>%
 		identify_baseline_by_clustering( ) %>%
 		
-		mutate(significant = ((.lower_alpha2 - zero) * (.upper_alpha2 - zero)) > 0) %>%
-		mutate(fold_change  = ifelse(significant, .value_alpha2, 0))
+			mutate(significant = ((.lower_alpha2_cens - 0) * (.upper_alpha2_cens - 0)) > 0) %>%
+			mutate(fold_change  = ifelse(significant, .value_alpha2_cens, 0))
 		)
 	
 	# Level 4
@@ -693,8 +703,8 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) ,  by = "ancestor")  %>%
 				identify_baseline_by_clustering( ) %>%
 				
-				mutate(significant = ((.lower_alpha2 - zero) * (.upper_alpha2 - zero)) > 0) %>%
-				mutate(fold_change  = ifelse(significant, .value_alpha2, 0))
+				mutate(significant = ((.lower_alpha2_cens - 0) * (.upper_alpha2_cens - 0)) > 0) %>%
+				mutate(fold_change  = ifelse(significant, .value_alpha2_cens, 0))
 		)
 	
 	dx
@@ -855,64 +865,4 @@ run_lv_1 = function(internals,
 	
 }
 
-run_censored_model = function(.data, idx){
-	
-	S = .data %>% distinct(sample) %>% nrow
-	C = .data %>% distinct(C) %>% nrow
-	A = 2
-	
-	time = .data %>% distinct(sample, PFI.time.2) %>% mutate(time = PFI.time.2 %>% log1p %>% scale %>% as.numeric) %>% pull(time)
-	cens = .data %>% distinct(sample, alive) %>% pull(alive);
-	prop_logit_scaled  = 
-		.data %>% 
-		distinct(sample, C, .value_relative) %>%
-		group_by(C) %>% 
-		mutate(.value_relative = .value_relative %>% boot::logit() %>% scale) %>%
-		spread( C, .value_relative) %>%
-		nanny::as_matrix(rownames = sample)
-	
-	if(any(is.na(prop_logit_scaled))) return(NULL)
-	
-	which_censored = .data %>% distinct(sample, alive) %>% pull(alive) %>% which
-	which_non_censored = .data %>% distinct(sample, alive) %>% pull(alive) %>% `!` %>% which
-	n_cens = length(which_censored)
-	n_non_cens = length(which_non_censored)
-	
-	rstan::optimizing(
-		stanmodels$censored_regression,
-		data = list(
-			S = S,
-			C = C,
-			A = A,
-			time = time,
-			cens = cens,
-			prop_logit_scaled = prop_logit_scaled,
-			which_censored = which_censored,
-			which_non_censored = which_non_censored,
-			n_cens = n_cens,
-			n_non_cens = n_non_cens
-		)) %$%
-		par %>%
-		enframe() %>%
-		filter(grepl("alpha", name)) %>%
-		tidyr::extract(name, c("A", "C"), ".+\\[([0-9]),([0-9])\\]", convert = TRUE) %>%
-		filter(A ==2) %>%
-		mutate(C = colnames(prop_logit_scaled)) 
-	
-}
-
-
-
-censored_regression = function(.proportions){
-	
-	.proportions %>%
-
-		select(-.value, -.value_relative) %>%
-		unnest(.draws) %>%
-		filter(node %>% is.na %>% `!`) %>%
-		nanny::nest_subset(data = -c(node, .draw)) %>%
-		mutate(cens_regression = imap(data, ~ .x %>% arrange(sample) %>% run_censored_model(.y))) %>%
-		unnest(cens_regression) %>%
-		distinct(node, value, C, .chain, .iteration, .draw) 
-}
 
