@@ -334,6 +334,68 @@ produce_KM_curves = function(file_name){
 		))
 }
 
+produce_KM_curves_abs_values = function(file_name){
+	
+	file_name %>%
+		
+		readRDS() %>%
+		select(`Cell type category`, level, proportions) %>%
+		unnest(proportions) %>%
+		select(
+			type,
+			`Cell type category`,
+			level,
+			sample,
+			proportion = .value,
+			PFI.time.2,
+			dead = PFI.2,
+			.draws
+		) %>%
+		#unnest(.draws) %>%
+		
+		# Stratify the data
+		nanny::nest_subset(
+			data = -c(type, `Cell type category`, level), 
+			.exclude = dead
+		) %>%
+		
+		# Define the split
+		mutate(data = map(
+			data,
+			~ .x %>%
+				mutate(med_prop = median(proportion)) %>%
+				mutate(high = proportion > med_prop)
+		)) %>%
+		
+		# Execute model
+		mutate(fit = map(data,
+										 ~
+										 	survival::survfit(
+										 		survival::Surv(PFI.time.2, dead) ~ high,
+										 		data = .x
+										 	))) %>%
+		
+		# Calculate p-value
+		mutate(pvalue = map2(
+			fit, data,
+			~ survminer::surv_pvalue(.x, data = .y)
+		)) %>%
+		
+		# Execute plot
+		mutate(plot = map2(
+			fit, data,
+			~ survminer::ggsurvplot(
+				fit = .x,
+				.y,
+				risk.table = FALSE,
+				conf.int = T,
+				#legend = "none",
+				pval = T
+			)
+		)) 
+}
+
+
 # Kaplan-Meyer curves
 km_curves =
 	dir("dev", pattern = "^armet_", full.names = T) %>%	grep("regression.rds$", ., value = T) %>%
@@ -341,7 +403,7 @@ km_curves =
 	# Prepare data
 	enframe(value = "file_name") %>%
 	
-	mutate(km_data = future_map(file_name, ~ .x %>% produce_KM_curves )) %>%
+	mutate(km_data = future_map(file_name, ~ .x %>% produce_KM_curves_abs_values() )) %>%
 	unnest(km_data)
 
 km_curves %>% saveRDS("dev/km_curves.rds")
@@ -431,7 +493,6 @@ set.seed(321)
 	km_curves %>% 
 	select(pvalue) %>% 
 	unnest(pvalue) %>%
-	sample_n(576) %>%
 	select(pval) %>%
 	mutate(algorithm="ARMET") %>%
 	bind_rows(
@@ -443,7 +504,8 @@ set.seed(321)
 	ggplot(aes(pval)) +
 	geom_histogram(aes(y=..count../sum(..count..))) +
 	facet_wrap(~algorithm) +
-	my_theme
+	my_theme +
+		theme(	axis.text.x = element_text(	angle = 0))
 ) %>%
 	ggsave(
 		"dev/TCGA_KM_curves_pvalue_hist.pdf.pdf",
@@ -456,9 +518,27 @@ set.seed(321)
 	)
 	
 km_curves %>%
-	arrange(avg_pvalue) %>%
-	slice(c(1,3,5)) %>%
+	unnest(pvalue) %>%
+	arrange(pval) %>%
+	slice(1:3) %>%
 	pull(plot) %>%
-	wrap_plots() +
+	survminer::arrange_ggsurvplots() +
 	plot_layout(	guides = "collect", nrow = 1	)  & 
 	theme(legend.position = 'bottom') 
+
+km_cibersort %>%
+	unnest(pvalue) %>%
+	arrange(pval) %>%
+	slice(1:3) %>%
+	mutate(plot = map2(
+		fit, data,
+		~ survminer::ggsurvplot(
+			fit = .x,
+			.y,
+			risk.table = FALSE,
+			conf.int = T,
+			#legend = "none",
+			pval = T
+		)
+	)) %>%
+	pull(plot)
