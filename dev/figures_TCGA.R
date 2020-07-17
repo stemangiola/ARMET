@@ -11,7 +11,7 @@ library(doParallel)
 registerDoParallel(20)
 
 library(furrr)
-plan(multisession, workers=10)
+plan(multisession, workers=15)
 options(future.globals.maxSize = 50068 * 1024^2)
 
 my_theme =
@@ -62,8 +62,11 @@ my_theme =
 # load("dev/armet_UCS.tcga.harmonized.counts.allgenes.rds.rda" )
 # dc8 = test_differential_composition(res) 
 
+which_files = dir("dev", pattern = "^armet_", full.names = T) %>%	grep("rda$", ., value = T) %>%
+	setdiff(dir("dev", pattern = "^armet_", full.names = T) %>%	grep("regression.rds$", ., value = T) %>% gsub("_regression.rds$", "", .))
+
 dc = 
-	foreach(i =	dir("dev", pattern = "^armet_", full.names = T) %>%	grep("rda$", ., value = T) ) %dopar% {
+	foreach(i =	which_files ) %do% {
 	load(i)
 	test_differential_composition(res) %>% saveRDS(sprintf("%s_regression.rds", i))
 }
@@ -126,6 +129,7 @@ pol_p %>%
 		limitsize = FALSE
 	)
 
+
 # Heatmap 1
 hmap_df = 
 	dir("dev", pattern = "^armet_", full.names = T) %>%	grep("regression.rds$", ., value = T) %>%
@@ -137,25 +141,7 @@ hmap_df =
 						 		~ .x %>% 
 						 			distinct() %>%
 						 			#filter(A == 2) %>%
-						 			mutate(higher = .value > 0, lower = .value < 0) %>% 
-						 			count(higher) %>%
-						 			spread(higher, n) %>%
-						 			
-						 			# Create column if does not exist
-						 			purrr::when(
-						 				("TRUE" %in% colnames(.) %>% `!`) ~ mutate(., `TRUE` = 0),
-						 				("FALSE" %in% colnames(.) %>% `!`) ~ mutate(., `FALSE` = 0),
-						 				~ (.)
-						 			) %>%
-						 			
-						 			# Smaller probability
-						 			mutate(prob = min(`FALSE`, `TRUE`)/sum(`FALSE`, `TRUE`)) %>% 
-						 			
-						 			# Multiply by 2 and invert 
-						 			mutate(prob = 1 - (prob * 2)) %>%
-						 			
-						 			mutate(prob = ifelse(`FALSE`>`TRUE`, -prob, prob)) %>%
-						 			pull(prob)
+						 			ARMET:::draws_to_prob_non_zero()
 						 	)) %>%
 			
 			mutate(file=.x) %>%
@@ -171,14 +157,15 @@ hmap_df =
 			mutate(data = map(data, ~ .x %>% 			select(
 				.variable, community, level ,  
 				`Cell type category`, C, 
-				.value_alpha1, .value_alpha2, .value_alpha2_cens,
+				.value_alpha1, .value_alpha2,.lower_alpha2, .upper_alpha2, .lower_alpha2_cens, .upper_alpha2_cens,
+				.value_alpha2_cens,
 				alpha2_prob
 			)))
 		
 		)
 
 hmap_df %>% 
-	saveRDS("hmap_df.rds") 
+	saveRDS("dev/hmap_df.rds") 
 
 hmap_df_annotated =
 	hmap_df %>%
@@ -201,37 +188,39 @@ hmap_composition =
 	unnest(data) %>%
 	mutate(group = if_else(group %>% is.na, "other", group)) %>%
 	group_by(level) %>%
+	mutate(.value_alpha1 = .value_alpha1 %>% scale(center = F)) %>%
 	heatmap( 
 		cancer_ID, `Cell type category`, .value_alpha1, 
-		annotation = c(group, imm_therapy, median_DSS),
-		type = c("tile", "tile", "point"),
-		#palette_discrete = list(unique(cancer_sig$color)),
-		palette_value = circlize::colorRamp2(c(-4, -2, 0, 2, 4)/3*2, brewer.pal(5, "RdBu")) , 
-		.scale = "column"
-	)
+		palette_value = circlize::colorRamp2(c(-2, -1, 0, 1, 2), brewer.pal(5, "RdBu")) ,
+		.scale = "none"
+	) %>%
+	add_tile(group, palette = brewer.pal(8, "Set1")) %>%
+	add_point(median_DSS) %>%
+	add_tile(imm_therapy, palette = c("white", "grey"))
 
 hmap_association = 
 	hmap_df_annotated %>%
 	unnest(data) %>%
 	mutate(group = if_else(group %>% is.na, "other", group)) %>%
-	mutate(alpha2_combined = .value_alpha2_cens * abs(alpha2_prob)) %>%
+	mutate(alpha2_combined = alpha2_prob) %>%
 	group_by(level) %>%
 	heatmap( 
 		cancer_ID, `Cell type category`, alpha2_combined ,
-		annotation = c(group, imm_therapy, median_DSS),
-		type = c("tile", "tile", "point"),
-		#palette_discrete = list(unique(cancer_sig$color)),
 		palette_value = circlize::colorRamp2(c(-1, -0.5, 0, 0.5, 1), brewer.pal(5, "RdBu")),
 		.scale = "none"
-	)
+	) %>%
+	add_tile(group, palette = brewer.pal(8, "Set1")) %>%
+	add_point(median_DSS) %>%
+	add_tile(imm_therapy, palette = c("white", "grey"))
 
 hmap_composition %>% save_pdf("dev/hmap_composition.pdf", width = 183, height = 110, units = "mm")
 hmap_association %>% save_pdf("dev/hmap_association.pdf", width = 183, height = 110, units = "mm")
 
+library(ComplexHeatmap)
 pdf("dev/tanglegram.pdf")
 tanglegram(
-	hmap_composition %>% draw %>% row_dend, 
-	hmap_association %>% draw %>% row_dend,
+	hmap_composition %>% show %>% draw %>% row_dend, 
+	hmap_association %>% show %>% draw %>% row_dend,
 	highlight_branches_lwd = F, 
 )
 dev.off()
@@ -270,108 +259,206 @@ print_and_return = function(.data, string){
 	.data
 }
 
+produce_KM_curves = function(file_name){
 
+	file_name %>%
+		
+		readRDS() %>%
+		select(`Cell type category`, level, proportions) %>%
+		unnest(proportions) %>%
+		select(
+			type,
+			`Cell type category`,
+			level,
+			sample,
+			proportion = .value,
+			PFI.time.2,
+			dead = PFI.2,
+			.draws
+		) %>%
+		unnest(.draws) %>%
+		
+		# Stratify the data
+		nanny::nest_subset(
+			data = -c(type, `Cell type category`, .draw), 
+			.exclude = dead
+		) %>%
+		
+		# Define the split
+		mutate(data = map(
+			data,
+			~ .x %>%
+				mutate(med_prop = median(.value_relative)) %>%
+				mutate(high = .value_relative > med_prop)
+		)) %>%
+		
+		# Execute model
+		mutate(fit = map(data,
+										 ~
+										 	survival::survfit(
+										 		survival::Surv(PFI.time.2, dead) ~ high,
+										 		data = .x
+										 	))) %>%
+		
+		# Calculate p-value
+		nest(ct_data = -c(`Cell type category`)) %>%
+		mutate(pvalue = map(
+			ct_data,
+			~ survminer::surv_pvalue(.x$fit, data = .x$data, combine = TRUE)
+		)) %>%
+		
+		mutate(avg_pvalue = map_dbl(pvalue, ~ median(.x$pval))) %>%
+		
+		# Execute plot
+		mutate(plot_df = map(
+			ct_data,
+			~ survminer::ggsurvplot(
+				fit = .x$fit %>% setNames(as.character(1:length(.))) %>% .[1:150],
+				.x$data  %>% setNames(as.character(1:length(.))) %>% .[1:150],
+				risk.table = FALSE,
+				conf.int = F,
+				combine = TRUE,
+				legend = "none",
+				pval = F
+			)$plot$data
+		)) %>%
+		
+		mutate(plot = map(
+			plot_df,
+			~ .x %>%
+				separate(strata, c("id", "category"), sep = "::", remove = F) %>%
+				arrange(surv, id, category) %>%
+				ggplot(aes(time, surv,  color = category)) +
+				geom_line(aes(group = strata), alpha = 0.2) +
+				my_theme + theme(text = element_text(size = 8))
+		))
+}
 
 # Kaplan-Meyer curves
 km_curves =
 	dir("dev", pattern = "^armet_", full.names = T) %>%	grep("regression.rds$", ., value = T) %>%
+
+	# Prepare data
+	enframe(value = "file_name") %>%
 	
+	mutate(km_data = future_map(file_name, ~ .x %>% produce_KM_curves )) %>%
+	unnest(km_data)
+
+km_curves %>% saveRDS("dev/km_curves.rds")
+
+
+library(patchwork)
+
+km_grid = 
+	km_curves %>%
+	extract(file_name, "type", ".*armet_([A-Z]+)\\..*") %>%
+	
+	# Get top per cancer
+	group_by(type) %>%
+	arrange(avg_pvalue) %>%
+	slice(1) %>%
+	ungroup() %>%
+	arrange(avg_pvalue) %>%
+	filter(avg_pvalue<0.05) %>%
+	mutate(plot = pmap(list(plot, type, `Cell type category`),
+										 ~..1 +
+										 	scale_color_brewer(palette = "Set1") +
+										 	theme(axis.title.x=element_blank(), axis.title.y=element_blank()) +
+										 	ggtitle(paste(..2, ..3))
+										)) %>%
+	pull(plot) %>%
+	wrap_plots() +
+	plot_layout(	guides = "collect", nrow = 1	)  & 
+	theme(legend.position = 'bottom') 
+
+ggsave(
+	"KM_curves_ARMET_TCGA.pdf",
+	plot = km_grid,
+	useDingbats=FALSE,
+	units = c("mm"),
+	width = 183 ,
+	height = 183*0.61,
+	limitsize = FALSE
+)
+
+# Rank of immunogenicity
+hmap_df_annotated %>% 
+	unnest(data) %>%
+#	extract(file_name, "type", ".*armet_([A-Z]+)\\..*") %>%
+	filter(`Cell type category` == "immune_cell") %>%
+	arrange(.value_alpha2_cens %>% desc) %>%
+	mutate(cancer_ID = factor(cancer_ID, levels = unique(.$cancer_ID))) %>%
+	ggplot(aes(cancer_ID, .value_alpha2_cens)) +
+	geom_hline(yintercept = 0, type="dashed", color="grey") +
+	geom_errorbar(aes(ymin=.lower_alpha2_cens, ymax=.upper_alpha2_cens), width=0) +
+	geom_point(aes( size=.value_alpha1, fill=imm_therapy), shape=21) + 
+	coord_flip() +
+	scale_fill_manual(values = c( "grey",  "yellow")) +
+	my_theme
+
+
+# Plot of best ranked
+dd =
+	dir("dev", pattern = "^armet_", full.names = T) %>%	grep("regression.rds$", ., value = T) %>%
 	# Prepare data
 	map_dfr(
-		~ readRDS(.x) %>%
-			select(`Cell type category`, level, proportions) %>%
-			unnest(proportions) %>%
-			select(
-				type,
-				`Cell type category`,
-				level,
-				sample,
-				proportion = .value,
-				PFI.time.2,
-				dead = PFI.2,
-				.draws
-			) %>% 
-			unnest(.draws)
+		~ readRDS(.x) %>% mutate(file=.x))
+
+dd %>%
+	extract(file, "type", ".*armet_([A-Z]+)\\..*") %>%
+	inner_join(
+		hmap_df_annotated %>% 
+			unnest(data) %>% 
+			arrange(alpha2_prob %>% abs %>% desc, .value_alpha2_cens %>% abs %>% desc) %>%
+			select(type = cancer_ID, `Cell type category`) %>% 
+			slice(1:6)
 	) %>%
-	print_and_return(".") %>%
-	
-	# Stratify the data
-	nanny::nest_subset(data = -c(type, `Cell type category`, .draw)) %>%
-	print_and_return(".") %>%
-	
-	# Define the split
-	mutate(data = map(data, ~ .x %>%
-											mutate(med_prop = median(.value_relative)) %>%
-											mutate(high = .value_relative > med_prop)
-											)) %>%
-	# Execute model
-	mutate(fit = future_map(data,
-												 ~
-												 	survival::survfit(
-												 	survival::Surv(PFI.time.2, dead) ~ high,
-												 	data = .x
-												 )
-								)) %>%
-	print_and_return(".") %>%
-	
-	# Calculate p-value
-	nest(ct_data = -c(type, `Cell type category`)) %>%
-	mutate(pvalue = future_map(ct_data, ~ survminer::surv_pvalue(.x$fit, data = .x$data, combine=TRUE	)	)  ) %>%
-	print_and_return(".") %>%
-	
-	mutate(avg_pvalue = map_dbl(pvalue, ~ mean(.x$pval) )) %>%
-
-	# Execute plot
-	mutate(plot_df = future_map(
-		ct_data,
-		~ survminer::ggsurvplot(
-			fit = .x$fit %>% setNames(as.character(1:length(.))) %>% .[1:500],
-			.x$data  %>% setNames(as.character(1:length(.))) %>% .[1:500],
-			risk.table = FALSE,
-			conf.int = F,
-			combine = TRUE,
-			legend = "none",
-			pval = F
-		)$plot$data
-	)) %>%
-	print_and_return(".") %>%
-	
-	mutate(plot = future_map(
-		plot_df, ~ .x %>%
-			separate(strata, c("id", "category"), sep="::", remove = F) %>% 
-			arrange( surv, id, category) %>%
-			ggplot(aes(time, surv,  color=category)) + 
-			geom_line(aes(group=strata), alpha=0.2) +
-			my_theme + theme(text = element_text(size=8))
-	))
+	select( `Cell type category`, proportions) %>% 
+	unnest(proportions) %>% 
+	ggplot(aes(boot::logit(.value_relative), (PFI.time.2))) + 
+	geom_errorbar(aes(xmin = boot::logit(.value_relative.lower), xmax = boot::logit(.value_relative.upper))) + 
+	geom_point() + 
+	facet_wrap(~ type + `Cell type category`, scale="free_x") +
+	scale_y_log10()
 
 
+# P-value histogram
+km_curves <- readRDS("dev/km_curves.rds")
+km_cibersort  = readRDS("dev/km_cibersort.rds")
 
+set.seed(321)
 (
-	hmap_df %>% 
-	unnest(data) %>%
-	extract( col = "file",into =  "type", regex = ".+armet_([A-Z]+)\\..*") %>%
-	select(type, `Cell type category`, level, alpha2_prob, .value_alpha2_cens) %>%
-	left_join(km_curves, by = c("type", "Cell type category", "level")) %>%
-	ggplot(aes(pval, .value_alpha2_cens * abs(alpha2_prob), label =type, ct = `Cell type category`)) +
-	geom_point()
-) %>% plotly::ggplotly()
-
- 
-dd %>% filter(grepl("t_CD4$", `Cell type category`) & grepl("READ", file)) %>%
-	select(proportions) %>% unnest(proportions) %>% ggplot(aes(boot::logit(.value_relative), PFI.time.2)) + geom_point() + scale_y_log10()
-
-
-	survminer::arrange_ggsurvplots(print = FALSE, ncol = 1, nrow=1) %>%
+	km_curves %>% 
+	select(pvalue) %>% 
+	unnest(pvalue) %>%
+	sample_n(576) %>%
+	select(pval) %>%
+	mutate(algorithm="ARMET") %>%
+	bind_rows(
+		km_cibersort %>% 
+			unnest(pvalue) %>%
+			select(pval) %>%
+			mutate(algorithm="Cibersort")
+	) %>%
+	ggplot(aes(pval)) +
+	geom_histogram(aes(y=..count../sum(..count..))) +
+	facet_wrap(~algorithm) +
+	my_theme
+) %>%
 	ggsave(
-		"survival_plot_CAPRA_S_publication.pdf", 
+		"dev/TCGA_KM_curves_pvalue_hist.pdf.pdf",
 		plot = .,
-		device = "pdf",
 		useDingbats=FALSE,
 		units = c("mm"),
 		width = 183 ,
-		height = 183
+		height = 183*0.61,
+		limitsize = FALSE
 	)
-
-
-
+	
+km_curves %>%
+	arrange(avg_pvalue) %>%
+	slice(c(1,3,5)) %>%
+	pull(plot) %>%
+	wrap_plots() +
+	plot_layout(	guides = "collect", nrow = 1	)  & 
+	theme(legend.position = 'bottom') 
