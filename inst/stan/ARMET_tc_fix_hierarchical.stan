@@ -566,7 +566,7 @@ if(dim_4[1] > 0) {
     sigma_deconvoluted_1 = sumNB[2];
 
 		// Overwrite parameter
-		sigma_intercept = 1.3420415;
+		//sigma_intercept = 1.3420415;
 
 
 		// deconvolution
@@ -659,7 +659,7 @@ real beta_regression_lpdf(vector[] p, matrix X, matrix alpha, real[] phi, real p
 
 		real lp = 0;
 		//matrix[num_elements(p[,1]), num_elements(p[1])] mu;
-		vector[num_elements(phi)]  phi_exp= exp( 1.0 ./ to_vector(phi));
+		vector[num_elements(phi)]  phi_exp= ( 1.0 ./ (to_vector(phi )+ 0.001));
 
 		// Build sum to zero variable
 		int c = cols(alpha);
@@ -690,7 +690,7 @@ vector[] beta_regression_rng( matrix X, matrix alpha, real[] phi, real plateau){
 		vector[cols(alpha)+1] p[rows(X)];
 
 		//matrix[num_elements(p[,1]), num_elements(p[1])] mu;
-		vector[num_elements(phi)]  phi_exp= exp( 1.0 ./ to_vector(phi));
+		vector[num_elements(phi)] phi_exp= ( 1.0 ./ (to_vector(phi )+ 0.001));
 
 // Build sum to zero variable
 		int c = cols(alpha);
@@ -863,7 +863,7 @@ transformed data{
 
 }
 parameters {
-	real sigma_intercept_dec;
+	real<upper=3> sigma_intercept_dec;
 	//real<upper=0> sigma_slope_dec;
 
   // Local properties of the data
@@ -1030,7 +1030,7 @@ model {
   if(lv == 1 && do_regression) {
 
 		//print(X_scaled[,2]);
-  	prop_1 ~ beta_regression(X_scaled, alpha_1, phi[1:4], 0.5);
+  	prop_1 ~ beta_regression(X_scaled, alpha_1, phi[1:4], 1);
   	 alpha_1[1] ~ normal(0,10);
   	 to_vector( alpha_1[2:] ) ~ student_t(3, 0, 10);
 
@@ -1143,7 +1143,7 @@ model {
 
 	// lambda UFO
 	for(i in 1:shards) lambda_UFO[i] ~ skew_normal(6.2, 3.3, -2.7);
-	prop_UFO ~ beta(1.001, 20);
+	prop_UFO ~ beta(1.5, 10);
 
 	// Censoring
 	if(how_many_cens > 0){
