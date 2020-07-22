@@ -55,7 +55,7 @@ ARMET_tc_continue = function(armet_obj, level, model = stanmodels$ARMET_tc_fix_h
 	
 	if (input$do_regression && length(parse_formula(input$.formula)$covariates) >0 )
 		internals$alpha = internals$alpha  %>% bind_rows( get_alpha(fit, level, input$family) )
-	 
+	
 	# Return
 	list(
 		# Matrix of proportions
@@ -148,10 +148,10 @@ ARMET_tc = function(.data,
 										do_regression = T, 
 										prior_survival_time = c(),
 										model = stanmodels$ARMET_tc_fix_hierarchical) {
-
+	
 	# At the moment is not active
 	full_bayesian = F
-
+	
 	input = c(as.list(environment()))
 	input$.formula = .formula
 	
@@ -163,7 +163,7 @@ ARMET_tc = function(.data,
 	.sample = col_names$.sample
 	.transcript = col_names$.transcript
 	.abundance = col_names$.abundance
-
+	
 	# Rename columns mix
 	.data = .data %>% rename( sample = !!.sample, symbol = !!.transcript ,  count = !!.abundance)
 	input$.data = .data
@@ -176,42 +176,42 @@ ARMET_tc = function(.data,
 	# Checkif count is integer
 	if(.data %>% select(count) %>% lapply(class) %>% unlist() %>% equals("integer") %>% `!`)
 		stop(sprintf("ARMET says: the %s column must be integer as the deconvolution model is Negative Binomial", quo_name(.abundance)))
-
+	
 	# Check family
 	if(family %in% c("dirichlet", "beta") %>% any %>% `!`) stop("ARMET says: Please choose between dirichlet or beta families")
-
+	
 	# Covariate column
 	cov_columns =
 		parse_formula(.formula)$covariates %>%
 		map_chr(~ .x %>% gsub("censored\\(|\\)| ", "", .) %>% str_split("\\,") %>% `[[` (1) %>% `[` (1)) %>%
 		ifelse_pipe((.) %>% is.null, ~ c())
-
+	
 	# Do regresson
 	if(length(cov_columns) > 0 & (cov_columns %>% is.na %>% `!`)) do_regression = T
-
+	
 	# distinct_at is not released yet for dplyr, thus we have to use this trick
 	df_for_edgeR <- .data %>%
-
+		
 		# Stop if any counts is NA
 		error_if_counts_is_na(count) %>%
-
+		
 		# Stop if there are duplicated transcripts
 		error_if_duplicated_genes(sample,symbol,count) %>%
-
+		
 		# Prepare the data frame
 		select(symbol,
 					 sample,
 					 count,
 					 one_of(cov_columns)) %>%
 		distinct() %>%
-
+		
 		# Check if data rectangular
 		ifelse_pipe(
 			(.) %>% check_if_data_rectangular(sample,symbol,count, type = "soft") %>% `!` &
 				TRUE, #!fill_missing_values,
 			~ .x %>% eliminate_sparse_transcripts(symbol)
 		)
-
+	
 	# Censoring column
 	.cens_column = parse_formula(.formula)$covariates %>% grep("censored(", ., fixed = T, value = T)  %>% gsub("censored\\(|\\)| ", "", .) %>% str_split("\\,") %>% ifelse_pipe(length(.)>0, ~.x %>% `[[` (1) %>% `[` (-1), ~NULL)
 	.cens_value_column = parse_formula(.formula)$covariates %>% grep("censored(", ., fixed = T, value = T)  %>% gsub("censored\\(|\\)| ", "", .) %>% str_split("\\,") %>% ifelse_pipe(length(.)>0, ~.x %>% `[[` (1) %>% `[` (1), ~NULL)
@@ -226,7 +226,7 @@ ARMET_tc = function(.data,
 		sd_survival_months = .data %>%  select(sample, .cens_value_column) %>% distinct %>% pull(.cens_value_column) %>% sd
 		df_for_edgeR = df_for_edgeR %>% mutate(!!.cens_value_column := !!as.symbol(.cens_value_column) / sd_survival_months)
 		prior_survival_time = prior_survival_time / sd_survival_months
-
+		
 	}
 	else{
 		cens = NULL
@@ -235,43 +235,43 @@ ARMET_tc = function(.data,
 	# Create design matrix
 	if(length(cov_columns) > 0 & (cov_columns %>% is.na %>% `!`)) my_formula = as.formula( paste("~",paste(cov_columns, collapse = "+")))
 	else my_formula = .formula
-
+	
 	X =
 		model.matrix(
 			object = 	my_formula,
 			data = df_for_edgeR %>% select(sample, one_of(cov_columns)) %>% distinct %>% arrange(sample)
 		)
-
+	
 	mix =
 		.data %>%
 		select(sample, symbol, count, one_of(parse_formula(.formula)$covariates)) %>%
 		distinct() %>%
 		spread(symbol, count)
-
+	
 	shards = cores #* 2
 	is_level_in = shards %>% `>` (0) %>% as.integer
-
+	
 	tree = 	data.tree::Clone(ARMET::tree) 
-
+	
 	
 	# Print overlap descriptive stats
 	#get_overlap_descriptive_stats(mix %>% slice(1) %>% gather(symbol, count, -sample), reference)
-
+	
 	# Prepare data frames -
 	# For Q query first
 	# For G house keeing first
 	# For GM level 1 first
-
+	
 	Q = mix %>% nrow
-
+	
 	reference_filtered =
 		ARMET::ARMET_ref %>%
-
+		
 		left_join(.n_markers, by = c("ct1", "ct2")) %>%
 		filter_reference(mix, .n_markers) %>%
 		select(-ct1,-ct2,-rank,-`n markers`) %>%
 		distinct %>%
-
+		
 		# Select cell types in hierarchy
 		inner_join(
 			tree %>%
@@ -286,13 +286,13 @@ ARMET_tc = function(.data,
 			mdf = (.) %>%
 				distinct(symbol, `house keeping`) %>%
 				filter(`house keeping`)
-
+			
 			withr::with_seed(123, 	sample_frac(mdf, 0.5)) %>%
 				distinct(symbol)
 		},
 		by = "symbol"
-	)
-
+		)
+	
 	tree_propeties = get_tree_properties(tree)
 	
 	# Default internals
@@ -326,7 +326,7 @@ ARMET_tc = function(.data,
 			.formula = .formula,
 			model = model
 		)
-	 
+	
 	# Return
 	list(
 		# Matrix of proportions
@@ -335,7 +335,7 @@ ARMET_tc = function(.data,
 			select(c(sample, (.) %>% get_specific_annotation_columns(sample))) %>%
 			distinct() %>%
 			left_join(internals$prop) %>%
-
+			
 			# Attach alpha if regression
 			ifelse_pipe(
 				do_regression && length(parse_formula(.formula)$covariates) >0 ,
@@ -346,14 +346,14 @@ ARMET_tc = function(.data,
 						by = c("Cell type category", "level")
 					)
 			),
-
+		
 		# # Return the input itself
 		input = input,
-
+		
 		# Return the fitted object
 		internals = internals
 	)
-
+	
 }
 
 #' @export
@@ -377,7 +377,7 @@ run_model = function(reference_filtered,
 										 prior_survival_time = c()) {
 	
 	Q = Q
-
+	
 	# Global properties - derived by previous analyses of the whole reference dataset
 	sigma_intercept = 1.3420415
 	sigma_slope = -0.3386389
@@ -393,28 +393,28 @@ run_model = function(reference_filtered,
 	
 	# Filter on level considered
 	reference_filtered = reference_filtered %>% filter(level %in% lv)
-
+	
 	df = ref_mix_format(reference_filtered, mix)
-
+	
 	G = df %>% filter(!`query`) %>% distinct(G) %>% nrow()
 	GM = df %>% filter(!`house keeping`) %>% distinct(symbol) %>% nrow()
-
+	
 	# For  reference MPI inference
 	counts_baseline =
 		df %>%
-
+		
 		# Eliminate the query part, not the house keeping of the query
 		filter(!`query` | `house keeping`)  %>%
-
+		
 		format_for_MPI(shards)
-
+	
 	S = counts_baseline %>% distinct(sample) %>% nrow()
 	N = counts_baseline %>% distinct(idx_MPI, count, `read count MPI row`) %>%  count(idx_MPI) %>% summarise(max(n)) %>% pull(1)
 	M = counts_baseline %>% distinct(start, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
-
+	
 	lambda_log = 	  counts_baseline %>% filter(!query) %>% distinct(G, lambda_log) %>% arrange(G) %>% pull(lambda_log)
 	sigma_inv_log = counts_baseline %>% filter(!query) %>% distinct(G, sigma_inv_log) %>% arrange(G) %>% pull(sigma_inv_log)
-
+	
 	y_source =
 		df %>%
 		filter(`query` & !`house keeping`) %>%
@@ -434,99 +434,99 @@ run_model = function(reference_filtered,
 		) %>%
 		arrange(C, Q, symbol) %>%
 		mutate(`Cell type category` = factor(`Cell type category`, unique(`Cell type category`)))
-
+	
 	counts_baseline_to_linear =
 		counts_baseline %>%
 		filter_house_keeping_query_if_fixed(full_bayesian) %>%
 		arrange(G, S) %>%
 		mutate(counts_idx = 1:n()) %>%
 		mutate(S = S %>% as.factor %>% as.integer)
-
+	
 	counts_linear = counts_baseline_to_linear %>%  pull(count)
 	G_to_counts_linear = counts_baseline_to_linear %>% pull(G)
 	G_linear = G_to_counts_linear
 	S_linear = counts_baseline_to_linear %>% pull(S)
-
+	
 	CL = length(counts_linear)
 	S = counts_baseline_to_linear %>% distinct(S) %>% nrow
-
+	
 	# Counts idx for each level for each level
 	counts_idx_lv_NA = counts_baseline_to_linear %>% filter(level %>% is.na) %>% pull(counts_idx)
 	CL_NA = counts_idx_lv_NA %>% length
-
+	
 	# Level specific
 	counts_idx_lv = counts_baseline_to_linear %>% filter(level == lv) %>% pull(counts_idx)
 	CL_lv = counts_idx_lv %>% length
-
+	
 	# Deconvolution, get G only for markers of each level. Exclude house keeping
 	G_lv_linear = counts_baseline %>% filter(level == lv) %>% select(G, GM, sprintf("C%s", lv)) %>% distinct() %>% arrange(GM,!!as.symbol(sprintf("C%s", lv))) %>% pull(G)
 	G_lv = G_lv_linear %>% length
-
+	
 	# Observed mix counts
 	y_linear_lv = y_source %>% filter(level == lv) %>% distinct(GM, Q, S, count) %>% arrange(GM, Q) %>% pull(count)
-
+	
 	# Observed mix samples indexes
 	y_linear_S_lv = y_source %>% filter(level == lv) %>% distinct(GM, Q, S, count) %>% arrange(GM, Q) %>% pull(S)
-
+	
 	# Lengths indexes
 	Y_lv = y_linear_lv %>% length
-
-
+	
+	
 	MPI_data = get_MPI_df(counts_baseline_to_linear,
 												y_source,
 												counts_baseline,
 												shards,
 												lv)
-
+	
 	# Dirichlet regression
 	A = X %>% ncol
-
-
-
+	
+	
+	
 	
 	additional_par_to_save  = switch(full_bayesian %>% `!` %>% sum(1),
 																	 c("lambda_log", "sigma_inv_log"),
 																	 c())
-
+	
 	# library(rstan)
 	# fileConn<-file("~/.R/Makevars")
 	# writeLines(c( "CXX14FLAGS += -O2","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
 	# close(fileConn)
 	# ARMET_tc_model = rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix.stan", auto_write = F)
-
+	
 	exposure_rate_init = switch(
 		(lv > 1) %>% `!` %>% as.numeric %>% sum(1),
 		exposure_posterior %>% pull(1),
 		runif(S, -0.5, 0.5)
 	) %>% as.array
-
+	
 	exposure_rate_multiplier = sd(exposure_rate_init) %>% ifelse_pipe((.) %>% is.na, ~ 0.1)
-
+	
 	init_list = list(lambda_log = lambda_log,
 									 sigma_inv_log = sigma_inv_log) %>%
 		ifelse_pipe(!full_bayesian,
 								~ .x %>% c(list(exposure_rate = exposure_rate_init)))
-
-
+	
+	
 	Sys.setenv("STAN_NUM_THREADS" = shards)
-
+	
 	fam_dirichlet = family == "dirichlet"
-
+	
 	if(cens %>% is.null) cens =  rep(0, Q)
 	which_cens = which(cens == 1)  %>% as.array()
 	which_not_cens = which(cens == 0) %>% as.array()
 	how_many_cens = length(which_cens)
-
+	
 	max_unseen = ifelse(how_many_cens>0, max(X[,2]), 0 )
 	if(is.null(prior_survival_time)) prior_survival_time = array(1)[0]
 	spt = length(prior_survival_time)
-
+	
 	
 	# model  = stanmodels$ARMET_tc_fix_hierarchical
 	# switch(fam_dirichlet %>% `!` %>% sum(1),
 	# 								stanmodels$ARMET_tc_fix_hierarchical,
 	# 								stanmodels$ARMET_tc_fix)
-
+	
 	fit = 
 		sampling(
 			model,
@@ -551,13 +551,13 @@ run_model = function(reference_filtered,
 			(.)  %>% rstan::summary() %$% summary %>% as_tibble(rownames = "par") %>% arrange(Rhat %>% desc) %>% filter(Rhat > 1.5) %>% ifelse_pipe(nrow(.) > 0, ~ .x %>% print)
 			(.)
 		}
-
+	
 	list(df,
 			 switch(
 			 	approximate_posterior %>% sum(1),
-
+			 	
 			 	fit,
-
+			 	
 			 	vb_iterative(
 			 		model,
 			 		#ARMET_tc_model,
@@ -578,10 +578,10 @@ run_model = function(reference_filtered,
 			 		#,
 			 		init = function ()
 			 			list(lambda_log = lambda_log, sigma_inv_log = sigma_inv_log) # runif(G,  lambda_log - 1, lambda_log + 1)	)
-
+			 		
 			 	)
 			 ))
-
+	
 }
 
 #' @export
@@ -596,7 +596,7 @@ get_signatures = function(.data){
 		mutate(node = map(
 			node,
 			~ .x %>%
-
+				
 				# Build combination of cell types
 				nanny::permute_nest(
 					.names_from = `Cell type category`,
@@ -625,15 +625,15 @@ get_signatures = function(.data){
 				unnest(prob_df) %>% 
 				filter(`Cell type category_1` == `Cell type category`) %>%
 				select(-`Cell type category`)
-				
+			
 		)) %>%
 		unnest( node)
 }
 
 #' @export
 test_differential_composition = function(.data, credible_interval = 0.90, cluster_CI = 0.55) {
-
-	 
+	
+	
 	cens_alpha = 
 		.data$proportions %>% 
 		select(-draws, -rng) %>%
@@ -654,7 +654,7 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 	
 	# Level 1
 	if(.d %>% filter(level ==1) %>% nrow %>% `>` (0))
-	dx = 
+		dx = 
 		.d %>%
 		
 		filter(level ==1) %>%
@@ -663,34 +663,34 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 		
 		mutate(significant = ((.lower_alpha2_cens - 0) * (.upper_alpha2_cens - 0)) > 0) %>%
 		mutate(fold_change  = ifelse(significant, .value_alpha2_cens, 0))
-		
+	
 	# Level 2
 	if(.d %>% filter(level ==2) %>% nrow %>% `>` (0))
 		dx =	dx %>% bind_rows(
-				.d %>%
-		
-		filter(level ==2) %>%
-		left_join(ancestor_child, by = "Cell type category") %>%
-		left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change),  by = "ancestor" )  %>%
-		identify_baseline_by_clustering( ) %>%
-		
-			mutate(significant = ((.lower_alpha2_cens - 0) * (.upper_alpha2_cens - 0)) > 0) %>%
-			mutate(fold_change  = ifelse(significant, .value_alpha2_cens, 0))
+			.d %>%
+				
+				filter(level ==2) %>%
+				left_join(ancestor_child, by = "Cell type category") %>%
+				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change),  by = "ancestor" )  %>%
+				identify_baseline_by_clustering( ) %>%
+				
+				mutate(significant = ((.lower_alpha2_cens - 0) * (.upper_alpha2_cens - 0)) > 0) %>%
+				mutate(fold_change  = ifelse(significant, .value_alpha2_cens, 0))
 		) 
 	
 	
 	# Level 3
 	if(.d %>% filter(level ==3) %>% nrow %>% `>` (0))
 		dx =	dx %>% bind_rows(
-		.d %>%
-		
-		filter(level ==3) %>%
-		left_join(ancestor_child, by = "Cell type category") %>%
-		left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) ,  by = "ancestor")  %>%
-		identify_baseline_by_clustering( ) %>%
-		
-			mutate(significant = ((.lower_alpha2_cens - 0) * (.upper_alpha2_cens - 0)) > 0) %>%
-			mutate(fold_change  = ifelse(significant, .value_alpha2_cens, 0))
+			.d %>%
+				
+				filter(level ==3) %>%
+				left_join(ancestor_child, by = "Cell type category") %>%
+				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) ,  by = "ancestor")  %>%
+				identify_baseline_by_clustering( ) %>%
+				
+				mutate(significant = ((.lower_alpha2_cens - 0) * (.upper_alpha2_cens - 0)) > 0) %>%
+				mutate(fold_change  = ifelse(significant, .value_alpha2_cens, 0))
 		)
 	
 	# Level 4
@@ -756,12 +756,85 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 	# 	# Calculate fold chage
 	# 	mutate(fold_change = .value_alpha2 - zero) %>%
 	# 	mutate(significant = ((.lower_alpha2 - zero) * (.upper_alpha2 - zero)) > 0) 
-		
 	
-
-#	ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
-		
+	
+	
+	#	ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
+	
 }
+
+get_CI = function(.data, credible_interval = 0.90, cluster_CI = 0.55) {
+	
+	
+	
+	.d = 
+		.data$proportions %>%
+		filter(.variable %>% is.na %>% `!`) %>%
+		cluster_posterior_slopes(credible_interval = cluster_CI) %>%
+		extract_CI(credible_interval)
+	
+	dx = list()	
+	
+	# Level 1
+	if(.d %>% filter(level ==1) %>% nrow %>% `>` (0))
+		dx = 
+		.d %>%
+		
+		filter(level ==1) %>%
+		mutate(fold_change_ancestor = 0) %>%
+		identify_baseline_by_clustering( ) %>%
+		
+		mutate(significant = ((.lower_alpha2 - 0) * (.upper_alpha2 - 0)) > 0) %>%
+		mutate(fold_change  = ifelse(significant, .value_alpha2, 0))
+	
+	# Level 2
+	if(.d %>% filter(level ==2) %>% nrow %>% `>` (0))
+		dx =	dx %>% bind_rows(
+			.d %>%
+				
+				filter(level ==2) %>%
+				left_join(ancestor_child, by = "Cell type category") %>%
+				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change),  by = "ancestor" )  %>%
+				identify_baseline_by_clustering( ) %>%
+				
+				mutate(significant = ((.lower_alpha2 - 0) * (.upper_alpha2 - 0)) > 0) %>%
+				mutate(fold_change  = ifelse(significant, .value_alpha2, 0))
+		) 
+	
+	
+	# Level 3
+	if(.d %>% filter(level ==3) %>% nrow %>% `>` (0))
+		dx =	dx %>% bind_rows(
+			.d %>%
+				
+				filter(level ==3) %>%
+				left_join(ancestor_child, by = "Cell type category") %>%
+				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) ,  by = "ancestor")  %>%
+				identify_baseline_by_clustering( ) %>%
+				
+				mutate(significant = ((.lower_alpha2 - 0) * (.upper_alpha2 - 0)) > 0) %>%
+				mutate(fold_change  = ifelse(significant, .value_alpha2, 0))
+		)
+	
+	# Level 4
+	if(.d %>% filter(level ==4) %>% nrow %>% `>` (0))
+		dx =	dx %>% bind_rows(
+			.d %>%
+				
+				filter(level ==4) %>%
+				left_join(ancestor_child, by = "Cell type category") %>%
+				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) ,  by = "ancestor")  %>%
+				identify_baseline_by_clustering( ) %>%
+				
+				mutate(significant = ((.lower_alpha2 - 0) * (.upper_alpha2 - 0)) > 0) %>%
+				mutate(fold_change  = ifelse(significant, .value_alpha2, 0))
+		)
+	
+	dx
+	
+	
+}
+
 
 
 #------------------------------------#
@@ -819,7 +892,7 @@ run_lv_1 = function(internals,
 		
 		# Add relative proportions
 		mutate(.value_relative = .value) %>%
-		 
+		
 		# Add tree information
 		left_join(
 			tree %>% data.tree::ToDataFrameTree("name", "C1", "C2", "C3", "C4") %>%
@@ -853,13 +926,13 @@ run_lv_1 = function(internals,
 	
 	if (do_regression && length(parse_formula(.formula)$covariates) >0 ) 
 		internals$alpha = get_alpha(fit, level, family) 
-
+	
 	internals$prop = prop
 	internals$fit = list(fit)
 	internals$df = list(df)
 	internals$draws = list(draws)
 	internals$prop_posterior[[1]] = fit_prop_parsed %>% group_by(.variable, Q, C) %>% prop_to_list %>% `[[` ("prop_1") 
-
+	
 	internals
 	
 	
