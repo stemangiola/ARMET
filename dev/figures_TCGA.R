@@ -164,16 +164,18 @@ hmap_df =
 		
 		)
 
-hmap_df %>% 
-	saveRDS("dev/hmap_df.rds") 
-
+# hmap_df %>% saveRDS("dev/hmap_df.rds") 
+cancer_imm_therapy = c("LUAD", "LUSC", "SKCM", "metastatic_SKCM", "KIRC", "KICH", "KIRP", "HNSC")
 hmap_df_annotated =
 	hmap_df %>%
-	extract(file, "cancer_ID", regex = ".*armet_([A-Z]+).*") %>%
+	extract(file, c( "cancer_ID", "dummy"), regex = ".*armet_((metastatic_)?[A-Z]+).*") %>%
+	select(-dummy) %>%
 	
 	# Add annotation
 	left_join(read_csv("dev/TCGA_supergroups.csv") %>% select(-cancer)) %>% 
-	mutate(imm_therapy = if_else(cancer_ID %in% c("LUAD", "LUSC", "SKCM", "KIRC", "KICH", "KIRP", "HNSC"), T, F)) %>%
+	mutate(group = if_else(cancer_ID == "metastatic_SKCM", "melanomas", group)) %>%
+	
+	mutate(imm_therapy = if_else(cancer_ID %in% cancer_imm_therapy, T, F)) %>%
 	left_join(
 		read_csv("dev/survival_TCGA_curated.csv") %>% 
 			filter(DSS_cr==1) %>%
@@ -390,15 +392,18 @@ produce_KM_curves_abs_values = function(file_name){
 				risk.table = FALSE,
 				conf.int = T,
 				#legend = "none",
-				pval = T
-			)
+				pval = T, 
+				palette = "Set1", 
+				ggtheme = my_theme + theme(axis.title.y=element_blank(),
+																	 axis.text.y=element_blank())
+			) 
 		)) 
 }
 
 
 # Kaplan-Meyer curves
 km_curves =
-	dir("dev", pattern = "^armet_", full.names = T) %>%	grep("regression.rds$", ., value = T) %>%
+	dir("dev/armet_TCGA_Ju29_lv1_beta_lv2_dir/", pattern = "^armet_", full.names = T) %>%	grep("regression.rds$", ., value = T) %>%
 
 	# Prepare data
 	enframe(value = "file_name") %>%
@@ -410,41 +415,43 @@ km_curves %>% saveRDS("dev/km_curves.rds")
 
 
 library(patchwork)
+library(survminer)
 
 km_grid = 
 	km_curves %>%
-	extract(file_name, "type", ".*armet_([A-Z]+)\\..*") %>%
-	
+	tidyr::extract(file_name, "type", ".*armet_([A-Z]+)\\..*") %>%
+	filter(type %in% cancer_imm_therapy) %>%
+	filter(level<=3) %>%
 	# Get top per cancer
+	unnest(pvalue) %>%
 	group_by(type) %>%
-	arrange(avg_pvalue) %>%
+	arrange(pval) %>%
 	slice(1) %>%
 	ungroup() %>%
-	arrange(avg_pvalue) %>%
-	filter(avg_pvalue<0.05) %>%
-	mutate(plot = pmap(list(plot, type, `Cell type category`),
-										 ~..1 +
-										 	scale_color_brewer(palette = "Set1") +
-										 	theme(axis.title.x=element_blank(), axis.title.y=element_blank()) +
-										 	ggtitle(paste(..2, ..3))
-										)) %>%
+	filter(pval <0.05) %>%
+	
+	mutate(plot = 	
+				 	pmap(list(plot, type, `Cell type category`), ~	..1 +
+				 			 #	scale_fill_brewer(palette="Set1") +
+				 			 	ggtitle(sprintf("%s %s", ..2, ..3)) 
+				 	)) %>%
 	pull(plot) %>%
-	wrap_plots() +
-	plot_layout(	guides = "collect", nrow = 1	)  & 
-	theme(legend.position = 'bottom') 
+	arrange_ggsurvplots(ncol = 6, nrow = 1)
+
 
 ggsave(
-	"KM_curves_ARMET_TCGA.pdf",
+	"dev/KM_curves_ARMET_TCGA.pdf",
 	plot = km_grid,
 	useDingbats=FALSE,
 	units = c("mm"),
-	width = 183 ,
+	width = 200 ,
 	height = 183*0.61,
 	limitsize = FALSE
 )
 
 # Rank of immunogenicity
-hmap_df_annotated %>% 
+(
+	hmap_df_annotated %>% 
 	unnest(data) %>%
 #	extract(file_name, "type", ".*armet_([A-Z]+)\\..*") %>%
 	filter(`Cell type category` == "immune_cell") %>%
@@ -454,9 +461,19 @@ hmap_df_annotated %>%
 	geom_hline(yintercept = 0, type="dashed", color="grey") +
 	geom_errorbar(aes(ymin=.lower_alpha2_cens, ymax=.upper_alpha2_cens), width=0) +
 	geom_point(aes( size=.value_alpha1, fill=imm_therapy), shape=21) + 
-	coord_flip() +
+	coord_flip(ylim = c(-1, 1.3)) +
 	scale_fill_manual(values = c( "grey",  "yellow")) +
 	my_theme
+) %>%
+	ggsave(
+		"dev/immunogenicity_TCGA.pdf",
+		plot = .,
+		useDingbats=FALSE,
+		units = c("mm"),
+		width = 183 ,
+		height = 183,
+		limitsize = FALSE
+	)
 
 
 # Plot of best ranked
@@ -542,3 +559,185 @@ km_cibersort %>%
 		)
 	)) %>%
 	pull(plot)
+
+# Example fit Cibersort-ARMET
+
+# km_curves %>% 
+# 	unnest(pvalue) %>%
+# 	arrange(pval) %>% 
+# 	slice(1:3) %>% 
+# 	unnest(data) %>% 
+# 	mutate(alive = !dead) %>%
+# 	select(-dead) %>%
+# 	mutate(method="ARMET") %>%
+# 	rename(.cell_type = `Cell type category`) %>%
+# 	bind_rows(
+# 		km_cibersort %>% 
+# 			arrange(p.value) %>% 
+# 			slice(1:3) %>% 
+# 			unnest(data) %>%
+# 			mutate(method="Cibersort") %>%
+# 			rename(proportion = .proportion) 
+# 	) %>%
+# 	ggplot(aes(proportion, PFI.time.2, color=alive)) + 
+# 	geom_point() + 
+# 	geom_smooth(method="lm") +
+# 	facet_wrap(method~interaction(type, .cell_type)) +
+# 	scale_y_log10() + 
+# 	scale_color_manual(values=c( "#e11f28", "grey")) +
+# 	scale_x_continuous(trans="probit") + 
+# 	my_theme
+
+base_breaks <- function(n = 10){
+	function(x) {
+		axisTicks(boot::logit(range(x, na.rm = TRUE)), log = FALSE, n = n)
+	}
+}
+
+
+library("functional")
+library(scales)
+logit <-
+	trans_new("logit",
+						transform = qlogis,
+						inverse = plogis,
+						breaks = Compose(qlogis, extended_breaks(), plogis),
+						format = scales::label_scientific(digits = 2)
+						)
+
+
+p1 = (
+	km_cibersort %>% 
+		arrange(p.value) %>% 
+		slice(c(1)) %>% 
+		unnest(data) %>% 
+		ggplot(aes(.proportion_0_corrected, PFI.time.2, color=alive)) + 
+		geom_point() + 
+		geom_smooth(method="lm") +
+		scale_y_log10() + 
+		scale_color_manual(values=c( "#e11f28", "grey")) +
+		scale_x_continuous(trans = logit) + 
+		my_theme+ theme(legend.position="none", axis.title.x = element_blank(), axis.title.y = element_blank(),  axis.text.x = element_text(
+			angle = 40,
+			hjust = 1,
+			vjust = 1
+		))
+) %>% 
+	ggExtra::ggMarginal(type = "histogram")
+
+p2 = (
+	km_cibersort %>% 
+		arrange(p.value) %>% 
+		slice(2) %>% 
+		unnest(data) %>% 
+		ggplot(aes(.proportion_0_corrected, PFI.time.2, color=alive)) + 
+		geom_point() + 
+		geom_smooth(method="lm") +
+		scale_y_log10() + 
+		scale_color_manual(values=c( "#e11f28", "grey")) +
+		scale_x_continuous(trans = logit) + 
+		my_theme+ theme(legend.position="none", axis.title.x = element_blank(), axis.title.y = element_blank(),  axis.text.x = element_text(
+			angle = 40,
+			hjust = 1,
+			vjust = 1
+		))
+) %>% 
+	ggExtra::ggMarginal(type = "histogram")
+
+p3 = (
+	km_cibersort %>% 
+		arrange(p.value) %>% 
+		slice(2) %>% 
+		unnest(data) %>% 
+		ggplot(aes(.proportion_0_corrected, PFI.time.2, color=alive)) + 
+		geom_point() + 
+		geom_smooth(method="lm") +
+		scale_y_log10() + 
+		scale_color_manual(values=c( "#e11f28", "grey")) +
+		scale_x_continuous(trans = logit) + 
+		my_theme+ theme(legend.position="none", axis.title.x = element_blank(), axis.title.y = element_blank(),  axis.text.x = element_text(
+			angle = 40,
+			hjust = 1,
+			vjust = 1
+		))
+) %>% 
+	ggExtra::ggMarginal(type = "histogram")
+
+# Example fit ARMET
+p4 = (
+
+	km_curves %>% 
+		unnest(pvalue) %>%
+		arrange(pval) %>% 
+		slice(1) %>% 
+		unnest(data) %>% 
+		mutate(alive = !dead) %>%
+		ggplot(aes(proportion, PFI.time.2, color=alive)) + 
+		geom_point() + 
+		geom_smooth(method="lm") +
+		scale_y_log10() + 
+		scale_color_manual(values=c( "#e11f28", "grey")) +
+		scale_x_continuous(trans = logit) + 
+		my_theme+ theme(legend.position="none", axis.title.x = element_blank(), axis.title.y = element_blank(),  axis.text.x = element_text(
+			angle = 40,
+			hjust = 1,
+			vjust = 1
+		))
+) %>% 
+	ggExtra::ggMarginal(type = "histogram")
+
+p5 =  (
+	
+	km_curves %>% 
+		unnest(pvalue) %>%
+		arrange(pval) %>% 
+		slice(2) %>% 
+		unnest(data) %>% 
+		mutate(alive = !dead) %>%
+		ggplot(aes(proportion, PFI.time.2, color=alive)) + 
+		geom_point() + 
+		geom_smooth(method="lm") +
+		scale_y_log10() + 
+		scale_color_manual(values=c( "#e11f28", "grey")) +
+		scale_x_continuous(trans = logit) + 
+		my_theme+ theme(legend.position="none", axis.title.x = element_blank(), axis.title.y = element_blank(),  axis.text.x = element_text(
+			angle = 40,
+			hjust = 1,
+			vjust = 1
+		))
+) %>% 
+	ggExtra::ggMarginal(type = "histogram")
+
+p6 = 	(
+		
+		km_curves %>% 
+			unnest(pvalue) %>%
+			arrange(pval) %>% 
+			slice(3) %>% 
+			unnest(data) %>% 
+			mutate(alive = !dead) %>%
+			ggplot(aes(proportion, PFI.time.2, color=alive)) + 
+			geom_point() + 
+			geom_smooth(method="lm") +
+			scale_y_log10() + 
+			scale_color_manual(values=c( "#e11f28", "grey")) +
+			scale_x_continuous(trans = logit) + 
+			my_theme+ theme(legend.position="none", axis.title.x = element_blank(), axis.title.y = element_blank(),  axis.text.x = element_text(
+				angle = 40,
+				hjust = 1,
+				vjust = 1
+			))
+) %>% 
+	ggExtra::ggMarginal(type = "histogram")
+
+
+plot_grid(p1, p2, p3, p4, p5, p6, nrow = 2 ) %>%
+	ggsave(
+		"dev/example_top_KM_regression_cibersort_ARMET.pdf",
+		plot = .,
+		useDingbats=FALSE,
+		units = c("mm"),
+		width = 183/4*3 ,
+		height = 150,
+		limitsize = FALSE
+	)
