@@ -51,6 +51,7 @@ expect_equal(
 my_mix = ARMET_ref %>% inner_join( (.) %>% distinct(sample) %>% slice(1)) %>% select(-level)
 
 
+
 test_that("check simple run",{
 
 result_fix =

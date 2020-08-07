@@ -1,3 +1,27 @@
+clear_previous_levels = function(.data, my_level){
+	# Eliminate previous results
+	.data$internals$fit = .data$internals$fit[1:(my_level-1)]
+	.data$internals$prop = .data$internals$prop %>% filter(level < !!my_level) 
+	.data$internals$alpha = .data$internals$alpha  %>% filter(level < !!my_level)
+	.data$internals$draws = .data$internals$draws[1:(my_level-1)]
+	
+	nodes_to_eliminate = 
+		.data$proportions  %>% 
+		filter(level >= !!my_level & (.variable %>% is.na %>% `!`)) %>%
+		distinct(.variable) %>% 
+		pull(.variable) %>%
+		gsub("alpha_", "", .) %>%
+		sprintf("prop_%s_prior", .)
+	
+	for(i in nodes_to_eliminate) {
+		.data$internals$prop_posterior[[i]] = 1:ncol(.data$internals$prop_posterior[[i]]) %>% matrix(nrow=1) %>% as_tibble() %>% slice(0)
+	}
+	
+	.data$proportions = .data$proportions  %>% filter(level < !!my_level)
+	
+	.data
+}
+
 #' ARMET_tc_continue
 #' 
 #' @description This function
@@ -5,6 +29,7 @@
 #' @export
 ARMET_tc_continue = function(armet_obj, level, model = stanmodels$ARMET_tc_fix_hierarchical){
 	
+	armet_obj= clear_previous_levels(armet_obj,  level)
 	internals = armet_obj$internals
 	input = armet_obj$input
 	
@@ -631,15 +656,32 @@ get_signatures = function(.data){
 }
 
 #' @export
-test_differential_composition = function(.data, credible_interval = 0.90, cluster_CI = 0.55) {
-	
+add_cox_test = function(.data, x, alive){
 	
 	cens_alpha = 
 		.data$proportions %>% 
 		select(-draws, -rng) %>%
 		rename(node = .variable)  %>% 
 		unnest(proportions) %>%
-		ARMET:::censored_regression()  %>% 
+		censored_regression(x = x, alive = alive)  %>% 
+		rename(.variable = node) %>%
+		nest(draws_cens = -c(level, .variable  ,      C)) 
+	
+	.data$proportions %>%
+		filter(.variable %>% is.na %>% `!`) %>%
+		left_join(cens_alpha, by = c("level", "C", ".variable"))
+}
+
+#' @export
+test_differential_composition = function(.data, credible_interval = 0.90, cluster_CI = 0.55, x, alive) {
+
+	
+	cens_alpha = 
+		.data$proportions %>% 
+		select(-draws, -rng) %>%
+		rename(node = .variable)  %>% 
+		unnest(proportions) %>%
+		censored_regression(x = x, alive = alive)  %>% 
 		rename(.variable = node) %>%
 		nest(draws_cens = -c(level, .variable  ,      C)) 
 	
@@ -763,9 +805,19 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 	
 }
 
+#' @export
 get_CI = function(.data, credible_interval = 0.90, cluster_CI = 0.55) {
 	
-	
+	# Choose the test
+	if("draws_cens" %in% colnames(.data$proportions)){
+		.v = as.symbol(".value_alpha2_cens")
+		.l = as.symbol(".lower_alpha2_cens")
+		.u = as.symbol(".upper_alpha2_cens")
+	} else {
+		.v = as.symbol(".value_alpha2")
+		.l = as.symbol(".lower_alpha2")
+		.u = as.symbol(".upper_alpha2")
+	}
 	
 	.d = 
 		.data$proportions %>%
@@ -784,8 +836,8 @@ get_CI = function(.data, credible_interval = 0.90, cluster_CI = 0.55) {
 		mutate(fold_change_ancestor = 0) %>%
 		identify_baseline_by_clustering( ) %>%
 		
-		mutate(significant = ((.lower_alpha2 - 0) * (.upper_alpha2 - 0)) > 0) %>%
-		mutate(fold_change  = ifelse(significant, .value_alpha2, 0))
+		mutate(significant = ((!!.l - 0) * (!!.u - 0)) > 0) %>%
+		mutate(fold_change  = ifelse(significant, !!.v, 0))
 	
 	# Level 2
 	if(.d %>% filter(level ==2) %>% nrow %>% `>` (0))
@@ -797,8 +849,8 @@ get_CI = function(.data, credible_interval = 0.90, cluster_CI = 0.55) {
 				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change),  by = "ancestor" )  %>%
 				identify_baseline_by_clustering( ) %>%
 				
-				mutate(significant = ((.lower_alpha2 - 0) * (.upper_alpha2 - 0)) > 0) %>%
-				mutate(fold_change  = ifelse(significant, .value_alpha2, 0))
+				mutate(significant = ((!!.l - 0) * (!!.u - 0)) > 0) %>%
+				mutate(fold_change  = ifelse(significant, !!.v, 0))
 		) 
 	
 	
@@ -812,8 +864,8 @@ get_CI = function(.data, credible_interval = 0.90, cluster_CI = 0.55) {
 				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) ,  by = "ancestor")  %>%
 				identify_baseline_by_clustering( ) %>%
 				
-				mutate(significant = ((.lower_alpha2 - 0) * (.upper_alpha2 - 0)) > 0) %>%
-				mutate(fold_change  = ifelse(significant, .value_alpha2, 0))
+				mutate(significant = ((!!.l - 0) * (!!.u - 0)) > 0) %>%
+				mutate(fold_change  = ifelse(significant, !!.v, 0))
 		)
 	
 	# Level 4
@@ -826,8 +878,8 @@ get_CI = function(.data, credible_interval = 0.90, cluster_CI = 0.55) {
 				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) ,  by = "ancestor")  %>%
 				identify_baseline_by_clustering( ) %>%
 				
-				mutate(significant = ((.lower_alpha2 - 0) * (.upper_alpha2 - 0)) > 0) %>%
-				mutate(fold_change  = ifelse(significant, .value_alpha2, 0))
+				mutate(significant = ((!!.l - 0) * (!!.u - 0)) > 0) %>%
+				mutate(fold_change  = ifelse(significant, !!.v, 0))
 		)
 	
 	dx
