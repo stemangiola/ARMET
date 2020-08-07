@@ -991,3 +991,28 @@ run_lv_1 = function(internals,
 }
 
 
+get_theoretical_data_disrtibution = function(fit){
+	
+	fit = res$internals$fit[[1]]
+	
+	m2 <- stan_model(file = "inst/stan/generated_quantities_lv1.stan")
+	
+	
+	# # If those nodes are not in fit add them otherwise generate quantities fails
+	# missing_columns = 
+	# 	c("1", letters[1:11]) %>%
+	# 	imap(
+	# 		~ sprintf("alpha_%s", .x) %>%
+	# 			grep(colnames(as.matrix(fit))) %>%
+	# 			when(length(.)== 0 ~ {
+	# 				add_col = matrix(rep(0, nrow(as.matrix(fit)) * (tree_properties$ct_in_nodes[.y]-1) * A  ), nrow = nrow(as.matrix(fit)) )
+	# 				colnames(add_col) = sprintf("alpha_%s[%s]", .x, apply(expand.grid( 1:A, 1:(tree_properties$ct_in_nodes[.y]-1)), 1, paste, collapse=","))
+	# 					 
+	# 					 add_col
+	# 			})
+	# 	) %>%
+	# 	do.call(cbind,.)
+	
+	
+	ff2 <- gqs(m2, draws =  as.matrix(fit), data = MPI_data %>% c(prop_posterior) %>% c(tree_properties))
+}

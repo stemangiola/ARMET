@@ -1171,58 +1171,58 @@ model {
 
 	}
 }
-generated quantities{
-	//vector[ct_in_levels[lv]]  prop_rng[Q];
-
-  // lv1
-  vector[ct_in_nodes[1]]  prop_1_rng[Q * (lv == 1) * do_regression]; // Root
-
-  // lv2
-  vector[ct_in_nodes[2]]  prop_a_rng[Q * (lv == 2)* do_regression]; // Immune cells childrens
-
-  // lv3
-  vector[ct_in_nodes[3]]  prop_b_rng[Q * (lv == 3)* do_regression]; // b cells childrens
-  vector[ct_in_nodes[4]]  prop_c_rng[Q * (lv == 3)* do_regression]; // granulocyte childrens
-  vector[ct_in_nodes[5]]  prop_d_rng[Q * (lv == 3)* do_regression]; // mono_derived childrens
-  vector[ct_in_nodes[6]]  prop_e_rng[Q * (lv == 3)* do_regression]; // natural_killer childrens
-  vector[ct_in_nodes[7]]  prop_f_rng[Q * (lv == 3)* do_regression]; // t_cell childrens
-
-	// lv4
-  vector[ct_in_nodes[8]]  prop_g_rng[Q * (lv == 4)* do_regression]; // dendritic myeloid childrens
-  vector[ct_in_nodes[9]]  prop_h_rng[Q * (lv == 4)* do_regression]; // macrophage childrens
-  vector[ct_in_nodes[10]] prop_i_rng[Q * (lv == 4)* do_regression]; // nk primed
-  vector[ct_in_nodes[11]] prop_l_rng[Q * (lv == 4)* do_regression]; // CD4 childrens
-  vector[ct_in_nodes[12]] prop_m_rng[Q * (lv == 4)* do_regression]; // CD8 childrens
-  
-	if(lv == 1 && do_regression) {
-
-  	prop_1_rng = beta_regression_rng(X_scaled, alpha_1, phi[1:4], 1
-  	);
-
-  }
-	if(lv == 2 && do_regression) {
-
-  	  for(q in 1:Q) prop_a_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_a, phi[1] , 0.01);
-
-  }
-  	if(lv == 3 && do_regression) {
-
-  		for(q in 1:Q) prop_b_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_b, phi[1] , 1);
-  		for(q in 1:Q) prop_c_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_c, phi[2] , 1);
-  		for(q in 1:Q) prop_d_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_d, phi[3] , 1);
-  		for(q in 1:Q) prop_e_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_e, phi[4] , 1);
-  		for(q in 1:Q) prop_f_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_f, phi[5] , 1);
-
-
-  }
-  	if(lv == 4 && do_regression) {
-
-  		for(q in 1:Q) prop_g_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_g, phi[1] , 1);
-  		for(q in 1:Q) prop_h_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_h, phi[2] , 1);
-  		for(q in 1:Q) prop_i_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_i, phi[3] , 1);
-  		for(q in 1:Q) prop_l_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_l, phi[4] , 1);
-  		for(q in 1:Q) prop_m_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_m, phi[5] , 1);
-
-
-  }
-}
+// generated quantities{
+// 	//vector[ct_in_levels[lv]]  prop_rng[Q];
+// 
+//   // lv1
+//   vector[ct_in_nodes[1]]  prop_1_rng[Q * (lv == 1) * do_regression]; // Root
+// 
+//   // lv2
+//   vector[ct_in_nodes[2]]  prop_a_rng[Q * (lv == 2)* do_regression]; // Immune cells childrens
+// 
+//   // lv3
+//   vector[ct_in_nodes[3]]  prop_b_rng[Q * (lv == 3)* do_regression]; // b cells childrens
+//   vector[ct_in_nodes[4]]  prop_c_rng[Q * (lv == 3)* do_regression]; // granulocyte childrens
+//   vector[ct_in_nodes[5]]  prop_d_rng[Q * (lv == 3)* do_regression]; // mono_derived childrens
+//   vector[ct_in_nodes[6]]  prop_e_rng[Q * (lv == 3)* do_regression]; // natural_killer childrens
+//   vector[ct_in_nodes[7]]  prop_f_rng[Q * (lv == 3)* do_regression]; // t_cell childrens
+// 
+// 	// lv4
+//   vector[ct_in_nodes[8]]  prop_g_rng[Q * (lv == 4)* do_regression]; // dendritic myeloid childrens
+//   vector[ct_in_nodes[9]]  prop_h_rng[Q * (lv == 4)* do_regression]; // macrophage childrens
+//   vector[ct_in_nodes[10]] prop_i_rng[Q * (lv == 4)* do_regression]; // nk primed
+//   vector[ct_in_nodes[11]] prop_l_rng[Q * (lv == 4)* do_regression]; // CD4 childrens
+//   vector[ct_in_nodes[12]] prop_m_rng[Q * (lv == 4)* do_regression]; // CD8 childrens
+//   
+// 	if(lv == 1 && do_regression) {
+// 
+//   	prop_1_rng = beta_regression_rng(X_scaled, alpha_1, phi[1:4], 1
+//   	);
+// 
+//   }
+// 	if(lv == 2 && do_regression) {
+// 
+//   	  for(q in 1:Q) prop_a_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_a, phi[1] , 0.01);
+// 
+//   }
+//   	if(lv == 3 && do_regression) {
+// 
+//   		for(q in 1:Q) prop_b_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_b, phi[1] , 1);
+//   		for(q in 1:Q) prop_c_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_c, phi[2] , 1);
+//   		for(q in 1:Q) prop_d_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_d, phi[3] , 1);
+//   		for(q in 1:Q) prop_e_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_e, phi[4] , 1);
+//   		for(q in 1:Q) prop_f_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_f, phi[5] , 1);
+// 
+// 
+//   }
+//   	if(lv == 4 && do_regression) {
+// 
+//   		for(q in 1:Q) prop_g_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_g, phi[1] , 1);
+//   		for(q in 1:Q) prop_h_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_h, phi[2] , 1);
+//   		for(q in 1:Q) prop_i_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_i, phi[3] , 1);
+//   		for(q in 1:Q) prop_l_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_l, phi[4] , 1);
+//   		for(q in 1:Q) prop_m_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_m, phi[5] , 1);
+// 
+// 
+//   }
+// }
