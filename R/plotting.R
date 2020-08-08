@@ -303,7 +303,7 @@ plot_scatter = function(.data){
 	# 			unnest(proportions) %>% distinct(Q,  DFS_MONTHS)
 	# 	) %>%
 	# 	select(level,  `Cell type category`, Q, .upper, .lower)
-	
+	 
 	inferred_y = 	
 		.data$proportions %>%
 		select(level, `Cell type category`, proportions) %>%
@@ -342,11 +342,22 @@ plot_scatter = function(.data){
 		ungroup() %>%
 		mutate(area = (xmax-xmin) * (ymax-ymin))
 	
+	lines_df =
+		.data$proportions %>%
+		filter(map_lgl(rng_mu, ~!is.null(.)) ) %>% 
+		select(level, `Cell type category`, C,rng_mu) %>% 
+		unnest(rng_mu) %>% 
+		group_by(level, `Cell type category`, C,Q, .variable) %>% 
+		slice(1:50) %>%
+		ungroup() %>%
+		left_join(plot_data %>% nanny::subset(c(sample, `Cell type category`))) %>%
+		filter(!alive)
+	
 	outlier_df =
 		.data$proportions %>%
-		filter(map_lgl(rng, ~!is.null(.)) ) %>% 
-		select(level, `Cell type category`, C,rng) %>% 
-		unnest(rng) %>% 
+		filter(map_lgl(rng_prop, ~!is.null(.)) ) %>% 
+		select(level, `Cell type category`, C,rng_prop) %>% 
+		unnest(rng_prop) %>% 
 		group_by(level, `Cell type category`, C,Q, .variable) %>% 
 		tidybayes::median_qi(.width = 0.95) %>%
 		ungroup() %>%
@@ -362,11 +373,12 @@ plot_scatter = function(.data){
 	
 	ggplot(plot_data, aes(x, y)) +
 		
-		geom_rect(aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax =ymax, alpha = -area), data =  plot_data %>% filter(alive)) +
-		geom_errorbar( aes(ymin =ymin, ymax = ymax, color = outlier), data = plot_data %>% filter(!alive)) +
-		geom_point( data =  plot_data %>% filter(alive), color="blue", shape=".") +
-		geom_line(aes(x, .upper_rng)) +
-		geom_line(aes(x, .lower_rng)) +
+		geom_rect(aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax =ymax, alpha = -area), data =  plot_data %>% filter(alive==1)) +
+		geom_errorbar( aes(ymin =ymin, ymax = ymax, color = outlier), data = plot_data %>% filter(alive == 0)) +
+		geom_point( data =  plot_data %>% filter(alive == 1), color="blue", shape=".") +
+		geom_line(data = lines_df %>% filter(!alive), aes(x = x, y = .value, group = .draw), color="green", alpha=0.1) +
+		# geom_line(aes(x, .upper_rng),  linetype ="dashed") +
+		# geom_line(aes(x, .lower_rng),  linetype ="dashed") +
 		#geom_density_2d(bins=3, fill = after_stat(density), geom = "polygon") +
 		#geom_point(aes(color = alive)) +
 		facet_wrap(~`Cell type category`, scale="free") +
@@ -408,17 +420,50 @@ plot_scatter = function(.data){
 #'
 #' @export
 plot_markers  = function(result, level, S = NULL, cores = 20){
+	 
+	library(furrr)
 	
-	library(multidplyr)
+	sum_NB = function(lambda, sigma, prop){
+		
+		prop_mat = matrix(prop, nrow=1)
+		lambda_mat = matrix(lambda, ncol = 1)
+		sigma_mat = matrix(sigma, ncol = 1)
+		
+		lambda_sum = prop_mat %*% lambda_mat;
+		
+		sigma_sum = 1/exp(sigma + (log(lambda_sum)*-0.4 )) 
+		
+		# sigma_sum =
+		# 	lambda_sum^2 /
+		# 	(
+		# 		prop_mat %*%
+		# 			(
+		# 				lambda_mat^2 /
+		# 					sigma_mat
+		# 			)
+		# 	) ;
+		
+		
+		c(lambda_sum, sigma_sum)
+		
+	}
 	
-	result$signatures[[level]] %>%
+	sigma = 
+		result$internals$fit[[level]] %>% 
+		rstan::summary("sigma_intercept_dec") %$% 
+		summary %>% 
+		.[1]
+	
+	sigma = 1.4
+		
+	result$internals$df[[level]] %>%
 		filter(!query & !`house keeping`) %>%
 		distinct(`Cell type category`, C, level, G, GM, symbol, lambda_log, sigma_inv_log) %>%
 		{ print(1); Sys.time(); (.) } %>%
 		
 		# Add divergence
 		left_join(
-			result$fit[[level]] %>% rstan::summary() %$% summary %>% as_tibble(rownames = "par") %>% filter(Rhat > 1.6) %>%
+			result$internals$fit[[level]] %>% rstan::summary() %$% summary %>% as_tibble(rownames = "par") %>% filter(Rhat > 1.6) %>%
 				filter(grepl("^lambda_log", par)) %>%
 				separate(par, c("par", "G"), sep="\\[|\\]", extra = "drop") %>%
 				distinct(G) %>% mutate(G = G %>% as.integer) %>%
@@ -428,13 +473,16 @@ plot_markers  = function(result, level, S = NULL, cores = 20){
 		{ print(2); Sys.time(); (.) } %>%
 		
 		# If inferred replace lambda_log and sigma_inv_log
-		ifelse_pipe(
-			result$input$full_bayesian,
-			~ .x %>% select(-lambda_log, -sigma_inv_log) %>%
+		purrr::when(
+			result$input$full_bayesian	~ (.) %>% 
+				select(-lambda_log, -sigma_inv_log) %>%
 				left_join(
-					result$fit[[level]] %>% tidybayes::spread_draws(lambda_log[G], sigma_inv_log[G]) %>% ungroup() %>%
+					result$internals$fit[[level]] %>%
+						tidybayes::spread_draws(lambda_log[G], sigma_inv_log[G]) %>% 
+						ungroup() %>%
 						rename(lambda_log = lambda_log,sigma_inv_log = sigma_inv_log)
-				)
+				),
+			~ (.)
 		) %>%
 		{ print(3); Sys.time(); (.) } %>%
 		
@@ -444,18 +492,23 @@ plot_markers  = function(result, level, S = NULL, cores = 20){
 		
 		# Add proportions
 		left_join(
-			result$proportions %>% select(level, Q, sample, .draws, `Cell type category`) %>% unnest(.draws)
+			result$proportions %>% 
+				select(level, C, `Cell type category`, proportions, -.variable) %>%
+				unnest(proportions) %>%
+				select(level, Q, sample, .draws, `Cell type category`) %>%
+				mutate(.draws = map(.draws, ~filter(.x, .draw %>% between(1,30)))) %>% 
+				unnest(.draws)
 		) %>%
 		
-		# add expsure
+		# add exposure
 		left_join(
-			result$fit[[level]] %>% tidybayes::spread_draws(exposure_rate[S]) %>% ungroup() %>% rename(Q = S)
+			result$internals$fit[[level]] %>% tidybayes::spread_draws(exposure_rate[S]) %>% ungroup() %>% rename(Q = S)
 		) %>%
 		
 		# Filter by sample
-		ifelse_pipe(
-			S %>% is.null %>% `!`,
-			~ .x %>% filter(Q == S)
+		purrr::when(
+			S %>% is.null %>% `!` ~ (.) %>% filter(Q == S),
+			~ (.)
 		)	 %>%
 		
 		# Calculate sum
@@ -467,54 +520,23 @@ plot_markers  = function(result, level, S = NULL, cores = 20){
 		{ print(4); Sys.time(); (.) } %>%
 		
 		# Filter just first 30 draws
-		inner_join( (.) %>% distinct(.draw) %>% sample_n(30) ) %>%
+		#inner_join( (.) %>% distinct(.draw) ) %>%
 		
-		do_parallel_start(cores, "symbol") %>%
-		do({
+		nest(data = -c(level, symbol, GM, converged, ct1    ,     ct2   ,     sample   ,   exposure_rate,   .chain, .iteration ,.draw )) %>%
+		dplyr::mutate(.sum = map(
+			data,
+			~
+				sum_NB(.x$lambda_exp, !!sigma, .x$.value) %>%
+				as.matrix %>%
+				t %>%
+				tibble::as_tibble() %>%
+				setNames(c("lambda_sum", "sigma_sum"))
 			
-			`%>%` = magrittr::`%>%`
-			
-			sum_NB = function(lambda, sigma, prop){
-				
-				prop_mat = matrix(prop, nrow=1)
-				lambda_mat = matrix(lambda, ncol = 1)
-				sigma_mat = matrix(sigma, ncol = 1)
-				
-				lambda_sum = prop_mat %*% lambda_mat;
-				sigma_sum =
-					lambda_sum^2 /
-					(
-						prop_mat %*%
-							(
-								lambda_mat^2 /
-									sigma_mat
-							)
-					) ;
-				
-				
-				c(lambda_sum, sigma_sum)
-				
-			}
-			
-			(.) %>%
-				tidyr::nest(data_for_sum = -c(level, symbol, GM, converged, ct1    ,     ct2   ,     sample   ,   exposure_rate,   .chain, .iteration ,.draw )) %>%
-				dplyr::mutate(.sum = purrr::map(
-					data_for_sum,
-					~
-						sum_NB(.x$lambda_exp, .x$sigma_exp, .x$.value) %>%
-						as.matrix %>%
-						t %>%
-						tibble::as_tibble() %>%
-						setNames(c("lambda_sum", "sigma_sum"))
-					
-				))
-			
-		}) %>%
-		do_parallel_end() %>%
+		)) %>%
 		
 		{ print(5); Sys.time(); (.) } %>%
 		
-		select(-data_for_sum) %>%
+		select(-data) %>%
 		unnest(.sum) %>%
 		{ print(6); Sys.time(); (.) } %>%
 		
@@ -538,20 +560,28 @@ plot_markers  = function(result, level, S = NULL, cores = 20){
 		{ print(8); Sys.time(); (.) } %>%
 		
 		# Add counts
-		left_join(	result$input$mix %>%	gather(symbol, count, -sample) ) %>%
+		left_join(	result$input$.data ) %>%
 		{ print(9); Sys.time(); (.) } %>%
 		
-		{ ((.) %>%	ggplot(aes(x = count+1, y=.q50+1, color=ct1, shape = converged, GM = GM)) +
-			 	geom_abline() +
-			 	geom_errorbar(aes(ymin = .q025 + 1, ymax=.q97.5 + 1), alpha=0.5) +
-			 	geom_point() +
-			 	scale_y_log10() +
-			 	scale_x_log10() +
-			 	facet_grid(converged ~.chain) +
-			 	my_theme) %>% print
-			
-			(.)
-		}
+
+		# Setup plot with lables
+		mutate(outlier = count %>% between(.q025, .q97.5) %>% `!`) %>%
+		mutate(min_error = min(abs(.q025-count), abs(.q97.5-count))) %>%
+		ungroup() %>%
+		
+		# Keep just one gene
+		group_by(symbol) %>% slice(1) %>% ungroup %>%
+		arrange(desc(outlier), desc(min_error)) %>%
+		mutate(symbol = if_else(outlier & row_number()<10, symbol, "")) %>%
+		ggplot(.,aes(x = count+1, y=.q50+1,  GM = GM, label=symbol)) +
+		geom_abline() +
+		geom_errorbar(aes(color=ct1,ymin = .q025 + 1, ymax=.q97.5 + 1), alpha=0.3) +
+		geom_point(aes(color=ct1, shape = converged)) +
+		ggrepel::geom_text_repel() +
+		scale_y_log10() +
+		scale_x_log10() +
+		facet_grid(converged ~.chain) 
+	
 }
 
 plot_heatmap = function(.data){
