@@ -40,9 +40,6 @@ data {
 	int lv;
 	// Reference matrix inference
 
-	int<lower=0> S;
-	int CL; // counts linear size
-
 	// Cell types
  	int<lower=0> Q;
   int<lower=1> n_nodes;
@@ -50,18 +47,16 @@ data {
 
 	// Dirichlet regression
 	int A; // factors of interest
-	matrix[Q,A] X;
-	int do_regression;
 
 } parameters {
 
 
 	// lv4
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[8]-1]  alpha_g; // dendritic myeloid
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[9]-1]  alpha_h; // macrophage
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[10]-1]  alpha_i; // NK
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[11]-1] alpha_l; // CD4
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[12]-1] alpha_m; // CD8
+  matrix[A * (lv == 4) ,ct_in_nodes[8]-1]  alpha_g; // dendritic myeloid
+  matrix[A * (lv == 4) ,ct_in_nodes[9]-1]  alpha_h; // macrophage
+  matrix[A * (lv == 4) ,ct_in_nodes[10]-1]  alpha_i; // NK
+  matrix[A * (lv == 4) ,ct_in_nodes[11]-1] alpha_l; // CD4
+  matrix[A * (lv == 4) ,ct_in_nodes[12]-1] alpha_m; // CD8
 
 	real<lower=0> phi[12]; //[fam_dirichlet ? 10 : ct_in_levels[lv]];
 
@@ -70,17 +65,17 @@ data {
 generated quantities{
 
 	// lv4
-  vector[ct_in_nodes[8]]  prop_g_rng[Q * (lv == 4)* do_regression]; // dendritic myeloid childrens
-  vector[ct_in_nodes[9]]  prop_h_rng[Q * (lv == 4)* do_regression]; // macrophage childrens
-  vector[ct_in_nodes[10]] prop_i_rng[Q * (lv == 4)* do_regression]; // nk primed
-  vector[ct_in_nodes[11]] prop_l_rng[Q * (lv == 4)* do_regression]; // CD4 childrens
-  vector[ct_in_nodes[12]] prop_m_rng[Q * (lv == 4)* do_regression]; // CD8 childrens
+  vector[ct_in_nodes[8]]  prop_g_rng[Q * (lv == 4)]; // dendritic myeloid childrens
+  vector[ct_in_nodes[9]]  prop_h_rng[Q * (lv == 4)]; // macrophage childrens
+  vector[ct_in_nodes[10]] prop_i_rng[Q * (lv == 4)]; // nk primed
+  vector[ct_in_nodes[11]] prop_l_rng[Q * (lv == 4)]; // CD4 childrens
+  vector[ct_in_nodes[12]] prop_m_rng[Q * (lv == 4)]; // CD8 childrens
   
-  vector[ct_in_nodes[8]]  mu_g_rng[Q * (lv == 4)* do_regression]; // dendritic myeloid childrens
-  vector[ct_in_nodes[9]]  mu_h_rng[Q * (lv == 4)* do_regression]; // macrophage childrens
-  vector[ct_in_nodes[10]] mu_i_rng[Q * (lv == 4)* do_regression]; // nk primed
-  vector[ct_in_nodes[11]] mu_l_rng[Q * (lv == 4)* do_regression]; // CD4 childrens
-  vector[ct_in_nodes[12]] mu_m_rng[Q * (lv == 4)* do_regression]; // CD8 childrens
+  vector[ct_in_nodes[8]]  mu_g_rng[Q * (lv == 4)]; // dendritic myeloid childrens
+  vector[ct_in_nodes[9]]  mu_h_rng[Q * (lv == 4)]; // macrophage childrens
+  vector[ct_in_nodes[10]] mu_i_rng[Q * (lv == 4)]; // nk primed
+  vector[ct_in_nodes[11]] mu_l_rng[Q * (lv == 4)]; // CD4 childrens
+  vector[ct_in_nodes[12]] mu_m_rng[Q * (lv == 4)]; // CD8 childrens
   
 
 	for(q in 1:Q) prop_g_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_g, phi[1] , 1);

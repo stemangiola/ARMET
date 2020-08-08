@@ -2305,20 +2305,20 @@ get_alpha = function(fit, level, family){
 		
 		# Attach generated quantities
 		separate(.variable, c("par", "node"), remove = F) %>%
-		left_join(
-			fit %>% 
-				draws_to_tibble("prop_", "Q", "C") %>%
-				filter(grepl("_rng", .variable)) %>% 
-				mutate(Q = as.integer(Q)) %>%
-				mutate(.variable = gsub("_rng", "", .variable)) %>% 
-				separate(.variable, c("par", "node"), remove = F)  %>% 
-				select(-par) %>% drop_na() %>% nest(rng = -c(node, C)) %>%
-				mutate(C = 1:n()) 
-		) %>%
+		# left_join(
+		# 	fit %>% 
+		# 		draws_to_tibble("prop_", "Q", "C") %>%
+		# 		filter(grepl("_rng", .variable)) %>% 
+		# 		mutate(Q = as.integer(Q)) %>%
+		# 		mutate(.variable = gsub("_rng", "", .variable)) %>% 
+		# 		separate(.variable, c("par", "node"), remove = F)  %>% 
+		# 		select(-par) %>% drop_na() %>% nest(rng = -c(node, C)) %>%
+		# 		mutate(C = 1:n()) 
+		# ) %>%
 		
 		# Add level label
 		mutate(level = !!level)
-	
+
 }
 
 draws_to_tibble = function(fit, par, x, y) {
@@ -2759,3 +2759,52 @@ draws_to_prob_non_zero = function(.data){
 		mutate(prob = ifelse(`FALSE`>`TRUE`, -prob, prob)) %>%
 		pull(prob)
 }
+
+get_generated_quantities_standalone = function(fit, level, internals){
+	
+	
+	S = internals$Q
+	Q = internals$Q
+	lv = level
+	A = dim(data.frame(internals$X))[2]
+	
+	mod = switch(
+		lv,
+		stanmodels$generated_quantities_lv1,
+		stanmodels$generated_quantities_lv2,
+		stanmodels$generated_quantities_lv3,
+		stanmodels$generated_quantities_lv4
+	)
+	
+	fit2 = rstan::gqs(
+		stanmodels$generated_quantities_lv1,
+		draws =  as.matrix(fit),
+		data = internals$tree_properties
+	) 
+
+	
+	left_join(
+		fit2 %>%
+			draws_to_tibble("prop_", "Q", "C") %>%
+			mutate(Q = as.integer(Q)) %>%
+			mutate(.variable = gsub("_rng", "", .variable)) %>%
+			separate(.variable, c("par", "node"), remove = F)  %>%
+			select(-par) %>%
+			nest(rng_prop = -c(node, C)) %>%
+			mutate(C = 1:n()),
+		
+		fit2 %>%
+			draws_to_tibble("mu_", "Q", "C") %>%
+			mutate(Q = as.integer(Q)) %>%
+			mutate(.variable = gsub("_rng", "", .variable)) %>%
+			separate(.variable, c("par", "node"), remove = F)  %>%
+			select(-par) %>%
+			nest(rng_mu = -c(node, C)) %>%
+			mutate(C = 1:n()),
+		by=c("C", "node")
+	)
+	
+	
+}
+
+

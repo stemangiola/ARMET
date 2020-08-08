@@ -40,9 +40,6 @@ data {
 	int lv;
 	// Reference matrix inference
 
-	int<lower=0> S;
-	int CL; // counts linear size
-
 	// Cell types
  	int<lower=0> Q;
   int<lower=1> n_nodes;
@@ -50,8 +47,6 @@ data {
 
 	// Dirichlet regression
 	int A; // factors of interest
-	matrix[Q,A] X;
-	int do_regression;
 
 } parameters {
 
@@ -76,17 +71,17 @@ generated quantities{
 
 
   // lv3
-  vector[ct_in_nodes[3]]  prop_b_rng[Q * (lv == 3)* do_regression]; // b cells childrens
-  vector[ct_in_nodes[4]]  prop_c_rng[Q * (lv == 3)* do_regression]; // granulocyte childrens
-  vector[ct_in_nodes[5]]  prop_d_rng[Q * (lv == 3)* do_regression]; // mono_derived childrens
-  vector[ct_in_nodes[6]]  prop_e_rng[Q * (lv == 3)* do_regression]; // natural_killer childrens
-  vector[ct_in_nodes[7]]  prop_f_rng[Q * (lv == 3)* do_regression]; // t_cell childrens
+  vector[ct_in_nodes[3]]  prop_b_rng[Q * (lv == 3)]; // b cells childrens
+  vector[ct_in_nodes[4]]  prop_c_rng[Q * (lv == 3)]; // granulocyte childrens
+  vector[ct_in_nodes[5]]  prop_d_rng[Q * (lv == 3)]; // mono_derived childrens
+  vector[ct_in_nodes[6]]  prop_e_rng[Q * (lv == 3)]; // natural_killer childrens
+  vector[ct_in_nodes[7]]  prop_f_rng[Q * (lv == 3)]; // t_cell childrens
 
-  vector[ct_in_nodes[3]]  mu_b_rng[Q * (lv == 3) * do_regression]; 
-  vector[ct_in_nodes[4]]  mu_c_rng[Q * (lv == 3) * do_regression]; 
-  vector[ct_in_nodes[5]]  mu_d_rng[Q * (lv == 3) * do_regression]; 
-  vector[ct_in_nodes[6]]  mu_e_rng[Q * (lv == 3) * do_regression]; 
-  vector[ct_in_nodes[7]]  mu_f_rng[Q * (lv == 3) * do_regression]; 
+  vector[ct_in_nodes[3]]  mu_b_rng[Q * (lv == 3) ]; 
+  vector[ct_in_nodes[4]]  mu_c_rng[Q * (lv == 3) ]; 
+  vector[ct_in_nodes[5]]  mu_d_rng[Q * (lv == 3) ]; 
+  vector[ct_in_nodes[6]]  mu_e_rng[Q * (lv == 3) ]; 
+  vector[ct_in_nodes[7]]  mu_f_rng[Q * (lv == 3) ]; 
 
 
 	for(q in 1:Q) prop_b_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_b, phi[1] , 1);

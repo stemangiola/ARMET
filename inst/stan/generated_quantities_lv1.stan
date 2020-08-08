@@ -40,9 +40,6 @@ data {
 	int lv;
 	// Reference matrix inference
 
-	int<lower=0> S;
-	int CL; // counts linear size
-
 	// Cell types
  	int<lower=0> Q;
   int<lower=1> n_nodes;
@@ -50,10 +47,9 @@ data {
 
 	// Dirichlet regression
 	int A; // factors of interest
-	matrix[Q,A] X;
-	int do_regression;
 
-} parameters {
+} 
+parameters {
 
   matrix[A,ct_in_nodes[1]-1]  alpha_1; // Root
 	real<lower=0> phi[12]; //[fam_dirichlet ? 10 : ct_in_levels[lv]];
@@ -63,8 +59,8 @@ data {
 generated quantities{
 
   // lv1
-  vector[ct_in_nodes[1]]  prop_1_rng[Q * (lv == 1) * do_regression]; // Root
-  vector[ct_in_nodes[1]]  mu_1_rng[Q * (lv == 1) * do_regression]; 
+  vector[ct_in_nodes[1]]  prop_1_rng[Q * (lv == 1) ]; // Root
+  vector[ct_in_nodes[1]]  mu_1_rng[Q * (lv == 1) ]; 
 
 
 

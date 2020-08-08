@@ -40,9 +40,6 @@ data {
 	int lv;
 	// Reference matrix inference
 
-	int<lower=0> S;
-	int CL; // counts linear size
-
 	// Cell types
  	int<lower=0> Q;
   int<lower=1> n_nodes;
@@ -50,8 +47,6 @@ data {
 
 	// Dirichlet regression
 	int A; // factors of interest
-	matrix[Q,A] X;
-	int do_regression;
 
 } parameters {
 
@@ -70,11 +65,11 @@ data {
 generated quantities{
 
 
-  vector[ct_in_nodes[2]]  prop_a_rng[Q * (lv == 2)* do_regression]; // Immune cells childrens
-  vector[ct_in_nodes[2]]  mu_a_rng[Q * (lv == 2) * do_regression]; 
+  vector[ct_in_nodes[2]]  prop_a_rng[Q * (lv == 2)]; // Immune cells childrens
+  vector[ct_in_nodes[2]]  mu_a_rng[Q * (lv == 2) ]; 
 
 
-  for(q in 1:Q) prop_a_rng[q] = dirichlet_regression_rng( X[q], alpha_a, phi[1] , 0.01);
+  for(q in 1:Q) prop_a_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_a, phi[1] , 0.01);
   mu_a_rng = get_mean_prop(X_scaled, alpha_a);
 
 

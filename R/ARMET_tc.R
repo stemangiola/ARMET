@@ -79,7 +79,14 @@ ARMET_tc_continue = function(armet_obj, level, model = stanmodels$ARMET_tc_fix_h
 	internals$draws = internals$draws %>% c(list(draws))
 	
 	if (input$do_regression && length(parse_formula(input$.formula)$covariates) >0 )
-		internals$alpha = internals$alpha  %>% bind_rows( get_alpha(fit, level, input$family) )
+		internals$alpha = internals$alpha  %>% bind_rows( 
+			get_alpha(fit, level, input$family) %>% 
+				left_join(
+					get_generated_quantities_standalone(fit, level, internals),
+					by = c("node", "C")
+					
+				)
+		)
 	
 	# Return
 	list(
@@ -96,7 +103,7 @@ ARMET_tc_continue = function(armet_obj, level, model = stanmodels$ARMET_tc_fix_h
 				~ .x %>%
 					nest(proportions = -c(`Cell type category`, C, level)) %>%
 					left_join(
-						internals$alpha %>%	select(`Cell type category`, contains("alpha"), level, draws, rng, .variable, Rhat),
+						internals$alpha %>%	select(`Cell type category`, contains("alpha"), level, draws, rng_prop, rng_mu, .variable, Rhat),
 						by = c("Cell type category", "level")
 					)
 			),
@@ -367,7 +374,7 @@ ARMET_tc = function(.data,
 				~ .x %>%
 					nest(proportions = -c(`Cell type category`, C, level)) %>%
 					left_join(
-						internals$alpha %>%	select(`Cell type category`, contains("alpha"), level, draws, rng, .variable, Rhat),
+						internals$alpha %>%	select(`Cell type category`, contains("alpha"), level, draws, rng_prop, rng_mu, .variable, Rhat),
 						by = c("Cell type category", "level")
 					)
 			),
@@ -410,7 +417,7 @@ run_model = function(reference_filtered,
 	lambda_mu_mu = 5.612671
 	lambda_sigma = 7.131593
 	
-	# Non centered
+	# Non centred
 	lambda_mu_prior = c(6.2, 1)
 	lambda_sigma_prior =  c(3.3 , 1)
 	lambda_skew_prior =  c(-2.7, 1)
@@ -961,7 +968,7 @@ run_lv_1 = function(internals,
 		# add sample annotation
 		left_join(df %>% distinct(Q, sample), by = "Q")	%>%
 		
-		# If MCMC is used check divergencies as well
+		# If MCMC is used check divergences as well
 		ifelse_pipe(
 			!approximate_posterior,
 			~ .x %>% parse_summary_check_divergence(),
@@ -976,8 +983,17 @@ run_lv_1 = function(internals,
 								filter(`query`) %>%
 								distinct(Q, sample))
 	
+
+	
+	
 	if (do_regression && length(parse_formula(.formula)$covariates) >0 ) 
-		internals$alpha = get_alpha(fit, level, family) 
+		internals$alpha = 
+		get_alpha(fit, level, family) %>% 
+		left_join(
+			get_generated_quantities_standalone(fit, level, internals),
+			by = c("node", "C")
+			
+		)
 	
 	internals$prop = prop
 	internals$fit = list(fit)
@@ -993,9 +1009,8 @@ run_lv_1 = function(internals,
 
 get_theoretical_data_disrtibution = function(fit){
 	
-	fit = res$internals$fit[[1]]
-	
-	m2 <- stan_model(file = "inst/stan/generated_quantities_lv1.stan")
+
+	m2 <- rstan::stan_model(file = "inst/stan/generated_quantities_lv1.stan")
 	
 	
 	# # If those nodes are not in fit add them otherwise generate quantities fails
@@ -1014,5 +1029,4 @@ get_theoretical_data_disrtibution = function(fit){
 	# 	do.call(cbind,.)
 	
 	
-	ff2 <- gqs(m2, draws =  as.matrix(fit), data = MPI_data %>% c(prop_posterior) %>% c(tree_properties))
 }
