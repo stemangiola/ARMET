@@ -846,45 +846,25 @@ ToDataFrameTypeColFull = function(tree, fill = T, ...) {
 	1:(t %$% Get("level") %>% max) %>%
 		map_dfr(
 			~ data.tree::Clone(t) %>%
-					{
-						data.tree::Prune(., function(x)
-							x$level <= .x + 1)
-						.
-					} %>%
-					data.tree::ToDataFrameTypeCol() %>%
-					as_tibble
+				{
+					data.tree::Prune(., function(x)
+						x$level <= .x + 1)
+					.
+				} %>%
+				data.tree::ToDataFrameTypeCol() %>%
+				as_tibble
 			
 		) %>%
 		distinct() %>%
-		ifelse_pipe(
-			fill,
-			~ .x %>%
-				{
-					if ("level_3" %in% ((.) %>% colnames))
-						(.) %>% mutate(level_3 = ifelse(level_3 %>% is.na, level_2, level_3))
-					else
-						(.)
-				} %>%
-				{
-					if ("level_4" %in% ((.) %>% colnames))
-						(.) %>% mutate(level_4 = ifelse(level_4 %>% is.na, level_3, level_4))
-					else
-						(.)
-				} %>%
-				{
-					if ("level_5" %in% ((.) %>% colnames))
-						(.) %>% mutate(level_5 = ifelse(level_5 %>% is.na, level_4, level_5))
-					else
-						(.)
-				} %>%
-				{
-					if ("level_6" %in% ((.) %>% colnames))
-						(.) %>% mutate(level_6 = ifelse(level_6 %>% is.na, level_5, level_6))
-					else
-						(.)
-				}
+		
+		when(
+			fill & ("level_3" %in% colnames(.)) ~ mutate(., level_3 = ifelse(level_3 %>% is.na, level_2, level_3)),
+			fill & ("level_4" %in% colnames(.)) ~ mutate(., level_4 = ifelse(level_4 %>% is.na, level_3, level_4)),
+			fill & ("level_5" %in% colnames(.)) ~ mutate(., level_5 = ifelse(level_5 %>% is.na, level_4, level_5)),
+			fill & ("level_6" %in% colnames(.)) ~ mutate(., level_6 = ifelse(level_6 %>% is.na, level_5, level_6)),
+			TRUE ~ (.)
 		) %>%
-		select(..., everything())
+		dplyr::select(..., everything())
 	
 }
 
@@ -2358,27 +2338,6 @@ summary_to_tibble = function(fit, par, x, y) {
 	
 }
 
-lower_triangular = function(.data){
-	
-	levs = .data$`Cell type category_1` %>% levels
-	
-	.data %>%
-		select(`Cell type category_1`, `Cell type category_2`,    prob) %>%
-		spread(`Cell type category_2` ,   prob) %>% 
-		as_matrix(rownames = "Cell type category_1") %>%
-		
-		# Drop upper triangular
-		{ ma = (.); ma[lower.tri(ma)] <- NA; ma} %>% 
-		
-		as_tibble(rownames = "Cell type category_1") %>% 
-		gather(`Cell type category_2`, prob, -`Cell type category_1`) %>% 
-		mutate(
-			`Cell type category_1` = factor(`Cell type category_1`, levels = levs), 
-			`Cell type category_2` = factor(`Cell type category_2`, levels = levs), 
-		) %>%
-		drop_na
-}
-
 get_alpha_test = function(slope, which_changing, cell_types){
 
 	# Get the alpha matrix
@@ -2777,7 +2736,7 @@ get_generated_quantities_standalone = function(fit, level, internals){
 	)
 	
 	fit2 = rstan::gqs(
-		stanmodels$generated_quantities_lv1,
+		mod,
 		draws =  as.matrix(fit),
 		data = internals$tree_properties
 	) 
