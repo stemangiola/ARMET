@@ -2677,8 +2677,8 @@ prepare_TCGA_input = function(file_name, my_dir){
 		# Select primary tumour
 		inner_join(
 			dir(sprintf("%s/TCGA_harmonised_clinical", my_dir), full.names = T) %>% 
-				map_dfr(~ .x %>% readRDS %>% distinct(sample, definition))  %>% 
-				#filter(definition == "Primary solid Tumor") %>%
+				map_dfr(~ .x %>% readRDS %>% distinct(sample, definition, gender))  %>% 
+				#filter(definition == "Primary solid Tumour") %>%
 				tidyr::extract(sample, into = "sample", regex = "([a-zA-Z0-9]+-[a-zA-Z0-9]+-[a-zA-Z0-9]+-[a-zA-Z0-9]+)") ,
 			by = "sample"
 		) %>%
