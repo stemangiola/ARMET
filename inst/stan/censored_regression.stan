@@ -64,5 +64,8 @@ parameters {
 }
 model {
   time ~ censored_regression(prop_logit_scaled, alpha, phi, cens, which_censored, which_non_censored);
+  to_vector(alpha) ~ student_t(3, 0, 10);
+  phi ~ gamma(0.001, 0.001);
+  
 }
 

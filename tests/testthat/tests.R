@@ -74,8 +74,14 @@ test_that("check nk dataset run",{
 
 	result_nk_fix =
 		ARMET_ref %>%
-		inner_join( (.) %>% filter(`Cell type category` == "nk_primed") %>% distinct(sample) %>% slice(1)) %>%
-		select(-level) %>%
+		inner_join( (.) %>% dplyr::filter(`Cell type category` == "nk_primed") %>% distinct(sample) %>% slice(1:2)) %>%
+		dplyr::select(-level) %>%
+		
+		mutate(count = as.numeric(count)) %>%
+		tidybulk::fill_missing_abundance(sample, symbol, count, fill_with = 0) %>%
+		mutate(count = as.integer(count)) %>%
+		
+	
 		ARMET_tc(
 			.sample = sample,
 			.transcript = symbol,
@@ -85,8 +91,8 @@ test_that("check nk dataset run",{
 		ARMET_tc_continue(2) %>%
 		ARMET_tc_continue(3) %$%
 		proportions %>%
-		filter(level==3) %>%
-		filter(`Cell type category` == "nk_primed") 
+		dplyr::filter(level==3) %>%
+		dplyr::filter(`Cell type category` == "nk_primed") 
 	
 	expect_gt(
 		result_nk_fix %>%

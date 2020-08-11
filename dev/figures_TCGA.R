@@ -132,7 +132,7 @@ pol_p %>%
 
 # Heatmap 1
 hmap_df = 
-	dir("dev", pattern = "^armet_", full.names = T) %>%	grep("regression.rds$", ., value = T) %>%
+	dir("dev/armet_TCGA_Ju29_lv1_beta_lv2_dir/", pattern = "^armet_", full.names = T) %>%	grep("regression.rds$", ., value = T) %>%
 	map_dfr(~ readRDS(.x) %>%
 			# Add relative probability of slope != 0
 			mutate(alpha2_prob =
@@ -741,3 +741,148 @@ plot_grid(p1, p2, p3, p4, p5, p6, nrow = 2 ) %>%
 		height = 150,
 		limitsize = FALSE
 	)
+
+# Pots composition vs association
+data_4_scatter = 
+	dir("dev/armet_TCGA_Ju29_lv1_beta_lv2_dir/", pattern = "^armet_", full.names = T) %>%	grep("regression.rds$", ., value = T) %>%
+	map_dfr(~ readRDS(.x) %>%
+						# Add relative probability of slope != 0
+						mutate(alpha2_prob =
+									 	map_dbl(
+									 		draws_cens, 
+									 		~ .x %>% 
+									 			distinct() %>%
+									 			#filter(A == 2) %>%
+									 			ARMET:::draws_to_prob_non_zero()
+									 	)) %>%
+						
+						mutate(file=.x) %>%
+						nest(data = -file)
+	) %>%
+	unnest(data)  %>% 
+	mutate(log_avg_proportion = map_dbl(proportions, ~ .x %>% pull(.value) %>% boot::logit() %>% mean %>% boot::inv.logit() )) %>%
+	extract(file, c( "cancer_ID", "dummy"), regex = ".*armet_((metastatic_)?[A-Z]+).*") %>%
+	mutate(imm_therapy = if_else(cancer_ID %in% cancer_imm_therapy, T, F)) %>%
+	mutate(imm_therapy = if_else(cancer_ID %in% cancer_imm_therapy, T, F)) %>%
+	left_join(
+		read_csv("dev/survival_TCGA_curated.csv") %>% 
+			filter(DSS_cr==1) %>%
+			group_by(type) %>%
+			summarise(log_mean_exp_DSS = mean(log1p(as.numeric(DSS.time.cr)), na.rm=T) %>% exp) %>% 
+			arrange(log_mean_exp_DSS),
+		by=c("cancer_ID" = "type")
+	)
+	
+
+data_4_scatter %>%
+	filter(`Cell type category` == "immune_cell") %>%
+	ggplot(aes(log_avg_proportion, alpha2_prob, color=log(log_mean_exp_DSS))) +
+	geom_point() +
+	scale_x_continuous(trans = logit) +
+	scale_color_distiller(palette = "Spectral")
+
+	
+# Best cell type
+data_4_violin = 
+	data_4_scatter %>%
+	select(cancer_ID, level, `Cell type category`, log_avg_proportion, alpha2_prob, imm_therapy, log_mean_exp_DSS) %>%
+	nest(data = -c(`Cell type category`, level)) %>%
+	mutate(mean_prob = map_dbl(data, ~.x%>%pull(alpha2_prob) %>% mean)) %>%
+	mutate(sd_prob = map_dbl(data, ~.x%>%pull(alpha2_prob) %>% sd)) %>%
+	nest(lv_data = -level) %>%
+	mutate(lv_data = map(lv_data, ~.x %>% mutate(sd_prob = scale(sd_prob)))) %>%
+	unnest(lv_data) %>%
+	arrange(level, mean_prob %>% desc) %>%
+	mutate(`Cell type category` = factor(`Cell type category`, levels = unique(.$`Cell type category`))) %>%
+	unnest(data) 
+
+p1 = 
+	data_4_violin %>%
+	ggplot(aes(`Cell type category`, alpha2_prob)) + 
+	geom_hline(yintercept = 0) +
+	geom_violin() +
+	geom_point(alpha=0.4) +
+	stat_summary(fun.y=mean, geom="point", size=2, color="red") +
+	facet_grid(.~level, scales = "free_x", space = "free_x")+
+	theme_bw() +
+	theme(
+		panel.border = element_blank(),
+		axis.line = element_line(),
+		panel.grid.major = element_line(size = 0.2),
+		panel.grid.minor = element_line(size = 0.1),
+		text = element_text(size = 10),
+		legend.position = "bottom",
+		axis.text.x = element_blank(),
+		axis.ticks.x = element_blank(),
+		axis.title.x = element_blank(),
+		strip.background = element_blank()
+	)
+
+
+p2 = 
+	data_4_violin %>%
+	ggplot(aes(`Cell type category`, 1, fill=sd_prob)) +
+	geom_tile() +
+	facet_grid(.~level, scales = "free_x", space = "free_x")+
+	scale_fill_gradient2(low ="#440154FF", mid = "#21908CFF", high="#fefada" )  +
+	my_theme
+#+
+	#theme(aspect.ratio = 0.03)
+
+library(patchwork)
+
+p = p1 / p2
+
+ggsave(
+	"dev/best_cell_types.pdf",
+	plot = p,
+	useDingbats=FALSE,
+	units = c("mm"),
+	width = 120 ,
+	height = 183,
+	limitsize = FALSE
+)
+
+# DE analysis for immunotherapies
+type_in_cluster_imm = c("STAD", "KIRP", "DLBC", "KICH", "OV", "ACC", "CESC", "TGCT", "HNSC", "LUSC", "MESO", "BLCA", "mSKCM", "SARC")
+type_in_cluster_brain = c("LGG", "GBM", "UVM", "PRAD", "KIRC", "PCPG", "THYM")
+
+
+(
+	data_4_scatter %>%
+	dplyr::select(cancer_ID, level, `Cell type category`, log_avg_proportion, alpha2_prob, imm_therapy, log_mean_exp_DSS) %>%
+	mutate(cluster = case_when( cancer_ID %in% type_in_cluster_imm ~ 1, cancer_ID %in% type_in_cluster_brain ~ 2, TRUE~3 ) %>% factor ) %>%
+	nest(ct_data = -`Cell type category` ) %>%
+	mutate(fit = map(ct_data, ~ lm( alpha2_prob ~ 0 + cluster , data=.x))) %>%
+	mutate(fit_contrast = map(fit, ~ glht(.x, linfct = matrix(c(1,-1/2,-1/2), nrow = 1)))) %>%
+	mutate(pvalue = map_dbl(fit_contrast, ~.x %>% summary() %$% test %$% pvalues %>% as.numeric())) %>%
+	mutate(coefficient = map_dbl(fit_contrast, ~.x %>% summary() %$% test %$% coefficients %>% as.numeric())) %>%
+	
+	# plot
+	arrange(pvalue) %>%
+	mutate(`Cell type category` = factor(`Cell type category`, levels = .$`Cell type category`)) %>%
+	filter(`Cell type category` %in% c("t_CD4", "nk_primed", "macrophage_M2", "t_gamma_delta", "nk_primed_IL2", "t_CD8_naive") %>% `!`) %>%
+	slice(1:8) %>%
+	unnest(ct_data) %>%
+	ggplot(aes(cluster, alpha2_prob, fill=cluster == 1)) + 
+	geom_boxplot(outlier.shape = NA) +
+	geom_point(size=0.3) +
+	facet_wrap(~`Cell type category`, nrow = 2) +
+	scale_fill_manual(values = c( "grey",  "yellow")) +
+	my_theme
+) %>%
+	ggsave(
+		"dev/immunotherapy_cell_types.pdf",
+		plot = .,
+		useDingbats=FALSE,
+		units = c("mm"),
+		width = 63 ,
+		height = 183,
+		limitsize = FALSE
+	)
+
+	
+	
+
+	
+

@@ -1,4 +1,4 @@
-# Create mix_base withn NA - imputed values
+# Create mix_base within NA - imputed values
 
 library(tidyverse)
 library(magrittr)
@@ -7,9 +7,9 @@ library(furrr)
 library(data.tree)
 library(foreach)
 library(ARMET)
-# plan(multiprocess)
-library(doParallel)
-registerDoParallel(cores=20)
+plan(multiprocess, workers=20)
+# library(doParallel)
+# registerDoParallel(cores=20)
 library(iterators)
 #source("~/PhD/deconvolution/ARMET/R/utils.R")
 #source("~/PostDoc/ppcSeq/R/do_parallel.R")
@@ -213,13 +213,13 @@ get_mix = function(mix_base, slope, which_changing, S){
 	
 }
 
-mix_base = get_noiseless_harmonised()
+# mix_base = get_noiseless_harmonised()
 
-which_is_up_down = 1:16
-
-mixes =
-	which_is_up_down %>%
-	map( ~ get_mix(mix_base, 4, .x, 30))
+# which_is_up_down = 1:16
+# 
+# mixes =
+# 	which_is_up_down %>%
+# 	map( ~ get_mix(mix_base, 4, .x, 30))
 
 #
 # which_is_up_down %>%
@@ -230,91 +230,179 @@ mixes =
 # REGRESSION
 #------------------------------------#
 
-dir("dev", "test_noisless_survival_regression", full.names = T) %>%
-	map_dfr(~ .x %>% readRDS %>% mutate(file=.x))
+# dir("dev", "test_noisless_survival_regression", full.names = T) %>%
+# 	map_dfr(~ .x %>% readRDS %>% mutate(file=.x))
+# 
+# # Plot sample match
+# (
+# 	res_regression$mix %>% attr("proportions") %>%
+# 	mutate(sample = run %>% as.character) %>%
+# 	dplyr::select(-contains("alpha")) %>%
+# 	left_join(res_regression$result$proportions %>% dplyr::select(-draws, -rng, -.variable) %>%
+# 							unnest(proportions) %>% filter(level==3)) %>%
+# 	ggplot(aes(x = p, y = .value, color = `Cell type category`)) +
+# 	geom_abline(intercept = 0 , slope = 1) +
+# 	geom_smooth(method = "lm") +
+# 	geom_errorbar(aes(ymin = .value.lower, ymax = .value.upper), alpha = 0.2) +
+# 	geom_point()
+# ) %>% plotly::ggplotly()
 
-res_regression = readRDS("dev/test_noisless_survival_regression.rds")
-
-CI_to_ARMET = function(.data, CI){
-	
-	foreach(x = .data, i=icount(), .combine = bind_rows) %dopar% {
-		x$result %>%
-			
-			test_differential_composition(credible_interval = CI) %>%
-			#filter(level == 3) %>%
-			inner_join(
-				x$mix %>% attr("proportions") %>% dplyr::distinct(`Cell type category`, alpha_2) %>%
-					
-					# Adapt to the detection of cell imbalance rather than absolute change
-					{
-						my_ct =(.) %>% filter(alpha_2 != 0) %>% pull(`Cell type category`)
-						my_ancestors = ARMET::tree %>% ARMET:::ToDataFrameTypeColFull() %>% filter(level_4 == my_ct) %>% as.character
-						my_cousin = ARMET::tree %>% ARMET:::ToDataFrameTypeColFull() %>% filter(level_3 == my_ancestors[3]) %>% pull(level_4) 
-						my_all = purrr::when(length(my_cousin) > 2 ~ my_ancestors, ~ c(my_ancestors, my_cousin)) %>% unique
-						my_slope = (.) %>% filter(alpha_2!=0) %>% pull(alpha_2)
-						(.) %>% mutate(alpha_2 = if_else(`Cell type category`%in% my_all, my_slope, alpha_2))
-					}	,
-				by = "Cell type category"
-			) %>%
+CI_to_ARMET_one = function(x, CI){
+	x$result %>%
+		#test_differential_composition(credible_interval = CI,  x=  "days", alive = "alive")	%>%
+		get_CI(credible_interval = CI) %>%
+		#filter(level == 3) %>%
+		inner_join(
+			x$mix %>% attr("proportions") %>% dplyr::distinct(`Cell type category`, alpha_2),
+			# %>%
+			# 	
+			# 	# Adapt to the detection of cell imbalance rather than absolute change
+			# 	{
+			# 		my_ct =(.) %>% filter(alpha_2 != 0) %>% pull(`Cell type category`)
+			# 		my_ancestors = ARMET::tree %>% ARMET:::ToDataFrameTypeColFull() %>% filter(level_4 == my_ct) %>% as.character
+			# 		my_cousin = ARMET::tree %>% ARMET:::ToDataFrameTypeColFull() %>% filter(level_3 == my_ancestors[3]) %>% pull(level_4) 
+			# 		my_all = purrr::when(length(my_cousin) > 2 ~ my_ancestors, ~ c(my_ancestors, my_cousin)) %>% unique
+			# 		my_slope = (.) %>% filter(alpha_2!=0) %>% pull(alpha_2)
+			# 		(.) %>% mutate(alpha_2 = if_else(`Cell type category`%in% my_all, my_slope, alpha_2))
+			# 	}	,
+			by = "Cell type category"
+		) %>%
 		#	drop_na  %>%
-			
-			# Calculate
-			mutate(fp = alpha_2 == 0 & significant) %>%
-			mutate(tp = alpha_2 != 0 & significant) %>%
-			
-			mutate(run = i)
 		
-	}
-	
-
+		# Calculate
+		mutate(fp = alpha_2 == 0 & significant) %>%
+		mutate(tp = alpha_2 != 0 & significant) 
 }
 
-# Calculate fpr for regression
+# Calculate for for regression
 regression_ARMET =
-	tibble(CI = c( seq(0.0, 0.85, 0.05), seq(0.85, 0.9999, 0.001))) %>%
-	#slice(1, 10, 30, 100) %>%
-	mutate(roc = map(
-		CI,
-		~ {
-			cat(".")
-			x = CI_to_ARMET(res_regression, .x)
+	dir("dev/test_simulation/", full.names = TRUE) %>%
+	grep("cibersort", ., invert = T, value = T)%>%
+	grep("test_noise_survival_regression",., value = T) %>%
+	future_map_dfr(~ {
+			res_regression = readRDS(.x) 
+			tibble(CI = c( seq(0.0, 0.85, 0.05), seq(0.85, 0.9999, 0.001))) %>%
+				#slice(1, 10, 30, 100) %>%
+				mutate(roc = map(
+					CI,
+					~ {
+						cat(".")
+						x = CI_to_ARMET_one(res_regression, .x)
+						
+						slope_run = x %>% distinct(alpha_2) %>% filter(alpha_2 != 0) %>% pull(alpha_2)
+						
+						x %>%
+							mutate(slope_run = slope_run) %>%
+							
+							# Filter out accidental fp because of simplex
+							filter(!(fp & (slope_run * .value_alpha2_cens )<0))  %>%
+							
+							select(-c( proportions, draws, rng))
 
+					}
+				))
+		}) %>%
+	unnest(roc) %>%
+	mutate(abs_slope_run = abs(slope_run)) %>%
+	nest(data = -c(abs_slope_run, CI)) %>%
+	mutate(real_negative = map_dbl(data, ~ .x %>% filter(alpha_2==0) %>% nrow)) %>%
+	mutate(FP = map_dbl(data, ~ .x %>% filter(fp) %>% nrow)) %>%
+	mutate(real_positive = map_dbl(data, ~ .x %>% filter(alpha_2!=0) %>% nrow )) %>%
+	mutate(TP = map_dbl(data, ~ .x %>% filter(tp) %>% nrow) ) %>%
+	mutate(TP_rate = TP/real_positive, FP_rate = FP/real_negative) %>%
+	
+	select(-data)
+
+
+
+CI_to_others = function(.data, pvalue){
+	.data %>%
+		imap_dfr(
+			~
+				# Integrate
+				.x$result %>%
+				dplyr::select(.cell_type, estimate, 	p.value) %>%
+				left_join(
+					.x$mix %>% attr("proportions") %>% distinct(`Cell type category`, alpha_2),
+					by = c(".cell_type" = "Cell type category"  )
+				) %>%
+				drop_na  %>%
+				
+				# Calculate
+				mutate(fp = alpha_2 == 0 &	p.value < pvalue) %>%
+				mutate(tp = alpha_2 != 0 &	p.value < pvalue) %>%
+				
+				mutate(run = .y)
+			
+		)
+}
+
+regression_cibersort =
+	dir("dev/test_simulation/", full.names = TRUE) %>%
+	grep("cibersort", .,  value = T) %>%
+	enframe(value = "res_cibersort") %>%
+	mutate(CI_df = list(tibble(CI =  rev(1-c( seq(0.0, 0.85, 0.05), seq(0.85, 0.9999, 0.001),seq(0.9999, 0.99999999, 0.000001) ))) )) %>%
+	unnest(CI_df) %>%
+	mutate(roc = future_map2(
+		CI,res_cibersort,
+		~ {
+			x = readRDS(.y) %>% CI_to_others(.x)
+			
 			slope_run = x %>% distinct(alpha_2, run) %>% filter(alpha_2 != 0) %>% rename(slope_run = alpha_2)
+			
 			
 			x %>%
 				left_join(slope_run, by="run") %>%
-				nest(data = -slope_run) %>%
+				mutate(abs_slope_run = abs(slope_run)) %>%
+				
+				
+				# Filter out accidental fp because of simplex
+				filter(!(fp & (slope_run * estimate )<0))  %>%
+			
+				nest(data = -abs_slope_run) %>%
 				mutate(real_negative = map_dbl(data, ~ .x %>% filter(alpha_2==0) %>% nrow)) %>%
 				mutate(FP = map_dbl(data, ~ .x %>% filter(fp) %>% nrow)) %>%
 				mutate(real_positive = map_dbl(data, ~ .x %>% filter(alpha_2!=0) %>% nrow )) %>%
 				mutate(TP = map_dbl(data, ~ .x %>% filter(tp) %>% nrow) ) %>%
 				mutate(TP_rate = TP/real_positive, FP_rate = FP/real_negative) %>%
-			
-				select(-data)
 				
+				select(-data)
+			
+			# x %>% filter(alpha_2 != 0) %>% group_by(alpha_2) %>%
+			# 	summarise(fnr = sum(fn) / n()) %>%
+			# 	mutate(
+			# 		FP_rate =
+			# 			x %>% filter(alpha_2 == 0) %>% select(-alpha_2) %>%
+			# 			summarise(FP_rate = sum(fp) / n()) %>% pull(1)
+			# 	)
 		}
 	))
 
+# merge results
+merged = 
+	regression_ARMET %>%
+	mutate(method="armet") %>%
+	bind_rows(
+		regression_cibersort %>%
+			unnest(roc) %>%
+			mutate(method = "cibersort") 
+	) %>%
+	arrange(FP_rate, TP_rate)
+
+saveRDS(merged, "dev/test_simulation/merged.rda", compress = "xz")
 
 (
-	regression_ARMET %>%
-	mutate(method = "ARMET") %>%
-	unnest(roc) %>%
-	arrange(FP_rate) %>%
-	ggplot(aes(x=FP_rate, y=TP_rate)) +
+	merged %>%
+	ggplot(aes(x=FP_rate, y=TP_rate, color=method)) +
 	geom_abline(intercept = 0, slope = 1, linetype="dotted", color="grey") +
 	geom_line() +
 	scale_color_brewer(palette = "Set1") +
-	facet_wrap(~ slope_run, nrow = 1) +
-	xlim(c(0,1)) +
-		ylim(c(0,1)) +
+	facet_wrap(~ abs_slope_run, nrow = 1) +
+	coord_cartesian(xlim=c(0,0.08), ylim=c(0,1)) +
 	my_theme
-) %>%
-	ggsave(
-		"dev/test_noisless_survival_ROC.pdf",
-		plot = .,
-		useDingbats=FALSE,
-		units = c("mm"),
-		width = 183 ,
-		limitsize = FALSE
-	)
+)
+
+
+# With noise
+
+

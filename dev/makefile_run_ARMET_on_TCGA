@@ -1,5 +1,3 @@
-CORES=24
-MEMORY=30024
 dev/armet_ACC.tcga.harmonized.counts.allgenes.rds.rda:
 	dev/run_armet_on_cancer_type.sh ACC.tcga.harmonized.counts.allgenes.rds
 dev/armet_BLCA.tcga.harmonized.counts.allgenes.rds.rda:

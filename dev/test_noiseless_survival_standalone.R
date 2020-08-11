@@ -1,4 +1,7 @@
 # Create mix_base withn NA - imputed values
+args = commandArgs(trailingOnly=TRUE)
+slope = as.integer(args[1])
+run = as.integer(args[2])
 
 library(tidyverse)
 library(magrittr)
@@ -8,7 +11,9 @@ library(data.tree)
 library(foreach)
 library(ARMET)
 library(nanny)
+library(tidybulk)
 
+plan(multisession, workers=10)
 
 my_theme =
 	theme_bw() +
@@ -75,8 +80,7 @@ generate_mixture = function(.data, X_df, alpha) {
 		exp(x - logsumexp(x))
 	}
 	
-	
-	X = X_df %>% select(intercept, real_days) %>% nanny::as_matrix()
+	X = X_df %>% mutate(real_days = log(real_days)) %>% select(intercept, real_days) %>% nanny::as_matrix()
 	
 	samples_per_run =
 		map_dfr(
@@ -148,10 +152,11 @@ generate_mixture = function(.data, X_df, alpha) {
 		
 		left_join(dirichlet_source %>% nanny::subset(run) ) %>%
 		
-		# Add proportions
-		add_attr(cell_type_proportions, "proportions") %>%
+		mutate(fold_change = fold_change) %>%
 		
-		mutate(fold_change = fold_change)
+		
+		# Add proportions
+		add_attr(cell_type_proportions, "proportions") 
 	
 }
 
@@ -218,16 +223,64 @@ noiseles_test = function(mix_base, slope, which_changing, S) {
 	#%>% saveRDS(sprintf("dev/test_student_noisless_%s", which_is_up_down %>% paste(collapse="_")))
 }
 
+noiseles_test_cibersort = function(mix_base, slope, which_changing, S) {
+	
+	cell_types =  mix_base %>% filter(level ==3) %>% pull(`Cell type category`) %>% unique
+	
+	alpha = get_alpha(slope, which_changing, cell_types)
+	X_df = get_survival_X(S)
+	
+	mix = mix_base %>% generate_mixture(X_df, alpha)
+	
+	rr =
+		mix %>%
+		mutate(`count mix` = as.integer(`count mix`), run = as.character(run)) %>%
+		select(-level) %>%
+		mutate(dead = !alive) %>%
+		tidybulk::test_differential_cellularity(
+			survival::Surv(days, dead) ~ ., 
+			run, symbol, `count mix`, 
+			reference = mix_base %>% 
+				distinct(`Cell type category`, symbol, `count normalised bayes`) %>%
+				spread(`Cell type category`, `count normalised bayes`) %>%
+				nanny::as_matrix(rownames = symbol) %>%
+				as.data.frame
+		)
+	
+	list(mix = mix, result = rr)
+}
+
 mix_base = get_noiseless_harmonised()
 
 which_is_up_down = 1:16
 
-map(which_is_up_down,  ~ noiseles_test(mix_base, 4, .x, 30)) %>%
-c(map(which_is_up_down,  ~ noiseles_test(mix_base, -4, .x, 30))) %>%
-saveRDS("dev/test_noisless_survival_regression_4_slope.rds")
+noiseles_test(mix_base, slope, run, 30) %>%
+	saveRDS(sprintf("dev/test_simulation/test_noisless_survival_regression_%s_%s.rds", slope, run), compress = "gzip")
 
 
-map(which_is_up_down,  ~ noiseles_test(mix_base, 2, .x, 30)) %>%
-	c(map(which_is_up_down,  ~ noiseles_test(mix_base, -2, .x, 30))) %>%
-	saveRDS("dev/test_noisless_survival_regression_2_slope.rds")
+# map(which_is_up_down,  ~ noiseles_test(mix_base, 1, .x, 30)) %>%
+# 	c(map(which_is_up_down,  ~ noiseles_test(mix_base, -1, .x, 30))) %>%
+# 	saveRDS("dev/test_simulation/test_noisless_survival_regression_1_slope.rds")
+# 
+# map(which_is_up_down,  ~ noiseles_test(mix_base, 2, .x, 30)) %>%
+# 	c(map(which_is_up_down,  ~ noiseles_test(mix_base, -2, .x, 30))) %>%
+# 	saveRDS("dev/test_simulationtest_noisless_survival_regression_2_slope.rds")
+# 
+# 
+# map(which_is_up_down,  ~ noiseles_test(mix_base, 4, .x, 30)) %>%
+# c(map(which_is_up_down,  ~ noiseles_test(mix_base, -4, .x, 30))) %>%
+# saveRDS("dev/test_noisless_survival_regression_4_slope.rds")
 
+# future_map(which_is_up_down,  ~ noiseles_test_cibersort(mix_base, 4, .x, 30)) %>%
+# 	c(future_map(which_is_up_down,  ~ noiseles_test_cibersort(mix_base, -4, .x, 30))) %>%
+# 	saveRDS("dev/test_noisless_survival_regression_4_slope_cibersort.rds")
+# 
+# 
+# future_map(which_is_up_down,  ~ noiseles_test_cibersort(mix_base, 2, .x, 30)) %>%
+# 	c(future_map(which_is_up_down,  ~ noiseles_test_cibersort(mix_base, -2, .x, 30))) %>%
+# 	saveRDS("dev/test_noisless_survival_regression_2_slope_cibersort.rds")
+# 
+# 
+# future_map(which_is_up_down,  ~ noiseles_test_cibersort(mix_base, 1, .x, 30)) %>%
+# 	c(future_map(which_is_up_down,  ~ noiseles_test_cibersort(mix_base, -1, .x, 30))) %>%
+# 	saveRDS("dev/test_noisless_survival_regression_1_slope_cibersort.rds")

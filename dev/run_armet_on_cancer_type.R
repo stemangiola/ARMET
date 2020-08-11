@@ -6,11 +6,9 @@ library(ARMET)
 library(furrr)
 library(tidybulk)
 
-plan(multicore)
+plan(multiprocess, workers=15)
 
 # PFI the best
-
-
 
 # read_csv("dev/survival_TCGA_evaluation.csv") %>%
 # 	gather(survival_type, evaluation, c("OS" ,  "PFI" ,  "DFI" ,  "DSS")) %>%
@@ -19,9 +17,9 @@ plan(multicore)
 
 my_dir = "../"
 my_dir = "~/unix3XX/PhD/deconvolution/"   # <----------------------------
+#my_dir = "~/PhD/deconvolution/"   # <----------------------------
 
-
-# # Build HPC list
+# Build HPC list
 # dir(my_dir) %>%
 # 	#grep("_Primary_Tumor", ., value = T) %>%
 # 	gsub(".csv", "", .) %>%
@@ -40,9 +38,24 @@ my_dir = "~/unix3XX/PhD/deconvolution/"   # <----------------------------
 i = "MESO.tcga.harmonized.counts.allgenes.rds"
 i = args[1]
 
+outliers = c("TCGA-12-3652", "TCGA-02-2485", "TCGA-12-0618", "TCGA-19-1390", "TCGA-15-1444", "TCGA-41-2571", "TCGA-28-2499")
+
 
 res = i %>%
-	prepare_TCGA_input(my_dir) %>%
+	ARMET:::prepare_TCGA_input(my_dir) %>%
+	filter(definition == "Primary solid Tumor" ) %>%
+	
+	filter(PFI.time.2 %>% is.na %>% `!`) %>%
+	filter(sample %in% outliers %>% `!`) %>%
+	#mutate_if(is.character, as.factor) %>%
+	
+	# Aggregate duplicates
+	aggregate_duplicates(sample, transcript, count) %>%
+	mutate(alive = PFI.2 == 0) %>%
+	
+	# Filter 0 time
+	filter(PFI.time.2 != 0) %>%
+	
 #	inner_join((.) %>% distinct(sample) %>% slice(1:5)) %>%      # <----------------------------
 	ARMET_tc(
 	~ censored(PFI.time.2, alive),
