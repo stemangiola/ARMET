@@ -597,7 +597,7 @@ filter_reference = function(reference, mix, n_markers) {
 		)
 
 	reference %>%
-		filter(symbol %in% (mix %>% colnames)) %>%
+		filter(symbol %in% (mix %>% distinct(symbol) %>% pull(symbol) )) %>%
 		{
 			bind_rows(
 				# Get markers based on common genes with mix
@@ -716,13 +716,13 @@ parse_summary_check_divergence = function(draws) {
 		mutate(converged = diptest::dip.test(`.value_relative`) %$%	`p.value` > 0.05) %>%
 
 		# If some proportions have not converged chose the most populated one
-		do(
-			(.) %>%
-				ifelse_pipe(
-					(.) %>% distinct(converged) %>% pull(1) %>% `!`,
-					~ .x %>% choose_chains_majority_roule
-				)
-		) %>%
+		# do(
+		# 	(.) %>%
+		# 		ifelse_pipe(
+		# 			(.) %>% distinct(converged) %>% pull(1) %>% `!`,
+		# 			~ .x %>% choose_chains_majority_roule
+		# 		)
+		# ) %>%
 
 		# Anonymous function - add summary fit to converged label
 		# input: tibble
@@ -1202,18 +1202,18 @@ get_MPI_df = function(counts_baseline_to_linear,
 }
 
 ref_mix_format = function(ref, mix) {
-	bind_rows(
+	bind_rows( 
 		# Get reference based on mix genes
 		ref %>% mutate(`query` = FALSE),
+		
+		# Select only markers
 		mix %>%
-			gather(`symbol`, count,-sample) %>%
-			inner_join(ref %>% distinct(symbol), by = "symbol") %>%
-			left_join(ref %>% distinct(symbol, `house keeping`), by = "symbol") %>%
+			inner_join(ref %>% distinct(symbol, `house keeping`), by = "symbol") %>%
 			mutate(`Cell type category` = "query") %>%
 			mutate(`query` = TRUE)
 	)	%>%
 
-		# Add marker symbol indeces
+		# Add marker symbol indexes
 		left_join((.) %>%
 								filter(!`house keeping`) %>%
 								distinct(symbol) %>%
@@ -1674,27 +1674,75 @@ create_design_matrix = function(input.df, formula, sample_column){
 #'
 #'
 parse_formula <- function(fm) {
-	pars = as.character(attr(terms(fm), "variables"))[-1]
+	
+	components = as.character(attr(terms(fm), "variables"))[-1]
 
-	response = NULL
-	if(attr(terms(fm), "response") == 1) response = pars[1]
-	covariates = ifelse(attr(terms(fm), "response") == 1, pars[-1], pars)
+	components_formatted = 
+		components %>% 
+		map_chr(~ .x %>% 
+							gsub("censored\\(|\\)| ", "", .) %>% 
+							str_split("\\,") %>% .[[1]] %>% .[1]
+		) 
+	
+	covariates_formatted = components_formatted %>% when(attr(terms(fm), "response") == 1 ~ (.)[-1], (.))
+	response_formatted = components_formatted %>% when(attr(terms(fm), "response") == 1 ~ (.)[1])
+	
+	censored_formatted= 
+		components %>% 
+		grep("censored", ., value = T) %>% 
+		map_chr(~ .x %>% 
+							gsub("censored\\(|\\)| ", "", .) %>% 
+							str_split("\\,") %>% .[[1]] %>% .[1]
+					) 
+	
+	censored_column = 
+		components %>% 
+		grep("censored(", ., fixed = T, value = T)  %>% 
+		gsub("censored\\(|\\)| ", "", .) %>% str_split("\\,") %>% 
+		when(length(.)>0 ~(.) %>% .[[1]] %>% .[-1])
+	censored_value_column = 
+		components%>% grep("censored(", ., fixed = T, value = T)  %>% 
+		gsub("censored\\(|\\)| ", "", .) %>% str_split("\\,") %>% 
+		when(length(.)>0 ~(.) %>% .[[1]]%>% .[1])
+	
+	
+	formula_formatted =
+		Reduce(paste, deparse(fm)) %>%
+		gsub( grep( "censored", components, value = T), censored_formatted, ., fixed = T)	 %>%
+		as.formula
+	
+	formula_censored_formatted =
+		Reduce(paste, deparse(fm)) %>%
+		gsub( grep( "censored", components, value = T), "proportion", ., fixed = T)	 %>%
+		sprintf("%s%s", censored_formatted, .) %>%
+		as.formula
 
 	list(
-		response = response,
-		covariates = covariates
+		components = components,
+		components_formatted = components_formatted,
+		covariates_formatted = covariates_formatted,
+		response_formatted = response_formatted,
+		censored_formatted = censored_formatted,
+		censored_column = censored_column,
+		censored_value_column = censored_value_column,
+		formula_formatted = formula_formatted,
+		formula_censored_formatted = formula_censored_formatted
 	)
 }
 
 rebuild_last_component_sum_to_zero = function(.){
-	
+	 
 	(.) %>%
 		nest(data = -c(.variable, A)) %>%
 		mutate(data = map(data, ~.x %>%
 												mutate(C = C +1) %>%
+												
+												# Add a 0 component, the first one
 												bind_rows({
 													
 													(.) %>%
+														
+														# Select one of the C does not matter
 														filter(C ==2) %>%
 														mutate(C = rep(1, n())) %>%
 														mutate(.value = rep(0, n())) 
@@ -1982,7 +2030,7 @@ get_tree_properties = function(tree){
 
 #' @importFrom tidygraph tbl_graph
 cluster_posterior_slopes = function(.data, credible_interval = 0.67){
-	  
+	   
 	# Add cluster info to cell types per node
 	.data %>%
 		filter(.variable %>% is.na %>% `!`) %>%
@@ -1996,7 +2044,7 @@ cluster_posterior_slopes = function(.data, credible_interval = 0.67){
 						# Unnest data
 						(.) %>% 
 							extract_CI(credible_interval) %>%
-							select(-c(proportions  ,   draws ,      rng )) %>%
+							select(-c(proportions  ,   draws ,      rng_prop               )) %>%
 							
 							# Build combination of cell types
 							combine_nest(
@@ -2099,8 +2147,7 @@ identify_baseline_by_clustering = function(.data, CI){
 }
 
 extract_CI =  function(.data, credible_interval = 0.90){
-	
-	non_cens = 
+	 
 		.data %>%
 		mutate(regression = map(draws,
 														~ .x %>%
@@ -2120,15 +2167,24 @@ extract_CI =  function(.data, credible_interval = 0.90){
 			.data %>%
 				mutate(regression = map(draws_cens,
 																~ .x %>%
+																	group_by(A) %>% 
 																	mutate(.draw = 1:n()) %>%
 																	select(-one_of(".draw2")) %>%
+																	
+																	nest(draws = -c(A)) %>%
+																	
+																	mutate(prob_non_0 = map_dbl(draws, ~.x %>% draws_to_prob_non_zero)) %>%
+																	mutate(draws = map(draws, ~.x %>% tidybayes::mean_qi())) %>%
+																	unnest(draws) %>%
+																	
+																	
 																	#group_by(.chain ,.iteration, .draw) %>%
-																	tidybayes::median_qi(.width = credible_interval) %>%
-																	ungroup() %>%
-																	rename(.value_alpha2_cens = .value, .lower_alpha2_cens = .lower, .upper_alpha2_cens =   .upper)
+																	# tidybayes::median_qi(.width = credible_interval) %>%
+																	# ungroup() %>%
+																	pivot_wider(names_from = A, values_from=c(.value, .lower, .upper,prob_non_0 ))
 				)) %>%
 				unnest(cols = c(regression)) %>%
-				select(C, `Cell type category`,.value_alpha2_cens ,.lower_alpha2_cens, .upper_alpha2_cens)
+				select(C, `Cell type category`,starts_with(".value"), ,starts_with(".upper"), ,starts_with(".lower"), starts_with("prob_non_0"))
 			
 		), 
 		~ (.))
@@ -2535,48 +2591,50 @@ run_censored_model_iterative = function(.data){
 	
 	rstan::sampling(
 		stanmodels$censored_regression,
-		data = .data, chain = 1, iter=150+sampling_iter, warmup=150, save_warmup=F, refresh = 2000, init="0")  %>% 
-		rstan::extract("alpha") %>% 
-		as.data.frame() %>% 
-		select(contains("alpha.2")) %>%
-		rowid_to_column(".draw2") %>%
-		pivot_longer(cols = contains("alpha"), names_sep = "\\.", names_to = c("par", "A", "C")) %>%
-		mutate(A = as.integer(A), C = as.integer(C)) %>%
-		select(-par) %>%
-		mutate(C = rep(!!.data[["colnames_prop_logit_scaled"]] %>% as.integer, sampling_iter) )
+		data = .data, chain = 1, iter=150+sampling_iter, warmup=150, save_warmup=F, refresh = 2000, init="0"
+	)   %>%
+		tidybayes::gather_draws(alpha[A, C]) %>%
+		ungroup() %>%
+		rename(value = .value, .draw2 = .draw) %>%
+		select(-.variable, -.chain, -.iteration) %>%
+	
+		# Change C 
+		nest(data = -C) %>%
+		mutate(C = !!.data$prop_C_names %>% as.integer)  %>%
+		unnest(data) 
 	
 }
 
 run_censored_model = function(.data, sampling = F){
-	
+	 
 	if(sampling)
 		rstan::sampling(
 			stanmodels$censored_regression,
 			data = .data) %>%
 		tidybayes::gather_draws(alpha[A, C]) %>%
-		filter(A==2)  %>%
-		nest(draws = everything()) %>%
+	#	filter(A==dim(.data$X[1]))  %>%
+		nest(draws = -c(A, C)) %>%
 		
 		mutate(prob_non_0 = map_dbl(draws, ~.x %>% draws_to_prob_non_zero)) %>%
 		mutate(draws = map(draws, ~.x %>% tidybayes::mean_qi())) %>%
 		unnest(draws) %>%
 		
-		mutate(C = !!.data[["colnames_prop_logit_scaled"]] %>% as.integer)  %>%
+		#mutate(C = !!.data[["colnames_prop_logit_scaled"]] %>% as.integer)  %>%
 		rename(value = .value)
 	else
 		run_censored_model_iterative(.data)
 	
 }
 
-make_cens_data = function(.data, x, alive){
+make_cens_data = function(.data, formula_df){
 	
-	x = enquo(x)
-	alive = enquo(alive)
+	# x = enquo(x)
+	# alive = enquo(alive)
 	
 	# For Cibersort
 	scale_sd_0_robust = function(y) (y - mean(y)) / sd(y) ^ as.logical(sd(y))
 	
-	# ELIMINATE I HAVE TO SOLVE THIS ISSUE
+	# ELIMINATE I HAVE TO SOLVE THIS ISSUE OF NAs
 	#####################
 	to_eliminate = 
 		.data %>% 
@@ -2593,32 +2651,40 @@ make_cens_data = function(.data, x, alive){
 		# Eliminate samples with NA
 		filter(sample %in% to_eliminate %>% `!`) %>%
 		
-		filter(!!x %>% is.na %>% `!`)
+		filter(!!as.symbol(formula_df$censored_value_column) %>% is.na %>% `!`)
 	
 	##########################
 	
 	.data = .data %>% arrange(sample)
 	
+	
+
+	
+	X  = 
+		.data %>%
+		rename(proportion = .value_relative) %>%
+		arrange(sample) %>%
+		nest(prop_df = -C) %>%
+		
+		# Scale
+		mutate(prop_df = map(prop_df, ~ mutate(.x, proportion %>% boot::logit() %>% scale(scale = F)))) %>%
+		mutate(design = map(prop_df, ~ model.matrix(formula_df$formula_censored_formatted, data=.x) )) %>%
+		pull(design) %>%
+		abind::abind(along=3)  %>% 
+		aperm(perm = c(3, 1, 2)) 
+	
+	
 	S = .data %>% distinct(sample) %>% nrow
 	C = .data %>% distinct(C) %>% nrow
-	A = 2
+	A = ncol(X[1,,])
 	
-	prop_logit_scaled  = 
-		.data %>%
-		
-		distinct(sample, C, .value_relative) %>%
-		group_by(C) %>% 
-		mutate(.value_relative = .value_relative %>% boot::logit() %>% scale(scale = F)) %>%
-		spread( C, .value_relative) %>%
-		nanny::as_matrix(rownames = sample)
+	sample_subset =  .data %>% nanny::subset(sample) %>% arrange(sample)
 	
-	sample_subset =  .data %>% distinct(sample, !!x, !!alive)
-	
-	time = sample_subset %>% mutate(time = !!x %>% log1p %>% scale %>% as.numeric) %>% pull(time) %>% as.array()
-	cens =sample_subset %>% pull(!!alive) %>% as.array();
+	time = sample_subset %>% mutate(time = !!as.symbol(formula_df$censored_value_column) %>% log1p %>% scale %>% as.numeric) %>% pull(time) %>% as.array()
+
 	#	print(.y)
-	which_censored = sample_subset %>% pull(!!alive) %>% equals(1) %>% which() %>% as.array()
-	which_non_censored = sample_subset %>% pull(!!alive) %>% equals(0) %>% which() %>% as.array()
+	which_censored = sample_subset %>% pull(!!as.symbol(formula_df$censored_column)) %>% equals(1) %>% which() %>% as.array()
+	which_non_censored = sample_subset %>% pull(!!as.symbol(formula_df$censored_column)) %>% equals(0) %>% which() %>% as.array()
 	n_cens = length(which_censored)
 	n_non_cens = length(which_non_censored)
 	
@@ -2627,25 +2693,24 @@ make_cens_data = function(.data, x, alive){
 		C = C,
 		A = A,
 		time = time,
-		cens = cens,
-		prop_logit_scaled = prop_logit_scaled,
+		X = X,
 		which_censored = which_censored,
 		which_non_censored = which_non_censored,
 		n_cens = n_cens,
 		n_non_cens = n_non_cens,
-		colnames_prop_logit_scaled = colnames(prop_logit_scaled)
+		prop_C_names = .data %>% distinct(C) %>% arrange(C) %>% pull(C)
 	)
 	
 }
 
-censored_regression = function(.proportions, sampling = F, x, alive){
-	 
-	x = as.symbol(x)
-	alive = as.symbol(alive)
+censored_regression = function(.proportions, sampling = F, formula_df, filter_how_many = Inf){
+	  
+	# x = as.symbol(x)
+	# alive = as.symbol(alive)
 	
 	.proportions %>%
 		
-		select(sample, !!x, level, !!alive, node, C, .draws) %>%
+		select(sample, formula_df$components_formatted, level, !!formula_df$censored_column, node, C, .draws) %>%
 		filter(node %>% is.na %>% `!`) %>%
 		unnest(.draws) %>%
 		nest(data = -c(node , level,  .chain, .iteration, .draw)) %>%
@@ -2653,24 +2718,27 @@ censored_regression = function(.proportions, sampling = F, x, alive){
 		# Sample half if sampling FALSE
 		when(sampling == F ~ (.) %>% group_by(node) %>% sample_frac(0.5) %>% ungroup(), ~ (.)) %>%
 		
+		when(filter_how_many < nrow(.) ~ sample_n(filter_how_many), ~ (.)) %>%
 		# Create input for the model
-		mutate(input = imap(data, ~ { make_cens_data(.x, !!x, !!alive)})) %>%
+		mutate(input = imap(data, ~ { make_cens_data(.x, formula_df)})) %>%
 		
 		# Run model
 		mutate(cens_regression = imap(input, ~{ print(.y); run_censored_model(.x, sampling)})) %>%
 		select(-data , - input) %>%
 		unnest(cens_regression) %>%
 		rename(.value = value) %>%
-		select(level, node, C, .chain, .iteration, .draw, .value, one_of(".draw2", ".lower", ".upper", "prob_non_0")) %>%
+		select(level, node, C, A, .chain, .iteration, .draw, .value, one_of(".draw2", ".lower", ".upper", "prob_non_0")) %>%
 		distinct() 
 
 }
 
 prepare_TCGA_input = function(file_name, my_dir){
-	
+	 
 		readRDS(sprintf("%s/TCGA_harmonised/%s", my_dir, file_name)) %>%
 		as_tibble(rownames = "ens") %>%
-		gather(sample, count, -ens) %>%
+		ensembl_to_symbol(ens) %>%
+
+		gather(sample, count, -ens, -transcript) %>%
 		mutate(count = as.integer(count)) %>%
 		tidyr::extract(sample, into = "sample", regex = "([a-zA-Z0-9]+-[a-zA-Z0-9]+-[a-zA-Z0-9]+-[a-zA-Z0-9]+)") %>%
 		
@@ -2679,18 +2747,22 @@ prepare_TCGA_input = function(file_name, my_dir){
 			dir(sprintf("%s/TCGA_harmonised_clinical", my_dir), full.names = T) %>% 
 				map_dfr(~ .x %>% readRDS %>% distinct(sample, definition, gender))  %>% 
 				#filter(definition == "Primary solid Tumour") %>%
-				tidyr::extract(sample, into = "sample", regex = "([a-zA-Z0-9]+-[a-zA-Z0-9]+-[a-zA-Z0-9]+-[a-zA-Z0-9]+)") ,
+				tidyr::extract(sample, into = "sample", regex = "([a-zA-Z0-9]+-[a-zA-Z0-9]+-[a-zA-Z0-9]+-[a-zA-Z0-9]+)") %>%
+				tidyr::extract(sample, into = "patient", regex = "([a-zA-Z0-9]+-[a-zA-Z0-9]+-[a-zA-Z0-9]+)", remove=FALSE) 	,
 			by = "sample"
 		) %>%
-		tidyr::extract(sample, into = "patient", regex = "([a-zA-Z0-9]+-[a-zA-Z0-9]+-[a-zA-Z0-9]+)", remove=FALSE) %>%
-		ensembl_to_symbol(ens) %>%
 		left_join(
 			read_csv("dev/survival_TCGA_curated.csv") %>% 
 				#select(bcr_patient_barcode, type, PFI.2, PFI.time.2) %>%
 				mutate_each(function(x) ifelse(x == "#N/A", NA, x)) %>%
-				type_convert(), 
+				type_convert() %>%
+				
+				# Subset otherwise dataset too big
+				select(bcr_patient_barcode, type, PFI.time.2, PFI.2), 
 			by = c("patient" = "bcr_patient_barcode")
-		) 
+		) %>%
+		select(-sample) %>%
+		mutate_if(is.character, as.factor)
 }
 
 draws_to_prob_non_zero = function(.data){

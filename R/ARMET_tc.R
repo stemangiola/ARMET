@@ -180,7 +180,7 @@ ARMET_tc = function(.data,
 										do_regression = T, 
 										prior_survival_time = c(),
 										model = stanmodels$ARMET_tc_fix_hierarchical) {
-	
+	 
 	# At the moment is not active
 	full_bayesian = F
 	
@@ -205,7 +205,7 @@ ARMET_tc = function(.data,
 	names_taken = c("level") 
 	if(.data %>% colnames %in% names_taken %>% any) stop(sprintf("ARMET says: your input data frame includes reserved column names: %s", names_taken))
 	
-	# Checkif count is integer
+	# Check if count is integer
 	if(.data %>% select(count) %>% lapply(class) %>% unlist() %>% equals("integer") %>% `!`)
 		stop(sprintf("ARMET says: the %s column must be integer as the deconvolution model is Negative Binomial", quo_name(.abundance)))
 	
@@ -213,13 +213,10 @@ ARMET_tc = function(.data,
 	if(family %in% c("dirichlet", "beta") %>% any %>% `!`) stop("ARMET says: Please choose between dirichlet or beta families")
 	
 	# Covariate column
-	cov_columns =
-		parse_formula(.formula)$covariates %>%
-		map_chr(~ .x %>% gsub("censored\\(|\\)| ", "", .) %>% str_split("\\,") %>% `[[` (1) %>% `[` (1)) %>%
-		ifelse_pipe((.) %>% is.null, ~ c())
+	formula_df = parse_formula(.formula)
 	
-	# Do regresson
-	if(length(cov_columns) > 0 & (cov_columns %>% is.na %>% `!`)) do_regression = T
+	# Do regression
+	if(length(formula_df$covariates_formatted) > 0 & (formula_df$covariates_formatted %>% is.na %>% `!`)) do_regression = T
 	
 	# distinct_at is not released yet for dplyr, thus we have to use this trick
 	df_for_edgeR <- .data %>%
@@ -234,7 +231,7 @@ ARMET_tc = function(.data,
 		select(symbol,
 					 sample,
 					 count,
-					 one_of(cov_columns)) %>%
+					 one_of(formula_df$covariates_formatted)) %>%
 		distinct() %>%
 		
 		# Check if data rectangular
@@ -245,18 +242,16 @@ ARMET_tc = function(.data,
 		)
 	
 	# Censoring column
-	.cens_column = parse_formula(.formula)$covariates %>% grep("censored(", ., fixed = T, value = T)  %>% gsub("censored\\(|\\)| ", "", .) %>% str_split("\\,") %>% ifelse_pipe(length(.)>0, ~.x %>% `[[` (1) %>% `[` (-1), ~NULL)
-	.cens_value_column = parse_formula(.formula)$covariates %>% grep("censored(", ., fixed = T, value = T)  %>% gsub("censored\\(|\\)| ", "", .) %>% str_split("\\,") %>% ifelse_pipe(length(.)>0, ~.x %>% `[[` (1) %>% `[` (1), ~NULL)
-	
-	if(length(.cens_column) == 1) {
-		cens = .data %>% select(sample, .cens_column) %>% distinct %>% arrange(sample) %>% pull(2)
+
+	if(length(formula_df$censored_column) == 1) {
+		cens = .data %>% select(sample, formula_df$censored_column) %>% distinct %>% arrange(sample) %>% pull(2)
 		
 		# Check cens right type
 		if(typeof(cens) %in% c("integer", "logical") %>% any %>% `!`) stop("ARMET says: censoring variable should be logical of integer (0,1)")
 		if(length(prior_survival_time) == 0) stop("AMET says: you really need to provide third party survival time for your condition/disease")
 		
-		sd_survival_months = .data %>%  select(sample, .cens_value_column) %>% distinct %>% pull(.cens_value_column) %>% sd
-		df_for_edgeR = df_for_edgeR %>% mutate(!!.cens_value_column := !!as.symbol(.cens_value_column) / sd_survival_months)
+		sd_survival_months = .data %>%  select(sample, formula_df$censored_value_column) %>% distinct %>% pull(formula_df$censored_value_column) %>% sd
+		df_for_edgeR = df_for_edgeR %>% mutate(!!formula_df$censored_value_column := !!as.symbol(formula_df$censored_value_column) / sd_survival_months)
 		prior_survival_time = prior_survival_time / sd_survival_months
 		
 	}
@@ -264,21 +259,16 @@ ARMET_tc = function(.data,
 		cens = NULL
 	} 
 	
-	# Create design matrix
-	if(length(cov_columns) > 0 & (cov_columns %>% is.na %>% `!`)) my_formula = as.formula( paste("~",paste(cov_columns, collapse = "+")))
-	else my_formula = .formula
-	
 	X =
 		model.matrix(
-			object = 	my_formula,
-			data = df_for_edgeR %>% select(sample, one_of(cov_columns)) %>% distinct %>% arrange(sample)
+			object = 	formula_df$formula_formatted,
+			data = df_for_edgeR %>% select(sample, one_of(formula_df$covariates_formatted)) %>% distinct %>% arrange(sample)
 		)
 	
 	mix =
 		.data %>%
-		select(sample, symbol, count, one_of(parse_formula(.formula)$covariates)) %>%
-		distinct() %>%
-		spread(symbol, count)
+		select(sample, symbol, count, one_of(formula_df$covariates_formatted)) %>%
+		distinct() 
 	
 	shards = cores #* 2
 	is_level_in = shards %>% `>` (0) %>% as.integer
@@ -294,7 +284,7 @@ ARMET_tc = function(.data,
 	# For G house keeing first
 	# For GM level 1 first
 	
-	Q = mix %>% nrow
+	Q = mix %>% distinct(sample) %>% nrow
 	
 	reference_filtered =
 		ARMET::ARMET_ref %>%
@@ -341,7 +331,8 @@ ARMET_tc = function(.data,
 			X = X,
 			cens = cens,
 			tree_properties = tree_propeties,
-			prior_survival_time = prior_survival_time
+			prior_survival_time = prior_survival_time,
+			formula_df = formula_df
 		) 
 	
 	internals = 
@@ -680,24 +671,26 @@ add_cox_test = function(.data, x, alive){
 }
 
 #' @export
-test_differential_composition = function(.data, credible_interval = 0.90, cluster_CI = 0.55, x, alive) {
-
-	
+test_differential_composition = function(.data, credible_interval = 0.90, cluster_CI = 0.55) {
+      
+	# x = .data$internals$formula_df$components_formatted
+	# alive = .data$internals$formula_df$censored_column
+	# 	
 	cens_alpha = 
 		.data$proportions %>% 
-		select(-draws, -rng) %>%
+		select(-draws, -contains("rng")) %>%
 		rename(node = .variable)  %>% 
 		unnest(proportions) %>%
-		censored_regression(x = x, alive = alive)  %>% 
+		censored_regression(formula_df = .data$internals$formula_df, filter_how_many = Inf)  %>% 
 		rename(.variable = node) %>%
 		nest(draws_cens = -c(level, .variable  ,      C)) 
-	
+	 
 	.d = 
 		.data$proportions %>%
 		filter(.variable %>% is.na %>% `!`) %>%
 		left_join(cens_alpha, by = c("level", "C", ".variable")) %>%
 		cluster_posterior_slopes(credible_interval = cluster_CI) %>%
-		extract_CI(credible_interval)
+		extract_CI(credible_interval = credible_interval)
 	
 	dx = list()	
 	
@@ -710,8 +703,8 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 		mutate(fold_change_ancestor = 0) %>%
 		identify_baseline_by_clustering( ) %>%
 		
-		mutate(significant = ((.lower_alpha2_cens - 0) * (.upper_alpha2_cens - 0)) > 0) %>%
-		mutate(fold_change  = ifelse(significant, .value_alpha2_cens, 0))
+		mutate(significant = ((.lower_2 - 0) * (.upper_2 - 0)) > 0) %>%
+		mutate(fold_change  = ifelse(significant, .value_2, 0))
 	
 	# Level 2
 	if(.d %>% filter(level ==2) %>% nrow %>% `>` (0))
@@ -723,8 +716,8 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change),  by = "ancestor" )  %>%
 				identify_baseline_by_clustering( ) %>%
 				
-				mutate(significant = ((.lower_alpha2_cens - 0) * (.upper_alpha2_cens - 0)) > 0) %>%
-				mutate(fold_change  = ifelse(significant, .value_alpha2_cens, 0))
+				mutate(significant = ((.lower_2 - 0) * (.upper_2 - 0)) > 0) %>%
+				mutate(fold_change  = ifelse(significant, .value_2, 0))
 		) 
 	
 	
@@ -738,8 +731,8 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) ,  by = "ancestor")  %>%
 				identify_baseline_by_clustering( ) %>%
 				
-				mutate(significant = ((.lower_alpha2_cens - 0) * (.upper_alpha2_cens - 0)) > 0) %>%
-				mutate(fold_change  = ifelse(significant, .value_alpha2_cens, 0))
+				mutate(significant = ((.lower_2 - 0) * (.upper_2 - 0)) > 0) %>%
+				mutate(fold_change  = ifelse(significant, .value_2, 0))
 		)
 	
 	# Level 4
@@ -752,8 +745,8 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) ,  by = "ancestor")  %>%
 				identify_baseline_by_clustering( ) %>%
 				
-				mutate(significant = ((.lower_alpha2_cens - 0) * (.upper_alpha2_cens - 0)) > 0) %>%
-				mutate(fold_change  = ifelse(significant, .value_alpha2_cens, 0))
+				mutate(significant = ((.lower_2 - 0) * (.upper_2 - 0)) > 0) %>%
+				mutate(fold_change  = ifelse(significant, .value_2, 0))
 		)
 	
 	dx
@@ -908,7 +901,7 @@ run_lv_1 = function(internals,
 										do_regression = do_regression,
 										family = family,
 										.formula = .formula, model = stanmodels$ARMET_tc_fix_hierarchical){
-	res1 = run_model(
+	res1 = run_model( 
 		internals$reference_filtered,
 		internals$mix,
 		shards,
