@@ -1,0 +1,67 @@
+MEMORY=40024
+CORES=12
+
+dev/armet_ACC.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh ACC.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_BLCA.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh BLCA.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_BRCA.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh BRCA.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_CESC.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh CESC.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_CHOL.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh CHOL.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_COAD.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh COAD.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_DLBC.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh DLBC.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_ESCA.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh ESCA.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_GBM.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh GBM.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_HNSC.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh HNSC.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_KICH.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh KICH.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_KIRC.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh KIRC.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_KIRP.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh KIRP.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_LGG.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh LGG.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_LIHC.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh LIHC.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_LUAD.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh LUAD.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_LUSC.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh LUSC.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_MESO.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh MESO.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_OV.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh OV.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_PAAD.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh PAAD.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_PCPG.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh PCPG.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_PRAD.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh PRAD.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_READ.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh READ.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_SARC.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh SARC.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_SKCM.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh SKCM.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_STAD.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh STAD.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_TGCT.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh TGCT.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_THCA.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh THCA.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_THYM.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh THYM.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_UCEC.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh UCEC.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_UCS.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh UCS.tcga.harmonized.counts.allgenes.rds 1
+dev/armet_UVM.tcga.harmonized.counts.allgenes.rds_gender.rda:
+	dev/run_armet_on_cancer_type.sh UVM.tcga.harmonized.counts.allgenes.rds 1
