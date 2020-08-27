@@ -62,14 +62,6 @@ my_theme =
 # load("dev/armet_UCS.tcga.harmonized.counts.allgenes.rds.rda" )
 # dc8 = test_differential_composition(res) 
 
-which_files = dir("dev", pattern = "^armet_", full.names = T) %>%	grep("rda$", ., value = T) %>%
-	setdiff(dir("dev", pattern = "^armet_", full.names = T) %>%	grep("regression.rds$", ., value = T) %>% gsub("_regression.rds$", "", .))
-
-dc = 
-	foreach(i =	which_files ) %do% {
-	load(i)
-	test_differential_composition(res) %>% saveRDS(sprintf("%s_regression.rds", i))
-}
 
 # Polar
 pol_p = 
@@ -882,7 +874,117 @@ type_in_cluster_brain = c("LGG", "GBM", "UVM", "PRAD", "KIRC", "PCPG", "THYM")
 	)
 
 	
+# Gender analyses
+gender = 
+	dir("dev", pattern = "lv_4_gender_regression.rds", full.names = T) %>%
+	map_dfr(~ .x %>% readRDS %>% mutate(file=.x)) 
+
+
+# Abundance
+gender %>%
+
+	# Order
+	arrange(desc(abs(.value_3))) %>% 
+	dplyr::slice(1:10) %>%
 	
+	# unnest
+	select(file, 2:5, prob_non_0_3, proportions) %>%
+	unnest(proportions) %>%
+	
+	# Filter rare
+	group_by(type, `Cell type category`) %>%
+	mutate(mean_abu = mean(boot::logit(.value))) %>%
+	ungroup() %>%
+	filter(mean_abu > -10) %>%
+	
+	# plot
+	unite("pair", c(`Cell type category`, type), remove = F) %>%
+	mutate(pair = factor(pair, levels = unique(.$pair))) %>%
+	
+	ggplot(aes(pair, .value, fill=gender)) +
+	geom_split_violin(trim = TRUE) +
+	geom_boxplot( width = 0.25, notch = FALSE, notchwidth = .4, outlier.shape = NA, coef=0) +
+	scale_y_continuous(trans=logit) +
+	my_theme
+
+
+
+# Gender association
+gender %>%
+	
+	# Order
+	arrange(desc(abs(prob_non_0_4))) %>% 
+	dplyr::slice(1:10) %>%
+	
+	# unnest
+	select(file, 2:5, .value_4, prob_non_0_4, proportions) %>%
+	
+	mutate(proportions = map(
+		proportions,
+		~ .x %>%
+			mutate(med_prop = median(.value_relative)) %>%
+			mutate(high = .value_relative > med_prop) %>%
+			mutate(dead = !alive) %>%
+			unite(col = "high_gender", c(high, gender))
+	)) %>%
+	
+	# Execute model
+	mutate(fit = map(proportions,
+									 ~
+									 	survival::survfit(
+									 		survival::Surv(PFI.time.2, dead) ~ high_gender,
+									 		data = .x
+									 	))) %>%
+	
+	# Calculate p-value
+	mutate(pvalue = map2(
+		proportions, fit,
+		~ survminer::surv_pvalue(.y, data = .x)
+	)) %>%
+
+	# Execute plot
+	mutate(plot_df =  map2(
+		proportions, fit,
+		~ survminer::ggsurvplot(
+			fit = .y,
+			.x ,
+			risk.table = FALSE,
+			conf.int = T,
+			combine = TRUE,
+			legend = "bottom",
+			pval = F
+		)
+	)) %>%
+	
+	pull(plot_df) %>%
+	.[[3]]
 
 	
+	unnest(proportions) %>%
+	
+	# Filter rare
+	group_by(type, `Cell type category`) %>%
+	mutate(mean_abu = mean(boot::logit(.value))) %>%
+	ungroup() %>%
+	filter(mean_abu > -10) %>%
+	
+	# plot
+	unite("pair", c(`Cell type category`, type), remove = F) %>%
+	mutate(pair = factor(pair, levels = unique(.$pair))) %>%
+	
+	ggplot(aes(pair, .value, fill=gender)) +
+	geom_split_violin(trim = TRUE) +
+	geom_boxplot( width = 0.25, notch = FALSE, notchwidth = .4, outlier.shape = NA, coef=0) +
+	scale_y_continuous(trans=logit) +
+	my_theme
 
+
+
+
+# Stratify the data
+nanny::nest_subset(
+	data = -c(type, `Cell type category`, .draw), 
+	.exclude = dead
+) %>%
+	
+	# Define the split
