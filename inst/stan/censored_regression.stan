@@ -17,15 +17,15 @@ functions {
 	  
 	}
 	
-	real censored_regression_lpdf(vector time, matrix prop, matrix alpha, row_vector phi, int[] is_censored, int[] which_censored, int[] which_non_censored){
+	real censored_regression_lpdf(vector time, matrix[] X, matrix alpha, row_vector phi, int[] which_censored, int[] which_non_censored){
 		
-		int C = cols(prop);
-		int S = rows(prop);
+		int C = size(X);
+		int S = rows(X[1]);
 		matrix[S,C] mu;
 		real lp = 0;
 	
 		// For each cell type
-		for(s in 1:S) for(c in 1:C) mu[s,c] = alpha[1,c] + (prop[s,c]) * alpha[2,c];
+	for(c in 1:C) mu[,c] = X[c] * alpha[,c];
 	
 	 // print((rep_matrix(time[which_censored], C)));
 	 // print((mu[which_censored]));
@@ -48,8 +48,7 @@ data {
  	int A; // factors of interest
  	
 	vector[S] time;
-	int cens[S];
-	matrix[S, C] prop_logit_scaled;
+	matrix[S, A] X[C];
 	
 	// Censoring
 	int	n_cens;
@@ -63,6 +62,9 @@ parameters {
   row_vector<lower=0>[C] phi;
 }
 model {
-  time ~ censored_regression(prop_logit_scaled, alpha, phi, cens, which_censored, which_non_censored);
+  time ~ censored_regression(X, alpha, phi, which_censored, which_non_censored);
+  to_vector(alpha) ~ student_t(3, 0, 10);
+  phi ~ gamma(0.001, 0.001);
+  
 }
 
