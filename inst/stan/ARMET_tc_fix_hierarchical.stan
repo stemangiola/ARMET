@@ -566,7 +566,7 @@ if(dim_4[1] > 0) {
     sigma_deconvoluted_1 = sumNB[2];
 
 		// Overwrite parameter
-		//sigma_intercept = 1.3420415;
+		sigma_intercept = 1.3420415;
 
 
 		// deconvolution
@@ -610,7 +610,7 @@ if(dim_4[1] > 0) {
 		int size_buffer = get_real_buffer_size(mus_sigmas, threshold);
 		int size_vector = (rows(mus_sigmas)-size_buffer)/2;
 
-		if(min(mus_sigmas[1:(size_vector*2)]) == threshold) print("ERROR! The MPI implmentation is buggy")
+		if(min(mus_sigmas[1:(size_vector*2)]) == threshold) print("ERROR! The MPI implmentation is buggy");
 
 		// Reference / exposure rate
 		lp = neg_binomial_2_log_lpmf(
@@ -661,12 +661,12 @@ real beta_regression_lpdf(vector[] p, matrix X, matrix alpha, real[] phi, real p
 		//matrix[num_elements(p[,1]), num_elements(p[1])] mu;
 		vector[num_elements(phi)]  phi_exp= ( 1.0 ./ (to_vector(phi )+ 0.0001));
 
-		// // Build sum to zero variable
-		// int c = cols(alpha);
-		// int r = rows(alpha);
-		// matrix[r, c+1]  alpha_;
-		// alpha_[,1:c] = alpha;
-		// for(rr in 1:r) alpha_[rr,c+1] = -sum(alpha_[rr, 1:c]);
+		// Build sum to zero variable
+		int c = cols(alpha);
+		int r = rows(alpha);
+		matrix[r, c+1]  alpha_;
+		alpha_[,1:c] = alpha;
+		for(rr in 1:r) alpha_[rr,c+1] = -sum(alpha_[rr, 1:c]);
 		
 	//	print(alpha_);
 	//	print(phi);
@@ -690,14 +690,14 @@ vector[] beta_regression_rng( matrix X, matrix alpha, real[] phi, real plateau){
 		vector[cols(alpha)+1] p[rows(X)];
 
 		//matrix[num_elements(p[,1]), num_elements(p[1])] mu;
-		vector[num_elements(phi)] phi_exp= ( 1.0 ./ (to_vector(phi )+ 0.0001));
-// 
-// // Build sum to zero variable
-// 		int c = cols(alpha);
-// 		int r = rows(alpha);
-// 		matrix[r, c+1]  alpha_;
-// 		alpha_[,1:c] = alpha;
-// 		for(rr in 1:r) alpha_[rr,c+1] = -sum(alpha_[rr, 1:(c)]);
+		vector[num_elements(phi)]  phi_exp= ( 1.0 ./ (to_vector(phi )+ 0.0001));
+
+// Build sum to zero variable
+		int c = cols(alpha);
+		int r = rows(alpha);
+		matrix[r, c+1]  alpha_;
+		alpha_[,1:c] = alpha;
+		for(rr in 1:r) alpha_[rr,c+1] = -sum(alpha_[rr, 1:(c)]);
 		
 		for(j in 1:num_elements(p[,1])) {
 
@@ -863,7 +863,7 @@ transformed data{
 
 }
 parameters {
-	real<upper=3> sigma_intercept_dec;
+	real sigma_intercept_dec;
 	//real<upper=0> sigma_slope_dec;
 
   // Local properties of the data
@@ -1008,7 +1008,7 @@ model {
 	exposure_rate ~ normal(0,1);
 
 	// Deconvolution
-	sigma_intercept_dec ~ normal(0,2);
+	sigma_intercept_dec ~ normal(0,1);
 
 	// Level NA - Mix house keeing /////////////////////
 
@@ -1030,7 +1030,7 @@ model {
   if(lv == 1 && do_regression) {
 
 		//print(X_scaled[,2]);
-  	prop_1 ~ beta_regression(X_scaled, alpha_1, phi[1:4], 1);
+  	prop_1 ~ beta_regression(X_scaled, alpha_1, phi[1:4], 0.5);
   	 alpha_1[1] ~ normal(0,10);
   	 to_vector( alpha_1[2:] ) ~ student_t(3, 0, 10);
 
@@ -1043,8 +1043,7 @@ model {
   if(lv == 2 && do_regression) {
 
   	//prop_a ~ beta_regression(X_scaled, alpha_a, phi[1:6], 1);
-  	for(q in 1:Q) prop_a[q] ~ dirichlet_regression( X_scaled[q], alpha_a, phi[1] , 0.01);
-  	#prop_a ~ beta_regression(X_scaled, alpha_a, phi[1:6], 1);
+  	for(q in 1:Q) prop_a[q] ~ dirichlet_regression( X_scaled[q], alpha_a, phi[1] , 0.05);
   	alpha_a[1] ~ normal(0,10);
   	to_vector( alpha_a[2:] ) ~ student_t(3, 0, 10);
 
@@ -1137,16 +1136,12 @@ model {
 		int_package
 	));
 
-	// // Dirichlet regression
-	// if(lv > 1) phi ~ normal(0, 3);
-	// // Beta regression
-	// else phi ~  gamma(1.001,5); // beta(1,20);// beta(1,20);
-
+	// Dirichlet regression
 	phi ~  gamma(1,5);
 
 	// lambda UFO
 	for(i in 1:shards) lambda_UFO[i] ~ skew_normal(6.2, 3.3, -2.7);
-	prop_UFO ~ beta(1.5, 10);
+	prop_UFO ~ beta(1.001, 20);
 
 	// Censoring
 	if(how_many_cens > 0){
@@ -1171,58 +1166,3 @@ model {
 
 	}
 }
-// generated quantities{
-// 	//vector[ct_in_levels[lv]]  prop_rng[Q];
-// 
-//   // lv1
-//   vector[ct_in_nodes[1]]  prop_1_rng[Q * (lv == 1) * do_regression]; // Root
-// 
-//   // lv2
-//   vector[ct_in_nodes[2]]  prop_a_rng[Q * (lv == 2)* do_regression]; // Immune cells childrens
-// 
-//   // lv3
-//   vector[ct_in_nodes[3]]  prop_b_rng[Q * (lv == 3)* do_regression]; // b cells childrens
-//   vector[ct_in_nodes[4]]  prop_c_rng[Q * (lv == 3)* do_regression]; // granulocyte childrens
-//   vector[ct_in_nodes[5]]  prop_d_rng[Q * (lv == 3)* do_regression]; // mono_derived childrens
-//   vector[ct_in_nodes[6]]  prop_e_rng[Q * (lv == 3)* do_regression]; // natural_killer childrens
-//   vector[ct_in_nodes[7]]  prop_f_rng[Q * (lv == 3)* do_regression]; // t_cell childrens
-// 
-// 	// lv4
-//   vector[ct_in_nodes[8]]  prop_g_rng[Q * (lv == 4)* do_regression]; // dendritic myeloid childrens
-//   vector[ct_in_nodes[9]]  prop_h_rng[Q * (lv == 4)* do_regression]; // macrophage childrens
-//   vector[ct_in_nodes[10]] prop_i_rng[Q * (lv == 4)* do_regression]; // nk primed
-//   vector[ct_in_nodes[11]] prop_l_rng[Q * (lv == 4)* do_regression]; // CD4 childrens
-//   vector[ct_in_nodes[12]] prop_m_rng[Q * (lv == 4)* do_regression]; // CD8 childrens
-//   
-// 	if(lv == 1 && do_regression) {
-// 
-//   	prop_1_rng = beta_regression_rng(X_scaled, alpha_1, phi[1:4], 1
-//   	);
-// 
-//   }
-// 	if(lv == 2 && do_regression) {
-// 
-//   	  for(q in 1:Q) prop_a_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_a, phi[1] , 0.01);
-// 
-//   }
-//   	if(lv == 3 && do_regression) {
-// 
-//   		for(q in 1:Q) prop_b_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_b, phi[1] , 1);
-//   		for(q in 1:Q) prop_c_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_c, phi[2] , 1);
-//   		for(q in 1:Q) prop_d_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_d, phi[3] , 1);
-//   		for(q in 1:Q) prop_e_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_e, phi[4] , 1);
-//   		for(q in 1:Q) prop_f_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_f, phi[5] , 1);
-// 
-// 
-//   }
-//   	if(lv == 4 && do_regression) {
-// 
-//   		for(q in 1:Q) prop_g_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_g, phi[1] , 1);
-//   		for(q in 1:Q) prop_h_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_h, phi[2] , 1);
-//   		for(q in 1:Q) prop_i_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_i, phi[3] , 1);
-//   		for(q in 1:Q) prop_l_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_l, phi[4] , 1);
-//   		for(q in 1:Q) prop_m_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_m, phi[5] , 1);
-// 
-// 
-//   }
-// }
