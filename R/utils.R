@@ -2718,7 +2718,7 @@ censored_regression = function(.proportions, sampling = F, formula_df, filter_ho
 		# Sample half if sampling FALSE
 		when(sampling == F ~ (.) %>% group_by(node) %>% sample_frac(0.5) %>% ungroup(), ~ (.)) %>%
 		
-		when(filter_how_many < nrow(.) ~ sample_n(filter_how_many), ~ (.)) %>%
+		when(filter_how_many < nrow(.) ~ (.) %>% sample_n(filter_how_many), ~ (.)) %>%
 		# Create input for the model
 		mutate(input = imap(data, ~ { make_cens_data(.x, formula_df)})) %>%
 		
@@ -2729,7 +2729,7 @@ censored_regression = function(.proportions, sampling = F, formula_df, filter_ho
 		rename(.value = value) %>%
 		select(level, node, C, A, .chain, .iteration, .draw, .value, one_of(".draw2", ".lower", ".upper", "prob_non_0")) %>%
 		distinct() 
-
+ 
 }
 
 prepare_TCGA_input = function(file_name, my_dir){

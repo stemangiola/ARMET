@@ -672,7 +672,7 @@ add_cox_test = function(.data, x, alive){
 
 #' @export
 test_differential_composition = function(.data, credible_interval = 0.90, cluster_CI = 0.55) {
-      
+       
 	# x = .data$internals$formula_df$components_formatted
 	# alive = .data$internals$formula_df$censored_column
 	# 	
