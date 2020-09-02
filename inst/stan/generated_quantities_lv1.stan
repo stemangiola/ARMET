@@ -64,7 +64,7 @@ generated quantities{
 
 
 
-	prop_1_rng = beta_regression_rng(X_scaled, alpha_1, phi[1:4], 1	);
+	prop_1_rng = beta_regression_rng(X_scaled, alpha_1, phi[1:4], 0.5	);
 	mu_1_rng = get_mean_prop(X_scaled, alpha_1);
 
  

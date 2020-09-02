@@ -549,7 +549,7 @@ run_model = function(reference_filtered,
 	# switch(fam_dirichlet %>% `!` %>% sum(1),
 	# 								stanmodels$ARMET_tc_fix_hierarchical,
 	# 								stanmodels$ARMET_tc_fix)
-	
+
 	fit = 
 		sampling(
 			model,
@@ -568,7 +568,8 @@ run_model = function(reference_filtered,
 			# 	c(additional_par_to_save),
 			init = function ()
 				init_list,
-			save_warmup = FALSE
+			save_warmup = FALSE,
+			control=list( adapt_delta=0.9,stepsize = 0.01,  max_treedepth =10  )
 		) %>%
 		{
 			(.)  %>% rstan::summary() %$% summary %>% as_tibble(rownames = "par") %>% arrange(Rhat %>% desc) %>% filter(Rhat > 1.5) %>% ifelse_pipe(nrow(.) > 0, ~ .x %>% print)
