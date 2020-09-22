@@ -1896,7 +1896,10 @@ get_ancestor_child = function(tree){
 		filter(ancestor != `Cell type category`)
 }
 
+
 get_tree_properties = function(tree){
+	
+	library(foreach)
 	
 	# Set up tree structure
 	levels_in_the_tree = 1:4
@@ -1910,18 +1913,18 @@ get_tree_properties = function(tree){
 		pull(count)
 	
 	# Get the number of leafs for every level
-	ct_in_levels = map_int(
-		1:(levels_in_the_tree + 1), 
-		~ {
-			data.tree::Clone(tree) %>%
-				when((.) %>% data.tree::ToDataFrameTree("level") %>% pull(2) %>% max %>% `>` (.x)	~ {
-											(.)
-											data.tree::Prune(., function(x)	x$level <= .x)
-											(.)
-										})  %>%
-				data.tree::Traverse(., filterFun = isLeaf) %>%
-				length()
-		})
+	ct_in_levels = foreach(l = levels_in_the_tree + 1, .combine = c) %do% {
+		data.tree::Clone(tree) %>%
+			ifelse_pipe((.) %>% data.tree::ToDataFrameTree("level") %>% pull(2) %>% max %>% `>` (l),
+									~ {
+										.x
+										data.tree::Prune(.x, function(x)
+											x$level <= l)
+										.x
+									})  %>%
+			data.tree::Traverse(., filterFun = isLeaf) %>%
+			length()
+	}
 	
 	n_nodes = ct_in_nodes %>% length
 	n_levels = ct_in_levels %>% length
@@ -1968,6 +1971,79 @@ get_tree_properties = function(tree){
 		PLV4 = PLV4
 	)
 }
+
+# get_tree_properties = function(tree){
+# 	
+# 	# Set up tree structure
+# 	levels_in_the_tree = 1:4
+# 	
+# 	ct_in_nodes =
+# 		tree %>%
+# 		data.tree::ToDataFrameTree("name", "level", "C", "count", "isLeaf") %>%
+# 		as_tibble %>%
+# 		arrange(level, C) %>%
+# 		filter(!isLeaf) %>%
+# 		pull(count)
+# 	
+# 	# Get the number of leafs for every level
+# 	ct_in_levels = map_int(
+# 		1:(levels_in_the_tree + 1), 
+# 		~ {
+# 			data.tree::Clone(tree) %>%
+# 				when((.) %>% data.tree::ToDataFrameTree("level") %>% pull(2) %>% max %>% `>` (.x)	~ {
+# 											(.)
+# 											data.tree::Prune(., function(x)	x$level <= .x)
+# 											(.)
+# 										})  %>%
+# 				data.tree::Traverse(., filterFun = isLeaf) %>%
+# 				length()
+# 		})
+# 	
+# 	n_nodes = ct_in_nodes %>% length
+# 	n_levels = ct_in_levels %>% length
+# 	
+# 	# Needed in the model
+# 	singles_lv2 = tree$Get("C1", filterFun = isLeaf) %>% na.omit %>% as.array
+# 	SLV2 = length(singles_lv2)
+# 	parents_lv2 = tree$Get("C1", filterFun = isNotLeaf) %>% na.omit %>% as.array
+# 	PLV2 = length(parents_lv2)
+# 	
+# 	singles_lv3 = tree$Get("C2", filterFun = isLeaf) %>% na.omit %>% as.array
+# 	SLV3 = length(singles_lv3)
+# 	parents_lv3 = tree$Get("C2", filterFun = isNotLeaf) %>% na.omit %>% as.array
+# 	PLV3 = length(parents_lv3)
+# 	
+# 	singles_lv4 = tree$Get("C3", filterFun = isLeaf) %>% na.omit %>% as.array
+# 	SLV4 = length(singles_lv4)
+# 	parents_lv4 = tree$Get("C3", filterFun = isNotLeaf) %>% na.omit %>% as.array
+# 	PLV4 = length(parents_lv4)
+# 	
+# 	list(
+# 		ct_in_nodes =ct_in_nodes,
+# 		
+# 		# Get the number of leafs for every level
+# 		ct_in_levels = ct_in_levels,
+# 		
+# 		n_nodes = ct_in_nodes %>% length,
+# 		n_levels = ct_in_levels %>% length,
+# 		
+# 		# Needed in the model
+# 		singles_lv2 = singles_lv2,
+# 		SLV2 = SLV2,
+# 		parents_lv2 = parents_lv2,
+# 		PLV2 = PLV2,
+# 		
+# 		singles_lv3 = singles_lv3,
+# 		SLV3 = SLV3,
+# 		parents_lv3 = parents_lv3,
+# 		PLV3 = PLV3,
+# 		
+# 		singles_lv4 = singles_lv4,
+# 		SLV4 = SLV4,
+# 		parents_lv4 = parents_lv4,
+# 		PLV4 = PLV4
+# 	)
+# }
 
 #' @importFrom tidygraph tbl_graph
 cluster_posterior_slopes = function(.data, credible_interval = 0.67){
@@ -2671,6 +2747,158 @@ censored_regression = function(.proportions, sampling = F, formula_df, filter_ho
 		select(level, node, C, A, .chain, .iteration, .draw, .value, one_of(".draw2", ".lower", ".upper", "prob_non_0")) %>%
 		distinct() 
  
+}
+
+run_censored_model_joint = function(.data, sampling = F){
+	
+	sampling_iter = 5
+	
+	rstan::sampling(
+		stanmodels$censored_regression,
+		data = .data, chain = 1, iter=150+sampling_iter, warmup=150, save_warmup=F, init="0", refresh = 2000)   %>%
+		tidybayes::gather_draws(alpha[A, C]) %>%
+		ungroup() %>%
+		rename(value = .value, .draw2 = .draw) %>%
+		select(-.variable, -.chain, -.iteration)
+	
+	# %>%
+	# 	
+	# 	# Change C 
+	# 	nest(data = -C) %>%
+	# 	mutate(C = !!.data$prop_C_names %>% as.integer)  %>%
+	# 	unnest(data) 
+	
+	
+}
+
+make_cens_data_joint = function(.data, formula_df){
+	
+	# x = enquo(x)
+	# alive = enquo(alive)
+	
+	# For Cibersort
+	scale_sd_0_robust = function(y) (y - mean(y)) / sd(y) ^ as.logical(sd(y))
+	
+	# ELIMINATE I HAVE TO SOLVE THIS ISSUE OF NAs
+	#####################
+	to_eliminate = 
+		.data %>% 
+		distinct(sample, new_C, .value_relative) %>%
+		group_by(new_C) %>% 
+		mutate(.value_relative = .value_relative %>% boot::logit() %>% scale(scale = F)) %>%
+		spread( new_C, .value_relative) %>%
+		nanny::as_matrix(rownames = sample) %>%
+		{ rownames(.)[apply(., 2, function(x) which(is.na(x))) %>% unlist() %>% as.numeric() %>% unique()] }
+	
+	.data = 
+		.data %>% 
+		
+		# Eliminate samples with NA
+		filter(sample %in% to_eliminate %>% `!`) %>%
+		
+		filter(!!as.symbol(formula_df$censored_value_column) %>% is.na %>% `!`)
+	
+	##########################
+	
+	.data = .data %>% arrange(sample)
+	
+	
+	
+	
+	X  = 
+		.data %>%
+		rename(proportion = .value_relative) %>%
+		arrange(sample) %>%
+		nest(prop_df = -new_C) %>%
+		
+		# Scale
+		mutate(prop_df = map(prop_df, ~ mutate(.x, proportion %>% boot::logit() %>% scale(scale = F)))) %>%
+		mutate(design = map(prop_df, ~ model.matrix(formula_df$formula_censored_formatted, data=.x) )) %>%
+		pull(design) %>%
+		abind::abind(along=3)  %>% 
+		aperm(perm = c(3, 1, 2)) 
+	
+	
+	S = .data %>% distinct(sample) %>% nrow
+	C = .data %>% distinct(new_C) %>% nrow
+	A = ncol(X[1,,])
+	
+	sample_subset =  .data %>% nanny::subset(sample) %>% arrange(sample)
+	
+	time = sample_subset %>% mutate(time = !!as.symbol(formula_df$censored_value_column) %>% log1p %>% scale %>% as.numeric) %>% pull(time) %>% as.array()
+	
+	#	print(.y)
+	which_censored = sample_subset %>% pull(!!as.symbol(formula_df$censored_column)) %>% equals(1) %>% which() %>% as.array()
+	which_non_censored = sample_subset %>% pull(!!as.symbol(formula_df$censored_column)) %>% equals(0) %>% which() %>% as.array()
+	n_cens = length(which_censored)
+	n_non_cens = length(which_non_censored)
+	
+	list(
+		S = S,
+		C = C,
+		A = A,
+		time = time,
+		X = X,
+		which_censored = which_censored,
+		which_non_censored = which_non_censored,
+		n_cens = n_cens,
+		n_non_cens = n_non_cens,
+		prop_C_names = .data %>% distinct(C) %>% arrange(C) %>% pull(C)
+	)
+	
+}
+
+
+censored_regression_joint = function(.proportions, sampling = F, formula_df, filter_how_many = Inf, partitions = 30){
+	
+	# x = as.symbol(x)
+	# alive = as.symbol(alive)
+	
+
+		.proportions %>%
+		
+		select(sample, formula_df$components_formatted, level, !!formula_df$censored_column, node, C, .draws) %>%
+		filter(node %>% is.na %>% `!`) %>%
+		unnest(.draws) %>%
+		nest(data = -c(node , level,  .chain, .iteration, .draw)) %>%
+		
+		# Sample half if sampling FALSE
+		when(sampling == F ~ (.) %>% group_by(node) %>% sample_frac(0.5) %>% ungroup(), ~ (.)) %>%
+		when(filter_how_many < nrow(.) ~ (.) %>% sample_n(filter_how_many), ~ (.)) %>%
+		
+		# Add indexes
+		rownames_to_column(var = "idx") %>% 
+		
+		# slice(1:2) %>%
+		
+		unnest(data) %>%
+		unite("idx_C", c(idx, C), remove = F) %>%
+		mutate(idx_C = factor(idx_C)) %>%
+		mutate(new_C = as.integer(idx_C)) %>%
+		select(-.value) %>%
+		
+		# Parallelise
+		left_join( (.) %>% distinct(new_C) %>% mutate(partition = sample(1:partitions, size = n(), replace = T))) %>%
+		nest(data = -partition) %>%
+		
+		mutate(data = furrr::future_map(
+				data, ~ .x %>%
+					left_join(
+						(.) %>%
+							# Create input for the model
+							make_cens_data_joint(formula_df) %>%
+							
+							# Run model
+							run_censored_model_joint(sampling) %>%
+							rename(.value = value) ,
+						by=c("new_C" = "C")
+					) %>%
+					
+					select(level, node, C, A, .chain, .iteration, .draw, .value, one_of(".draw2", ".lower", ".upper", "prob_non_0")) %>%
+					distinct() 
+		)) %>%
+		unnest(data)
+		
 }
 
 prepare_TCGA_input = function(file_name, my_dir){
