@@ -41,7 +41,7 @@ i = "MESO.tcga.harmonized.counts.allgenes.rds"
 i = args[1]
 
 outliers = c("TCGA-12-3652", "TCGA-02-2485", "TCGA-12-0618", "TCGA-19-1390", "TCGA-15-1444", "TCGA-41-2571", "TCGA-28-2499")
-print("blaaaauuuu")
+
 # Setup gender
 gen = as.integer(args[2])
 if(gen %>% is.na)  { analyse_gender = F }
