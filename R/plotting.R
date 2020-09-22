@@ -273,7 +273,7 @@ plot_polar = function(	.data,
 #' #' Create polar plot of results
 #' @rdname plot_scatter
 #'
-#' Prints a report of the hipothesis testing
+#' Prints a report of the hypothesis testing
 #'
 #' @import ggplot2
 #' @import tibble

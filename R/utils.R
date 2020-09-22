@@ -851,7 +851,7 @@ ToDataFrameTypeColFull = function(tree, fill = T, ...) {
 						x$level <= .x + 1)
 					.
 				} %>%
-				data.tree::ToDataFrameTypeCol() %>%
+				data.tree::ToDataFrameTypeCol(...) %>%
 				as_tibble
 			
 		) %>%
@@ -2044,7 +2044,7 @@ cluster_posterior_slopes = function(.data, credible_interval = 0.67){
 						# Unnest data
 						(.) %>% 
 							extract_CI(credible_interval) %>%
-							select(-c(proportions  ,   draws ,      rng_prop               )) %>%
+							select(-c(proportions  ,   draws , rng_prop )) %>%
 							
 							# Build combination of cell types
 							combine_nest(

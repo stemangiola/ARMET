@@ -566,7 +566,7 @@ if(dim_4[1] > 0) {
     sigma_deconvoluted_1 = sumNB[2];
 
 		// Overwrite parameter
-		sigma_intercept = 1.3420415;
+		sigma_intercept = 1.5;
 
 
 		// deconvolution
@@ -637,9 +637,10 @@ if(dim_4[1] > 0) {
 		// int r = rows(alpha);
 		// matrix[r, c]  alpha_ = alpha;
 		// alpha_[1,c] = -sum(alpha_[1, 1:(c-1)]);
+			//	real  phi_exp= ( 1.0 ./ (phi + 0.0001));
 
 		// Calculate log prob
-		return (dirichlet_lpdf(p | softmax( append_row([0]', to_vector(X * alpha))) * exp( phi) + plateau ));
+		return (dirichlet_lpdf(p | softmax( append_row([0]', to_vector(X * alpha))) * exp(phi) + plateau ));
 	}
 
 	vector dirichlet_regression_rng( row_vector X, matrix alpha, real phi, real plateau){
@@ -649,10 +650,10 @@ if(dim_4[1] > 0) {
 		// int r = rows(alpha);
 		// matrix[r, c]  alpha_ = alpha;
 		// alpha_[1,c] = -sum(alpha_[1, 1:(c-1)]);
-
+	//	real  phi_exp= ( 1.0 ./ (phi + 0.0001));
 
 		// Calculate log prob
-		return (dirichlet_rng( softmax( append_row([0]', to_vector(X * alpha))) * exp( phi) + plateau ));
+		return (dirichlet_rng( softmax( append_row([0]', to_vector(X * alpha))) * exp(phi) + plateau ));
 	}
 
 real beta_regression_lpdf(vector[] p, matrix X, matrix alpha, real[] phi, real plateau){
@@ -928,7 +929,7 @@ transformed parameters{
 
 
 	matrix[Q,A] X_ = X;
-	matrix[Q,A] X_scaled = X_;;
+	matrix[Q,A] X_scaled = X_;
 	
 	if(how_many_cens > 0) {
 		X_[which_cens,2] = X_[which_cens,2] + unseen;
@@ -1032,7 +1033,7 @@ model {
 		//print(X_scaled[,2]);
   	prop_1 ~ beta_regression(X_scaled, alpha_1, phi[1:4], 0.5);
   	 alpha_1[1] ~ normal(0,5);
-  	 to_vector( alpha_1[2:] ) ~ student_t(3, 0,5);
+  	 to_vector( alpha_1[2:] ) ~ student_t(3, 0, 5);
 
 
   }
@@ -1044,8 +1045,8 @@ model {
 
   	//prop_a ~ beta_regression(X_scaled, alpha_a, phi[1:6], 1);
   	for(q in 1:Q) prop_a[q] ~ dirichlet_regression( X_scaled[q], alpha_a, phi[1] , 0.05);
-  	alpha_a[1] ~ normal(0,5);
-  	to_vector( alpha_a[2:] ) ~ student_t(3, 0,5);
+  	alpha_a[1] ~ normal(0,2);
+  	to_vector( alpha_a[2:] ) ~ student_t(3, 0, 2.5);
 
   }
 	if(lv == 2 && !do_regression) for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | rep_vector(1, num_elements(prop_a[1])));
@@ -1060,16 +1061,16 @@ model {
   		for(q in 1:Q) prop_e[q] ~ dirichlet_regression( X_scaled[q], alpha_e, phi[4] , 1);
   		for(q in 1:Q) prop_f[q] ~ dirichlet_regression( X_scaled[q], alpha_f, phi[5] , 1);
 
-		alpha_b[1] ~  normal(0,5);
-  	to_vector( alpha_b[2:] ) ~ student_t(3, 0,5);
-		alpha_c[1] ~  normal(0,5);
-  	to_vector( alpha_c[2:] ) ~ student_t(3, 0,5);
-		alpha_d[1] ~  normal(0,5);
-  	to_vector( alpha_d[2:] ) ~ student_t(3, 0,5);
-		alpha_e[1] ~  normal(0,5);
-  	to_vector( alpha_e[2:] ) ~ student_t(3, 0,5);
-		alpha_f[1] ~  normal(0,5);
-  	to_vector( alpha_f[2:] ) ~ student_t(3, 0,5);
+		alpha_b[1] ~  normal(0,2);
+  	to_vector( alpha_b[2:] ) ~ student_t(5, 0, 2.5);
+		alpha_c[1] ~  normal(0,2);
+  	to_vector( alpha_c[2:] ) ~ student_t(5, 0, 2.5);
+		alpha_d[1] ~  normal(0,2);
+  	to_vector( alpha_d[2:] ) ~ student_t(5, 0, 2.5);
+		alpha_e[1] ~  student_t(5, 0, 2.5);
+  	to_vector( alpha_e[2:] ) ~ student_t(5, 0, 2.5);
+		alpha_f[1] ~  normal(0,2);
+  	to_vector( alpha_f[2:] ) ~ student_t(5, 0, 2.5);
   }
   if(lv == 3 && !do_regression) for(q in 1:Q){
   	 target += dirichlet_lpdf(prop_b[q] | rep_vector(1, num_elements(prop_b[1])));
@@ -1096,16 +1097,16 @@ model {
   		for(q in 1:Q) prop_m[q] ~ dirichlet_regression( X_scaled[q], alpha_m, phi[5] , 1);
 
 // else  prop_4 ~ beta_regression(X_scaled, alpha_4, phi);
-		alpha_g[1] ~ normal(0,5);
-  	to_vector( alpha_g[2:] ) ~ student_t(3, 0,5);
-		alpha_h[1] ~ normal(0,5);
-  	to_vector( alpha_h[2:] ) ~ student_t(3, 0,5);
-		alpha_i[1] ~ normal(0,5);
-  	to_vector( alpha_i[2:] ) ~ student_t(3, 0,5);
-		alpha_l[1] ~ normal(0,5);
-  	to_vector( alpha_l[2:] ) ~ student_t(3, 0,5);
-		alpha_m[1] ~ normal(0,5);
-  	to_vector( alpha_m[2:] ) ~ student_t(3, 0,5);
+		alpha_g[1] ~ normal(0,2);
+  	to_vector( alpha_g[2:] ) ~ student_t(5, 0, 2.5);
+		alpha_h[1] ~ normal(0,2);
+  	to_vector( alpha_h[2:] ) ~ student_t(5, 0, 2.5);
+		alpha_i[1] ~normal(0,2);
+  	to_vector( alpha_i[2:] ) ~ student_t(5, 0, 2.5);
+		alpha_l[1] ~ normal(0,2);
+  	to_vector( alpha_l[2:] ) ~ student_t(5, 0, 2.5);
+		alpha_m[1] ~ normal(0,2);
+  	to_vector( alpha_m[2:] ) ~ student_t(5, 0, 2.5);
 
   }
   if(lv == 4 && !do_regression) for(q in 1:Q){

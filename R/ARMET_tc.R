@@ -2,7 +2,7 @@ clear_previous_levels = function(.data, my_level){
 	# Eliminate previous results
 	.data$internals$fit = .data$internals$fit[1:(my_level-1)]
 	.data$internals$prop = .data$internals$prop %>% filter(level < !!my_level) 
-	.data$internals$alpha = .data$internals$alpha  %>% filter(level < !!my_level)
+	if(.data$internals$alpha %>% is.null %>% `!`) .data$internals$alpha = .data$internals$alpha  %>% filter(level < !!my_level)
 	.data$internals$draws = .data$internals$draws[1:(my_level-1)]
 	
 	nodes_to_eliminate = 
@@ -78,7 +78,7 @@ ARMET_tc_continue = function(armet_obj, level, model = stanmodels$ARMET_tc_fix_h
 	internals$prop_posterior[sprintf("%s_prior", fit_prop_parsed %>% distinct(.variable) %>% pull())] = fit_prop_parsed %>% group_by(Q, C, .variable) %>% prop_to_list
 	internals$draws = internals$draws %>% c(list(draws))
 	
-	if (input$do_regression && length(parse_formula(input$.formula)$covariates) >0 )
+	if (input$do_regression && paste(as.character(input$.formula), collapse="")  != "~1" )
 		internals$alpha = internals$alpha  %>% bind_rows( 
 			get_alpha(fit, level, input$family) %>% 
 				left_join(
@@ -99,7 +99,7 @@ ARMET_tc_continue = function(armet_obj, level, model = stanmodels$ARMET_tc_fix_h
 			
 			# Attach alpha if regression
 			ifelse_pipe(
-				input$do_regression && length(parse_formula(input$.formula)$covariates) >0 ,
+				input$do_regression && paste(as.character(input$.formula), collapse="")  != "~1" ,
 				~ .x %>%
 					nest(proportions = -c(`Cell type category`, C, level)) %>%
 					left_join(
@@ -213,11 +213,46 @@ ARMET_tc = function(.data,
 	if(family %in% c("dirichlet", "beta") %>% any %>% `!`) stop("ARMET says: Please choose between dirichlet or beta families")
 	
 	# Covariate column
-	formula_df = parse_formula(.formula)
+	if(do_regression & paste(as.character(.formula), collapse="")  != "~1"){
+		formula_df = parse_formula(.formula)
+		
+		# Censoring column
+		if(do_regression && length(formula_df$censored_column) == 1) {
+			cens = .data %>% select(sample, formula_df$censored_column) %>% distinct %>% arrange(sample) %>% pull(2)
+			
+			# Check cens right type
+			if(typeof(cens) %in% c("integer", "logical") %>% any %>% `!`) stop("ARMET says: censoring variable should be logical of integer (0,1)")
+			if(length(prior_survival_time) == 0) stop("AMET says: you really need to provide third party survival time for your condition/disease")
+			
+			sd_survival_months = .data %>%  select(sample, formula_df$censored_value_column) %>% distinct %>% pull(formula_df$censored_value_column) %>% sd
+			prior_survival_time = prior_survival_time / sd_survival_months
+			
+		}
+		else{
+			cens = NULL
+		} 
+		
+		
+		X =
+			model.matrix(
+				object = 	formula_df$formula_formatted,
+				data = .data %>% select(sample, one_of(formula_df$covariates_formatted)) %>% distinct %>% arrange(sample)
+			)
+		
+		
+	}	else {
+		formula_df = cens  = NULL	
+		
+		X =
+			model.matrix(
+				object = 	~ 1,
+				data = .data %>% select(sample) %>% distinct %>% arrange(sample)
+			)
+	}
 	
 	# Do regression
-	if(length(formula_df$covariates_formatted) > 0 & (formula_df$covariates_formatted %>% is.na %>% `!`)) do_regression = T
-	
+	#if(length(formula_df$covariates_formatted) > 0 & (formula_df$covariates_formatted %>% is.na %>% `!`)) do_regression = T
+
 	# distinct_at is not released yet for dplyr, thus we have to use this trick
 	df_for_edgeR <- .data %>%
 		
@@ -239,30 +274,12 @@ ARMET_tc = function(.data,
 			(.) %>% check_if_data_rectangular(sample,symbol,count, type = "soft") %>% `!` &
 				TRUE, #!fill_missing_values,
 			~ .x %>% eliminate_sparse_transcripts(symbol)
-		)
-	
-	# Censoring column
-
-	if(length(formula_df$censored_column) == 1) {
-		cens = .data %>% select(sample, formula_df$censored_column) %>% distinct %>% arrange(sample) %>% pull(2)
+		) %>%
 		
-		# Check cens right type
-		if(typeof(cens) %in% c("integer", "logical") %>% any %>% `!`) stop("ARMET says: censoring variable should be logical of integer (0,1)")
-		if(length(prior_survival_time) == 0) stop("AMET says: you really need to provide third party survival time for your condition/disease")
-		
-		sd_survival_months = .data %>%  select(sample, formula_df$censored_value_column) %>% distinct %>% pull(formula_df$censored_value_column) %>% sd
-		df_for_edgeR = df_for_edgeR %>% mutate(!!formula_df$censored_value_column := !!as.symbol(formula_df$censored_value_column) / sd_survival_months)
-		prior_survival_time = prior_survival_time / sd_survival_months
-		
-	}
-	else{
-		cens = NULL
-	} 
-	
-	X =
-		model.matrix(
-			object = 	formula_df$formula_formatted,
-			data = df_for_edgeR %>% select(sample, one_of(formula_df$covariates_formatted)) %>% distinct %>% arrange(sample)
+		when(
+			do_regression && length(formula_df$censored_column) == 1 ~ 
+				mutate(., !!formula_df$censored_value_column := !!as.symbol(formula_df$censored_value_column) / sd_survival_months),
+			~ (.)
 		)
 	
 	mix =
@@ -361,7 +378,7 @@ ARMET_tc = function(.data,
 			
 			# Attach alpha if regression
 			ifelse_pipe(
-				do_regression && length(parse_formula(.formula)$covariates) >0 ,
+				do_regression && paste(as.character(.formula), collapse="")  != "~1" ,
 				~ .x %>%
 					nest(proportions = -c(`Cell type category`, C, level)) %>%
 					left_join(
@@ -655,14 +672,14 @@ get_signatures = function(.data){
 }
 
 #' @export
-add_cox_test = function(.data, x, alive){
+add_cox_test = function(.data){
 	
 	cens_alpha = 
 		.data$proportions %>% 
-		select(-draws, -rng) %>%
+		select(-draws, -contains("rng")) %>%
 		rename(node = .variable)  %>% 
 		unnest(proportions) %>%
-		censored_regression(x = x, alive = alive)  %>% 
+		censored_regression(formula_df = .data$internals$formula_df, filter_how_many = Inf)  %>% 
 		rename(.variable = node) %>%
 		nest(draws_cens = -c(level, .variable  ,      C)) 
 	
@@ -811,9 +828,9 @@ get_CI = function(.data, credible_interval = 0.90, cluster_CI = 0.55) {
 	
 	# Choose the test
 	if("draws_cens" %in% colnames(.data$proportions)){
-		.v = as.symbol(".value_alpha2_cens")
-		.l = as.symbol(".lower_alpha2_cens")
-		.u = as.symbol(".upper_alpha2_cens")
+		.v = as.symbol(".value_2")
+		.l = as.symbol(".lower_2")
+		.u = as.symbol(".upper_2")
 	} else {
 		.v = as.symbol(".value_alpha2")
 		.l = as.symbol(".lower_alpha2")
@@ -980,7 +997,7 @@ run_lv_1 = function(internals,
 
 	
 	
-	if (do_regression && length(parse_formula(.formula)$covariates) >0 ) 
+	if (do_regression && paste(as.character(.formula), collapse="")  != "~1" ) 
 		internals$alpha = 
 		get_alpha(fit, level, family) %>% 
 		left_join(
