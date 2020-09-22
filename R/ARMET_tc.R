@@ -137,8 +137,6 @@ ARMET_tc_continue = function(armet_obj, level, model = stanmodels$ARMET_tc_fix_h
 #' @importFrom tidybayes gather_samples
 #' @importFrom tidybayes median_qi
 #'
-#' @importFrom foreach foreach
-#' @importFrom foreach %do%
 #'
 #' @import data.tree
 #'
