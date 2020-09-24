@@ -1,6 +1,6 @@
 #~/unix3XX/third_party_sofware/cctools-7.1.5-x86_64-centos6/bin/makeflow -T torque  --do-not-save-failed-output dev/TCGA_makeflow_pipeline/makefile_ARMET_TCGA.makeflow
 #~/third_party_sofware/cctools-7.1.5-x86_64-centos6/bin/makeflow -T slurm  --do-not-save-failed-output dev/test_sim
-
+#~/third_party_sofware/cctools-7.1.5-x86_64-centos6/bin/makeflow -T slurm  --do-not-save-failed-output dev/test_simulation_makeflow_pipeline/makefile_test_simulation.makeflow
 library(tidyverse)
 
 project_dir = "~/PhD/deconvolution/ARMET"

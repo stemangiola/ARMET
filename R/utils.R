@@ -844,7 +844,7 @@ ToDataFrameTypeColFull = function(tree, fill = T, ...) {
 						x$level <= .x + 1)
 					.
 				} %>%
-				data.tree::ToDataFrameTypeCol(...) %>%
+				data.tree::ToDataFrameTypeCol() %>%
 				as_tibble
 			
 		) %>%
@@ -852,11 +852,21 @@ ToDataFrameTypeColFull = function(tree, fill = T, ...) {
 		
 		when(
 			fill & ("level_3" %in% colnames(.)) ~ mutate(., level_3 = ifelse(level_3 %>% is.na, level_2, level_3)),
+			TRUE ~ (.)
+		) %>%
+		when(
 			fill & ("level_4" %in% colnames(.)) ~ mutate(., level_4 = ifelse(level_4 %>% is.na, level_3, level_4)),
+			TRUE ~ (.)
+		) %>%
+		when(
 			fill & ("level_5" %in% colnames(.)) ~ mutate(., level_5 = ifelse(level_5 %>% is.na, level_4, level_5)),
+			TRUE ~ (.)
+		) %>%
+		when(
 			fill & ("level_6" %in% colnames(.)) ~ mutate(., level_6 = ifelse(level_6 %>% is.na, level_5, level_6)),
 			TRUE ~ (.)
 		) %>%
+
 		dplyr::select(..., everything())
 	
 }
@@ -2847,7 +2857,6 @@ make_cens_data_joint = function(.data, formula_df){
 	)
 	
 }
-
 
 censored_regression_joint = function(.proportions, sampling = F, formula_df, filter_how_many = Inf, partitions = 30){
 	

@@ -1,7 +1,11 @@
+library(EPIC)
 library(tidyverse)
 library(magrittr)
 library(ARMET)
 library(tidybulk)
+
+# library(furrr)
+# plan(multisession, workers=10)
 
 args = commandArgs(trailingOnly=TRUE)
 input_file = args[1]
@@ -93,7 +97,7 @@ readRDS(input_file) %>%
       
       # Make object lighter
       result_light = result$proportions %>% select(-draws, -rng_prop, -rng_mu) 
-      list(proportions = result_light)
+      list(proportions = result_light, fit = result$internals$fit)
     },
     
     # If any other method

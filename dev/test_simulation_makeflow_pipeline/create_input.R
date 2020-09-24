@@ -10,6 +10,7 @@ which_changing = as.integer(args[4])
 run = as.integer(args[5])
 output_file = args[6]
 
+set.seed(34543*run)
 
 get_alpha = function(slope, which_changing, cell_types){
 	

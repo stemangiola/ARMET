@@ -1,16 +1,7 @@
-# Create mix_base within NA - imputed values
-
 library(tidyverse)
 library(magrittr)
 library(purrr)
-library(furrr)
-library(data.tree)
-library(foreach)
 library(ARMET)
-plan(multiprocess, workers=28)
-library(iterators)
-#source("~/PhD/deconvolution/ARMET/R/utils.R")
-#source("~/PostDoc/ppcSeq/R/do_parallel.R")
 
 my_theme =
 	theme_bw() +
@@ -53,7 +44,7 @@ roc_df =
 	mutate(real_negative = map_dbl(data, ~ .x %>% filter(alpha_2==0) %>% nrow)) %>%
 	mutate(FP = map_dbl(data, ~ .x %>% filter(fp) %>% nrow)) %>%
 	mutate(real_positive = map_dbl(data, ~ .x %>% filter(alpha_2!=0) %>% nrow )) %>%
-	mutate(TP = map_dbl(data, ~ .x %>% filter(tp) %>% nrow) ) %>%
+	mutate(TP = map_dbl(data, ~ .x$tp %>% sum ) ) %>%
 	mutate(TP_rate = TP/real_positive, FP_rate = FP/real_negative) %>%
 	
 	select(-data)
@@ -66,7 +57,7 @@ roc_df %>%
 	geom_abline(intercept = 0, slope = 1, linetype="dotted", color="grey") +
 	geom_line() +
 	scale_color_brewer(palette = "Set1") +
-	facet_wrap(~ abs_slope + foreignProp + S, nrow = 1) +
+	facet_grid(foreignProp ~ abs_slope + S) +
 	coord_cartesian(xlim=c(0,0.08), ylim=c(0,1)) +
 	my_theme
 
