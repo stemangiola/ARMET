@@ -6,15 +6,16 @@ library(tidybulk)
 args = commandArgs(trailingOnly=TRUE)
 
 
-# foreignProp="0.8"
-# run="2"
-# S = "90"
-# slope = 2
-# whichChanging = "14"
+# foreignProp="0"
+# run="1"
+# S = "60"
+# slope = 0.5
+# whichChanging = "16"
 # method ="ARMET"
-# input_file ="dev/test_simulation/input__slope_2__foreignProp_0.8__S_90__whichChanging_14__run_2.rds"
-# file = "dev/test_simulation/output__slope_2__foreignProp_0.8__S_90__whichChanging_14__run_2__method_ARMET.rds"
-# output_file = "dev/test_simulation/asses__slope_2__foreignProp_0.8__S_90__whichChanging_14__run_2__method_ARMET.rds"
+# input_file ="dev/test_simulation/input__slope_0.5__foreignProp_0__S_60__whichChanging_16__run_1.rds"
+# file = "dev/test_simulation/output__slope_0.5__foreignProp_0__S_60__whichChanging_16__run_1__method_ARMET.rds"
+# output_file = "dev/test_simulation/asses__slope_0.5__foreignProp_0__S_60__whichChanging_16__run_1__method_ARMET.rds"
+
 
 
   
@@ -59,8 +60,9 @@ decide_if_fp_tp = function(.data, CI, slope){
     # ) %>%
     
     # Filter out accidental fp because of simplex, when cell is really 0 slope
+    # Keep the NA because I need for ARMET lower level retrieval
     filter(
-      !(
+      is.na(alpha_2) | !(
         fp & 
         (slope * estimate )<0 &
         alpha_2 == 0
@@ -79,6 +81,9 @@ process_third_party = function(CI, file, input_file, slope){
         distinct(`Cell type category`, alpha_2),
       by = c(".cell_type" = "Cell type category"  )
     ) %>%
+    
+    # Apparently the estimate have opposite sign!!!
+    mutate(estimate = -estimate) %>%
     
     decide_if_fp_tp(CI, slope)  %>%
     
@@ -121,7 +126,7 @@ check_lower_levels_for_ARMET = function(.data, input_df, CI, slope){
 }
 
 process_ARMET = function(CI, file, input_file, slope){
-  
+ 
   # Load input data frame that will be used more than once
   input_df = 
     readRDS(input_file) %>% 
