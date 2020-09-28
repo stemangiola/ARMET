@@ -42,11 +42,6 @@ ARMET_tc_continue = function(armet_obj, level, model = stanmodels$ARMET_tc_fix_h
 		full_bayesian = input$full_bayesian,
 		approximate_posterior = input$approximate_posterior,
 		internals$prop_posterior,
-		exposure_posterior = when(
-			level,
-			(.)==1 ~ tibble(.mean = 0, .sd = 0)[0,], 
-			~ draws_to_exposure(internals$fit[[1]])
-		),
 		iterations = input$iterations,
 		sampling_iterations = input$sampling_iterations	,
 		X = internals$X,
@@ -56,7 +51,8 @@ ARMET_tc_continue = function(armet_obj, level, model = stanmodels$ARMET_tc_fix_h
 		tree_properties = internals$tree_properties,
 		Q = internals$Q,
 		model = model,
-		prior_survival_time = internals$prior_survival_time
+		prior_survival_time = internals$prior_survival_time,
+		sample_scaling = internals$sample_scaling
 	)
 	
 	df = res[[1]]
@@ -316,21 +312,35 @@ ARMET_tc = function(.data,
 				as_tibble %>%
 				select(-1),
 			by = "Cell type category"
-		)	%>%
-		
-		# Decrease the number of house keeping used
-		anti_join({
-			mdf = (.) %>%
-				distinct(symbol, `house keeping`) %>%
-				filter(`house keeping`)
-			
-			withr::with_seed(123, 	sample_frac(mdf, 0.5)) %>%
-				distinct(symbol)
-		},
-		by = "symbol"
-		)
-	
+		)	
+	# %>%
+	# 	
+	# 	# Decrease the number of house keeping used
+	# 	anti_join({
+	# 		mdf = (.) %>%
+	# 			distinct(symbol, `house keeping`) %>%
+	# 			filter(`house keeping`)
+	# 		
+	# 		withr::with_seed(123, 	sample_frac(mdf, 0.5)) %>%
+	# 			distinct(symbol)
+	# 	},
+	# 	by = "symbol"
+	# 	)
+	# 
 	tree_propeties = get_tree_properties(tree)
+	
+	# Find normalisation
+	sample_scaling = 
+		reference_filtered %>%
+		filter(`house keeping`) %>% 
+		select(count = lambda_log, symbol) %>%
+		distinct() %>%
+		mutate(count = exp(count), sample = "reference") %>% 
+		tidybulk::aggregate_duplicates(sample, symbol, count, aggregation_function = median) %>%
+		bind_rows(mix %>% filter(symbol %in% (reference_filtered %>% filter(`house keeping`) %>% distinct(symbol) %>% pull(symbol)))) %>%
+		tidybulk::scale_abundance(sample, symbol, count, reference_sample = "reference", action ="get") %>%
+		distinct(sample, multiplier)
+	
 	
 	# Default internals
 	internals = 
@@ -347,7 +357,8 @@ ARMET_tc = function(.data,
 			cens = cens,
 			tree_properties = tree_propeties,
 			prior_survival_time = prior_survival_time,
-			formula_df = formula_df
+			formula_df = formula_df,
+			sample_scaling = sample_scaling
 		) 
 	
 	internals = 
@@ -402,7 +413,6 @@ run_model = function(reference_filtered,
 										 full_bayesian,
 										 approximate_posterior,
 										 prop_posterior,
-										 exposure_posterior = tibble(.mean = 0, .sd = 0)[0,],
 										 iterations = 250,
 										 sampling_iterations = 100,
 										 X,
@@ -412,7 +422,8 @@ run_model = function(reference_filtered,
 										 tree_properties,
 										 Q,
 										 model = stanmodels$ARMET_tc_fix_hierarchical,
-										 prior_survival_time = c()) {
+										 prior_survival_time = c(),
+										 sample_scaling) {
 	
 	Q = Q
 	
@@ -532,18 +543,25 @@ run_model = function(reference_filtered,
 	# close(fileConn)
 	# ARMET_tc_model = rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix.stan", auto_write = F)
 	
-	exposure_rate_init = switch(
-		(lv > 1) %>% `!` %>% as.numeric %>% sum(1),
-		exposure_posterior %>% pull(1),
-		runif(S, -0.5, 0.5)
-	) %>% as.array
+	# exposure_rate_init = switch(
+	# 	(lv > 1) %>% `!` %>% as.numeric %>% sum(1),
+	# 	exposure_posterior %>% pull(1),
+	# 	runif(S, -0.5, 0.5)
+	# ) %>% as.array
 	
-	exposure_rate_multiplier = sd(exposure_rate_init) %>% ifelse_pipe((.) %>% is.na, ~ 0.1)
+	# exposure_rate_multiplier = sd(exposure_rate_init) %>% ifelse_pipe((.) %>% is.na, ~ 0.1)
+	
+	exposure_rate = 
+		sample_scaling %>% 
+		filter(sample %in% (y_source %>% pull(sample))) %>% 
+		arrange(Q) %>% 
+		pull(multiplier) %>% 
+		log
 	
 	init_list = list(lambda_log = lambda_log,
 									 sigma_inv_log = sigma_inv_log) %>%
 		ifelse_pipe(!full_bayesian,
-								~ .x %>% c(list(exposure_rate = exposure_rate_init)))
+								~ .x )
 	
 	
 	Sys.setenv("STAN_NUM_THREADS" = shards)
@@ -610,7 +628,6 @@ run_model = function(reference_filtered,
 			 			"prop_2",
 			 			"prop_3",
 			 			"prop_4",
-			 			"exposure_rate",
 			 			"lambda_log",
 			 			"sigma_inv_log",
 			 			"sigma_intercept_dec"
@@ -935,7 +952,8 @@ run_lv_1 = function(internals,
 		tree_properties = internals$tree_properties,
 		Q = internals$Q,
 		model = model,
-		prior_survival_time = internals$prior_survival_time
+		prior_survival_time = internals$prior_survival_time,
+		sample_scaling = internals$sample_scaling
 	)
 	
 	df = res1[[1]]

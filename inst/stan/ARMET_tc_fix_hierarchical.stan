@@ -803,10 +803,6 @@ data {
   vector[ct_in_nodes[6]]  prop_e_prior[Q * (lv > 3)]; // nk
   vector[ct_in_nodes[7]]  prop_f_prior[Q * (lv > 3)]; // t_cell
 
-	// exposure posterior previous fit
-	vector[2] exposure_posterior[Q * (lv > 1)];
-	real exposure_rate_multiplier;
-
 	// Dirichlet regression
 	int A; // factors of interest
 	matrix[Q,A] X;
@@ -823,6 +819,9 @@ data {
 	int spt;
 	real prior_survival_time[spt];
 
+  // Local properties of the data
+  vector[S] exposure_rate;
+  
 }
 transformed data{
 
@@ -867,8 +866,7 @@ parameters {
 	real sigma_intercept_dec;
 	//real<upper=0> sigma_slope_dec;
 
-  // Local properties of the data
-  vector<multiplier = exposure_rate_multiplier>[S] exposure_rate;
+
 
   // Proportions
   // lv1
@@ -950,7 +948,6 @@ model {
 	vector[(ct_in_levels[lv] * Q) + max(size_y_linear_S_MPI) + (max(size_G_linear_MPI)/ct_in_levels[lv])] pack_r_1[shards];
 
 	// Tree poportion
-	
 	vector[ct_in_levels[2]] prop_2[Q * (lv >= 2)];
 	vector[ct_in_levels[3]] prop_3[Q * (lv >= 3)];
 	vector[ct_in_levels[4]] prop_4[Q * (lv >= 4)];
@@ -1005,27 +1002,10 @@ model {
 		
 	prop_lv	= which(lv, prop_1, prop_2, prop_3, prop_4);
 
-	// Exposure
-	exposure_rate ~ normal(0,1);
-
 	// Deconvolution
 	sigma_intercept_dec ~ normal(0,1);
 
 	// Level NA - Mix house keeing /////////////////////
-
-	// Reference
-	if(lv == 1)
-		target += sum(map_rect(
-			lp_reduce_simple ,
-			[sigma_intercept, sigma_slope]', // global parameters
-			get_mu_sigma_vector_MPI(
-				lambda_log[G_to_counts_linear[counts_idx_lv_NA]] + exposure_rate[S_linear[counts_idx_lv_NA]],
-				sigma_inv_log[G_to_counts_linear[counts_idx_lv_NA]],
-				shards
-			),
-			real_data,
-			get_int_MPI( counts_linear[counts_idx_lv_NA], shards)
-		));
 
 	// lv 1
   if(lv == 1 && do_regression) {
@@ -1123,7 +1103,7 @@ model {
 		shards,
 		size_y_linear_S_MPI,
 		y_linear_S_MPI,
-		lv == 1 ? exposure_rate : to_vector(exposure_posterior[,1]),
+		exposure_rate,
 		prop_lv,
 		lambda_UFO
 	);

@@ -4,7 +4,7 @@
 \alias{plot_counts_inferred_sum}
 \title{plot_counts_inferred_sum}
 \usage{
-plot_counts_inferred_sum(fit_obj, samples = NULL)
+plot_counts_inferred_sum(fit_obj, samples = NULL, level)
 }
 \description{
 Get data format for MPI deconvolution part
