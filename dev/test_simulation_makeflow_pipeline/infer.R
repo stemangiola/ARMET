@@ -87,8 +87,8 @@ readRDS(input_file) %>%
             get_survival_X() %$% 
             real_days %>% 
             as.numeric, 
-          iterations = 2000, 
-          sampling_iterations = 800
+          iterations = 500, 
+          sampling_iterations = 300
         )  %>%
         ARMET_tc_continue(2) %>%
         ARMET_tc_continue(3)

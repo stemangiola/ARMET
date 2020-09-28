@@ -916,7 +916,7 @@ parameters {
 
 	// Unknown population
 	vector<lower=0, upper = log(max(counts_linear))>[max(size_G_linear_MPI)/ct_in_levels[lv]] lambda_UFO[shards];
-	real<lower=0, upper=0.5> prop_UFO;
+	real<lower=0, upper=1> prop_UFO;
 
 	// Censoring
 	vector<lower=0>[how_many_cens] unseen;
@@ -1032,8 +1032,8 @@ model {
 
 		//print(X_scaled[,2]);
   	prop_1 ~ beta_regression(X_scaled, alpha_1, phi[1:4], 0.5);
-  	 alpha_1[1] ~ normal(0,5);
-  	 to_vector( alpha_1[2:] ) ~ student_t(3, 0, 5);
+  	 alpha_1[1] ~ normal(0,2);
+  	 to_vector( alpha_1[2:] ) ~ student_t(5,  0,  2.5);
 
 
   }
@@ -1046,7 +1046,7 @@ model {
   	//prop_a ~ beta_regression(X_scaled, alpha_a, phi[1:6], 1);
   	for(q in 1:Q) prop_a[q] ~ dirichlet_regression( X_scaled[q], alpha_a, phi[1] , 0.05);
   	alpha_a[1] ~ normal(0,2);
-  	to_vector( alpha_a[2:] ) ~ student_t(3, 0, 2.5);
+  	to_vector( alpha_a[2:] ) ~ student_t(5,  0, 2.5);
 
   }
 	if(lv == 2 && !do_regression) for(q in 1:Q) target += dirichlet_lpdf(prop_a[q] | rep_vector(1, num_elements(prop_a[1])));
@@ -1117,7 +1117,6 @@ model {
 		 target += dirichlet_lpdf(prop_m[q] | rep_vector(1, num_elements(prop_m[1])));
   }
 
-
 	pack_r_1 = package_vector_parameters(
 		ct_in_levels[lv],
 		Q,
@@ -1142,7 +1141,7 @@ model {
 
 	// lambda UFO
 	for(i in 1:shards) lambda_UFO[i] ~ skew_normal(6.2, 3.3, -2.7);
-	prop_UFO ~ beta(1.001, 20);
+	target += beta_lpdf(prop_UFO | 1.001, 20) * Q;
 
 	// Censoring
 	if(how_many_cens > 0){
