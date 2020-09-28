@@ -449,7 +449,7 @@ plot_differences_in_lambda = function() {
 				pars = c(
 					"lambda_mu",
 					"lambda_sigma",
-					"exposure_rate",
+					# "exposure_rate",
 					"lambda_log",
 					"sigma_inv_log",
 					"prop"
@@ -1294,13 +1294,13 @@ draws_to_alphas = function(.data, pars) {
 		pull(alphas)
 }
 
-draws_to_exposure = function(.data) {
-	.data %>%
-		tidybayes::gather_draws(exposure_rate[Q]) %>%
-		summarise(.mean = .value %>% mean, .sd = .value %>% sd) %>%
-		ungroup() %>%
-		select(.mean , .sd)
-}
+# draws_to_exposure = function(.data) {
+# 	.data %>%
+# 		tidybayes::gather_draws(exposure_rate[Q]) %>%
+# 		summarise(.mean = .value %>% mean, .sd = .value %>% sd) %>%
+# 		ungroup() %>%
+# 		select(.mean , .sd)
+# }
 
 get_null_prop_posterior = function(ct_in_nodes) {
 	prop_posterior = list()
@@ -2263,7 +2263,7 @@ get_draws = function(fit_prop_parsed, level, internals){
 	
 	my_value_column = as.symbol(sprintf(".value%s", level) )
 	ancestor_value_column = as.symbol(sprintf(".value%s", level-1) )
-	
+
 	internals$draws[[level-1]] %>%
 		# Temporary I have to fix!!!
 		when(level ==2 ~ (.) %>% rename(C1 = C, !!ancestor_value_column := .value), ~ (.)) %>%

@@ -539,41 +539,55 @@ if(dim_4[1] > 0) {
 		real sigma_intercept = global_parameters[2];
 
 		// Deconvoluted means
-		vector[size_G_linear_MPI/C*Q] lambda_log_deconvoluted_1;
-    vector[size_G_linear_MPI/C*Q] sigma_deconvoluted_1;
+		// vector[size_G_linear_MPI/C*Q] lambda_log_deconvoluted_1;
+    // vector[size_G_linear_MPI/C*Q] sigma_deconvoluted_1;
 
-		// Calculate convoluted // Add UFO
-    vector[size_G_linear_MPI/C * Q] sumNB[2] = sum_NB_MPI(
+// 		// Calculate convoluted // Add UFO
+//     vector[size_G_linear_MPI/C * Q] sumNB[2] = sum_NB_MPI(
+// 
+//       append_row(
+//       	to_matrix(exp(ref_lambda_log), C, size_G_linear_MPI/C),
+//       	to_row_vector(exp(lambda_UFO)) // add UFO
+//       ),
+// 
+//       append_row(
+//       	to_matrix(1.0 ./ exp( ref_sigma_inv_log ), C, size_G_linear_MPI/C),
+//       	to_row_vector(1.0 ./ exp(lambda_UFO * -0.4 + 1.52 )) // add UFO
+//       ),
+// 
+//       append_col(
+//       	to_matrix(prop_1, Q, C) * (1-prop_UFO),
+//       	rep_vector(prop_UFO,Q) // add UFO
+//       )
+// 
+//     );
+//     
+//     lambda_log_deconvoluted_1 = log(sumNB[1]);
+//     sigma_deconvoluted_1 = sumNB[2];
 
-      append_row(
-      	to_matrix(exp(ref_lambda_log), C, size_G_linear_MPI/C),
-      	to_row_vector(exp(lambda_UFO)) // add UFO
-      ),
-
-      append_row(
-      	to_matrix(1.0 ./ exp( ref_sigma_inv_log ), C, size_G_linear_MPI/C),
-      	to_row_vector(1.0 ./ exp(lambda_UFO * -0.4 + 1.52 )) // add UFO
-      ),
-
-      append_col(
+ 	vector[size_G_linear_MPI/C*Q] lambda_log_deconvoluted_1 = 
+ 		to_vector(
+ 			// Prop matrix
+			append_col(
       	to_matrix(prop_1, Q, C) * (1-prop_UFO),
       	rep_vector(prop_UFO,Q) // add UFO
+      ) * 
+			
+			// Expression matrix
+			append_row(
+      	to_matrix(exp(ref_lambda_log), C, size_G_linear_MPI/C),
+      	to_row_vector(exp(lambda_UFO)) // add UFO
       )
-
-    );
-
-    lambda_log_deconvoluted_1 = log(sumNB[1]);
-    sigma_deconvoluted_1 = sumNB[2];
-
+     );
+		
 		// Overwrite parameter
 		sigma_intercept = 1.5;
 
-
 		// deconvolution
 		lp = neg_binomial_2_lpmf(mix_counts |
-			exp(lambda_log_deconvoluted_1 + mix_exposure_rate),
+			lambda_log_deconvoluted_1 .* exp(mix_exposure_rate) ,
 			// sigma_deconvoluted_1
-			1.0 ./ exp( lambda_log_deconvoluted_1  * -0.4 + sigma_intercept)
+			1.0 ./ exp( log(lambda_log_deconvoluted_1)  * -0.4 + sigma_intercept)
 		);
 
 
@@ -941,9 +955,6 @@ transformed parameters{
 }
 model {
 
-	vector[Y_lv] lambda_log_deconvoluted_1;
-	vector[Y_lv] sigma_deconvoluted_1;
-
  	vector[ct_in_levels[lv]] prop_lv[Q] ;
 	vector[(ct_in_levels[lv] * Q) + max(size_y_linear_S_MPI) + (max(size_G_linear_MPI)/ct_in_levels[lv])] pack_r_1[shards];
 
@@ -1059,13 +1070,6 @@ model {
 		 target += dirichlet_lpdf(prop_e[q] | rep_vector(1, num_elements(prop_e[1])));
 		 target += dirichlet_lpdf(prop_f[q] | rep_vector(1, num_elements(prop_f[1])));
   }
-  // if(lv > 3){
-  //   for(q in 1:Q) target += dirichlet_lpdf(prop_b[q] | prop_b_prior[q]);
-  //   for(q in 1:Q) target += dirichlet_lpdf(prop_c[q] | prop_c_prior[q]);
-  //   for(q in 1:Q) target += dirichlet_lpdf(prop_d[q] | prop_d_prior[q]);
-  //   for(q in 1:Q) target += dirichlet_lpdf(prop_e[q] | prop_e_prior[q]);
-  //   for(q in 1:Q) target += dirichlet_lpdf(prop_f[q] | prop_f_prior[q]);
-  // }
 
 	// lv 4
   if(lv == 4 && do_regression){
@@ -1140,9 +1144,6 @@ model {
 	 	
 	 	prior_unseen_beta[1] ~ student_t(3, 6, 10);
   	prior_unseen_alpha[1] ~  gamma(0.01, 0.01);
-  
-	 	// prior_unseen_alpha ~ normal(1.28, 0.1); // sd is increased on 2.5x
-	 	// prior_unseen_beta ~ normal(-0.717, 0.05); // sd is increased on 2.5x
 
 	}
 }

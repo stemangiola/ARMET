@@ -563,7 +563,6 @@ run_model = function(reference_filtered,
 		ifelse_pipe(!full_bayesian,
 								~ .x )
 	
-	
 	Sys.setenv("STAN_NUM_THREADS" = shards)
 	
 	fam_dirichlet = family == "dirichlet"
@@ -695,7 +694,7 @@ add_cox_test = function(.data){
 		select(-draws, -contains("rng")) %>%
 		rename(node = .variable)  %>% 
 		unnest(proportions) %>%
-		censored_regression(formula_df = .data$internals$formula_df, filter_how_many = Inf)  %>% 
+		censored_regression_joint(formula_df = .data$internals$formula_df, filter_how_many = Inf)  %>% 
 		rename(.variable = node) %>%
 		nest(draws_cens = -c(level, .variable  ,      C)) 
 	
@@ -715,7 +714,7 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 		select(-draws, -contains("rng")) %>%
 		rename(node = .variable)  %>% 
 		unnest(proportions) %>%
-		censored_regression(formula_df = .data$internals$formula_df, filter_how_many = Inf)  %>% 
+		censored_regression_joint(formula_df = .data$internals$formula_df, filter_how_many = Inf)  %>% 
 		rename(.variable = node) %>%
 		nest(draws_cens = -c(level, .variable  ,      C)) 
 	 
