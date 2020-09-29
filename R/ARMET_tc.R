@@ -530,13 +530,6 @@ run_model = function(reference_filtered,
 	# Dirichlet regression
 	A = X %>% ncol
 	
-	
-	
-	
-	additional_par_to_save  = switch(full_bayesian %>% `!` %>% sum(1),
-																	 c("lambda_log", "sigma_inv_log"),
-																	 c())
-	
 	# library(rstan)
 	# fileConn<-file("~/.R/Makevars")
 	# writeLines(c( "CXX14FLAGS += -O2","CXX14FLAGS += -DSTAN_THREADS", "CXX14FLAGS += -pthread"), fileConn)
@@ -555,13 +548,33 @@ run_model = function(reference_filtered,
 		sample_scaling %>% 
 		filter(sample %in% (y_source %>% pull(sample))) %>% 
 		arrange(Q) %>% 
-		pull(multiplier) %>% 
-		log
+		pull(multiplier) 
 	
-	init_list = list(lambda_log = lambda_log,
-									 sigma_inv_log = sigma_inv_log, lambda_UFO = rep(6.2, GM)) %>%
-		ifelse_pipe(!full_bayesian,
-								~ .x )
+	init_list = list(
+		lambda_log = lambda_log,
+		sigma_inv_log = sigma_inv_log,
+		lambda_UFO = rep(6.2, GM)
+	) 
+	
+	ref = 
+		counts_baseline %>%
+		filter(!`house keeping`) %>%
+		mutate(lambda = exp(lambda_log)) %>%
+		select(C, GM, lambda ) %>% 
+		distinct() %>%
+		arrange(C, GM) %>% 
+		spread(GM, lambda) %>% 
+		tidybulk::as_matrix(rownames = "C") 
+	
+	y = 
+		y_source %>%
+		select(Q, GM, count) %>% 
+		distinct() %>%
+		arrange(Q, GM) %>% 
+		spread(GM, count) %>% 
+		tidybulk::as_matrix(rownames = "Q") 
+	
+	max_y = max(y)
 	
 	Sys.setenv("STAN_NUM_THREADS" = shards)
 	
@@ -581,7 +594,7 @@ run_model = function(reference_filtered,
 	# switch(fam_dirichlet %>% `!` %>% sum(1),
 	# 								stanmodels$ARMET_tc_fix_hierarchical,
 	# 								stanmodels$ARMET_tc_fix)
-
+browser()
 	fit = 
 		sampling(
 			model,
