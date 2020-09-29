@@ -1,5 +1,12 @@
 functions{
 	
+	vector pow_vector(vector v, real p){
+		vector[rows(v)] v_pow;
+		
+		for(i in 1:rows(v)) v_pow[i] = v[i] ^ p;
+		
+		return(v_pow);
+	}
 	// int[] int_2D_to_1D(int[,] mat){
 	// 	
 	// 	int vec[num_elements(int[,1]), num_elements(int[1,])] vec;
@@ -158,9 +165,10 @@ model {
 	// Calculate y hat with UFO
 	matrix[Q, GM] mu =
 	
+			// prop * ref;
 			// Prop matrix
-			append_col(	prop * (1-prop_UFO), 	rep_vector(prop_UFO,Q) ) * 
-			
+			append_col(	prop * (1-prop_UFO), 	rep_vector(prop_UFO,Q) ) *
+
 			// Expression matrix
 			append_row(	ref,	exp(lambda_UFO) );
 	
@@ -169,7 +177,7 @@ model {
 	
 	// Vectorise 
 	mu_vector = to_vector(mu');
-	sigma_vector = 1.0 ./  exp( log(mu_vector)  * -0.4 + sigma_intercept); //((mu_vector^(-0.4)) *  exp(sigma_intercept));
+	sigma_vector = 1.0 ./ (pow_vector(mu_vector, -0.4) *  exp(sigma_intercept)); //   exp( log(mu_vector)  * -0.4 + sigma_intercept); //;
 	
 	// Sampling
 	to_array_1d(y) ~ neg_binomial_2(mu_vector, sigma_vector);
@@ -178,7 +186,7 @@ model {
   to_vector( alpha_1[2:] ) ~ student_t(5,  0,  2.5);
   	 
 	// lambda UFO
-	for(i in 1:shards) lambda_UFO[i] ~ skew_normal(6.2, 3.3, -2.7);
+	lambda_UFO ~ skew_normal(6.2, 3.3, -2.7);
 	target += beta_lpdf(prop_UFO | 1.001, 20) * Q;
 
 	// Censoring

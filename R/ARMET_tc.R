@@ -559,7 +559,7 @@ run_model = function(reference_filtered,
 		log
 	
 	init_list = list(lambda_log = lambda_log,
-									 sigma_inv_log = sigma_inv_log) %>%
+									 sigma_inv_log = sigma_inv_log, lambda_UFO = rep(6.2, GM)) %>%
 		ifelse_pipe(!full_bayesian,
 								~ .x )
 	
