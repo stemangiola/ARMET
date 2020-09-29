@@ -37,7 +37,7 @@ Temporary Items
 .apdisk
 *.Rproj*
 *.o
-*.hpp
+#*.hpp
 .Rhistory
 .RData
 data/ref_array.rda
@@ -69,4 +69,4 @@ dev/*.rds
 dev/*.RDS
 dev/*.csv
 run_armet_on_cancer_type.sh.*
-
+slurm.status*
