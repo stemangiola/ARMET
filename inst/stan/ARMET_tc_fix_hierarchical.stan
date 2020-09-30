@@ -1,5 +1,6 @@
 functions{
 
+	
 matrix vector_array_to_matrix(vector[] x) {
 		matrix[size(x), rows(x[1])] y;
 		for (m in 1:size(x))
@@ -122,6 +123,112 @@ vector[] beta_regression_rng( matrix X, matrix alpha, real[] phi, real plateau){
 		return (p);
 	}
 
+
+// START MPI 
+
+// int[] get_elements_per_shard(int lenth_v, int shards){
+// 
+// 	// Returned integer(max_size, last_element_size)
+// 	int tentative_size = lenth_v / shards;
+// 	int tentative_remaining = lenth_v - (tentative_size * shards);
+// 	int elements_per_shard = tentative_remaining > 0 ? tentative_size + 1 : tentative_size;
+// 	int remaining =  (elements_per_shard * shards) - lenth_v;
+// 
+// 	int length_obj[shards];
+// 
+// 	for(s in 1:shards) {
+// 		length_obj[s] =
+// 			s != shards ?
+// 			elements_per_shard :
+// 			elements_per_shard - remaining;  // Actual elements in it for last object
+// 	}
+// 
+//  	return length_obj;
+// 
+// }
+// 
+// int[,] get_int_MPI(int[] v, int shards){
+//   // Simple MPI for int vector
+// 
+// 	int elements_per_shard[shards] = get_elements_per_shard(size(v), shards); // Length of the returned object
+// 	int size_MPI_obj = elements_per_shard[1]; // the first element is always the full size of the object
+// 	int v_MPI[shards,size_MPI_obj] = rep_array(-1, shards,size_MPI_obj); // Set values to -1 for the ones that are not filled
+// 
+// 	int i = 0; // Index sweeping the vector
+// 
+// 	for(s in 1:shards){
+// 		v_MPI[s, 1:elements_per_shard[s]] = v[ (i + 1) : i + elements_per_shard[s] ];
+// 		i += elements_per_shard[s];
+// 	}
+// 
+// 	return v_MPI;
+// }
+// 
+// 
+// 
+// 	vector[] get_mu_sigma_vector_MPI(vector mus, vector sigmas, int shards){
+// 
+// 		int elements_per_shard[shards] = get_elements_per_shard(rows(mus), shards); // Length of the returned object
+// 		int size_MPI_obj = elements_per_shard[1]; // the first element is always the full size of the object
+// 		vector[size_MPI_obj * 2] v_MPI[shards] ; // Set values to -999 for the ones that are not filled
+// 
+// 		int i = 0; // Index sweeping the vector
+// 
+// 		for(s in 1:shards){
+// 
+// 			// If last shard fill in
+// 			if(s == shards) v_MPI[s] = rep_vector(-999.0, size_MPI_obj * 2);
+// 
+// 			v_MPI[s, 1:elements_per_shard[s]] = mus[ (i + 1) : i + elements_per_shard[s] ];
+// 			v_MPI[s, (elements_per_shard[s]+1):(elements_per_shard[s]+elements_per_shard[s])] = sigmas[ (i + 1) : i + elements_per_shard[s] ];
+// 
+// 			i += elements_per_shard[s];
+// 		}
+// 
+// 		return v_MPI;
+// 	}
+// 	
+// int get_real_buffer_size(vector v, real threshold){
+// 	// This function finds how may fake indexes -1 there are in a vector, added for map_rect needs
+// 
+// 	real i = threshold; // Value of the index
+// 	int n = 0; // Length of the buffer
+// 	int s = rows(v); // Size of the whole vector
+// 
+// 	while(i == threshold){
+// 		i = v[s-n];
+// 		if(i==threshold) n += 1;
+// 	}
+// 
+// 	return n;
+// }
+// 
+// 	vector lp_reduce_simple( vector global_parameters , vector mus , real[] real_data , int[] int_data ) {
+// 
+// 		real lp;
+// 		real threshold = -999;
+// 		int size_buffer = get_real_buffer_size(mus, threshold);
+// 		int size_vector = (rows(mus)-size_buffer)/2;
+// 
+// 		real sigma_intercept = global_parameters[1];
+// 		real sigma_slope = global_parameters[2];
+// 		
+// 		if(min(mus[1:(size_vector*2)]) == threshold) print("ERROR! The MPI implmentation is buggy");
+// 
+// 
+// 		// Reference / exposure rate
+// 		lp = neg_binomial_2_lpmf(
+// 			int_data[1:size_vector] |
+// 			mus[1:size_vector],
+// 			1.0 ./ (pow_vector(mus[1:size_vector], sigma_slope) *  exp(sigma_intercept)) 
+// 		);
+// 
+// 	 return [lp]';
+// 
+// 	}
+	
+// END MPI FRAMEWORK	
+
 }
 data {
 	// shards
@@ -149,8 +256,6 @@ data {
 	real<upper=0> sigma_slope;
 	real<lower=0> sigma_sigma;
 	//real sigma_intercept;
-
-
 	
 	// Cell types
  	int<lower=0> Q;
@@ -163,23 +268,11 @@ data {
 	int y[Q, GM];
 	int max_y;
 	matrix[ ct_in_levels[lv], GM] ref;
-	
-  // Deconvolution
-  int<lower=0> G_lv;
-  int G_lv_linear[G_lv];
 
   // Observed counts
   int<lower=0> Y_lv;
 	int y_linear_lv[Y_lv];
 	int y_linear_S_lv[Y_lv];
-
-	// MPI
-	int size_y_linear_MPI[max(shards, 1)];
-	int size_y_linear_S_MPI[max(shards, 1)];
-	int y_linear_S_MPI[shards,max(size_y_linear_S_MPI)];
-	int size_G_linear_MPI[max(shards, 1)];
-	int G_linear_MPI[shards,max(size_G_linear_MPI)];
-	int y_linear_MPI[shards,max(size_y_linear_MPI)];
 
 	// Lv2 tree structure parents singles
 	int<lower=0> SLV2;
@@ -240,6 +333,9 @@ data {
   // Local properties of the data
   vector[S] exposure_rate;
   
+}
+transformed data{
+	real real_data[shards, 0];
 }
 parameters {
 
@@ -391,13 +487,21 @@ model {
 	// Correct for exposure
 	for(q in 1:Q) mu[q] = mu[q] * exposure_rate[q];
 	
+	// Sampling
+		
 	// Vectorise 
 	mu_vector = to_vector(mu');
 	sigma_vector = 1.0 ./ (pow_vector(mu_vector, -0.4) *  exp(sigma_intercept)); //   exp( log(mu_vector)  * -0.4 + sigma_intercept); //;
-	
-	// Sampling
 	to_array_1d(y) ~ neg_binomial_2(mu_vector, sigma_vector);
 
+	// // MPI
+	// target += sum(map_rect(
+	// 		lp_reduce_simple ,
+	// 		[sigma_intercept, -0.4]', // global parameters
+	// 		get_mu_sigma_vector_MPI(mu_vector,	sigma_vector,	shards),
+	// 		real_data,
+	// 		get_int_MPI( 	to_array_1d(y), shards)
+	// 	));
 
 	// lv 1
   if(lv == 1 && do_regression) {
