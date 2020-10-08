@@ -8,8 +8,8 @@ matrix vector_array_to_matrix(vector[] x) {
 		return y;
 }
 
-vector[] which(int x, vector[] a, vector[] b, vector[] c, vector[] d){
-		if(x == 1) return(a);
+matrix which(int x, vector[] a, matrix b, matrix c, matrix d){
+		if(x == 1) return(vector_array_to_matrix(a));
 		if(x == 2) return(b);
 		if(x == 3) return(c);
 		else return(d);
@@ -24,12 +24,22 @@ vector[] append_vector_array(vector[] v1, vector[] v2){
 	return v3;
 }
 
-vector[] multiply_by_column(vector[] v, real[] r){
+matrix multiply_by_column(vector[] v, vector r){
 	int n_rows = num_elements(v[,1]);
 	int n_cols = num_elements(v[1]);
 
-	vector[n_cols] v_mult [n_rows];
-	for(i in 1:n_cols) v_mult[,i] = to_array_1d(to_row_vector(v[,i]) .* to_row_vector(r));
+	matrix[n_rows,n_cols] v_mult ;
+	for(i in 1:n_rows) v_mult[i] = to_row_vector(v[i] * r[i]);
+
+	return v_mult;
+}
+
+matrix multiply_matrix_by_column(matrix v, vector r){
+	int n_rows = rows(v);
+	int n_cols = cols(v);
+
+	matrix[n_rows,n_cols] v_mult ;
+	for(i in 1:n_rows) v_mult[i] = v[i] * r[i];
 
 	return v_mult;
 }
@@ -234,6 +244,7 @@ data {
 	// shards
 	int<lower=1> shards;
 	int lv;
+	
 	// Reference matrix inference
 	int<lower=0> G;
 	int<lower=0> GM;
@@ -267,8 +278,10 @@ data {
 	// reference counts
 	int y[Q, GM];
 	int max_y;
+	int ct_in_ancestor_level;
 	matrix[ ct_in_levels[lv], GM] ref;
-
+	matrix[ Q, ct_in_ancestor_level] prior_prop;
+	
   // Observed counts
   int<lower=0> Y_lv;
 	int y_linear_lv[Y_lv];
@@ -386,7 +399,7 @@ parameters {
 
 	// Unknown population
 	row_vector<lower=0, upper = log(max(counts_linear))>[GM] lambda_UFO;
-	real<lower=0, upper=1> prop_UFO;
+	vector<lower=0, upper=1>[Q] prop_UFO;
 
 	// Censoring
 	vector<lower=0>[how_many_cens] unseen;
@@ -411,12 +424,12 @@ transformed parameters{
 }
 model {
 
- 	vector[ct_in_levels[lv]] prop_lv[Q] ;
+ 	matrix[Q, ct_in_levels[lv]] prop_lv ;
 
 	// Tree poportion
-	vector[ct_in_levels[2]] prop_2[Q * (lv >= 2)];
-	vector[ct_in_levels[3]] prop_3[Q * (lv >= 3)];
-	vector[ct_in_levels[4]] prop_4[Q * (lv >= 4)];
+	matrix[Q * (lv >= 2), ct_in_levels[2]] prop_2;
+	matrix[Q * (lv >= 2), ct_in_levels[3]] prop_3;
+	matrix[Q * (lv >= 2), ct_in_levels[4]] prop_4;
 	
 	vector[Q*GM] mu_vector;
 	vector[Q*GM] sigma_vector;
@@ -426,27 +439,27 @@ model {
 	real sigma_intercept = 1.5;
 	
 	// proportion of level 2
-	if(lv >= 2)
+	if(lv == 2)
 	prop_2 =
-		append_vector_array(
-			prop_1_prior[,singles_lv2],
-			multiply_by_column( (lv == 2 ? prop_a : prop_a_prior), prop_1_prior[,parents_lv2[1]])
+		append_col(
+			prior_prop[,singles_lv2],
+			multiply_by_column( prop_a , prior_prop[,parents_lv2[1]])
 		);
 
 	// proportion of level 3
-	if(lv >= 3)
+	if(lv == 3)
 	prop_3 =
-		append_vector_array(
-			prop_2[,singles_lv3],
-			append_vector_array(
-				multiply_by_column((lv == 3 ? prop_b : prop_b_prior), prop_2[,parents_lv3[1]]),
-				append_vector_array(
-					multiply_by_column((lv == 3 ? prop_c : prop_c_prior), prop_2[,parents_lv3[2]]),
-					append_vector_array(
-						multiply_by_column((lv == 3 ? prop_d : prop_d_prior), prop_2[,parents_lv3[3]]),
-						append_vector_array(
-							multiply_by_column((lv == 3 ? prop_e : prop_e_prior), prop_2[,parents_lv3[4]]),
-							multiply_by_column((lv == 3 ? prop_f : prop_f_prior), prop_2[,parents_lv3[5]])
+		append_col(
+			prior_prop[,singles_lv3],
+			append_col(
+				multiply_by_column(prop_b , prior_prop[,parents_lv3[1]]),
+				append_col(
+					multiply_by_column(prop_c , prior_prop[,parents_lv3[2]]),
+					append_col(
+						multiply_by_column(prop_d , prior_prop[,parents_lv3[3]]),
+						append_col(
+							multiply_by_column( prop_e, prior_prop[,parents_lv3[4]]),
+							multiply_by_column(prop_f , prior_prop[,parents_lv3[5]])
 						)
 					)
 				)
@@ -454,19 +467,19 @@ model {
 		);
 
 	// proportion of level 4
-	if(lv >= 4)
+	if(lv == 4)
 	prop_4 =
-		append_vector_array(
-			prop_3[,singles_lv4],
-			append_vector_array(
-				multiply_by_column(prop_g, prop_3[,parents_lv4[1]]),
-				append_vector_array(
-					multiply_by_column(prop_h, prop_3[,parents_lv4[2]]),
-					append_vector_array(
-						multiply_by_column(prop_i, prop_3[,parents_lv4[3]]),
-						append_vector_array(
-  						multiply_by_column(prop_l, prop_3[,parents_lv4[4]]),
-  						multiply_by_column(prop_m, prop_3[,parents_lv4[5]])
+		append_col(
+			prior_prop[,singles_lv4],
+			append_col(
+				multiply_by_column(prop_g, prior_prop[,parents_lv4[1]]),
+				append_col(
+					multiply_by_column(prop_h, prior_prop[,parents_lv4[2]]),
+					append_col(
+						multiply_by_column(prop_i, prior_prop[,parents_lv4[3]]),
+						append_col(
+  						multiply_by_column(prop_l, prior_prop[,parents_lv4[4]]),
+  						multiply_by_column(prop_m, prior_prop[,parents_lv4[5]])
   					)
 					)
 				)
@@ -479,7 +492,7 @@ model {
 	mu =
 	
 			// Prop matrix
-			append_col(	vector_array_to_matrix(prop_lv) * (1-prop_UFO), 	rep_vector(prop_UFO,Q) ) *
+			append_col(	multiply_matrix_by_column( prop_lv,  (1-prop_UFO) ), 	prop_UFO ) *
 
 			// Expression matrix
 			append_row(	ref,	exp(lambda_UFO) );
@@ -591,7 +604,7 @@ model {
 
 	// lambda UFO
 	for(i in 1:shards) lambda_UFO[i] ~ skew_normal(6.2, 3.3, -2.7);
-	target += beta_lpdf(prop_UFO | 1.001, 20) * Q;
+	target += beta_lpdf(prop_UFO | 1.001, 20);
 
 	// Censoring
 	if(how_many_cens > 0){

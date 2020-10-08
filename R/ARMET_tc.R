@@ -52,7 +52,8 @@ ARMET_tc_continue = function(armet_obj, level, model = stanmodels$ARMET_tc_fix_h
 		Q = internals$Q,
 		model = model,
 		prior_survival_time = internals$prior_survival_time,
-		sample_scaling = internals$sample_scaling
+		sample_scaling = internals$sample_scaling,
+		prior_prop = internals$prop %>% filter(level == !!level -1) %>% distinct(Q, C, .value) %>% spread(C, .value) %>% tidybulk::as_matrix(rownames = Q) 
 	)
 	
 	df = res[[1]]
@@ -423,7 +424,8 @@ run_model = function(reference_filtered,
 										 Q,
 										 model = stanmodels$ARMET_tc_fix_hierarchical,
 										 prior_survival_time = c(),
-										 sample_scaling) {
+										 sample_scaling,
+										 prior_prop = matrix(1:Q)[,0]) {
 	
 	Q = Q
 	
@@ -575,6 +577,7 @@ run_model = function(reference_filtered,
 		tidybulk::as_matrix(rownames = "Q") 
 	
 	max_y = max(y)
+	ct_in_ancestor_level = ifelse(lv == 1, 0, tree_properties$ct_in_levels[lv-1])
 	
 	Sys.setenv("STAN_NUM_THREADS" = shards)
 	
@@ -594,33 +597,33 @@ run_model = function(reference_filtered,
 	# switch(fam_dirichlet %>% `!` %>% sum(1),
 	# 								stanmodels$ARMET_tc_fix_hierarchical,
 	# 								stanmodels$ARMET_tc_fix)
-browser()
-	fit = 
-		sampling(
-			model,
-			#rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix_hierarchical.stan", auto_write = F),
-			chains = 3,
-			cores = 3,
-			iter = iterations,
-			warmup = iterations - sampling_iterations,
-			data = MPI_data %>% c(prop_posterior) %>% c(tree_properties),
-			# pars=
-			# 	c("prop_1", "prop_2", "prop_3", sprintf("prop_%s", letters[1:9])) %>%
-			# 	c("alpha_1", sprintf("alpha_%s", letters[1:9])) %>%
-			# 	c("exposure_rate") %>%
-			# 	c("lambda_UFO") %>%
-			# 	c("prop_UFO") %>%
-			# 	c(additional_par_to_save),
-			init = function ()
-				init_list,
-			save_warmup = FALSE
-			# ,
-			# control=list( adapt_delta=0.9,stepsize = 0.01,  max_treedepth =10  )
-		) %>%
-		{
-			(.)  %>% rstan::summary() %$% summary %>% as_tibble(rownames = "par") %>% arrange(Rhat %>% desc) %>% filter(Rhat > 1.5) %>% ifelse_pipe(nrow(.) > 0, ~ .x %>% print)
-			(.)
-		}
+#browser()
+fit = 
+	sampling(
+		model,
+		#rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix_hierarchical.stan", auto_write = F),
+		chains = 3,
+		cores = 3,
+		iter = iterations,
+		warmup = iterations - sampling_iterations,
+		data = MPI_data %>% c(prop_posterior) %>% c(tree_properties),
+		# pars=
+		# 	c("prop_1", "prop_2", "prop_3", sprintf("prop_%s", letters[1:9])) %>%
+		# 	c("alpha_1", sprintf("alpha_%s", letters[1:9])) %>%
+		# 	c("exposure_rate") %>%
+		# 	c("lambda_UFO") %>%
+		# 	c("prop_UFO") %>%
+		# 	c(additional_par_to_save),
+		init = function ()
+			init_list,
+		save_warmup = FALSE
+		# ,
+		# control=list( adapt_delta=0.9,stepsize = 0.01,  max_treedepth =10  )
+	) %>%
+	{
+		(.)  %>% rstan::summary() %$% summary %>% as_tibble(rownames = "par") %>% arrange(Rhat %>% desc) %>% filter(Rhat > 1.5) %>% ifelse_pipe(nrow(.) > 0, ~ .x %>% print)
+		(.)
+	}
 	
 	list(df,
 			 switch(
@@ -700,14 +703,14 @@ get_signatures = function(.data){
 }
 
 #' @export
-add_cox_test = function(.data){
+add_cox_test = function(.data, relative = TRUE){
 	
 	cens_alpha = 
 		.data$proportions %>% 
 		select(-draws, -contains("rng")) %>%
 		rename(node = .variable)  %>% 
 		unnest(proportions) %>%
-		censored_regression_joint(formula_df = .data$internals$formula_df, filter_how_many = Inf)  %>% 
+		censored_regression_joint(formula_df = .data$internals$formula_df, filter_how_many = Inf, relative = relative)  %>% 
 		rename(.variable = node) %>%
 		nest(draws_cens = -c(level, .variable  ,      C)) 
 	

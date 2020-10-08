@@ -6,7 +6,7 @@ library(tidyverse)
 project_dir = "~/PhD/deconvolution/ARMET"
 pipeline_dir = paste0(project_dir, "/dev/test_simulation_makeflow_pipeline")
 output_dir = "dev/test_simulation" # paste0(project_dir, "/dev/test_simulation")
-makelow_file = paste0(pipeline_dir, "/makefile_test_simulation.makeflow") 
+makeflow_file = paste0(pipeline_dir, "/makefile_test_simulation.makeflow") 
 
 prepend = function (x, values, before = 1) 
 {
@@ -49,7 +49,7 @@ expand_grid(
 			prepend("CATEGORY=create_input\nMEMORY=8024\nCORES=2\nWALLTIME=1" ) %>%
 			
 			# Write to file
-			write_lines(makelow_file, append = FALSE)
+			write_lines(makeflow_file, append = FALSE)
 		
 		(.)
 	} %>%
@@ -67,10 +67,10 @@ expand_grid(
 			pull(command) %>%
 			
 			# Resources
-			prepend("CATEGORY=ARMET\nMEMORY=40024\nCORES=12\nWALLTIME=1" ) %>%
+			prepend("CATEGORY=ARMET\nMEMORY=30024\nCORES=4\nWALLTIME=1" ) %>%
 			
 			# Write to file
-			write_lines(makelow_file, append = TRUE)
+			write_lines(makeflow_file, append = TRUE)
 		
 		(.)
 	} %>%
@@ -91,7 +91,7 @@ expand_grid(
 			prepend("CATEGORY=third_party\nMEMORY=8024\nCORES=2\nWALLTIME=1" ) %>%
 			
 			# Write to file
-			write_lines(makelow_file, append = TRUE)
+			write_lines(makeflow_file, append = TRUE)
 		
 		(.)
 	} %>%
@@ -110,7 +110,7 @@ expand_grid(
 			prepend("CATEGORY=asses\nMEMORY=8024\nCORES=2\nWALLTIME=1" ) %>%
 			
 			# Write to file
-			write_lines(makelow_file, append = TRUE)
+			write_lines(makeflow_file, append = TRUE)
 		
 		(.)
 	}

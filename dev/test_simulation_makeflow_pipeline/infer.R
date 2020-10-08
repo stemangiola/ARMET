@@ -4,8 +4,7 @@ library(magrittr)
 library(ARMET)
 library(tidybulk)
 
-# library(furrr)
-# plan(multisession, workers=10)
+
 
 args = commandArgs(trailingOnly=TRUE)
 input_file = args[1]
@@ -93,7 +92,10 @@ readRDS(input_file) %>%
         ARMET_tc_continue(2) %>%
         ARMET_tc_continue(3)
       
-      result$proportions = result %>% add_cox_test()
+      # library(furrr)
+      # plan(multisession, workers=4)
+      
+      result$proportions = result %>% add_cox_test(relative = FALSE)
       
       # Make object lighter
       result_light = result$proportions %>% select(-draws, -rng_prop, -rng_mu) 

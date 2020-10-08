@@ -531,7 +531,7 @@ plot_counts_inferred_sum = function(fit_obj, samples = NULL, level) {
 
 }
 
-#' choose_chains_majority_roule
+#' choose_chains_majority_rule
 #'
 #' @description Get which chain cluster is more opulated in case I have divergence
 choose_chains_majority_roule = function(fit_parsed) {
@@ -2316,7 +2316,7 @@ get_props = function(draws, level, df, approximate_posterior){
 		# add sample annotation
 		left_join(df %>% distinct(Q, sample), by = "Q")	%>%
 		
-		# If MCMC is used check divergencies as well
+		# If MCMC is used check divergences as well
 		ifelse_pipe(
 			!approximate_posterior,
 			~ .x %>% parse_summary_check_divergence(),
@@ -2781,7 +2781,7 @@ run_censored_model_joint = function(.data, sampling = F){
 	
 }
 
-make_cens_data_joint = function(.data, formula_df){
+make_cens_data_joint = function(.data, formula_df, relative = TRUE){
 	
 	# x = enquo(x)
 	# alive = enquo(alive)
@@ -2789,14 +2789,16 @@ make_cens_data_joint = function(.data, formula_df){
 	# For Cibersort
 	scale_sd_0_robust = function(y) (y - mean(y)) / sd(y) ^ as.logical(sd(y))
 	
+	my_value_column = ifelse(relative, as.symbol(".value_relative"), as.symbol(".value_absolute"))
+	
 	# ELIMINATE I HAVE TO SOLVE THIS ISSUE OF NAs
 	#####################
 	to_eliminate = 
 		.data %>% 
-		distinct(sample, new_C, .value_relative) %>%
+		distinct(sample, new_C, !!my_value_column) %>%
 		group_by(new_C) %>% 
-		mutate(.value_relative = .value_relative %>% boot::logit() %>% scale(scale = F)) %>%
-		spread( new_C, .value_relative) %>%
+		mutate(!!my_value_column := !!my_value_column %>% boot::logit() %>% scale(scale = F)) %>%
+		spread( new_C, !!my_value_column) %>%
 		nanny::as_matrix(rownames = sample) %>%
 		{ rownames(.)[apply(., 2, function(x) which(is.na(x))) %>% unlist() %>% as.numeric() %>% unique()] }
 	
@@ -2817,7 +2819,7 @@ make_cens_data_joint = function(.data, formula_df){
 	
 	X  = 
 		.data %>%
-		rename(proportion = .value_relative) %>%
+		rename(proportion = !!my_value_column) %>%
 		arrange(sample) %>%
 		nest(prop_df = -new_C) %>%
 		
@@ -2858,7 +2860,8 @@ make_cens_data_joint = function(.data, formula_df){
 	
 }
 
-censored_regression_joint = function(.proportions, sampling = F, formula_df, filter_how_many = Inf, partitions = 30){
+censored_regression_joint = 
+	function(.proportions, sampling = F, formula_df, filter_how_many = Inf, partitions = 30, relative = TRUE){
 	
 	# x = as.symbol(x)
 	# alive = as.symbol(alive)
@@ -2866,6 +2869,9 @@ censored_regression_joint = function(.proportions, sampling = F, formula_df, fil
 
 		.proportions %>%
 		
+		# If absolute keep only last level
+		#	when(!relative ~ filter(., level == max(level)), ~ (.)) %>%
+			
 		select(sample, formula_df$components_formatted, level, !!formula_df$censored_column, node, C, .draws) %>%
 		filter(node %>% is.na %>% `!`) %>%
 		unnest(.draws) %>%
@@ -2883,19 +2889,23 @@ censored_regression_joint = function(.proportions, sampling = F, formula_df, fil
 		unnest(data) %>%
 		unite("idx_C", c(idx, C), remove = F) %>%
 		mutate(idx_C = factor(idx_C)) %>%
-		mutate(new_C = as.integer(idx_C)) %>%
-		select(-.value) %>%
+		#mutate(new_C = as.integer(idx_C)) %>%
+		rename(.value_absolute = .value) %>%
 		
 		# Parallelise
-		left_join( (.) %>% distinct(new_C) %>% mutate(partition = sample(1:partitions, size = n(), replace = T))) %>%
+		left_join( (.) %>% distinct(idx_C) %>% mutate(partition = sample(1:partitions, size = n(), replace = T)), by="idx_C") %>%
 		nest(data = -partition) %>%
 		
 		mutate(data = furrr::future_map(
 				data, ~ .x %>%
+					nest(data_part = -idx_C) %>%
+					mutate(new_C =  1:n()) %>%
+					unnest(data_part) %>%
+					
 					left_join(
 						(.) %>%
 							# Create input for the model
-							make_cens_data_joint(formula_df) %>%
+							make_cens_data_joint(formula_df, relative = relative) %>%
 							
 							# Run model
 							run_censored_model_joint(sampling) %>%
