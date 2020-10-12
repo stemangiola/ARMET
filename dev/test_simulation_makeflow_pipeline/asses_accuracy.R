@@ -98,8 +98,9 @@ check_lower_levels_for_ARMET = function(.data, input_df, CI, slope){
   ancestors = 
     ARMET::tree %>% 
     ToDataFrameTypeColFull(TRUE) %>% 
-    filter(level_4 %in% (input_df %>% filter(alpha_2!=0))) %>% 
-    distinct(level_1, level_2, level_3) %>% 
+    # LEVEL DEPENDENT
+    filter(level_5 %in% (input_df %>% filter(alpha_2!=0))) %>% 
+    distinct(level_1, level_2, level_3, level_4) %>% 
     as.data.frame  %>%
     as.character
   
@@ -109,7 +110,7 @@ check_lower_levels_for_ARMET = function(.data, input_df, CI, slope){
     mutate(divisor = 1:n()) %>%
     
     # Decide what is the penalty
-    mutate(tp = divisor/3) %>%
+    mutate(tp = divisor/4) %>%
     filter( p.value < CI & (estimate*slope)>0) %>%
     arrange(divisor) %>% 
     dplyr::slice(1) %>%

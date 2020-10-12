@@ -21,11 +21,11 @@ prepend = function (x, values, before = 1)
 }
 
 expand_grid(
-	slope = c(-2, -1, -.5, .5, 1, 2), 
+	slope = c(-1, -.5, -.2, .2, .5, 1), 
 	foreign_prop = c(0, 0.5, 0.8),
 	S = c(30, 60, 90),
-	which_changing = 1:16,
-	run = 1:5,
+	which_changing = 1:21,
+	run = 1,
 	method = c("ARMET", "cibersort", "llsr", "epic")
 )  %>%
 	

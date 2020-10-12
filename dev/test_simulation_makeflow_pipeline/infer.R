@@ -90,7 +90,8 @@ readRDS(input_file) %>%
           sampling_iterations = 300
         )  %>%
         ARMET_tc_continue(2) %>%
-        ARMET_tc_continue(3)
+        ARMET_tc_continue(3) %>%
+        ARMET_tc_continue(4)
       
       # library(furrr)
       # plan(multisession, workers=4)
