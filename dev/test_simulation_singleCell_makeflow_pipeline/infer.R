@@ -23,48 +23,7 @@ get_survival_X = function(S){
     mutate(intercept = 1)
 }
 
-get_noiseless_harmonised = function(){
-  
-  mix_base_unharmonized = readRDS("dev/mix_base_noiseless.RDS")
-  
-  my_markers =
-    ARMET::ARMET_ref %>%
-    
-    left_join(ARMET::n_markers, by = c("ct1", "ct2")) %>%
-    filter_reference(
-      mix_base_unharmonized %>%
-        filter(level == 3) %>%
-        distinct(`Cell type category`, symbol, `count normalised bayes`) ,
-      ARMET::n_markers
-    ) %>% distinct(level, symbol)
-  
-  # level 1
-  abundance_1 =
-    my_markers %>% filter(level == 1) %>%
-    left_join(mix_base_unharmonized) %>%
-    select(level_2, symbol,  `count normalised bayes 1` =`count normalised bayes`)
-  
-  abundance_2 =
-    my_markers %>% filter(level == 2) %>%
-    left_join(mix_base_unharmonized) %>%
-    select(level_3, symbol,  `count normalised bayes 2` =`count normalised bayes`)
-  
-  # Now this is noiseless for the ancestor markers so also for ARMET that rely on hierarchy
-  mix_base_unharmonized %>%
-    filter(level==3) %>%
-    left_join(abundance_2) %>%
-    left_join(abundance_1) %>%
-    mutate(`count normalised bayes 2` = ifelse(`count normalised bayes 1` %>% is.na, `count normalised bayes 2`, `count normalised bayes 1`)) %>%
-    mutate(`count normalised bayes` = ifelse(`count normalised bayes 2` %>% is.na, `count normalised bayes`, `count normalised bayes 2`)) %>%
-    select(level_2, level_3, level_4, `Cell type category`, level, sample, symbol, `count normalised bayes`, `house keeping`)
-  
-}
 
-# get_noiseless_harmonised() %>%
-#   distinct(`Cell type category`, symbol, `count normalised bayes`) %>%
-#   spread(`Cell type category`, `count normalised bayes`) %>%
-#   nanny::as_matrix(rownames = symbol) %>%
-#   as.data.frame %>% saveRDS("dev/test_simulation_makeflow_pipeline/third_party_reference.rds", compress = "xz")
 
 readRDS(input_file) %>%
   
@@ -90,8 +49,7 @@ readRDS(input_file) %>%
           sampling_iterations = 300
         )  %>%
         ARMET_tc_continue(2) %>%
-        ARMET_tc_continue(3) %>%
-        ARMET_tc_continue(4)
+        ARMET_tc_continue(3) 
       
       # library(furrr)
       # plan(multisession, workers=4)
@@ -106,12 +64,59 @@ readRDS(input_file) %>%
     # If any other method
     ~ (.) %>%
       mutate(dead = !alive) %>%
-      tidybulk::test_differential_cellularity(
-        survival::Surv(days, dead) ~ .,
+      
+      # Deconvolution
+      tidybulk::deconvolve_cellularity(
         sample, symbol, `count mix`,
-        reference = readRDS("dev/test_simulation_makeflow_pipeline/third_party_reference.rds"),
-        method = method
-      ) 
+        method=method,
+        reference = readRDS("dev/test_simulation_singleCell_makeflow_pipeline/third_party_reference_lv3.rds"),
+        action="get"
+      ) %>%
+    
+      # Test
+      pivot_longer(
+        names_prefix = sprintf("%s: ", method),
+        cols = starts_with(method),
+        names_to = ".cell_type",
+        values_to = ".proportion"
+      ) %>%
+      
+      
+      # Adapt cell types to single cells
+      mutate(
+        .cell_type = case_when(
+          .cell_type %in% c("b_memory", "b_naive") ~ "b_cell",
+          .cell_type %in% c("nk_primed", "nk_resting") ~ "natural_killer",
+          TRUE ~ .cell_type
+        )
+      ) %>%
+      nanny::nest_subset(data = -c(sample, .cell_type)) %>% 
+      mutate(.proportion = map_dbl(data, ~ sum(.x$.proportion))) %>% 
+      select(-data) %>%
+      
+      
+      # Replace 0s
+      mutate(min_proportion = min(.proportion[.proportion!=0])) %>%
+      mutate(.proportion_0_corrected = if_else(.proportion==0, min_proportion, .proportion)) %>%
+      
+      # Test survival
+      tidyr::nest(cell_type_proportions = -.cell_type) %>%
+      mutate(surv_test = map(
+        cell_type_proportions,
+        ~ {
+          if(pull(., .proportion_0_corrected) %>% unique %>% length %>%  `<=` (3)) return(NULL)
+          
+          # See if regression if censored or not
+          .x %>%
+            mutate(.proportion_0_corrected = .proportion_0_corrected  %>% boot::logit()) %>%
+            survival::coxph(survival::Surv(days, dead) ~ .proportion_0_corrected, .)	%>%
+            broom::tidy() %>%
+            select(-term)
+        }
+      )) %>%
+      
+      unnest(surv_test, keep_empty = TRUE) 
+    
   ) %>%
   
   # Save

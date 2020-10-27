@@ -62,12 +62,10 @@ generate_mixture = function(.data, X_df, alpha, foreign_prop = 0) {
 	
 	sample_list = .data %>% tidyseurat::pull(sample) %>% unique %>% sample(size = nrow(X), replace = TRUE)
 	
-
-	
 	samples_run_df = 
 		.data %>%
 		tidyseurat::count(sample, name = "cell_total") %>%
-		dplyr::sample_n(30, replace = T) %>%
+		dplyr::sample_n(nrow(X), replace = T) %>%
 		tibble::rowid_to_column(var = "run")
 	
 	ct_names = .data %>% tidyseurat::distinct(cell_type_curated) %>% pull(1)
@@ -121,34 +119,39 @@ generate_mixture = function(.data, X_df, alpha, foreign_prop = 0) {
 		mutate(cell_count = as.integer(cell_total*p)) %>%
 		mutate(transcriptome = pmap(
 			list(sample, cell_type_curated, cell_count),
-			~ .my_data %>% 
+			~ {
 				
-				# Subset sample/cell-type
-				tidyseurat::filter(sample == ..1 & cell_type_curated == ..2) %>%
+				my_mat = 
+					.my_data %>% 
 				
-				# take n cells based on proportion
-				tidyseurat::sample_n(..3, replace = TRUE) %>%
+					# Subset sample/cell-type
+					tidyseurat::filter(sample == ..1 & cell_type_curated == ..2) %>%
+					
+					`@` (assays) %>%
+					.[["RNA"]] 
 				
-				# Get abundance sum
-				`@` (assays) %$% 
-				RNA %>%
-				`@` (counts) %>%
-				as.matrix() %>%
-				rowSums %>% 
-				enframe(name = "transcript", value = "count")
-		))
+				my_mat[,sample(1:ncol(my_mat), size=..3, replace = TRUE)] %>%
+					as.matrix() %>%
+					rowSums %>% 
+					enframe(name = "transcript", value = "count")
+					
+			}
+		)) %>%
+		unnest(transcriptome)
 
 	# Add foreign sample
 	neural_sample = 
 		readRDS("dev/ENCODE.rds") %>% 
 		filter(grepl("neur", `Cell type`)) %>% 
-		group_by(symbol) %>% slice(1) %>% ungroup() %>%
-		select(symbol, count_neuro = count)
+		group_by(symbol) %>% 
+		slice(1) %>% 
+		ungroup() %>%
+		select(transcript = symbol, count_neuro = count)
 	
 	# Make mix
 	dirichlet_source %>%
-		mutate(c = `count scaled bayes` * p) %>%
-		group_by(run, symbol) %>%
+		mutate(c = count) %>%
+		group_by(run, transcript) %>%
 		summarise(`count mix` = c %>% sum) %>%
 		ungroup %>%
 		
@@ -157,8 +160,9 @@ generate_mixture = function(.data, X_df, alpha, foreign_prop = 0) {
 		mutate(fold_change = fold_change) %>%
 		
 		# Add neuron
-		left_join(neural_sample, by = "symbol") %>%
+		left_join(neural_sample, by = "transcript") %>%
 		mutate(prop_neural = foreign_prop) %>%
+		mutate(count_neuro = if_else(is.na(count_neuro), 0, count_neuro)) %>%
 		mutate(`count mix` = (`count mix` * (1-prop_neural))+(count_neuro*prop_neural)) %>%
 		
 		# Add proportions
@@ -167,7 +171,10 @@ generate_mixture = function(.data, X_df, alpha, foreign_prop = 0) {
 	
 }
 
-mix_base = readRDS("~/PhD/deconvolution/ARMET/dev/test_simulation_singleCell_makeflow_pipeline/PBMC_curate_subset.rds") 
+mix_base = 
+	readRDS("~/PhD/deconvolution/ARMET/dev/test_simulation_singleCell_makeflow_pipeline/PBMC_integrated_curated.rds") %>%
+	tidyseurat::filter(sample != "SCP591") %>%
+	tidyseurat::filter(cell_type_curated != "dendritic_myeloid")
 
 cell_types =  mix_base %>% pull(cell_type_curated) %>% unique
 alpha = get_alpha(slope, which_changing, cell_types)
@@ -178,8 +185,11 @@ mix_base %>%
 	
 	# Parse
 	mutate(`count mix` = as.integer(`count mix`), run = as.character(run)) %>%
-	select(-level) %>%
+	
+	#select(-level) %>%
+	rename(sample_source = sample) %>%
 	rename(sample = run) %>%
+	rename(symbol = transcript) %>%
 	
 	# Save
 	saveRDS(output_file, compress = "xz")

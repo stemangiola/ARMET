@@ -7,6 +7,7 @@ library(tidyseurat)
 library(Seurat)
 library(tidysc)
 library(ggplot2)
+options(future.globals.maxSize = 50068 * 1024^2)
 
 my_dir = "~/PostDoc/oligo_breast/expanded_analyses_with_control"
 sample_info = read_csv(sprintf("%s/OMBC - Sheet1.csv", my_dir))
@@ -148,31 +149,42 @@ cellranger_PBMC =
 		sample == "10x_8K_PBMC_CallRanger_2_1_0" ~ "10x_8K",
 		TRUE ~ sample
 	))
-	
 
 # Merge
 saskia_PBMC %>% 
-tidyseurat::bind_rows(cellranger_PBMC) %>%
-tidyseurat::bind_rows(broad_SCP345) %>%
-tidyseurat::bind_rows(broad_SCP424) %>%
-tidyseurat::bind_rows(broad_SCP591) %>%
-tidyseurat::bind_rows(broad_SCP589) %>%
-tidyseurat::filter(sample %>% is.na %>% `!`) %>%
+	tidyseurat::bind_rows(cellranger_PBMC) %>%
+	tidyseurat::bind_rows(broad_SCP345) %>%
+	tidyseurat::bind_rows(broad_SCP424) %>%
+	tidyseurat::bind_rows(broad_SCP591) %>%
+	tidyseurat::bind_rows(broad_SCP589) %>%
+	tidyseurat::filter(sample %>% is.na %>% `!`) %>%
 	
 	# Process
-	tidyseurat::nest(data = -sample) %>%
-	tidyseurat::mutate(data = map(
-		data,
-		~ .x %>% 
-			tidysc::scale_abundance() %>%
-			tidysc::reduce_dimensions(method="PCA") %>%
-			tidysc::cluster_elements() %>%
-			tidyseurat::mutate(cluster = seurat_clusters) %>%
-			tidysc::deconvolve_cellularity(species="Human") %>%
-			tidysc::reduce_dimensions("UMAP") %>%
-			tidysc::reduce_dimensions("tSNE") 
-	)) %>%
-	saveRDS("dev/test_simulation_singleCell/PBMC_nested.rds", compress = "gzip")
+	tidysc::adjust_abundance(
+		~ integrate(sample), 
+		reference_samples = "SCP345_580"
+	) %>%
+	tidysc::reduce_dimensions(method="PCA") %>%
+	tidysc::cluster_elements() %>%
+	tidyseurat::mutate(cluster = seurat_clusters) %>%
+	tidysc::deconvolve_cellularity(species="Human") %>%
+	tidysc::reduce_dimensions("UMAP") %>%
+	saveRDS("dev/test_simulation_singleCell_makeflow_pipeline/PBMC_integrated.rds", compress = "gzip")
+
+# # Process
+# tidyseurat::nest(data = -sample) %>%
+# tidyseurat::mutate(data = map(
+# 	data,
+# 	~ .x %>% 
+# 		tidysc::scale_abundance() %>%
+# 		tidysc::reduce_dimensions(method="PCA") %>%
+# 		tidysc::cluster_elements() %>%
+# 		tidyseurat::mutate(cluster = seurat_clusters) %>%
+# 		tidysc::deconvolve_cellularity(species="Human") %>%
+# 		tidysc::reduce_dimensions("UMAP") %>%
+# 		tidysc::reduce_dimensions("tSNE") 
+# )) %>%
+# saveRDS("dev/test_simulation_singleCell_makeflow_pipeline/PBMC_nested.rds", compress = "gzip")
 
 
 # # PCA
@@ -198,8 +210,8 @@ tidyseurat::filter(sample %>% is.na %>% `!`) %>%
 # 	plotly::ggplotly()
 
 
-readRDS("dev/test_simulation_singleCell/PBMC_nested.rds") %>% 
-	tidyseurat::unnest(data) %>%
+readRDS("dev/test_simulation_singleCell_makeflow_pipeline/PBMC_integrated.rds") %>% 
+	#	tidyseurat::unnest(data) %>%
 	
 	# Harmonize the cell types
 	tidyseurat::mutate(
@@ -216,13 +228,13 @@ readRDS("dev/test_simulation_singleCell/PBMC_nested.rds") %>%
 			old_cell_type == "3. NK"    & label_blueprint == "CD8+ T-cells" ~ "", 
 			old_cell_type == "3. NK"    & label_blueprint == "Monocytes" ~ "", 
 			old_cell_type == "3. NK"    & label_blueprint == "NK cells" ~ "natural_killer", 
-			old_cell_type == "4. Memory B cell"   & label_blueprint == "B-cells" ~ "b_memory", 
+			old_cell_type == "4. Memory B cell"   & label_blueprint == "B-cells" ~ "b_cell", 
 			old_cell_type == "4. Memory B cell"   & label_blueprint == "CD4+ T-cells" ~ "", 
 			old_cell_type == "4. Memory B cell"   & label_blueprint == "Monocytes" ~ "", 
 			old_cell_type == "4. Memory B cell"   & label_blueprint == "NK cells" ~ "", 
 			old_cell_type == "5. DC"    & label_blueprint == "Monocytes" ~ "dendritic_myeloid", 
 			old_cell_type == "6. CD16+ Monocyte"   & label_blueprint == "Monocytes" ~ "monocyte", 
-			old_cell_type == "7. Naive B cell"   & label_blueprint == "B-cells" ~ "b_naive", 
+			old_cell_type == "7. Naive B cell"   & label_blueprint == "B-cells" ~ "b_cell", 
 			old_cell_type == "8. Ambiguous / Potential Doublets" & label_blueprint == "B-cells" ~ "", 
 			old_cell_type == "8. Ambiguous / Potential Doublets" & label_blueprint == "CD4+ T-cells" ~ "", 
 			old_cell_type == "8. Ambiguous / Potential Doublets" & label_blueprint == "CD8+ T-cells" ~ "", 
@@ -235,6 +247,7 @@ readRDS("dev/test_simulation_singleCell/PBMC_nested.rds") %>%
 			old_cell_type == "CD14+ monocyte"   & label_blueprint == "CD8+ T-cells" ~ "" , 
 			old_cell_type == "CD14+ monocyte"   & label_blueprint == "Monocytes" ~ "monocyte" , 
 			old_cell_type == "CD16+ monocyte"   & label_blueprint == "Monocytes" ~ "monocyte" , 
+			old_cell_type == "Monocytes"   & label_blueprint == "Monocytes" ~ "monocyte",
 			old_cell_type == "CD4 T Cells"   & label_blueprint == "B-cells"  ~ "" , 
 			old_cell_type == "CD4 T Cells"   & label_blueprint == "CD4+ T-cells" ~ "t_CD4" ,
 			old_cell_type == "CD4 T Cells"   & label_blueprint == "CD8+ T-cells" ~ "" , 
@@ -263,32 +276,36 @@ readRDS("dev/test_simulation_singleCell/PBMC_nested.rds") %>%
 			old_cell_type %>% is.na    & label_blueprint == "CD8+ T-cells" ~ "t_CD8" ,
 			old_cell_type %>% is.na    & label_blueprint == "Monocytes" ~ "monocyte" ,
 			old_cell_type %>% is.na    & label_blueprint == "NK cells" ~ "natural_killer" ,
+			old_cell_type == "NK Cells"    & label_blueprint == "NK cells" ~ "natural_killer" ,
 			TRUE ~ "THIS SHOULD NOT EXIST"
 		)
 	) %>% 
 	filter(cell_type_curated != "") %>%
-	saveRDS("dev/test_simulation_singleCell/PBMC_curated.rds", compress = "gzip")
-
-readRDS("dev/test_simulation_singleCell/PBMC_curated.rds") %>%
-	
-	tidyseurat::nest(data = -cell_type_curated) %>%
-	filter(cell_type_curated != "") %>%
-	tidyseurat::mutate(data = map(data, ~ .x %>% tidysc::aggregate_cells(sample))) %>%
-	unnest(data) %>%
-	
-	# Prepare the scaled bulk
-	tidyr::unite("sample_ct", c(sample, cell_type_curated), remove = F) %>%
-	select(sample_ct, cell_type_curated, transcript, abundance_RNA, sample) %>%
-	tidybulk::identify_abundant(sample_ct, transcript, abundance_RNA) %>%
-	tidybulk::scale_abundance(sample_ct, transcript, abundance_RNA) %>%
-	
-	# Save
-	saveRDS("dev/test_simulation_singleCell/PBMC_sudo_bulk.rds", compress = "gzip")
+	filter(cell_type_curated != "THIS SHOULD NOT EXIST") %>%
+	saveRDS("dev/test_simulation_singleCell_makeflow_pipeline/PBMC_integrated_curated.rds", compress = "gzip")
 
 
+# 
+# readRDS("dev/test_simulation_singleCell_makeflow_pipeline/PBMC_integrated_curated.rds") %>%
+# 	
+# 	tidyseurat::nest(data = -cell_type_curated) %>%
+# 	filter(cell_type_curated != "") %>%
+# 	tidyseurat::mutate(data = map(data, ~ .x %>% tidysc::aggregate_cells(sample))) %>%
+# 	unnest(data) %>%
+# 	
+# 	# Prepare the scaled bulk
+# 	tidyr::unite("sample_ct", c(sample, cell_type_curated), remove = F) %>%
+# 	select(sample_ct, cell_type_curated, transcript, abundance_RNA, sample) %>%
+# 	tidybulk::identify_abundant(sample_ct, transcript, abundance_RNA) %>%
+# 	tidybulk::scale_abundance(sample_ct, transcript, abundance_RNA) %>%
+# 	
+# 	# Save
+# 	saveRDS("dev/test_simulation_singleCell_makeflow_pipeline/PBMC_sudo_bulk.rds", compress = "gzip")
+# 
+# 
+# 
+# readRDS("dev/test_simulation_singleCell_makeflow_pipeline/PBMC_sudo_bulk.rds") %>%
+# 	tidybulk::reduce_dimensions(sample_ct, transcript, abundance_RNA_scaled, method="PCA", action="get", scale=F) %>%
+# 	ggplot(aes(PC1, PC2, color=cell_type_curated)) +
+# 	geom_point()
 
-readRDS("dev/test_simulation_singleCell/PBMC_sudo_bulk.rds") %>%
-	tidybulk::reduce_dimensions(sample_ct, transcript, abundance_RNA_scaled, method="PCA", action="get", scale=F) %>%
-	ggplot(aes(PC1, PC2, color=cell_type_curated)) +
-	geom_point()
-	

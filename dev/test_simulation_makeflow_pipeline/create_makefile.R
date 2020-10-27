@@ -21,7 +21,7 @@ prepend = function (x, values, before = 1)
 }
 
 expand_grid(
-	slope = c(-1, -.5, -.2, .2, .5, 1), 
+	slope = 0.05 %>% c(seq(0.1, 1, 0.1)) %>% c(. * -1), 
 	foreign_prop = c(0, 0.5, 0.8),
 	S = c(30, 60, 90),
 	which_changing = 1:21,

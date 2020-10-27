@@ -4,8 +4,8 @@
 library(tidyverse)
 
 project_dir = "~/PhD/deconvolution/ARMET"
-pipeline_dir = paste0(project_dir, "/dev/test_simulation_makeflow_pipeline")
-output_dir = "dev/test_simulation" # paste0(project_dir, "/dev/test_simulation")
+pipeline_dir = paste0(project_dir, "/dev/test_simulation_singleCell_makeflow_pipeline")
+output_dir = "dev/test_simulation_singleCell" # paste0(project_dir, "/dev/test_simulation")
 makeflow_file = paste0(pipeline_dir, "/makefile_test_simulation.makeflow") 
 
 prepend = function (x, values, before = 1) 
@@ -24,7 +24,7 @@ expand_grid(
 	slope = c(-1, -.5, -.2, .2, .5, 1), 
 	foreign_prop = c(0, 0.5, 0.8),
 	S = c(30, 60, 90),
-	which_changing = 1:21,
+	which_changing = 1:5,
 	run = 1,
 	method = c("ARMET", "cibersort", "llsr", "epic")
 )  %>%
@@ -46,7 +46,7 @@ expand_grid(
 			pull(command) %>%
 			
 			# Resources
-			prepend("CATEGORY=create_input\nMEMORY=8024\nCORES=2\nWALLTIME=1" ) %>%
+			prepend("CATEGORY=create_input\nMEMORY=60024\nCORES=2\nWALLTIME=1" ) %>%
 			
 			# Write to file
 			write_lines(makeflow_file, append = FALSE)

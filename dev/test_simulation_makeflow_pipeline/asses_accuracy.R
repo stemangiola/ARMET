@@ -18,8 +18,6 @@ args = commandArgs(trailingOnly=TRUE)
 
 
 
-  
-
 foreignProp = args[1]
 run = args[2]
 S = args[3]

@@ -25,7 +25,7 @@ get_survival_X = function(S){
 
 get_noiseless_harmonised = function(){
   
-  mix_base_unharmonized = readRDS("dev/mix_base_noiseless.RDS")
+  mix_base_unharmonized = readRDS("dev/mix_base.RDS") %>% filter(level ==4)
   
   my_markers =
     ARMET::ARMET_ref %>%
@@ -33,8 +33,8 @@ get_noiseless_harmonised = function(){
     left_join(ARMET::n_markers, by = c("ct1", "ct2")) %>%
     filter_reference(
       mix_base_unharmonized %>%
-        filter(level == 3) %>%
-        distinct(`Cell type category`, symbol, `count normalised bayes`) ,
+        filter(level == 4) %>%
+        distinct(`Cell type category`, symbol, `count scaled bayes`) ,
       ARMET::n_markers
     ) %>% distinct(level, symbol)
   
@@ -42,29 +42,42 @@ get_noiseless_harmonised = function(){
   abundance_1 =
     my_markers %>% filter(level == 1) %>%
     left_join(mix_base_unharmonized) %>%
-    select(level_2, symbol,  `count normalised bayes 1` =`count normalised bayes`)
+    select(level_2, symbol,  `count scaled bayes 1` =`count scaled bayes`)
   
   abundance_2 =
     my_markers %>% filter(level == 2) %>%
     left_join(mix_base_unharmonized) %>%
-    select(level_3, symbol,  `count normalised bayes 2` =`count normalised bayes`)
+    select(level_3, symbol,  `count scaled bayes 2` =`count scaled bayes`)
+  
+  abundance_3 =
+    my_markers %>% filter(level == 3) %>%
+    left_join(mix_base_unharmonized) %>%
+    select(level_4, symbol,  `count scaled bayes 3` =`count scaled bayes`)
+  
   
   # Now this is noiseless for the ancestor markers so also for ARMET that rely on hierarchy
   mix_base_unharmonized %>%
-    filter(level==3) %>%
+    filter(level==4) %>%
+    left_join(abundance_3) %>%
     left_join(abundance_2) %>%
     left_join(abundance_1) %>%
-    mutate(`count normalised bayes 2` = ifelse(`count normalised bayes 1` %>% is.na, `count normalised bayes 2`, `count normalised bayes 1`)) %>%
-    mutate(`count normalised bayes` = ifelse(`count normalised bayes 2` %>% is.na, `count normalised bayes`, `count normalised bayes 2`)) %>%
-    select(level_2, level_3, level_4, `Cell type category`, level, sample, symbol, `count normalised bayes`, `house keeping`)
+    mutate(`count scaled bayes 3` = ifelse(`count scaled bayes 2` %>% is.na, `count scaled bayes 3`, `count scaled bayes 2`)) %>%
+    
+    mutate(`count scaled bayes 2` = ifelse(`count scaled bayes 1` %>% is.na, `count scaled bayes 2`, `count scaled bayes 1`)) %>%
+    mutate(`count scaled bayes` = ifelse(`count scaled bayes 2` %>% is.na, `count scaled bayes`, `count scaled bayes 2`)) %>%
+    select(level_2, level_3, level_4, `Cell type category`, level, sample, symbol, `count scaled bayes`, `house keeping`)
   
 }
 
-# get_noiseless_harmonised() %>%
-#   distinct(`Cell type category`, symbol, `count normalised bayes`) %>%
-#   spread(`Cell type category`, `count normalised bayes`) %>%
+# #get_noiseless_harmonised() 
+# readRDS("dev/mix_base.RDS") %>% 
+#   filter(level ==4) %>%
+#   distinct(`Cell type category`, symbol, `count scaled bayes`) %>%
+#   group_by(`Cell type category`, symbol) %>%
+#   summarise(`count scaled bayes` = median(`count scaled bayes`)) %>%
+#   spread(`Cell type category`, `count scaled bayes`) %>%
 #   nanny::as_matrix(rownames = symbol) %>%
-#   as.data.frame %>% saveRDS("dev/test_simulation_makeflow_pipeline/third_party_reference.rds", compress = "xz")
+#   as.data.frame %>% saveRDS("dev/test_simulation_makeflow_pipeline/third_party_reference_level4.rds", compress = "xz")
 
 readRDS(input_file) %>%
   
@@ -109,7 +122,7 @@ readRDS(input_file) %>%
       tidybulk::test_differential_cellularity(
         survival::Surv(days, dead) ~ .,
         sample, symbol, `count mix`,
-        reference = readRDS("dev/test_simulation_makeflow_pipeline/third_party_reference.rds"),
+        reference = readRDS("dev/test_simulation_makeflow_pipeline/third_party_reference_level4.rds"),
         method = method
       ) 
   ) %>%
