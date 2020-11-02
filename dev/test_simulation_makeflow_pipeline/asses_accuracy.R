@@ -6,15 +6,15 @@ library(tidybulk)
 args = commandArgs(trailingOnly=TRUE)
 
 
-# foreignProp="0"
+# foreignProp="0.5"
 # run="1"
 # S = "60"
-# slope = 0.5
-# whichChanging = "16"
+# slope = 0.05
+# whichChanging = "1"
 # method ="ARMET"
-# input_file ="dev/test_simulation/input__slope_0.5__foreignProp_0__S_60__whichChanging_16__run_1.rds"
-# file = "dev/test_simulation/output__slope_0.5__foreignProp_0__S_60__whichChanging_16__run_1__method_ARMET.rds"
-# output_file = "dev/test_simulation/asses__slope_0.5__foreignProp_0__S_60__whichChanging_16__run_1__method_ARMET.rds"
+# input_file ="dev/test_simulation//input__slope_0.05__foreignProp_0.5__S_60__whichChanging_1__run_1.rds"
+# file = "dev/test_simulation/output__slope_0.05__foreignProp_0.5__S_60__whichChanging_1__run_1__method_ARMET.rds"
+# output_file = "dev/test_simulation/asses__slope_0.05__foreignProp_0.5__S_60__whichChanging_1__run_1__method_ARMET.rds"
 
 
 
@@ -43,7 +43,7 @@ decide_if_fp_tp = function(.data, CI, slope){
     # If non significant of significant with opposite direction
     mutate(
       fp = alpha_2 == 0 &
-        p.value < CI |
+        p.value <= CI |
         (alpha_2 != 0 &	p.value < CI & (estimate*alpha_2)<0)
     ) %>%
     

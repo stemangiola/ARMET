@@ -42,7 +42,7 @@ decide_if_fp_tp = function(.data, CI, slope){
     # If non significant or significant with opposite direction
     mutate(
       fp = alpha_2 == 0 &
-        p.value < CI |
+        p.value <= CI |
         (alpha_2 != 0 &	p.value < CI & (estimate*alpha_2)<0)
     ) %>%
     
@@ -92,7 +92,10 @@ process_third_party = function(CI, file, input_file, slope){
     mutate(estimate = -estimate) %>%
     
     # Mark the failed tests
-    mutate(failed_test = p.value %>% is.na) %>%
+    mutate(failed_test = FALSE) %>%
+    
+    # # Mark the failed tests
+    # mutate(failed_test = p.value %>% is.na) %>%
     
     decide_if_fp_tp(CI, slope)  %>%
     
