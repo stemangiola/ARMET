@@ -144,9 +144,9 @@ generate_mixture = function(.data, X_df, alpha, foreign_prop = 0) {
 	
 }
 
-mix_base = readRDS("~/PhD/deconvolution/ARMET/dev/mix_base.RDS") %>% filter(level==3)
+mix_base = readRDS("~/PhD/deconvolution/ARMET/dev/mix_base.RDS") %>% filter(level==4)
 
-cell_types =  mix_base %>% filter(level ==3) %>% pull(`Cell type category`) %>% unique
+cell_types =  mix_base %>% pull(`Cell type category`) %>% unique
 alpha = get_alpha(slope, which_changing, cell_types)
 X_df = get_survival_X(S)
 

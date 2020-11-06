@@ -50,6 +50,7 @@ docs/feature_selection*
 docs/ref_1_2_3.csv
 temp*
 *torque*
+slurm.status*
 dev/run*
 log*
 docs/RECOVERED_FILES/*

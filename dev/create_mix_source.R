@@ -81,7 +81,12 @@ ref =	ARMET::ARMET_ref
 all_genes =
 	ref %>%
 	filter(level==1) %>%
-	inner_join( (.) %>% distinct(symbol, `Cell type category`) %>% count(symbol) %>% filter(n == max(n)) ) %>%
+	inner_join(
+		(.) %>% 
+			distinct(symbol, `Cell type category`) %>% 
+			dplyr::count(symbol) %>%
+			filter(n == max(n)) 
+	) %>%
 	distinct(symbol) %>% pull(1)
 
 mix_base_sparse = ref %>% filter(symbol %in% all_genes)
@@ -95,25 +100,6 @@ impute_missing = function(ref2, tree){
 				spread(symbol, `count scaled bayes`) %>%
 				gather(symbol, `count scaled bayes`, -c(1:3))
 		) %>%
-
-		# Level 5
-
-		# do_parallel_start(
-		# 	.f = ~ {
-		# 		values = .x %>% drop_na() %>% pull(`count scaled bayes`)
-		# 		if(length(values) > 0)
-		#
-		# 			bind_rows(
-		# 				.x %>% filter(`count scaled bayes` %>% is.na %>% `!`),
-		# 				.x %>% filter(`count scaled bayes` %>% is.na ) %>%
-	# 					mutate(`count scaled bayes` = sample(values, size = n(), replace = T))
-	# 			)
-	#
-	# 		else (.)
-	#
-	# 	} ,
-	# 	`Cell type category`, symbol
-	# ) %>%
 
 	do_parallel_start(n_cores, "Cell type category") %>%
 		do({
@@ -139,24 +125,6 @@ impute_missing = function(ref2, tree){
 		}) %>%
 		do_parallel_end() %>%
 
-		# Level 4
-
-		# do_parallel_start(
-		# 	.f = ~ {
-		# 		values = .x %>% drop_na() %>% pull(`count scaled bayes`)
-		# 		if(length(values) > 0)
-		#
-		# 			bind_rows(
-		# 				.x %>% filter(`count scaled bayes` %>% is.na %>% `!`),
-		# 				.x %>% filter(`count scaled bayes` %>% is.na ) %>%
-	# 					mutate(`count scaled bayes` = sample(values, size = n(), replace = T))
-	# 			)
-	#
-	# 		else (.)
-	#
-	# 	} ,
-	# 	`level_4`, symbol
-	# ) %>%
 
 
 	do_parallel_start(n_cores, "level_4") %>%
@@ -276,7 +244,7 @@ impute_missing = function(ref2, tree){
 		) %>%
 
 		# there is redundancy I don't know why
-		group_by(sample, symbol, level) %>% slice(1) %>% ungroup()
+		group_by(sample, symbol, level) %>% dplyr::slice(1) %>% ungroup()
 
 }
 

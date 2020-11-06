@@ -908,7 +908,7 @@ type_in_cluster_brain = c("LGG", "GBM", "UVM", "PRAD", "KIRC", "PCPG", "THYM")
 
 # Gender analyses
 gender = 
-	dir("dev/armet_TCGA_Sep2_gender/", pattern = "lv_4_gender_regression.rds", full.names = T) %>%
+	dir("dev/armet_TCGA_Oct2_gender/", pattern = "lv_4_gender_regression.rds", full.names = T) %>%
 	map_dfr(~ .x %>% readRDS %>% mutate(file=.x)) 
 
 
@@ -1123,6 +1123,7 @@ list(
 	plot_km_type_cell_division(gender, "COAD", "immune_cell", FALSE, "female") + ggtitle(paste(c("COAD", "immune_cell", FALSE, "female"), collapse=" ")),
 	plot_km_type_cell_division(gender, "HNSC", "immune_cell", TRUE, "male") + ggtitle(paste(c("HNSC", "immune_cell", TRUE, "male"), collapse=" ")),
 	plot_km_type_cell_division(gender, "GBM", "mast_cell", TRUE, "female") + ggtitle(paste(c( "GBM", "mast_cell", TRUE, "female"), collapse=" ")),
+	plot_km_type_cell_division(gender, "LGG", "mast_cell", FALSE, "female") + ggtitle(paste(c( "LGG", "mast_cell", FALSE, "female"), collapse=" ")),
 	plot_km_type_cell_division(gender, "THYM", "epithelial", FALSE, "female") + ggtitle(paste(c("THYM", "epithelial", FALSE, "female"), collapse=" ")),
 	plot_km_type_cell_division_thym_immune(gender, "THYM", "immune_cell") + ggtitle(paste(c("THYM", "immune_cell"), collapse=" "))
 ) %>%
