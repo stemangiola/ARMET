@@ -27,7 +27,8 @@ Imports:
 	rlang,
 	ape,
 	tidybayes,
-	tidygraph
+	tidygraph,
+	parallel
 LinkingTo: StanHeaders (>= 2.18.0), rstan (>= 2.18.1), BH (>= 1.66.0), Rcpp (>= 0.12.17), RcppEigen (>= 0.3.3.4.0)
 SystemRequirements: GNU make
 NeedsCompilation: yes

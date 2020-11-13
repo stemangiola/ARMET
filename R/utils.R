@@ -1653,23 +1653,33 @@ parse_formula <- function(fm) {
 		grep("censored(", ., fixed = T, value = T)  %>% 
 		gsub("censored\\(|\\)| ", "", .) %>% str_split("\\,") %>% 
 		when(length(.)>0 ~(.) %>% .[[1]] %>% .[-1])
+	
 	censored_value_column = 
 		components%>% grep("censored(", ., fixed = T, value = T)  %>% 
 		gsub("censored\\(|\\)| ", "", .) %>% str_split("\\,") %>% 
 		when(length(.)>0 ~(.) %>% .[[1]]%>% .[1])
 	
-	
 	formula_formatted =
-		Reduce(paste, deparse(fm)) %>%
-		gsub( grep( "censored", components, value = T), censored_formatted, ., fixed = T)	 %>%
-		as.formula
+		fm %>%
+		when(
+			length(grep( "censored", components, value = T)) == 0 ~ fm,
+			~ Reduce(paste, deparse(fm)) %>%
+				gsub( grep( "censored", components, value = T), censored_formatted, ., fixed = T)	 %>%
+				as.formula
+		)
+		
 	
 	formula_censored_formatted =
-		Reduce(paste, deparse(fm)) %>%
-		gsub( grep( "censored", components, value = T), "proportion", ., fixed = T)	 %>%
-		sprintf("%s%s", censored_formatted, .) %>%
-		as.formula
-
+		fm %>%
+		when(
+			length(grep( "censored", components, value = T)) == 0 ~ NULL,
+			~ Reduce(paste, deparse(fm)) %>%
+				gsub( grep( "censored", components, value = T), "proportion", ., fixed = T)	 %>%
+				sprintf("%s%s", censored_formatted, .) %>%
+				as.formula
+		)
+	
+	
 	list(
 		components = components,
 		components_formatted = components_formatted,
@@ -1905,7 +1915,6 @@ get_ancestor_child = function(tree){
 		) %>%
 		filter(ancestor != `Cell type category`)
 }
-
 
 get_tree_properties = function(tree){
 	
@@ -2208,10 +2217,10 @@ extract_CI =  function(.data, credible_interval = 0.90){
 																	#group_by(.chain ,.iteration, .draw) %>%
 																	# tidybayes::median_qi(.width = credible_interval) %>%
 																	# ungroup() %>%
-																	pivot_wider(names_from = A, values_from=c(.value, .lower, .upper,prob_non_0 ))
+																	pivot_wider(names_from = A, values_from=c(.value, .value.lower, .value.upper,prob_non_0 ))
 				)) %>%
 				unnest(cols = c(regression)) %>%
-				select(C, `Cell type category`,starts_with(".value"), ,starts_with(".upper"), ,starts_with(".lower"), starts_with("prob_non_0"))
+				select(C, `Cell type category`,starts_with(".value"), ,starts_with(".value.upper"), ,starts_with(".value.lower"), starts_with("prob_non_0"))
 			
 		), 
 		~ (.))
@@ -2860,13 +2869,16 @@ make_cens_data_joint = function(.data, formula_df, relative = TRUE){
 	
 }
 
+#' @import parallel
+#' 
 censored_regression_joint = 
-	function(.proportions, sampling = F, formula_df, filter_how_many = Inf, partitions = 30, relative = TRUE){
+	function(.proportions, sampling = F, formula_df, filter_how_many = Inf, partitions = 4, relative = TRUE){
 	
 	# x = as.symbol(x)
 	# alive = as.symbol(alive)
 	
 
+	partitions = 
 		.proportions %>%
 		
 		# If absolute keep only last level
@@ -2894,30 +2906,44 @@ censored_regression_joint =
 		
 		# Parallelise
 		left_join( (.) %>% distinct(idx_C) %>% mutate(partition = sample(1:partitions, size = n(), replace = T)), by="idx_C") %>%
-		nest(data = -partition) %>%
+		nest(data = -partition) 
+	
+	core_fx = function(.data){
+		.data %>%
+			nest(data_part = -idx_C) %>%
+			mutate(new_C =  1:n()) %>%
+			unnest(data_part) %>%
+			
+			left_join(
+				(.) %>%
+					# Create input for the model
+					make_cens_data_joint(formula_df, relative = relative) %>%
+					
+					# Run model
+					run_censored_model_joint(sampling) %>%
+					rename(.value = value) ,
+				by=c("new_C" = "C")
+			) %>%
+			
+			select(level, node, C, A, .chain, .iteration, .draw, .value, one_of(".draw2", ".lower", ".upper", "prob_non_0")) %>%
+			distinct() 
+	}
+	
+	# Make it parallel
+	partitions %>%
+		when(
+			Sys.info()[['sysname']] != "Windows" ~ (.) %>% pull(data) %>% parallel::mclapply(core_fx, mc.cores = 4),
+			~ {
+				cl <- parallel::makeCluster(4)
+				(.) %>% pull(data) %>% parallel::parlapply(cl, ., core_fx, mc.cores = 4)
+			}
+		) %>%
 		
-		mutate(data = furrr::future_map(
-				data, ~ .x %>%
-					nest(data_part = -idx_C) %>%
-					mutate(new_C =  1:n()) %>%
-					unnest(data_part) %>%
-					
-					left_join(
-						(.) %>%
-							# Create input for the model
-							make_cens_data_joint(formula_df, relative = relative) %>%
-							
-							# Run model
-							run_censored_model_joint(sampling) %>%
-							rename(.value = value) ,
-						by=c("new_C" = "C")
-					) %>%
-					
-					select(level, node, C, A, .chain, .iteration, .draw, .value, one_of(".draw2", ".lower", ".upper", "prob_non_0")) %>%
-					distinct() 
-		)) %>%
+		# Reformat as tibble
+		as_tibble_col(column_name = "data") %>%
+		rowid_to_column(var = "partition") %>%
 		unnest(data)
-		
+
 }
 
 prepare_TCGA_input = function(file_name, my_dir){
@@ -2946,7 +2972,7 @@ prepare_TCGA_input = function(file_name, my_dir){
 				type_convert() %>%
 				
 				# Subset otherwise dataset too big
-				select(bcr_patient_barcode, type, PFI.time.2, PFI.2), 
+				select(bcr_patient_barcode, type, PFI.time.2, PFI.2, DSS_cr, DSS.time.cr), 
 			by = c("patient" = "bcr_patient_barcode")
 		) %>%
 		select(-sample) %>%

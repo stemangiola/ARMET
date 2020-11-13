@@ -725,19 +725,33 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 	# x = .data$internals$formula_df$components_formatted
 	# alive = .data$internals$formula_df$censored_column
 	# 	
+	
 	cens_alpha = 
-		.data$proportions %>% 
-		select(-draws, -contains("rng")) %>%
-		rename(node = .variable)  %>% 
-		unnest(proportions) %>%
-		censored_regression_joint(formula_df = .data$internals$formula_df, filter_how_many = Inf)  %>% 
-		rename(.variable = node) %>%
-		nest(draws_cens = -c(level, .variable  ,      C)) 
+		.data$internals$formula_df$censored_formatted %>%
+		when(
+			length(.) == 0 ~ NULL,
+			
+			# Only if I have censoring
+			~ .data$proportions %>% 
+				select(-draws, -contains("rng")) %>%
+				rename(node = .variable)  %>% 
+				unnest(proportions) %>%
+				censored_regression_joint(formula_df = .data$internals$formula_df, filter_how_many = Inf)  %>% 
+				rename(.variable = node) %>%
+				nest(draws_cens = -c(level, .variable  ,      C)) 
+		)
+	
 	 
 	.d = 
 		.data$proportions %>%
 		filter(.variable %>% is.na %>% `!`) %>%
-		left_join(cens_alpha, by = c("level", "C", ".variable")) %>%
+		
+		# If I have censoring
+		when(
+			!is.null(cens_alpha) ~ (.) %>% left_join(cens_alpha, by = c("level", "C", ".variable")),
+			~ (.)
+		) %>%
+		
 		cluster_posterior_slopes(credible_interval = cluster_CI) %>%
 		extract_CI(credible_interval = credible_interval)
 	
@@ -752,8 +766,14 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 		mutate(fold_change_ancestor = 0) %>%
 		identify_baseline_by_clustering( ) %>%
 		
-		mutate(significant = ((.lower_2 - 0) * (.upper_2 - 0)) > 0) %>%
-		mutate(fold_change  = ifelse(significant, .value_2, 0))
+		when(
+			!is.null(cens_alpha) ~ 
+				mutate(., significant = ((.value.lower_2 - 0) * (.value.upper_2 - 0)) > 0) %>%
+				mutate(fold_change  = ifelse(significant, .value_2, 0)),
+			~ mutate(., significant = ((.lower_alpha2  - 0) * (.upper_alpha2  - 0)) > 0) %>%
+				mutate(fold_change  = ifelse(significant, .value_alpha2 , 0))
+		) 
+		
 	
 	# Level 2
 	if(.d %>% filter(level ==2) %>% nrow %>% `>` (0))
@@ -765,8 +785,13 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change),  by = "ancestor" )  %>%
 				identify_baseline_by_clustering( ) %>%
 				
-				mutate(significant = ((.lower_2 - 0) * (.upper_2 - 0)) > 0) %>%
-				mutate(fold_change  = ifelse(significant, .value_2, 0))
+				when(
+					!is.null(cens_alpha) ~ 
+						mutate(., significant = ((.value.lower_2 - 0) * (.value.upper_2 - 0)) > 0) %>%
+						mutate(fold_change  = ifelse(significant, .value_2, 0)),
+					~ mutate(., significant = ((.lower_alpha2  - 0) * (.upper_alpha2  - 0)) > 0) %>%
+						mutate(fold_change  = ifelse(significant, .value_alpha2 , 0))
+				) 
 		) 
 	
 	
@@ -780,8 +805,13 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) ,  by = "ancestor")  %>%
 				identify_baseline_by_clustering( ) %>%
 				
-				mutate(significant = ((.lower_2 - 0) * (.upper_2 - 0)) > 0) %>%
-				mutate(fold_change  = ifelse(significant, .value_2, 0))
+				when(
+					!is.null(cens_alpha) ~ 
+						mutate(., significant = ((.value.lower_2 - 0) * (.value.upper_2 - 0)) > 0) %>%
+						mutate(fold_change  = ifelse(significant, .value_2, 0)),
+					~ mutate(., significant = ((.lower_alpha2  - 0) * (.upper_alpha2  - 0)) > 0) %>%
+						mutate(fold_change  = ifelse(significant, .value_alpha2 , 0))
+				) 
 		)
 	
 	# Level 4
@@ -794,8 +824,13 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) ,  by = "ancestor")  %>%
 				identify_baseline_by_clustering( ) %>%
 				
-				mutate(significant = ((.lower_2 - 0) * (.upper_2 - 0)) > 0) %>%
-				mutate(fold_change  = ifelse(significant, .value_2, 0))
+				when(
+					!is.null(cens_alpha) ~ 
+						mutate(., significant = ((.value.lower_2 - 0) * (.value.upper_2 - 0)) > 0) %>%
+						mutate(fold_change  = ifelse(significant, .value_2, 0)),
+					~ mutate(., significant = ((.lower_alpha2  - 0) * (.upper_alpha2  - 0)) > 0) %>%
+						mutate(fold_change  = ifelse(significant, .value_alpha2 , 0))
+				) 
 		)
 	
 	dx
