@@ -10,16 +10,10 @@ ARMET_tc(
   .sample = NULL,
   .transcript = NULL,
   .abundance = NULL,
-  family = "dirichlet",
   reference = NULL,
   approximate_posterior = F,
-  verbose = F,
-  save_fit = F,
-  seed = NULL,
-  cores = 14,
   iterations = 250,
   sampling_iterations = 100,
-  levels = 1,
   .n_markers = n_markers,
   do_regression = T,
   prior_survival_time = c(),
@@ -27,33 +21,31 @@ ARMET_tc(
 )
 }
 \arguments{
-\item{verbose}{A boolean}
+\item{.data}{A tibble}
 
-\item{save_fit}{A boolean}
+\item{.formula}{A formula}
 
-\item{seed}{An integer}
+\item{.sample}{A column symbol}
 
-\item{mix}{A matrix}
+\item{.transcript}{A column symbol}
 
-\item{my_design}{A matrix}
+\item{.abundance}{A column symbol}
 
-\item{cov_to_test}{A character string}
+\item{reference}{A tibble}
 
-\item{fully_bayesian}{A boolean}
+\item{approximate_posterior}{A boolean for variational Bayes}
 
-\item{is_mix_microarray}{A boolean}
+\item{iterations}{An integer total iterations}
 
-\item{save_report}{A boolean}
+\item{sampling_iterations}{An integer. Sampling iteractions}
 
-\item{custom_ref}{A matrix}
+\item{.n_markers}{A tibble}
 
-\item{multithread}{A boolean}
+\item{do_regression}{A boolean}
 
-\item{do_debug}{A boolean}
+\item{prior_survival_time}{An array}
 
-\item{cell_type_root}{A character string}
-
-\item{choose_internal_ref}{A design matrix}
+\item{model}{A stan model}
 }
 \value{
 An ARMET object

@@ -1,16 +1,25 @@
-#' Create polar plot of results
+#' plot_polar
+#' 
+#' @description Create polar plot of results
 #' @rdname plot_polar
 #'
-#' Prints a report of the hipothesis testing
 #'
 #' @import ggplot2
 #' @import tibble
 #' @import dplyr
 #' @import data.tree
 #' @importFrom ape as.phylo
+#' @importFrom scales trans_new
 #'
 #'
-#' @param ARMET-tc object
+#' @param .data ARMET-tc object
+#' @param size_geom_text A double
+#' @param my_breaks An integer
+#' @param prop_filter A double
+#' @param barwidth A double
+#' @param barheight A double
+#' @param legend_justification A double
+#' @param fill_direction An integer
 #'
 #' @return a ggplot
 #'
@@ -269,18 +278,19 @@ plot_polar = function(	.data,
 		coord_polar(theta = "x")
 }
 
+#' plot_scatter
 #' 
-#' #' Create polar plot of results
+#' @description Create scatter plot of results
 #' @rdname plot_scatter
 #'
-#' Prints a report of the hypothesis testing
 #'
 #' @import ggplot2
 #' @import tibble
 #' @import dplyr
+#' @importFrom nanny subset
 #'
 #'
-#' @param ARMET-tc object
+#' @param .data ARMET-tc object
 #'
 #' @return a ggplot
 #'
@@ -417,12 +427,17 @@ plot_scatter = function(.data){
 #' This is a generalisation of ifelse that acceots an object and return an objects
 #'
 #' @import ggplot2
+#' @importFrom ggrepel geom_text_repel
+#' @importFrom tidybayes spread_draws
+#' 
+#' @param result An ARMET object
+#' @param level An integer.
+#' @param S An integer. Number of samples
+#' @param cores An integer
 #'
 #' @export
 plot_markers  = function(result, level, S = NULL, cores = 20){
 	 
-	library(furrr)
-	
 	sum_NB = function(lambda, sigma, prop){
 		
 		prop_mat = matrix(prop, nrow=1)
@@ -564,7 +579,7 @@ plot_markers  = function(result, level, S = NULL, cores = 20){
 		{ print(9); Sys.time(); (.) } %>%
 		
 
-		# Setup plot with lables
+		# Setup plot with labels
 		mutate(outlier = count %>% between(.q025, .q97.5) %>% `!`) %>%
 		mutate(min_error = min(abs(.q025-count), abs(.q97.5-count))) %>%
 		ungroup() %>%

@@ -21,6 +21,8 @@ vb_iterative(
 \item{iter}{An integer of how many max iterations}
 
 \item{tol_rel_obj}{A real}
+
+\item{algorithm}{A character}
 }
 \value{
 A Stan fit object
@@ -28,3 +30,4 @@ A Stan fit object
 \description{
 Runs iteratively variational bayes until it suceeds
 }
+\keyword{internal}

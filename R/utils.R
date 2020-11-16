@@ -1,5 +1,3 @@
-
-
 my_theme =
 	theme_bw() +
 	theme(
@@ -30,8 +28,17 @@ my_theme =
 		))
 	)
 
+# Greater than
+gt = function(a, b){	a > b }
+
+# Smaller than
+st = function(a, b){	a < b }
+
+# Negation
+not = function(is){	!is }
 
 #' This is a generalisation of ifelse that acceots an object and return an objects
+#' @keywords internal
 #'
 #' @import dplyr
 #' @import tidyr
@@ -50,6 +57,7 @@ ifelse_pipe = function(.x, .p, .f1, .f2 = NULL) {
 }
 
 #' This is a generalisation of ifelse that acceots an object and return an objects
+#' @keywords internal
 #'
 #' @import dplyr
 #' @import tidyr
@@ -85,6 +93,7 @@ ifelse2_pipe = function(.x, .p1, .p2, .f1, .f2, .f3 = NULL) {
 }
 
 #' This is a generalisation of ifelse that acceots an object and return an objects
+#' @keywords internal
 #'
 #' @import dplyr
 #' @import tidyr
@@ -129,6 +138,7 @@ ifelse3_pipe = function(.x, .p1, .p2, .p3, .f1, .f2, .f3, .f4 = NULL) {
 }
 
 #' This is a generalisation of ifelse that acceots an object and return an objects
+#' @keywords internal
 #'
 #' @import dplyr
 #' @import tidyr
@@ -181,130 +191,7 @@ ifelse4_pipe = function(.x, .p1, .p2, .p3, .p4, .f1, .f2, .f3, .f4, .f5 = NULL) 
 		))
 }
 
-#' format_for_MPI
-#'
-#' @description Format reference data frame for MPI
-format_for_MPI = function(df, shards) {
-	df %>%
-
-		left_join((.) %>%
-								distinct(G) %>%
-								arrange(G) %>%
-								mutate(idx_MPI = head(
-									rep(1:shards, (.) %>% nrow %>% `/` (shards) %>% ceiling), n = (.) %>% nrow
-								)), by = "G") %>%
-		arrange(idx_MPI, G) %>%
-
-		# Decide start - end location
-		group_by(idx_MPI) %>%
-		do((.) %>%
-			 	left_join(
-			 		(.) %>%
-			 			distinct(sample, G) %>%
-			 			arrange(G) %>%
-			 			count(G) %>%
-			 			mutate(end = cumsum(n)) %>%
-			 			mutate(start = c(
-			 				1, .$end %>% rev() %>% `[` (-1) %>% rev %>% `+` (1)
-			 			))
-			 	, by = "G")) %>%
-		ungroup() %>%
-
-		# Add ct_symbol MPI rows indexes - otherwise spread below gives error
-		left_join(
-			(.) %>%
-				group_by(idx_MPI) %>%
-				distinct(G) %>%
-				arrange(G) %>%
-				mutate(`symbol MPI row` = 1:n()) %>%
-				ungroup,
-			by = c("G", "idx_MPI")
-		) %>%
-
-		# Add counts MPI rows indexes
-		group_by(idx_MPI) %>%
-		arrange(G) %>%
-		mutate(`read count MPI row` = 1:n()) %>%
-		# do( (.) %>% arrange(G) %>% rowid_to_column("read count MPI row") ) %>%
-		ungroup
-
-}
-
-#' xx
-#' @import magrittr
-format_for_MPI_from_linear = function(df) {
-	shards = df %>% arrange(shards %>% desc) %>% slice(1) %>% pull(shards)
-	if (shards %>% length %>% equals(0))
-		shards = 1
-
-
-	df %>%
-
-		left_join((.) %>%
-								distinct(GM) %>%
-								arrange(GM) %>%
-								mutate(idx_MPI = head(
-									rep(1:shards, (.) %>% nrow %>% `/` (shards) %>% ceiling), n = (.) %>% nrow
-								)), by = "GM") %>%
-		arrange(idx_MPI, GM, G) %>%
-
-		# Add counts MPI rows indexes
-		group_by(idx_MPI) %>%
-		arrange(GM, G) %>%
-		do((.) %>% rowid_to_column("read count MPI row")) %>%
-		ungroup
-
-}
-
-format_for_MPI_from_linear_GM = function(df) {
-	shards = df %>% arrange(shards %>% desc) %>% slice(1) %>% pull(shards)
-	if (shards %>% length %>% equals(0))
-		shards = 1
-
-	df %>%
-
-		left_join((.) %>%
-								distinct(GM) %>%
-								arrange(GM) %>%
-								mutate(idx_MPI = head(
-									rep(1:shards, (.) %>% nrow %>% `/` (shards) %>% ceiling), n = (.) %>% nrow
-								)), by = "GM") %>%
-		arrange(idx_MPI, GM) %>%
-
-		# Add counts MPI rows indexes
-		group_by(idx_MPI) %>%
-		arrange(GM) %>%
-		do((.) %>% rowid_to_column("read count MPI row")) %>%
-		ungroup
-
-}
-
-format_for_MPI_from_linear_dec = function(df, lv) {
-	shards = df %>% arrange(shards %>% desc) %>% slice(1) %>% pull(shards)
-	if (shards %>% length %>% equals(0))
-		shards = 1
-
-	df %>%
-
-		left_join((.) %>%
-								distinct(GM) %>%
-								arrange(GM) %>%
-								mutate(idx_MPI = head(
-									rep(1:shards, (.) %>% nrow %>% `/` (shards) %>% ceiling), n = (.) %>% nrow
-								))) %>%
-		arrange(idx_MPI, GM, !!as.symbol(sprintf("C%s", lv))) %>%
-
-		# Add counts MPI rows indexes
-		group_by(idx_MPI) %>%
-		arrange(GM, !!as.symbol(sprintf("C%s", lv))) %>%
-		do((.) %>% rowid_to_column("read count MPI row")) %>%
-		ungroup
-
-}
-
-#' add_partition
-#'
-#' @description Add partition column dto data frame
+# @description Add partition column dto data frame
 add_partition = function(df.input, partition_by, n_partitions) {
 	df.input %>%
 		left_join(
@@ -321,103 +208,7 @@ add_partition = function(df.input, partition_by, n_partitions) {
 		)
 }
 
-#' get_MPI_deconv
-#'
-#' @description Get data format for MPI deconvolution part
-get_MPI_deconv = function(y_source, shards, my_level, tree) {
-	# This function is needed in case
-	# I have too many shards and not enough data
-	add_empty_shards = function(df) {
-		tibble(partition = 1:shards, n = 0 %>% as.integer) %>%
-			anti_join(df, by = "partition") %>%
-			bind_rows(df) %>%
-			arrange(partition)
-	}
-
-	y_MPI_source =
-		y_source %>%
-		distinct(level, Q, S, symbol, G, GM, `Cell type category`, count) %>%
-		filter(level == my_level)  %>%
-
-		# Add universal cell type rank
-		left_join(tree %>%
-								data.tree::ToDataFrameTree("name", sprintf("C%s", my_level)) %>%
-								select(-1) %>%
-								setNames(c("Cell type category" , "ct_rank"))) %>%
-
-		# Arrange very important for consistency
-		arrange(Q, symbol, ct_rank) %>%
-		add_partition("symbol", shards) %>%
-		mutate(partition = partition %>% as.integer) %>%
-		group_by(partition) %>%
-		left_join((.) %>% distinct(symbol) %>% mutate(MPI_row = 1:n())) %>%
-		ungroup()
-
-	list(
-		y_MPI_source = y_MPI_source,
-
-		y_MPI_symbol_per_shard =
-			y_MPI_source %>%
-			distinct(symbol, partition) %>%
-			count(partition) %>%
-			add_empty_shards %>%
-			spread(partition, n) %>%
-			as_vector %>% array,
-
-		y_MPI_idx_symbol =
-			y_MPI_source %>%
-			distinct(MPI_row, GM, partition, Q) %>%
-			spread(partition, GM) %>%
-			select(-Q) %>% distinct %>%
-			replace(is.na(.), 0 %>% as.integer) %>%
-			as_matrix(rownames = "MPI_row") %>%
-			t,
-
-		y_MPI_G_per_shard =
-			y_MPI_source %>%
-			distinct(symbol, `Cell type category`, partition) %>%
-			count(partition) %>%
-			add_empty_shards %>%
-			spread(partition, n) %>%
-			as_vector %>% array,
-
-		y_MPI_idx =
-			y_MPI_source %>%
-			distinct(partition, symbol, G, `Cell type category`, MPI_row) %>%
-			select(-symbol) %>%
-			spread(partition, G) %>%
-			arrange(MPI_row, `Cell type category`) %>%
-			select(-MPI_row,-`Cell type category`) %>%
-			replace(is.na(.), 0 %>% as.integer) %>%
-			as_matrix %>%
-			t,
-
-		y_idx =
-			y_MPI_source %>% distinct(symbol, G, `Cell type category`) %>% arrange(symbol, `Cell type category`) %>% pull(G),
-
-		y_MPI_N_per_shard =
-			y_MPI_source %>%
-			distinct(MPI_row, count, partition, Q) %>%
-			count(partition) %>%
-			add_empty_shards %>%
-			spread(partition, n) %>%
-			as_vector %>% array,
-
-		y_MPI_count =
-			y_MPI_source %>%
-			distinct(MPI_row, count, partition, Q) %>%
-			spread(partition, count) %>%
-			arrange(MPI_row, Q) %>%
-			select(-MPI_row,-Q) %>%
-			replace(is.na(.), 0 %>% as.integer) %>%
-			as_matrix %>%
-			t
-	)
-}
-
-#' Plot differences between inferred and observed transcription abundances
-#'
-#' @description  Plot differences between inferred and observed transcription abundances
+# @description  Plot differences between inferred and observed transcription abundances
 plot_differences_in_lambda = function() {
 	# Plot differences in lambda_log
 	(
@@ -440,7 +231,8 @@ plot_differences_in_lambda = function() {
 				slope = 1,
 				color = "red"
 			) + my_theme
-	)  %>% plotly::ggplotly()
+	)  
+	#%>% plotly::ggplotly()
 
 	#
 	(
@@ -463,13 +255,12 @@ plot_differences_in_lambda = function() {
 			ggplot(aes(
 				y = d, x = par, color = chain
 			)) + geom_point()
-	) %>% plotly::ggplotly()
+	) 
+	#%>% plotly::ggplotly()
 
 }
 
-#' Print which reference genes are in the mix
-#'
-#' @description Print which reference genes are in the mix
+# @description Print which reference genes are in the mix
 get_overlap_descriptive_stats = function(mix_tbl, ref_tbl) {
 	writeLines(
 		sprintf(
@@ -493,9 +284,7 @@ get_overlap_descriptive_stats = function(mix_tbl, ref_tbl) {
 
 }
 
-#' plot_counts_inferred_sum
-#'
-#' @description Get data format for MPI deconvolution part
+#@description Get data format for MPI deconvolution part
 plot_counts_inferred_sum = function(fit_obj, samples = NULL, level) {
 	fit_obj$internals$fit[[level]] %>%
 		rstan::summary(par = c("nb_sum")) %$% summary %>%
@@ -531,9 +320,7 @@ plot_counts_inferred_sum = function(fit_obj, samples = NULL, level) {
 
 }
 
-#' choose_chains_majority_rule
-#'
-#' @description Get which chain cluster is more opulated in case I have divergence
+#@description Get which chain cluster is more opulated in case I have divergence
 choose_chains_majority_roule = function(fit_parsed) {
 	fit_parsed %>%
 		inner_join(
@@ -573,11 +360,7 @@ choose_chains_majority_roule = function(fit_parsed) {
 		)
 }
 
-#' filter_reference
-#'
-#' @description Filter the reference
-#'
-#' @export
+#@description Filter the reference
 filter_reference = function(reference, mix, n_markers) {
 
 	# Check if all cell types in ref are in n_markers
@@ -636,8 +419,7 @@ filter_reference = function(reference, mix, n_markers) {
 		}
 }
 
-#' get_idx_level
-#'
+# get_idx_level
 get_idx_level = function(tree, my_level) {
 	left_join(
 		tree %>% data.tree::ToDataFrameTree("name") %>% as_tibble,
@@ -666,9 +448,7 @@ get_idx_level = function(tree, my_level) {
 		pull(my_C)
 }
 
-#' parse_summary
-#'
-#' @description Parse the stan fit object
+# @description Parse the stan fit object
 parse_summary = function(fit) {
 	fit %>%
 		rstan::summary() %$% summary %>%
@@ -697,9 +477,7 @@ median_qi_nest_draws = function(d){
 		)
 }
 
-#' parse_summary_check_divergence
-#'
-#' @description Parse the stan fit object and check for divergencies
+# @description Parse the stan fit object and check for divergences
 parse_summary_check_divergence = function(draws) {
 	draws %>%
 
@@ -730,11 +508,7 @@ parse_summary_check_divergence = function(draws) {
 		ungroup()
 }
 
-#' create_tree_object
-#'
-#' @description create tree object that is in data directory
-#'
-#' @export
+# @description create tree object that is in data directory
 create_tree_object = function(my_ref = ARMET::ARMET_ref) {
 	
 
@@ -784,9 +558,7 @@ create_tree_object = function(my_ref = ARMET::ARMET_ref) {
 	save(ancestor_child, file="data/ancestor_child.rda", compress = "gzip")
 }
 
-#' as_matrix
-#'
-#' @description Convert tibble to matrix
+# @description Convert tibble to matrix
 as_matrix = function(tbl, rownames = NULL) {
 	# If matriix empty ski the whole thing
 	if (length(tbl) == c(0))
@@ -828,11 +600,8 @@ as_matrix = function(tbl, rownames = NULL) {
 		as.matrix()
 }
 
-#' ToDataFrameTypeColFull
-#'
-#' @description Extension of data.tree package. It converts the tree into data frame
-#'
-#' @export
+# @description Extension of data.tree package. It converts the tree into data frame
+
 ToDataFrameTypeColFull = function(tree, fill = T, ...) {
 	t = tree %>% data.tree::Clone()
 	
@@ -872,6 +641,7 @@ ToDataFrameTypeColFull = function(tree, fill = T, ...) {
 }
 
 #' vb_iterative
+#' @keywords internal
 #'
 #' @description Runs iteratively variational bayes until it suceeds
 #'
@@ -881,6 +651,7 @@ ToDataFrameTypeColFull = function(tree, fill = T, ...) {
 #' @param output_samples An integer of how many samples from posteriors
 #' @param iter An integer of how many max iterations
 #' @param tol_rel_obj A real
+#' @param algorithm A character
 #'
 #' @return A Stan fit object
 #'
@@ -963,196 +734,6 @@ filter_house_keeping_query_if_fixed =  function(.data, full_bayesian) {
 								~ .x %>% filter(`house keeping` & `query`))
 }
 
-parse_baseline = function(.data, shards_in_levels, lv) {
-	.data %>%
-		filter(level == lv) %>%
-		distinct(
-			sample,
-			symbol,
-			`Cell type category`,
-			level,
-			count,
-			counts_idx,
-			G,
-			GM,
-			S,
-			`house keeping`
-		) %>%
-		left_join(tibble(level = lv, shards = shards_in_levels), by = "level") %>%
-		format_for_MPI_from_linear()
-}
-
-get_MPI_df = function(counts_baseline_to_linear,
-											y_source,
-											counts_baseline,
-											shards_in_levels,
-											lv) {
-
-	list(
-		counts_idx_lv_MPI =
-			counts_baseline_to_linear %>%
-			parse_baseline(shards_in_levels, lv)  %>%
-			distinct(idx_MPI, counts_idx, `read count MPI row`) %>%
-			spread(idx_MPI,  counts_idx) %>%
-			select(-`read count MPI row`) %>%
-			replace(is.na(.), -999 %>% as.integer) %>%
-			as_matrix() %>% t %>% 		as.data.frame,
-
-		size_counts_idx_lv_MPI =
-			counts_baseline_to_linear %>%
-			parse_baseline(shards_in_levels, lv)   %>%
-			distinct(idx_MPI, counts_idx, `read count MPI row`) %>%
-			count(idx_MPI) %>%
-			pull(n) %>%
-			ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array,
-
-		# Count indexes
-		counts_G_lv_MPI =
-			counts_baseline_to_linear %>%
-			parse_baseline(shards_in_levels, lv)   %>%
-			distinct(idx_MPI, G, `read count MPI row`)  %>%
-			spread(idx_MPI,  G) %>%
-			select(-`read count MPI row`) %>%
-			replace(is.na(.), -999 %>% as.integer) %>%
-			as_matrix() %>% t %>% 		as.data.frame,
-
-		size_counts_G_lv_MPI =
-			counts_baseline_to_linear %>%
-			parse_baseline(shards_in_levels, lv)   %>%
-			distinct(idx_MPI, G, `read count MPI row`)  %>%
-			count(idx_MPI) %>%
-			pull(n) %>%
-			ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array,
-
-		counts_G_lv_MPI_non_redundant =
-			counts_baseline_to_linear %>%
-			parse_baseline(shards_in_levels, lv)   %>%
-			distinct(idx_MPI, G)  %>%
-			group_by(idx_MPI) %>% do((.) %>% rowid_to_column("read count MPI row")) %>% ungroup() %>%
-			spread(idx_MPI,  G) %>%
-			select(-`read count MPI row`) %>%
-			replace(is.na(.), -999 %>% as.integer) %>%
-			as_matrix() %>% t %>% 		as.data.frame,
-
-		size_counts_G_lv_MPI_non_redundant =
-			counts_baseline_to_linear %>%
-			parse_baseline(shards_in_levels, lv)   %>%
-			distinct(idx_MPI, G)  %>%
-			count(idx_MPI) %>%
-			pull(n) %>%
-			ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array,
-
-		counts_G_lv_MPI_non_redundant_reps =
-			counts_baseline_to_linear %>%
-			parse_baseline(shards_in_levels, lv)   %>%
-			distinct(idx_MPI, G, `read count MPI row`)  %>%
-			left_join((.) %>% count(idx_MPI, G), by = c("idx_MPI", "G")) %>%
-			distinct(idx_MPI, G, n) %>%
-			group_by(idx_MPI) %>% do((.) %>% rowid_to_column("read count MPI row")) %>% ungroup() %>%
-			distinct(idx_MPI, n, `read count MPI row`) %>%
-			spread(idx_MPI,  n) %>%
-			select(-`read count MPI row`) %>%
-			replace(is.na(.), -999 %>% as.integer) %>%
-			as_matrix() %>% t %>% 		as.data.frame,
-
-		# Count indexes
-		counts_S_lv_MPI =
-			counts_baseline_to_linear %>%
-			parse_baseline(shards_in_levels, lv) %>%
-			distinct(idx_MPI, S, `read count MPI row`)  %>%
-			spread(idx_MPI,  S) %>%
-			select(-`read count MPI row`) %>%
-			replace(is.na(.), -999 %>% as.integer) %>%
-			as_matrix() %>% t %>% 		as.data.frame,
-
-		size_counts_S_lv_MPI =
-			counts_baseline_to_linear %>%
-			parse_baseline(shards_in_levels, lv) %>%
-			distinct(idx_MPI, S, `read count MPI row`)   %>%
-			count(idx_MPI) %>%
-			pull(n) %>%
-			ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array,
-
-		# mix Counts
-		y_linear_MPI =
-			y_source %>%
-			filter(level == lv) %>%
-			distinct(GM, Q, S, count, level) %>%
-			left_join(tibble(level = lv, shards = shards_in_levels),  by = "level") %>%
-			format_for_MPI_from_linear_GM() %>%
-			distinct(idx_MPI, count, `read count MPI row`)  %>%
-			spread(idx_MPI,  count) %>%
-			select(-`read count MPI row`) %>%
-			replace(is.na(.), -999 %>% as.integer) %>%
-			as_matrix() %>% t %>% 		as.data.frame,
-
-		size_y_linear_MPI =
-			y_source %>%
-			filter(level == lv) %>%
-			distinct(GM, Q, S, count, level) %>%
-			left_join(tibble(level = lv, shards = shards_in_levels), by = "level") %>%
-			format_for_MPI_from_linear_GM() %>%
-			distinct(idx_MPI, count, `read count MPI row`)  %>%
-			count(idx_MPI) %>%
-			pull(n) %>%
-			ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array,
-
-		y_linear_S_MPI =
-			y_source %>%
-			filter(level == lv) %>%
-			distinct(GM, Q, S, count, level) %>%
-			left_join(tibble(level = lv, shards = shards_in_levels), by = "level") %>%
-			format_for_MPI_from_linear_GM() %>%
-			distinct(idx_MPI, S, `read count MPI row`)  %>%
-			spread(idx_MPI,  S) %>%
-			select(-`read count MPI row`) %>%
-			replace(is.na(.), -999 %>% as.integer) %>%
-			as_matrix() %>% t %>% 		as.data.frame,
-
-		size_y_linear_S_MPI =
-			y_source %>%
-			filter(level == lv) %>%
-			distinct(GM, Q, S, count, level) %>%
-			left_join(tibble(level = lv, shards = shards_in_levels), by = "level") %>%
-			format_for_MPI_from_linear_GM() %>%
-			distinct(idx_MPI, S, `read count MPI row`)  %>%
-			count(idx_MPI) %>%
-			pull(n) %>%
-			ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array,
-
-		G_linear_MPI =
-			counts_baseline %>% filter(level == lv) %>%
-
-			# I have fixed this for right order
-			select(level, G, GM, sprintf("C%s", lv)) %>%
-			distinct() %>%
-			arrange(GM, !!as.symbol(sprintf("C%s", lv))) %>%
-
-			#distinct(G, GM, C, level) %>%
-			left_join(tibble(level = lv, shards = shards_in_levels), by = "level") %>%
-			format_for_MPI_from_linear_dec(lv) %>%
-			distinct(idx_MPI, G, `read count MPI row`) %>%
-			spread(idx_MPI,  G) %>%
-			select(-`read count MPI row`) %>%
-			replace(is.na(.), -999 %>% as.integer) %>%
-			as_matrix() %>% t %>% 		as.data.frame,
-
-		size_G_linear_MPI =
-			counts_baseline %>% filter(level == lv) %>%
-			# I have fixed this for right order
-			select(level, G, GM, sprintf("C%s", lv)) %>%
-			distinct() %>%
-			arrange(GM, !!as.symbol(sprintf("C%s", lv))) %>%
-
-			#distinct(G, GM, C, level) %>%
-			left_join(tibble(level = lv, shards = shards_in_levels), by = "level") %>%
-			format_for_MPI_from_linear_dec(lv) %>%
-			distinct(idx_MPI, G, `read count MPI row`)   %>%
-			count(idx_MPI) %>%
-			pull(n) %>%
-			ifelse_pipe(length((.)) == 0, ~ 0) %>%  		as.array
-	)
-}
 
 ref_mix_format = function(ref, mix) {
 	bind_rows( 
@@ -1255,7 +836,6 @@ get_prop = function(fit, approximate_posterior, df, tree) {
 								distinct(Q, sample))
 }
 
-#' @export
 draws_to_alphas = function(.data, pars) {
 	.data %>%
 		tidybayes::gather_draws(`prop_[1,a-z]`[Q, C], regex = T) %>%
@@ -1293,14 +873,6 @@ draws_to_alphas = function(.data, pars) {
     mutate(alphas = map(alphas, ~ .x %>% select_if(function(x){!all(is.na(x))})))%>%
 		pull(alphas)
 }
-
-# draws_to_exposure = function(.data) {
-# 	.data %>%
-# 		tidybayes::gather_draws(exposure_rate[Q]) %>%
-# 		summarise(.mean = .value %>% mean, .sd = .value %>% sd) %>%
-# 		ungroup() %>%
-# 		select(.mean , .sd)
-# }
 
 get_null_prop_posterior = function(ct_in_nodes) {
 	prop_posterior = list()
@@ -1393,6 +965,7 @@ plot_signatures = function(.data, n_markers, mix, ct1, ct2, n = 10, level) {
 }
 
 #' This is a generalisation of ifelse that acceots an object and return an objects
+#' @keywords internal
 #'
 #' @import dplyr
 #' @importFrom purrr as_mapper
@@ -1414,14 +987,8 @@ ifelse_pipe = function(.x, .p, .f1, .f2 = NULL) {
 
 }
 
-#' This is a generalisation of ifelse that acceots an object and return an objects
-#'
-#' @import ggplot2
-#'
-#' @export
+# This is a generalisation of ifelse that acceots an object and return an objects
 level_to_plot_inferred_vs_observed  = function(result, level, S = NULL, cores = 20){
-
-	library(multidplyr)
 
 	my_theme =
 		theme_bw() +
@@ -1599,11 +1166,12 @@ level_to_plot_inferred_vs_observed  = function(result, level, S = NULL, cores = 
 # level_to_plot_inferred_vs_observed(result, 3)
 
 #' Create the design matrix
+#' @keywords internal
 #'
 #' @param input.df A tibble
 #' @param formula A formula
 #' @param sample_column A symbol
-#' @export
+#' 
 create_design_matrix = function(input.df, formula, sample_column){
 
 	sample_column = enquo(sample_column)
@@ -1619,13 +1187,7 @@ create_design_matrix = function(input.df, formula, sample_column){
 
 }
 
-#' Formula parser
-#'
-#' @param fm A formula
-#'
-#' @return A character vector
-#'
-#'
+# Formula parser
 parse_formula <- function(fm) {
 	
 	components = as.character(attr(terms(fm), "variables"))[-1]
@@ -1751,6 +1313,7 @@ get_relative_zero = function(fit_parsed){
 }
 
 #' Get column names either from user or from attributes
+#' @keywords internal
 #'
 #' @importFrom rlang quo_is_symbol
 #'
@@ -1831,6 +1394,10 @@ get_specific_annotation_columns = function(.data, .col){
 	
 }
 
+#' @importFrom tidybulk as_matrix
+#' @keywords internal
+#' 
+#' @param fit_parsed A fit object
 prop_to_list = function(fit_parsed){
 	fit_parsed %>%
 		median_qi() %>%
@@ -1857,52 +1424,6 @@ gamma_alpha_beta = function(x){
 	c(shape, 1/scale)
 }
 
-permute_nest = function(.data, .names_from, .values_from){
-	.names_from = enquo(.names_from)
-	.values_from = enquo(.values_from)
-	
-	factor_levels = .data %>% pull(!!.names_from) %>% unique
-	
-	.data %>% 
-		pull(!!.names_from) %>%
-		unique() %>%
-		gtools::permutations(n = length(.), r = 2, v = .) %>%
-		as_tibble() %>%
-		unite(run, c(V1, V2), remove = F, sep="___") %>%
-		gather(which, !!.names_from, -run) %>%
-		select(-which) %>%
-		left_join(.data %>% select(!!.names_from, !!.values_from), by = quo_name(.names_from)) %>%
-		nest(data = -run) %>%
-		separate(run, sprintf("%s_%s", quo_name(.names_from), 1:2 ), sep="___") %>%
-		
-		# Introduce levels
-		mutate_at(vars(1:2),function(x) factor(x, levels = factor_levels))
-	
-}
-
-combine_nest = function(.data, .names_from, .values_from){
-	.names_from = enquo(.names_from)
-	.values_from = enquo(.values_from)
-	
-	factor_levels = .data %>% pull(!!.names_from) %>% unique
-	
-	.data %>% 
-		pull(!!.names_from) %>%
-		unique() %>%
-		gtools::combinations(n = length(.), r = 2, v = .) %>%
-		as_tibble() %>%
-		unite(run, c(V1, V2), remove = F, sep="___") %>%
-		gather(which, !!.names_from, -run) %>%
-		select(-which) %>%
-		left_join(.data %>% select(!!.names_from, !!.values_from), by = quo_name(.names_from)) %>%
-		nest(data = -run) %>%
-		separate(run, sprintf("%s_%s", quo_name(.names_from), 1:2), sep="___") %>%
-		
-		# Introduce levels
-		mutate_at(vars(1:2),function(x) factor(x, levels = factor_levels))
-	
-}
-
 get_ancestor_child = function(tree){
 	tree %>% ToDataFrameTypeColFull %>% distinct(level_1, level_2) %>% setNames(c("ancestor", "Cell type category")) %>% bind_rows(
 		tree %>% ToDataFrameTypeColFull %>% distinct(level_2, level_3) %>% setNames(c("ancestor", "Cell type category"))
@@ -1916,10 +1437,13 @@ get_ancestor_child = function(tree){
 		filter(ancestor != `Cell type category`)
 }
 
+#' @importFrom purrr map_int
+#' @keywords internal
+#' 
+#' @param tree A tree
 get_tree_properties = function(tree){
 	
-	library(foreach)
-	
+
 	# Set up tree structure
 	levels_in_the_tree = 1:4
 	
@@ -1932,18 +1456,21 @@ get_tree_properties = function(tree){
 		pull(count)
 	
 	# Get the number of leafs for every level
-	ct_in_levels = foreach(l = levels_in_the_tree + 1, .combine = c) %do% {
-		data.tree::Clone(tree) %>%
-			ifelse_pipe((.) %>% data.tree::ToDataFrameTree("level") %>% pull(2) %>% max %>% `>` (l),
-									~ {
-										.x
-										data.tree::Prune(.x, function(x)
-											x$level <= l)
-										.x
-									})  %>%
-			data.tree::Traverse(., filterFun = isLeaf) %>%
-			length()
-	}
+	ct_in_levels =
+		levels_in_the_tree + 1 %>%
+		map_int(~ {
+			data.tree::Clone(tree) %>%
+				when(
+					data.tree::ToDataFrameTree(., "level") %>% pull(2) %>% max %>% gt(.x) ~ {
+						t = (.)
+						data.tree::Prune(t, function(x)	x$level <= .x)
+						t
+					},
+					~ (.)
+				) %>%
+				data.tree::Traverse(., filterFun = isLeaf) %>%
+				length()
+		})
 	
 	n_nodes = ct_in_nodes %>% length
 	n_levels = ct_in_levels %>% length
@@ -1991,80 +1518,11 @@ get_tree_properties = function(tree){
 	)
 }
 
-# get_tree_properties = function(tree){
-# 	
-# 	# Set up tree structure
-# 	levels_in_the_tree = 1:4
-# 	
-# 	ct_in_nodes =
-# 		tree %>%
-# 		data.tree::ToDataFrameTree("name", "level", "C", "count", "isLeaf") %>%
-# 		as_tibble %>%
-# 		arrange(level, C) %>%
-# 		filter(!isLeaf) %>%
-# 		pull(count)
-# 	
-# 	# Get the number of leafs for every level
-# 	ct_in_levels = map_int(
-# 		1:(levels_in_the_tree + 1), 
-# 		~ {
-# 			data.tree::Clone(tree) %>%
-# 				when((.) %>% data.tree::ToDataFrameTree("level") %>% pull(2) %>% max %>% `>` (.x)	~ {
-# 											(.)
-# 											data.tree::Prune(., function(x)	x$level <= .x)
-# 											(.)
-# 										})  %>%
-# 				data.tree::Traverse(., filterFun = isLeaf) %>%
-# 				length()
-# 		})
-# 	
-# 	n_nodes = ct_in_nodes %>% length
-# 	n_levels = ct_in_levels %>% length
-# 	
-# 	# Needed in the model
-# 	singles_lv2 = tree$Get("C1", filterFun = isLeaf) %>% na.omit %>% as.array
-# 	SLV2 = length(singles_lv2)
-# 	parents_lv2 = tree$Get("C1", filterFun = isNotLeaf) %>% na.omit %>% as.array
-# 	PLV2 = length(parents_lv2)
-# 	
-# 	singles_lv3 = tree$Get("C2", filterFun = isLeaf) %>% na.omit %>% as.array
-# 	SLV3 = length(singles_lv3)
-# 	parents_lv3 = tree$Get("C2", filterFun = isNotLeaf) %>% na.omit %>% as.array
-# 	PLV3 = length(parents_lv3)
-# 	
-# 	singles_lv4 = tree$Get("C3", filterFun = isLeaf) %>% na.omit %>% as.array
-# 	SLV4 = length(singles_lv4)
-# 	parents_lv4 = tree$Get("C3", filterFun = isNotLeaf) %>% na.omit %>% as.array
-# 	PLV4 = length(parents_lv4)
-# 	
-# 	list(
-# 		ct_in_nodes =ct_in_nodes,
-# 		
-# 		# Get the number of leafs for every level
-# 		ct_in_levels = ct_in_levels,
-# 		
-# 		n_nodes = ct_in_nodes %>% length,
-# 		n_levels = ct_in_levels %>% length,
-# 		
-# 		# Needed in the model
-# 		singles_lv2 = singles_lv2,
-# 		SLV2 = SLV2,
-# 		parents_lv2 = parents_lv2,
-# 		PLV2 = PLV2,
-# 		
-# 		singles_lv3 = singles_lv3,
-# 		SLV3 = SLV3,
-# 		parents_lv3 = parents_lv3,
-# 		PLV3 = PLV3,
-# 		
-# 		singles_lv4 = singles_lv4,
-# 		SLV4 = SLV4,
-# 		parents_lv4 = parents_lv4,
-# 		PLV4 = PLV4
-# 	)
-# }
-
 #' @importFrom tidygraph tbl_graph
+#' @keywords internal
+#' 
+#' @param .data A tibble
+#' @param credible_interval A double
 cluster_posterior_slopes = function(.data, credible_interval = 0.67){
 	   
 	# Add cluster info to cell types per node
@@ -2336,7 +1794,7 @@ get_props = function(draws, level, df, approximate_posterior){
 	
 }
 
-get_alpha = function(fit, level, family){
+get_alpha = function(fit, level){
 	
 	my_c = as.symbol(sprintf("C%s", level))
 	
@@ -2344,11 +1802,9 @@ get_alpha = function(fit, level, family){
 		draws_to_tibble("alpha_", "A", "C") %>%
 
 		# rebuild the last component sum-to-zero
-		ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% rebuild_last_component_sum_to_zero) %>%
+		rebuild_last_component_sum_to_zero() %>%
 		
-		# Calculate relative 0 because of dirichlet relativity
-		#ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
-		
+
 		arrange(.chain, .iteration, .draw,     A) %>%
 		
 		nest(draws = -c(C, .variable)) %>%
@@ -2454,6 +1910,15 @@ get_survival_X = function(S){
 		mutate(intercept = 1)
 }
 
+#' @keywords internal
+#' 
+#' @importFrom nanny subset
+#' @importFrom gtools rdirichlet 
+#' 
+#' @param .data A tibble
+#' @param X_df A design matrix
+#' @param alpha A real
+#'
 generate_mixture = function(.data, X_df, alpha) {
 	add_attr = function(var, attribute, name) {
 		attr(var, name) <- attribute
@@ -2662,6 +2127,14 @@ run_censored_model = function(.data, sampling = F){
 	
 }
 
+#' @keywords internal
+#' @importFrom abind abind
+#' @importFrom boot logit
+#' @importFrom nanny subset
+#' 
+#' @param .data A tibble
+#' @param formula_df A formula dataframe
+#' 
 make_cens_data = function(.data, formula_df){
 	
 	# x = enquo(x)
@@ -2678,7 +2151,7 @@ make_cens_data = function(.data, formula_df){
 		group_by(C) %>% 
 		mutate(.value_relative = .value_relative %>% boot::logit() %>% scale(scale = F)) %>%
 		spread( C, .value_relative) %>%
-		nanny::as_matrix(rownames = sample) %>%
+		as_matrix(rownames = sample) %>%
 		{ rownames(.)[apply(., 2, function(x) which(is.na(x))) %>% unlist() %>% as.numeric() %>% unique()] }
 	
 	.data = 
@@ -2790,6 +2263,13 @@ run_censored_model_joint = function(.data, sampling = F){
 	
 }
 
+#' @keywords internal
+#' @importFrom nanny subset
+#' 
+#' @param .data A tibble
+#' @param formula_df A formula dataframe
+#' @param relative A boolean
+#' 
 make_cens_data_joint = function(.data, formula_df, relative = TRUE){
 	
 	# x = enquo(x)
@@ -2808,7 +2288,7 @@ make_cens_data_joint = function(.data, formula_df, relative = TRUE){
 		group_by(new_C) %>% 
 		mutate(!!my_value_column := !!my_value_column %>% boot::logit() %>% scale(scale = F)) %>%
 		spread( new_C, !!my_value_column) %>%
-		nanny::as_matrix(rownames = sample) %>%
+		as_matrix(rownames = sample) %>%
 		{ rownames(.)[apply(., 2, function(x) which(is.na(x))) %>% unlist() %>% as.numeric() %>% unique()] }
 	
 	.data = 
@@ -2869,7 +2349,16 @@ make_cens_data_joint = function(.data, formula_df, relative = TRUE){
 	
 }
 
+#' @keywords internal
 #' @import parallel
+#' 
+#' @param .proportions A tibble
+#' @param sampling A boolean
+#' @param formula_df A formula dataframe
+#' @param filter_how_many An integer
+#' @param partitions An integer
+#' @param relative A boolean
+#' 
 #' 
 censored_regression_joint = 
 	function(.proportions, sampling = F, formula_df, filter_how_many = Inf, partitions = 4, relative = TRUE){
@@ -2932,10 +2421,10 @@ censored_regression_joint =
 	# Make it parallel
 	partitions %>%
 		when(
-			Sys.info()[['sysname']] != "Windows" ~ (.) %>% pull(data) %>% parallel::mclapply(core_fx, mc.cores = 4),
+			Sys.info()[['sysname']] != "Windows" ~ (.) %>% pull(data) %>% mclapply(core_fx, mc.cores = 4),
 			~ {
-				cl <- parallel::makeCluster(4)
-				(.) %>% pull(data) %>% parallel::parlapply(cl, ., core_fx, mc.cores = 4)
+				cl <- makeCluster(4)
+				(.) %>% pull(data) %>% parlapply(cl, ., core_fx, mc.cores = 4)
 			}
 		) %>%
 		
@@ -3052,4 +2541,133 @@ get_generated_quantities_standalone = function(fit, level, internals){
 	
 }
 
+#' @importFrom nanny permute_nest
+#' 
+#' @param .data A tibble
+#' 
+get_signatures = function(.data){
+	.data$proportions %>%
+		filter(.variable %>% is.na %>% `!`) %>%
+		select(-proportions, -rng) %>%
+		unnest(draws) %>%
+		
+		# Group
+		nest(node = -c(level, .variable, A)) %>%
+		mutate(node = map(
+			node,
+			~ .x %>%
+				
+				# Build combination of cell types
+				nanny::permute_nest(
+					.names_from = `Cell type category`,
+					.values_from = c(.value)
+				) %>% 
+				
+				# Perform calculation
+				mutate(prob_df = map(
+					data, 
+					~.x %>%
+						nest(data = -c(`Cell type category`)) %>% 
+						mutate(med = map_dbl(data, ~.x$.value %>% median )) %>% 
+						mutate(med = rev(med)) %>% 
+						mutate(frac_up = map2_dbl(data, med, ~ (.x$.value  > .y) %>% sum %>% magrittr::divide_by(nrow(.x)))) %>% 
+						mutate(frac_down = map2_dbl(data, med, ~ (.x$.value  < .y) %>% sum %>% magrittr::divide_by(nrow(.x)))) %>%
+						mutate(prob = ifelse(frac_up > frac_down, frac_up, frac_down)) %>%
+						
+						# stretch to o 1 interval
+						mutate(prob = (prob-0.5)/0.5) %>%
+						
+						# Insert sign
+						mutate(prob = ifelse(frac_up < frac_down, -prob, prob)) %>%
+						select(`Cell type category`, prob)
+				)) %>%
+				select(-data) %>%
+				unnest(prob_df) %>% 
+				filter(`Cell type category_1` == `Cell type category`) %>%
+				select(-`Cell type category`)
+			
+		)) %>%
+		unnest( node)
+}
+
+get_CI = function(.data, credible_interval = 0.90, cluster_CI = 0.55) {
+	
+	# Choose the test
+	if("draws_cens" %in% colnames(.data$proportions)){
+		.v = as.symbol(".value_2")
+		.l = as.symbol(".lower_2")
+		.u = as.symbol(".upper_2")
+	} else {
+		.v = as.symbol(".value_alpha2")
+		.l = as.symbol(".lower_alpha2")
+		.u = as.symbol(".upper_alpha2")
+	}
+	
+	.d = 
+		.data$proportions %>%
+		filter(.variable %>% is.na %>% `!`) %>%
+		cluster_posterior_slopes(credible_interval = cluster_CI) %>%
+		extract_CI(credible_interval)
+	
+	dx = list()	
+	
+	# Level 1
+	if(.d %>% filter(level ==1) %>% nrow %>% `>` (0))
+		dx = 
+		.d %>%
+		
+		filter(level ==1) %>%
+		mutate(fold_change_ancestor = 0) %>%
+		identify_baseline_by_clustering( ) %>%
+		
+		mutate(significant = ((!!.l - 0) * (!!.u - 0)) > 0) %>%
+		mutate(fold_change  = ifelse(significant, !!.v, 0))
+	
+	# Level 2
+	if(.d %>% filter(level ==2) %>% nrow %>% `>` (0))
+		dx =	dx %>% bind_rows(
+			.d %>%
+				
+				filter(level ==2) %>%
+				left_join(ancestor_child, by = "Cell type category") %>%
+				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change),  by = "ancestor" )  %>%
+				identify_baseline_by_clustering( ) %>%
+				
+				mutate(significant = ((!!.l - 0) * (!!.u - 0)) > 0) %>%
+				mutate(fold_change  = ifelse(significant, !!.v, 0))
+		) 
+	
+	
+	# Level 3
+	if(.d %>% filter(level ==3) %>% nrow %>% `>` (0))
+		dx =	dx %>% bind_rows(
+			.d %>%
+				
+				filter(level ==3) %>%
+				left_join(ancestor_child, by = "Cell type category") %>%
+				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) ,  by = "ancestor")  %>%
+				identify_baseline_by_clustering( ) %>%
+				
+				mutate(significant = ((!!.l - 0) * (!!.u - 0)) > 0) %>%
+				mutate(fold_change  = ifelse(significant, !!.v, 0))
+		)
+	
+	# Level 4
+	if(.d %>% filter(level ==4) %>% nrow %>% `>` (0))
+		dx =	dx %>% bind_rows(
+			.d %>%
+				
+				filter(level ==4) %>%
+				left_join(ancestor_child, by = "Cell type category") %>%
+				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) ,  by = "ancestor")  %>%
+				identify_baseline_by_clustering( ) %>%
+				
+				mutate(significant = ((!!.l - 0) * (!!.u - 0)) > 0) %>%
+				mutate(fold_change  = ifelse(significant, !!.v, 0))
+		)
+	
+	dx
+	
+	
+}
 

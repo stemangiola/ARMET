@@ -10,6 +10,13 @@ ARMET_tc_continue(
   model = stanmodels$ARMET_tc_fix_hierarchical
 )
 }
+\arguments{
+\item{armet_obj}{An ARMEt object}
+
+\item{level}{An integer}
+
+\item{model}{A stan model}
+}
 \description{
-This function
+This function does inference for higher levels of the hierarchy
 }

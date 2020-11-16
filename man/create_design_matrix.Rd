@@ -16,3 +16,4 @@ create_design_matrix(input.df, formula, sample_column)
 \description{
 Create the design matrix
 }
+\keyword{internal}

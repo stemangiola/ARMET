@@ -249,19 +249,6 @@ data {
 	int<lower=0> G;
 	int<lower=0> GM;
 	int<lower=0> S;
-	int CL; // counts linear size
-
-	// reference counts
- 	int<lower=0> counts_linear[CL] ;
-
-	int G_to_counts_linear[CL] ;
-	int S_linear[CL] ;
-
-	// Reference counts per level
-	int<lower=0> CL_NA;
-	int<lower=0> counts_idx_lv_NA[CL_NA];
-	int<lower=0> CL_lv;
-	int<lower=0> counts_idx_lv[CL_lv];
 
 	// Priors
 	real<upper=0> sigma_slope;
@@ -398,7 +385,7 @@ parameters {
 	real<lower=0> phi[12]; //[fam_dirichlet ? 10 : ct_in_levels[lv]];
 
 	// Unknown population
-	row_vector<lower=0, upper = log(max(counts_linear))>[GM] lambda_UFO;
+	row_vector<lower=0, upper = log(max(to_array_1d(y)))>[GM] lambda_UFO;
 	vector<lower=0, upper=1>[Q] prop_UFO;
 
 	// Censoring

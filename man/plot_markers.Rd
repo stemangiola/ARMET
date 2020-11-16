@@ -6,6 +6,15 @@
 \usage{
 plot_markers(result, level, S = NULL, cores = 20)
 }
+\arguments{
+\item{result}{An ARMET object}
+
+\item{level}{An integer.}
+
+\item{S}{An integer. Number of samples}
+
+\item{cores}{An integer}
+}
 \description{
 This is a generalisation of ifelse that acceots an object and return an objects
 }

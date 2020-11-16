@@ -65,8 +65,7 @@ result_fix =
 		.transcript = symbol,
 		.abundance = count,
 		iterations = 50,
-		sampling_iterations = 5,
-		cores = 2
+		sampling_iterations = 5
 	)
 
 

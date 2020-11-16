@@ -24,7 +24,11 @@ clear_previous_levels = function(.data, my_level){
 
 #' ARMET_tc_continue
 #' 
-#' @description This function
+#' @description This function does inference for higher levels of the hierarchy
+#' 
+#' @param armet_obj An ARMEt object
+#' @param level An integer
+#' @param model A stan model
 #' 
 #' @export
 ARMET_tc_continue = function(armet_obj, level, model = stanmodels$ARMET_tc_fix_hierarchical){
@@ -46,7 +50,6 @@ ARMET_tc_continue = function(armet_obj, level, model = stanmodels$ARMET_tc_fix_h
 		sampling_iterations = input$sampling_iterations	,
 		X = internals$X,
 		do_regression = input$do_regression,
-		family = input$family,
 		cens = internals$cens,
 		tree_properties = internals$tree_properties,
 		Q = internals$Q,
@@ -77,7 +80,7 @@ ARMET_tc_continue = function(armet_obj, level, model = stanmodels$ARMET_tc_fix_h
 	
 	if (input$do_regression && paste(as.character(input$.formula), collapse="")  != "~1" )
 		internals$alpha = internals$alpha  %>% bind_rows( 
-			get_alpha(fit, level, input$family) %>% 
+			get_alpha(fit, level) %>% 
 				left_join(
 					get_generated_quantities_standalone(fit, level, internals),
 					by = c("node", "C")
@@ -122,35 +125,39 @@ ARMET_tc_continue = function(armet_obj, level, model = stanmodels$ARMET_tc_fix_h
 #'
 #' @import dplyr
 #' @import purrr
+#' 
+#' @importFrom tidybulk aggregate_duplicates
+#' @importFrom tidybulk scale_abundance
+#' @importFrom tidybulk as_matrix
 #'
 #' @importFrom tidyr spread
 #' @importFrom tidyr gather
 #' @importFrom tidyr drop_na
 #' @importFrom rlang enquo
 #' @importFrom tibble tibble
-#' @importFrom stringr str_split
 #' @importFrom tidybayes gather_draws
 #'
 #' @importFrom tidybayes gather_samples
 #' @importFrom tidybayes median_qi
 #'
+#' @importFrom magrittr equals
 #'
 #' @import data.tree
 #'
-#' @param mix A matrix
-#' @param my_design A matrix
-#' @param cov_to_test A character string
-#' @param fully_bayesian A boolean
-#' @param is_mix_microarray A boolean
-#' @param verbose A boolean
-#' @param save_report A boolean
-#' @param custom_ref A matrix
-#' @param multithread A boolean
-#' @param do_debug A boolean
-#' @param cell_type_root A character string
-#' @param choose_internal_ref A design matrix
-#' @param save_fit A boolean
-#' @param seed An integer
+#' @param .data A tibble
+#' @param .formula A formula
+#' @param .sample A column symbol
+#' @param .transcript A column symbol
+#' @param .abundance A column symbol
+#' @param reference A tibble
+#' @param approximate_posterior A boolean for variational Bayes
+#' @param iterations An integer total iterations
+#' @param sampling_iterations An integer. Sampling iteractions
+#' @param .n_markers A tibble
+#' @param do_regression A boolean
+#' @param prior_survival_time An array
+#' @param model A stan model
+#' 
 #'
 #' @return An ARMET object
 #'
@@ -161,22 +168,19 @@ ARMET_tc = function(.data,
 										.sample = NULL,
 										.transcript = NULL,
 										.abundance = NULL,
-										family = "dirichlet",
 										reference = NULL,
 										approximate_posterior = F,
-										verbose =                           F,
-										save_fit =                          F,
-										seed =                              NULL,
-										cores = 14,
 										iterations = 250,
 										sampling_iterations = 100,
-										levels = 1,
-										.n_markers = n_markers ,
+										
+										.n_markers = n_markers,
 										do_regression = T, 
 										prior_survival_time = c(),
 										model = stanmodels$ARMET_tc_fix_hierarchical) {
 	 
 	# At the moment is not active
+	levels = 1
+	cores = 4
 	full_bayesian = F
 	
 	input = c(as.list(environment()))
@@ -203,9 +207,6 @@ ARMET_tc = function(.data,
 	# Check if count is integer
 	if(.data %>% select(count) %>% lapply(class) %>% unlist() %>% equals("integer") %>% `!`)
 		stop(sprintf("ARMET says: the %s column must be integer as the deconvolution model is Negative Binomial", quo_name(.abundance)))
-	
-	# Check family
-	if(family %in% c("dirichlet", "beta") %>% any %>% `!`) stop("ARMET says: Please choose between dirichlet or beta families")
 	
 	# Covariate column
 	if(do_regression & paste(as.character(.formula), collapse="")  != "~1"){
@@ -372,7 +373,6 @@ ARMET_tc = function(.data,
 			iterations = iterations,
 			sampling_iterations = sampling_iterations	,
 			do_regression = do_regression,
-			family = family,
 			.formula = .formula,
 			model = model
 		)
@@ -406,7 +406,6 @@ ARMET_tc = function(.data,
 	
 }
 
-#' @export
 run_model = function(reference_filtered,
 										 mix,
 										 shards,
@@ -418,7 +417,6 @@ run_model = function(reference_filtered,
 										 sampling_iterations = 100,
 										 X,
 										 do_regression,
-										 family = "dirichlet",
 										 cens,
 										 tree_properties,
 										 Q,
@@ -493,12 +491,6 @@ run_model = function(reference_filtered,
 		mutate(counts_idx = 1:n()) %>%
 		mutate(S = S %>% as.factor %>% as.integer)
 	
-	counts_linear = counts_baseline_to_linear %>%  pull(count)
-	G_to_counts_linear = counts_baseline_to_linear %>% pull(G)
-	G_linear = G_to_counts_linear
-	S_linear = counts_baseline_to_linear %>% pull(S)
-	
-	CL = length(counts_linear)
 	S = counts_baseline_to_linear %>% distinct(S) %>% nrow
 	
 	# Counts idx for each level for each level
@@ -522,12 +514,6 @@ run_model = function(reference_filtered,
 	# Lengths indexes
 	Y_lv = y_linear_lv %>% length
 	
-	
-	MPI_data = get_MPI_df(counts_baseline_to_linear,
-												y_source,
-												counts_baseline,
-												shards,
-												lv)
 	
 	# Dirichlet regression
 	A = X %>% ncol
@@ -581,8 +567,6 @@ run_model = function(reference_filtered,
 	
 	Sys.setenv("STAN_NUM_THREADS" = shards)
 	
-	fam_dirichlet = family == "dirichlet"
-	
 	if(cens %>% is.null) cens =  rep(0, Q)
 	which_cens = which(cens == 1)  %>% as.array()
 	which_not_cens = which(cens == 0) %>% as.array()
@@ -592,12 +576,7 @@ run_model = function(reference_filtered,
 	if(is.null(prior_survival_time)) prior_survival_time = array(1)[0]
 	spt = length(prior_survival_time)
 	
-	
-	# model  = stanmodels$ARMET_tc_fix_hierarchical
-	# switch(fam_dirichlet %>% `!` %>% sum(1),
-	# 								stanmodels$ARMET_tc_fix_hierarchical,
-	# 								stanmodels$ARMET_tc_fix)
-#browser()
+
 fit = 
 	sampling(
 		model,
@@ -606,7 +585,7 @@ fit =
 		cores = 3,
 		iter = iterations,
 		warmup = iterations - sampling_iterations,
-		data = MPI_data %>% c(prop_posterior) %>% c(tree_properties),
+		data = prop_posterior %>% c(tree_properties),
 		# pars=
 		# 	c("prop_1", "prop_2", "prop_3", sprintf("prop_%s", letters[1:9])) %>%
 		# 	c("alpha_1", sprintf("alpha_%s", letters[1:9])) %>%
@@ -656,52 +635,13 @@ fit =
 	
 }
 
-#' @export
-get_signatures = function(.data){
-	.data$proportions %>%
-		filter(.variable %>% is.na %>% `!`) %>%
-		select(-proportions, -rng) %>%
-		unnest(draws) %>%
-		
-		# Group
-		nest(node = -c(level, .variable, A)) %>%
-		mutate(node = map(
-			node,
-			~ .x %>%
-				
-				# Build combination of cell types
-				nanny::permute_nest(
-					.names_from = `Cell type category`,
-					.values_from = c(.value)
-				) %>% 
-				
-				# Perform calculation
-				mutate(prob_df = map(
-					data, 
-					~.x %>%
-						nest(data = -c(`Cell type category`)) %>% 
-						mutate(med = map_dbl(data, ~.x$.value %>% median )) %>% 
-						mutate(med = rev(med)) %>% 
-						mutate(frac_up = map2_dbl(data, med, ~ (.x$.value  > .y) %>% sum %>% magrittr::divide_by(nrow(.x)))) %>% 
-						mutate(frac_down = map2_dbl(data, med, ~ (.x$.value  < .y) %>% sum %>% magrittr::divide_by(nrow(.x)))) %>%
-						mutate(prob = ifelse(frac_up > frac_down, frac_up, frac_down)) %>%
-						
-						# stretch to o 1 interval
-						mutate(prob = (prob-0.5)/0.5) %>%
-						
-						# Insert sign
-						mutate(prob = ifelse(frac_up < frac_down, -prob, prob)) %>%
-						select(`Cell type category`, prob)
-				)) %>%
-				select(-data) %>%
-				unnest(prob_df) %>% 
-				filter(`Cell type category_1` == `Cell type category`) %>%
-				select(-`Cell type category`)
-			
-		)) %>%
-		unnest( node)
-}
-
+#' add_cox_test
+#' 
+#' @description This function adds cox regression statistics to the fit object
+#' 
+#' @param .data A tibble
+#' @param relative A boolean
+#' 
 #' @export
 add_cox_test = function(.data, relative = TRUE){
 	
@@ -719,6 +659,15 @@ add_cox_test = function(.data, relative = TRUE){
 		left_join(cens_alpha, by = c("level", "C", ".variable"))
 }
 
+
+#' test_differential_composition
+#' 
+#' @description This function performs statistical testing on the fit object
+#' 
+#' @param .data A tibble
+#' @param credible_interval A double
+#' @param cluster_CI A double
+#' 
 #' @export
 test_differential_composition = function(.data, credible_interval = 0.90, cluster_CI = 0.55) {
        
@@ -835,140 +784,7 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 	
 	dx
 	
-	
-	# # Get zero
-	# .data$proportions %>%
-	# 	filter(.variable %>% is.na %>% `!`) %>%
-	# 	extract_CI %>%
-	# 	
-	# 	# Link zero to closest posterior
-	# 	nest(data = -.variable) %>%
-	# 	mutate(
-	# 		data = map(
-	# 			data, 
-	# 			~ .x %>%
-	# 				mutate(
-	# 					zero = 
-	# 						.x %>%
-	# 						mutate(diff = abs(zero - .value_alpha2)) %>%
-	# 						arrange(diff) %>% 
-	# 						slice(1) %>%
-	# 						pull(.value_alpha2)
-	# 				)
-	# 			)
-	# 	) %>%
-	# 	unnest(data) %>%
-	# 	
-	# 	# Label signifcant
-	# 	# mutate(
-	# 	# 	.value_alpha2 = .value_alpha2 - zero,
-	# 	# 	.lower_alpha2 = .lower_alpha2 - zero,
-	# 	# 	.upper_alpha2 = .upper_alpha2 - zero
-	# 	# ) %>%
-	# 	mutate(significant = ((.lower_alpha2 - zero) * (.upper_alpha2 - zero)) > 0) %>%
-	# 	
-	# 	# Adjust ifancestor is significant
-	# 	# equential important becaue we hav toudatecildren on level at the time
-	# 	left_join(ancestor_child)	%>%
-	# 	left_join( (.) %>% distinct(ancestor = `Cell type category`, fold_change_ancestor = ifelse(significant, .value_alpha2, 0)) )	%>%
-	# 	group_by(.variable) %>%
-	# 	mutate(zero = ifelse(level == 2 & fold_change_ancestor > 0, min(.value_alpha2), zero)) %>%
-	# 	mutate(zero = ifelse(level == 2 & fold_change_ancestor < 0, max(.value_alpha2), zero)) %>%
-	# 	mutate(zero = ifelse(level == 3 & fold_change_ancestor > 0, min(.value_alpha2), zero)) %>%
-	# 	mutate(zero = ifelse(level == 3 & fold_change_ancestor < 0, max(.value_alpha2), zero)) %>%
-	# 	mutate(zero = ifelse(level == 4 & fold_change_ancestor > 0, min(.value_alpha2), zero)) %>%
-	# 	mutate(zero = ifelse(level == 4 & fold_change_ancestor < 0, max(.value_alpha2), zero)) %>%
-	# 	
-	# 	# Calculate fold chage
-	# 	mutate(fold_change = .value_alpha2 - zero) %>%
-	# 	mutate(significant = ((.lower_alpha2 - zero) * (.upper_alpha2 - zero)) > 0) 
-	
-	
-	
-	#	ifelse_pipe(family == "dirichlet" | 1, ~ .x %>% get_relative_zero, ~ .x %>% mutate(zero = 0)) %>%
-	
-}
 
-#' @export
-get_CI = function(.data, credible_interval = 0.90, cluster_CI = 0.55) {
-	
-	# Choose the test
-	if("draws_cens" %in% colnames(.data$proportions)){
-		.v = as.symbol(".value_2")
-		.l = as.symbol(".lower_2")
-		.u = as.symbol(".upper_2")
-	} else {
-		.v = as.symbol(".value_alpha2")
-		.l = as.symbol(".lower_alpha2")
-		.u = as.symbol(".upper_alpha2")
-	}
-	
-	.d = 
-		.data$proportions %>%
-		filter(.variable %>% is.na %>% `!`) %>%
-		cluster_posterior_slopes(credible_interval = cluster_CI) %>%
-		extract_CI(credible_interval)
-	
-	dx = list()	
-	
-	# Level 1
-	if(.d %>% filter(level ==1) %>% nrow %>% `>` (0))
-		dx = 
-		.d %>%
-		
-		filter(level ==1) %>%
-		mutate(fold_change_ancestor = 0) %>%
-		identify_baseline_by_clustering( ) %>%
-		
-		mutate(significant = ((!!.l - 0) * (!!.u - 0)) > 0) %>%
-		mutate(fold_change  = ifelse(significant, !!.v, 0))
-	
-	# Level 2
-	if(.d %>% filter(level ==2) %>% nrow %>% `>` (0))
-		dx =	dx %>% bind_rows(
-			.d %>%
-				
-				filter(level ==2) %>%
-				left_join(ancestor_child, by = "Cell type category") %>%
-				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change),  by = "ancestor" )  %>%
-				identify_baseline_by_clustering( ) %>%
-				
-				mutate(significant = ((!!.l - 0) * (!!.u - 0)) > 0) %>%
-				mutate(fold_change  = ifelse(significant, !!.v, 0))
-		) 
-	
-	
-	# Level 3
-	if(.d %>% filter(level ==3) %>% nrow %>% `>` (0))
-		dx =	dx %>% bind_rows(
-			.d %>%
-				
-				filter(level ==3) %>%
-				left_join(ancestor_child, by = "Cell type category") %>%
-				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) ,  by = "ancestor")  %>%
-				identify_baseline_by_clustering( ) %>%
-				
-				mutate(significant = ((!!.l - 0) * (!!.u - 0)) > 0) %>%
-				mutate(fold_change  = ifelse(significant, !!.v, 0))
-		)
-	
-	# Level 4
-	if(.d %>% filter(level ==4) %>% nrow %>% `>` (0))
-		dx =	dx %>% bind_rows(
-			.d %>%
-				
-				filter(level ==4) %>%
-				left_join(ancestor_child, by = "Cell type category") %>%
-				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) ,  by = "ancestor")  %>%
-				identify_baseline_by_clustering( ) %>%
-				
-				mutate(significant = ((!!.l - 0) * (!!.u - 0)) > 0) %>%
-				mutate(fold_change  = ifelse(significant, !!.v, 0))
-		)
-	
-	dx
-	
-	
 }
 
 
@@ -983,7 +799,6 @@ run_lv_1 = function(internals,
 										iterations = iterations,
 										sampling_iterations = sampling_iterations,
 										do_regression = do_regression,
-										family = family,
 										.formula = .formula, model = stanmodels$ARMET_tc_fix_hierarchical){
 	res1 = run_model( 
 		internals$reference_filtered,
@@ -997,7 +812,6 @@ run_lv_1 = function(internals,
 		sampling_iterations = sampling_iterations,
 		X = internals$X,
 		do_regression = do_regression,
-		family = family,
 		cens = internals$cens,
 		tree_properties = internals$tree_properties,
 		Q = internals$Q,
@@ -1066,7 +880,7 @@ run_lv_1 = function(internals,
 	
 	if (do_regression && paste(as.character(.formula), collapse="")  != "~1" ) 
 		internals$alpha = 
-		get_alpha(fit, level, family) %>% 
+		get_alpha(fit, level) %>% 
 		left_join(
 			get_generated_quantities_standalone(fit, level, internals),
 			by = c("node", "C")

@@ -31,3 +31,4 @@ This is a generalisation of ifelse that acceots an object and return an objects
 
 This is a generalisation of ifelse that acceots an object and return an objects
 }
+\keyword{internal}
