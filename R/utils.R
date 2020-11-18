@@ -1438,6 +1438,8 @@ get_ancestor_child = function(tree){
 }
 
 #' @importFrom purrr map_int
+#' @importFrom foreach foreach
+#' @importFrom foreach %do%
 #' @keywords internal
 #' 
 #' @param tree A tree
@@ -1455,22 +1457,35 @@ get_tree_properties = function(tree){
 		filter(!isLeaf) %>%
 		pull(count)
 	
-	# Get the number of leafs for every level
-	ct_in_levels =
-		levels_in_the_tree + 1 %>%
-		map_int(~ {
-			data.tree::Clone(tree) %>%
-				when(
-					data.tree::ToDataFrameTree(., "level") %>% pull(2) %>% max %>% gt(.x) ~ {
-						t = (.)
-						data.tree::Prune(t, function(x)	x$level <= .x)
-						t
-					},
-					~ (.)
-				) %>%
-				data.tree::Traverse(., filterFun = isLeaf) %>%
-				length()
-		})
+	ct_in_levels = foreach(l = levels_in_the_tree + 1, .combine = c) %do% {
+		data.tree::Clone(tree) %>%
+			ifelse_pipe((.) %>% data.tree::ToDataFrameTree("level") %>% pull(2) %>% max %>% `>` (l),
+									~ {
+										.x
+										data.tree::Prune(.x, function(x)
+											x$level <= l)
+										.x
+									})  %>%
+			data.tree::Traverse(., filterFun = isLeaf) %>%
+			length()
+	}
+	
+	# # Get the number of leafs for every level
+	# ct_in_levels =
+	# 	levels_in_the_tree + 1 %>%
+	# 	map_int(~ {
+	# 		data.tree::Clone(tree) %>%
+	# 			when(
+	# 				data.tree::ToDataFrameTree(., "level") %>% pull(2) %>% max %>% gt(.x) ~ {
+	# 					t = (.)
+	# 					data.tree::Prune(t, function(x)	x$level <= .x)
+	# 					t
+	# 				},
+	# 				~ (.)
+	# 			) %>%
+	# 			data.tree::Traverse(., filterFun = isLeaf) %>%
+	# 			length()
+	# 	})
 	
 	n_nodes = ct_in_nodes %>% length
 	n_levels = ct_in_levels %>% length

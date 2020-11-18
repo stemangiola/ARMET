@@ -141,6 +141,7 @@ ARMET_tc_continue = function(armet_obj, level, model = stanmodels$ARMET_tc_fix_h
 #' @importFrom tidybayes median_qi
 #'
 #' @importFrom magrittr equals
+#' @importFrom magrittr %$%
 #'
 #' @import data.tree
 #'
@@ -425,7 +426,6 @@ run_model = function(reference_filtered,
 										 sample_scaling,
 										 prior_prop = matrix(1:Q)[,0]) {
 	
-	Q = Q
 	
 	# Global properties - derived by previous analyses of the whole reference dataset
 	sigma_intercept = 1.3420415
@@ -448,22 +448,6 @@ run_model = function(reference_filtered,
 	G = df %>% filter(!`query`) %>% distinct(G) %>% nrow()
 	GM = df %>% filter(!`house keeping`) %>% distinct(symbol) %>% nrow()
 	
-	# For  reference MPI inference
-	counts_baseline =
-		df %>%
-		
-		# Eliminate the query part, not the house keeping of the query
-		filter(!`query` | `house keeping`)  %>%
-		
-		format_for_MPI(shards)
-	
-	S = counts_baseline %>% distinct(sample) %>% nrow()
-	N = counts_baseline %>% distinct(idx_MPI, count, `read count MPI row`) %>%  count(idx_MPI) %>% summarise(max(n)) %>% pull(1)
-	M = counts_baseline %>% distinct(start, idx_MPI) %>% count(idx_MPI) %>% pull(n) %>% max
-	
-	lambda_log = 	  counts_baseline %>% filter(!query) %>% distinct(G, lambda_log) %>% arrange(G) %>% pull(lambda_log)
-	sigma_inv_log = counts_baseline %>% filter(!query) %>% distinct(G, sigma_inv_log) %>% arrange(G) %>% pull(sigma_inv_log)
-	
 	y_source =
 		df %>%
 		filter(`query` & !`house keeping`) %>%
@@ -484,37 +468,6 @@ run_model = function(reference_filtered,
 		arrange(C, Q, symbol) %>%
 		mutate(`Cell type category` = factor(`Cell type category`, unique(`Cell type category`)))
 	
-	counts_baseline_to_linear =
-		counts_baseline %>%
-		filter_house_keeping_query_if_fixed(full_bayesian) %>%
-		arrange(G, S) %>%
-		mutate(counts_idx = 1:n()) %>%
-		mutate(S = S %>% as.factor %>% as.integer)
-	
-	S = counts_baseline_to_linear %>% distinct(S) %>% nrow
-	
-	# Counts idx for each level for each level
-	counts_idx_lv_NA = counts_baseline_to_linear %>% filter(level %>% is.na) %>% pull(counts_idx)
-	CL_NA = counts_idx_lv_NA %>% length
-	
-	# Level specific
-	counts_idx_lv = counts_baseline_to_linear %>% filter(level == lv) %>% pull(counts_idx)
-	CL_lv = counts_idx_lv %>% length
-	
-	# Deconvolution, get G only for markers of each level. Exclude house keeping
-	G_lv_linear = counts_baseline %>% filter(level == lv) %>% select(G, GM, sprintf("C%s", lv)) %>% distinct() %>% arrange(GM,!!as.symbol(sprintf("C%s", lv))) %>% pull(G)
-	G_lv = G_lv_linear %>% length
-	
-	# Observed mix counts
-	y_linear_lv = y_source %>% filter(level == lv) %>% distinct(GM, Q, S, count) %>% arrange(GM, Q) %>% pull(count)
-	
-	# Observed mix samples indexes
-	y_linear_S_lv = y_source %>% filter(level == lv) %>% distinct(GM, Q, S, count) %>% arrange(GM, Q) %>% pull(S)
-	
-	# Lengths indexes
-	Y_lv = y_linear_lv %>% length
-	
-	
 	# Dirichlet regression
 	A = X %>% ncol
 	
@@ -524,28 +477,20 @@ run_model = function(reference_filtered,
 	# close(fileConn)
 	# ARMET_tc_model = rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix.stan", auto_write = F)
 	
-	# exposure_rate_init = switch(
-	# 	(lv > 1) %>% `!` %>% as.numeric %>% sum(1),
-	# 	exposure_posterior %>% pull(1),
-	# 	runif(S, -0.5, 0.5)
-	# ) %>% as.array
-	
-	# exposure_rate_multiplier = sd(exposure_rate_init) %>% ifelse_pipe((.) %>% is.na, ~ 0.1)
-	
 	exposure_rate = 
 		sample_scaling %>% 
 		filter(sample %in% (y_source %>% pull(sample))) %>% 
 		arrange(Q) %>% 
 		pull(multiplier) 
 	
-	init_list = list(
-		lambda_log = lambda_log,
-		sigma_inv_log = sigma_inv_log,
-		lambda_UFO = rep(6.2, GM)
-	) 
+	init_list = list(	lambda_UFO = rep(6.2, GM)	) 
 	
 	ref = 
-		counts_baseline %>%
+		df %>%
+		
+		# Eliminate the query part, not the house keeping of the query
+		filter(!`query` | `house keeping`)  %>%
+		
 		filter(!`house keeping`) %>%
 		mutate(lambda = exp(lambda_log)) %>%
 		select(C, GM, lambda ) %>% 
