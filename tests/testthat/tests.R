@@ -87,7 +87,7 @@ test_that("check nk dataset run",{
 	`%$%` = magrittr::`%$%`
 
 		ARMET_ref %>%
-		inner_join( (.) %>% dplyr::filter(`Cell type category` == "nk_resting") %>% distinct(sample) %>% slice(1:2)) %>%
+		inner_join( (.) %>% dplyr::filter(`Cell type category` == "nk_primed") %>% distinct(sample) %>% slice(1:2)) %>%
 		dplyr::select(-level) %>%
 		
 		mutate(count = as.numeric(count)) %>%
@@ -100,14 +100,13 @@ test_that("check nk dataset run",{
 		ARMET_tc(
 			.sample = sample,
 			.transcript = symbol,
-			.abundance = count,
-			cores = 2
+			.abundance = count
 		)  %>%
 		ARMET_tc_continue(2) %>%
 		ARMET_tc_continue(3) %$%
 		proportions %>%
 		dplyr::filter(level==3) %>%
-		dplyr::filter(`Cell type category` == "nk_resting") %>%
+		dplyr::filter(`Cell type category` == "nk_primed") %>%
 			select(-.variable) %>%
 			pull(.value) %>% 
 			mean %>%
@@ -118,36 +117,36 @@ test_that("check nk dataset run",{
 	})
 
 
-# test_that("Check accuracy N52",{
-# 
-# 	N52_ARMET_T =
-# 		filter(	readRDS("dev/N52.rds"),	ct == "T") %>%
-# 		mutate(count = as.integer(count)) %>%
-# 		ARMET_tc(
-# 			.sample = sample,
-# 			.transcript = symbol,
-# 			.abundance = count
-# 		) %>%
-# 		ARMET_tc_continue(2) %>%
-# 		ARMET_tc_continue(3)
-# 
-# 	expect_gt(
-# 		N52_ARMET_T$proportions %>% filter(`Cell type category` == "immune_cell") %>% select(-.variable) %>%  summarise(.value %>% min),
-# 		0.90
-# 	)
-# 
-# 	expect_gt(
-# 		N52_ARMET_T$proportions %>% filter(`Cell type category` == "t_cell") %>% select(-.variable) %>% summarise(.value %>% mean),
-# 		0.7
-# 	)
-# 
-# 	expect_lt(
-# 		N52_ARMET_T$proportions %>% select(-.variable) %>% filter(!converged) %>% nrow,
-# 		7
-# 	)
-# 
-# })
-# 
+test_that("Check accuracy N52",{
+
+	N52_ARMET_T =
+		filter(	readRDS("dev/N52.rds"),	ct == "T") %>%
+		mutate(count = as.integer(count)) %>%
+		ARMET_tc(
+			.sample = sample,
+			.transcript = symbol,
+			.abundance = count
+		) %>%
+		ARMET_tc_continue(2) %>%
+		ARMET_tc_continue(3)
+
+	expect_gt(
+		N52_ARMET_T$proportions %>% filter(`Cell type category` == "immune_cell") %>% select(-.variable) %>%  summarise(.value %>% min),
+		0.93
+	)
+
+	expect_gt(
+		N52_ARMET_T$proportions %>% filter(`Cell type category` == "t_cell") %>% select(-.variable) %>% summarise(.value %>% mean),
+		0.79
+	)
+
+	expect_lt(
+		N52_ARMET_T$proportions %>% select(-.variable) %>% filter(!converged) %>% nrow,
+		3
+	)
+
+})
+
 
 
 
