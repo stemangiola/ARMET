@@ -117,37 +117,35 @@ test_that("check nk dataset run",{
 	})
 
 
-test_that("Check accuracy N52",{
-
-	N52_ARMET_T =
-		filter(	readRDS("dev/N52.rds"),	ct == "T") %>%
-		mutate(count = as.integer(count)) %>%
-		ARMET_tc(
-			.sample = sample,
-			.transcript = symbol,
-			.abundance = count
-		) %>%
-		ARMET_tc_continue(2) %>%
-		ARMET_tc_continue(3)
-
-	expect_gt(
-		N52_ARMET_T$proportions %>% filter(`Cell type category` == "immune_cell") %>% select(-.variable) %>%  summarise(.value %>% min),
-		0.93
-	)
-
-	expect_gt(
-		N52_ARMET_T$proportions %>% filter(`Cell type category` == "t_cell") %>% select(-.variable) %>% summarise(.value %>% mean),
-		0.79
-	)
-
-	expect_lt(
-		N52_ARMET_T$proportions %>% select(-.variable) %>% filter(!converged) %>% nrow,
-		3
-	)
-
-})
-
-
+# test_that("Check accuracy N52",{
+# 
+# 	N52_ARMET_T =
+# 		filter(	readRDS("dev/N52.rds"),	ct == "T") %>%
+# 		mutate(count = as.integer(count)) %>%
+# 		ARMET_tc(
+# 			.sample = sample,
+# 			.transcript = symbol,
+# 			.abundance = count
+# 		) %>%
+# 		ARMET_tc_continue(2) %>%
+# 		ARMET_tc_continue(3)
+# 
+# 	expect_gt(
+# 		N52_ARMET_T$proportions %>% filter(`Cell type category` == "immune_cell") %>% select(-.variable) %>%  summarise(.value %>% min),
+# 		0.93
+# 	)
+# 
+# 	expect_gt(
+# 		N52_ARMET_T$proportions %>% filter(`Cell type category` == "t_cell") %>% select(-.variable) %>% summarise(.value %>% mean),
+# 		0.79
+# 	)
+# 
+# 	expect_lt(
+# 		N52_ARMET_T$proportions %>% select(-.variable) %>% filter(!converged) %>% nrow,
+# 		3
+# 	)
+# 
+# })
 
 
 # test_that("Simulated data and plot",{
