@@ -362,7 +362,7 @@ model {
 			append_row(	ref,	exp(lambda_UFO) );
 
 	// Correct for exposure
-	for(q in 1:Q) mu[q] = mu[q] * exposure_rate[q];
+	for(q in 1:Q) mu[q] = mu[q] * 1.0/exposure_rate[q];
 	
 	// Sampling
 		
