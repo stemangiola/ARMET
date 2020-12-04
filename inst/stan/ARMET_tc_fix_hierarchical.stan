@@ -132,6 +132,43 @@ vector[] beta_regression_rng( matrix X, matrix alpha, real[] phi, real plateau){
 		}
 		return (p);
 	}
+	
+	// SUM TO ZERO FRAMEWORK
+	vector Q_sum_to_zero_QR(int N) {
+    vector [2*N] Q_r;
+
+    for(i in 1:N) {
+      Q_r[i] = -sqrt((N-i)/(N-i+1.0));
+      Q_r[i+N] = inv_sqrt((N-i) * (N-i+1));
+    }
+    return Q_r;
+  }
+
+  vector sum_to_zero_QR(vector x_raw, vector Q_r) {
+    int N = num_elements(x_raw) + 1;
+    vector [N] x;
+    real x_aux = 0;
+
+    for(i in 1:N-1){
+      x[i] = x_aux + x_raw[i] * Q_r[i];
+      x_aux = x_aux + x_raw[i] * Q_r[i+N];
+    }
+    x[N] = x_aux;
+    return x;
+  }
+  
+  vector[] rate_to_prop(vector[] v, vector Q_r){
+  		int R = num_elements(v[,1]);
+			int C = num_elements(v[1]);
+	
+  	vector[C+1] prop[R];
+  	
+  	for(r in 1:R)
+  		prop[r] = softmax(sum_to_zero_QR(v[r], Q_r));
+  		
+  	return(prop);
+  }
+  
 
 }
 data {
@@ -212,31 +249,45 @@ data {
   
 }
 transformed data{
-	real real_data[shards, 0];
+
+	vector[2*ct_in_nodes[1]] Q_r_1 = Q_sum_to_zero_QR(ct_in_nodes[1]);
+	vector[2*ct_in_nodes[2]] Q_r_a = Q_sum_to_zero_QR(ct_in_nodes[2]);
+	vector[2*ct_in_nodes[3]] Q_r_b = Q_sum_to_zero_QR(ct_in_nodes[3]);
+	vector[2*ct_in_nodes[4]] Q_r_c = Q_sum_to_zero_QR(ct_in_nodes[4]);
+	vector[2*ct_in_nodes[5]] Q_r_d = Q_sum_to_zero_QR(ct_in_nodes[5]);
+	vector[2*ct_in_nodes[6]] Q_r_e = Q_sum_to_zero_QR(ct_in_nodes[6]);
+	vector[2*ct_in_nodes[7]] Q_r_f = Q_sum_to_zero_QR(ct_in_nodes[7]);
+	vector[2*ct_in_nodes[8]] Q_r_g = Q_sum_to_zero_QR(ct_in_nodes[8]);
+	vector[2*ct_in_nodes[9]] Q_r_h = Q_sum_to_zero_QR(ct_in_nodes[9]);
+	vector[2*ct_in_nodes[10]] Q_r_i = Q_sum_to_zero_QR(ct_in_nodes[10]);
+	vector[2*ct_in_nodes[11]] Q_r_l = Q_sum_to_zero_QR(ct_in_nodes[11]);
+	vector[2*ct_in_nodes[12]] Q_r_m = Q_sum_to_zero_QR(ct_in_nodes[12]);
+
 }
 parameters {
 
 
-  // Proportions
+  // Proportions rates
   // lv1
-  simplex[ct_in_nodes[1]]  prop_1[Q * (lv == 1)]; // Root
+  simplex[ct_in_nodes[1]-1]  rate_1[Q * (lv == 1)]; // Root
 
   // lv2
-  simplex[ct_in_nodes[2]]  prop_a[Q * (lv == 2)]; // Immune cells childrens
+  simplex[ct_in_nodes[2]-1]  rate_a[Q * (lv == 2)]; // Immune cells childrens
 
   // lv3
-  simplex[ct_in_nodes[3]]  prop_b[Q * (lv == 3)]; // b cells childrens
-  simplex[ct_in_nodes[4]]  prop_c[Q * (lv == 3)]; // granulocyte childrens
-  simplex[ct_in_nodes[5]]  prop_d[Q * (lv == 3)]; // mono_derived childrens
-  simplex[ct_in_nodes[6]]  prop_e[Q * (lv == 3)]; // natural_killer childrens
-  simplex[ct_in_nodes[7]]  prop_f[Q * (lv == 3)]; // t_cell childrens
+  simplex[ct_in_nodes[3]-1]  rate_b[Q * (lv == 3)]; // b cells childrens
+  simplex[ct_in_nodes[4]-1]  rate_c[Q * (lv == 3)]; // granulocyte childrens
+  simplex[ct_in_nodes[5]-1]  rate_d[Q * (lv == 3)]; // mono_derived childrens
+  simplex[ct_in_nodes[6]-1]  rate_e[Q * (lv == 3)]; // natural_killer childrens
+  simplex[ct_in_nodes[7]-1]  rate_f[Q * (lv == 3)]; // t_cell childrens
 
 	// lv4
-  simplex[ct_in_nodes[8]]  prop_g[Q * (lv == 4)]; // dendritic myeloid childrens
-  simplex[ct_in_nodes[9]]  prop_h[Q * (lv == 4)]; // macrophage childrens
-  simplex[ct_in_nodes[10]] prop_i[Q * (lv == 4)]; // nk primed
-  simplex[ct_in_nodes[11]] prop_l[Q * (lv == 4)]; // CD4 childrens
-  simplex[ct_in_nodes[12]] prop_m[Q * (lv == 4)]; // CD8 childrens
+  simplex[ct_in_nodes[8]-1]  rate_g[Q * (lv == 4)]; // dendritic myeloid childrens
+  simplex[ct_in_nodes[9]-1]  rate_h[Q * (lv == 4)]; // macrophage childrens
+  simplex[ct_in_nodes[10]-1] rate_i[Q * (lv == 4)]; // nk primed
+  simplex[ct_in_nodes[11]-1] rate_l[Q * (lv == 4)]; // CD4 childrens
+  simplex[ct_in_nodes[12]-1] rate_m[Q * (lv == 4)]; // CD8 childrens
+
 
 	// Dirichlet regression
   // lv1
@@ -255,7 +306,7 @@ parameters {
 	// lv4
   matrix[A * (lv == 4) * do_regression,ct_in_nodes[8]-1]  alpha_g; // dendritic myeloid
   matrix[A * (lv == 4) * do_regression,ct_in_nodes[9]-1]  alpha_h; // macrophage
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[10]-1]  alpha_i; // NK
+  matrix[A * (lv == 4) * do_regression,ct_in_nodes[10]-1] alpha_i; // NK
   matrix[A * (lv == 4) * do_regression,ct_in_nodes[11]-1] alpha_l; // CD4
   matrix[A * (lv == 4) * do_regression,ct_in_nodes[12]-1] alpha_m; // CD8
 
@@ -273,6 +324,28 @@ parameters {
 }
 transformed parameters{
 
+	// Proportions
+  // lv1
+  
+  vector[ct_in_nodes[1]]  prop_1[Q * (lv == 1)] = rate_to_prop(rate_1, Q_r_1); // Root
+
+  // lv2
+  vector[ct_in_nodes[2]]  prop_a[Q * (lv == 2)] = rate_to_prop(rate_a, Q_r_a); // Immune cells childrens
+
+  // lv3
+  vector[ct_in_nodes[3]]  prop_b[Q * (lv == 3)] = rate_to_prop(rate_b, Q_r_b); // b cells childrens
+  vector[ct_in_nodes[4]]  prop_c[Q * (lv == 3)] = rate_to_prop(rate_c, Q_r_c); // granulocyte childrens
+  vector[ct_in_nodes[5]]  prop_d[Q * (lv == 3)] = rate_to_prop(rate_d, Q_r_d); // mono_derived childrens
+  vector[ct_in_nodes[6]]  prop_e[Q * (lv == 3)] = rate_to_prop(rate_e, Q_r_e); // natural_killer childrens
+  vector[ct_in_nodes[7]]  prop_f[Q * (lv == 3)] = rate_to_prop(rate_f, Q_r_f); // t_cell childrens
+
+	// lv4
+  vector[ct_in_nodes[8]]  prop_g[Q * (lv == 4)] = rate_to_prop(rate_g, Q_r_g); // dendritic myeloid childrens
+  vector[ct_in_nodes[9]]  prop_h[Q * (lv == 4)] = rate_to_prop(rate_h, Q_r_h); // macrophage childrens
+  vector[ct_in_nodes[10]] prop_i[Q * (lv == 4)] = rate_to_prop(rate_i, Q_r_i); // nk primed
+  vector[ct_in_nodes[11]] prop_l[Q * (lv == 4)] = rate_to_prop(rate_l, Q_r_l); // CD4 childrens
+  vector[ct_in_nodes[12]] prop_m[Q * (lv == 4)] = rate_to_prop(rate_m, Q_r_m); // CD8 childrens
+  
 	matrix[Q,A] X_ = X;
 	matrix[Q,A] X_scaled = X_;
 	
@@ -302,6 +375,27 @@ model {
 	
 	real sigma_intercept = 1.5;
 	
+  // Compensation QR sum-to-zero
+  if(lv ==1) for(q in 1:Q) rate_1[q] ~ normal(0, inv_sqrt(1 - inv(ct_in_nodes[1])));
+  	
+  if(lv ==2) for(q in 1:Q) rate_a[q] ~ normal(0, inv_sqrt(1 - inv(ct_in_nodes[2])));
+
+  if(lv ==3) {
+  	for(q in 1:Q) rate_b[q] ~ normal(0, inv_sqrt(1 - inv(ct_in_nodes[3])));
+  	for(q in 1:Q) rate_c[q] ~ normal(0, inv_sqrt(1 - inv(ct_in_nodes[4])));
+  	for(q in 1:Q) rate_d[q] ~ normal(0, inv_sqrt(1 - inv(ct_in_nodes[5])));
+  	for(q in 1:Q) rate_e[q] ~ normal(0, inv_sqrt(1 - inv(ct_in_nodes[6])));
+  	for(q in 1:Q) rate_f[q] ~ normal(0, inv_sqrt(1 - inv(ct_in_nodes[7])));
+  }
+
+  if(lv ==4) {
+  	for(q in 1:Q) rate_g[q] ~ normal(0, inv_sqrt(1 - inv(ct_in_nodes[8])));
+  	for(q in 1:Q) rate_h[q] ~ normal(0, inv_sqrt(1 - inv(ct_in_nodes[9])));
+  	for(q in 1:Q) rate_i[q] ~ normal(0, inv_sqrt(1 - inv(ct_in_nodes[10])));
+  	for(q in 1:Q) rate_l[q] ~ normal(0, inv_sqrt(1 - inv(ct_in_nodes[11])));
+  	for(q in 1:Q) rate_m[q] ~ normal(0, inv_sqrt(1 - inv(ct_in_nodes[12])));
+  }
+  
 	// proportion of level 2
 	if(lv == 2)
 	prop_2 =
@@ -371,15 +465,6 @@ model {
 	sigma_vector = 1.0 ./ (pow_vector(mu_vector, -0.4) *  exp(sigma_intercept)); //   exp( log(mu_vector)  * -0.4 + sigma_intercept); //;
 	to_array_1d(y) ~ neg_binomial_2(mu_vector, sigma_vector);
 
-	// // MPI
-	// target += sum(map_rect(
-	// 		lp_reduce_simple ,
-	// 		[sigma_intercept, -0.4]', // global parameters
-	// 		get_mu_sigma_vector_MPI(mu_vector,	sigma_vector,	shards),
-	// 		real_data,
-	// 		get_int_MPI( 	to_array_1d(y), shards)
-	// 	));
-
 	// lv 1
   if(lv == 1 && do_regression) {
 
@@ -388,6 +473,8 @@ model {
   	 alpha_1[1] ~ normal(0,2);
   	 to_vector( alpha_1[2:] ) ~ student_t(5,  0,  2.5);
 
+
+  
 
   }
 	if(lv == 1 && !do_regression) for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | rep_vector(1, num_elements(prop_1[1])));
