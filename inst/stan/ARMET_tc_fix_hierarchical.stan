@@ -52,54 +52,68 @@ vector pow_vector(vector v, real p){
 		return(v_pow);
 	}
 	
-	real dirichlet_regression_lpdf(vector p, row_vector X, matrix alpha, real phi, real plateau){
+		// SUM TO ZERO FRAMEWORK
+	vector Q_sum_to_zero_QR(int N) {
+    vector [2*N] Q_r;
 
-		// // Build sum to zero variable
-		// int c = cols(alpha);
-		// int r = rows(alpha);
-		// matrix[r, c]  alpha_ = alpha;
-		// alpha_[1,c] = -sum(alpha_[1, 1:(c-1)]);
-			//	real  phi_exp= ( 1.0 ./ (phi + 0.0001));
+    for(i in 1:N) {
+      Q_r[i] = -sqrt((N-i)/(N-i+1.0));
+      Q_r[i+N] = inv_sqrt((N-i) * (N-i+1));
+    }
+    return Q_r;
+  }
+
+  vector sum_to_zero_QR(vector x_raw, vector Q_r) {
+    int N = num_elements(x_raw) + 1;
+    vector [N] x;
+    real x_aux = 0;
+
+    for(i in 1:N-1){
+      x[i] = x_aux + x_raw[i] * Q_r[i];
+      x_aux = x_aux + x_raw[i] * Q_r[i+N];
+    }
+    x[N] = x_aux;
+    return x;
+  }
+  
+    matrix vector_2D_sum_to_zero(matrix v, vector Q_r){
+  		int R = num_elements(v[,1]);
+			int C = num_elements(v[1]);
+	
+  	matrix[R,C+1] alpha;
+  	
+  	for(r in 1:R)
+  		alpha[r] = to_row_vector( sum_to_zero_QR(to_vector( v[r] ), Q_r) );
+  		
+  	return(alpha);
+  }
+  
+	real dirichlet_regression_lpdf(vector p, row_vector X, matrix alpha, real phi, real plateau, vector Q_r){
+
 
 		// Calculate log prob
-		return (dirichlet_lpdf(p | softmax( append_row([0]', to_vector(X * alpha))) * exp(phi) + plateau ));
+		return (dirichlet_lpdf(p | softmax( to_vector( X * vector_2D_sum_to_zero(alpha, Q_r) )) * exp(phi) + plateau ));
 	}
 
-	vector dirichlet_regression_rng( row_vector X, matrix alpha, real phi, real plateau){
-
-		// // Build sum to zero variable
-		// int c = cols(alpha);
-		// int r = rows(alpha);
-		// matrix[r, c]  alpha_ = alpha;
-		// alpha_[1,c] = -sum(alpha_[1, 1:(c-1)]);
-	//	real  phi_exp= ( 1.0 ./ (phi + 0.0001));
+	vector dirichlet_regression_rng( row_vector X, matrix alpha, real phi, real plateau, vector Q_r){
 
 		// Calculate log prob
-		return (dirichlet_rng( softmax( append_row([0]', to_vector(X * alpha))) * exp(phi) + plateau ));
+		return (dirichlet_rng( softmax( to_vector( X * vector_2D_sum_to_zero(alpha, Q_r) )) * exp(phi) + plateau ));
 	}
 
-real beta_regression_lpdf(vector[] p, matrix X, matrix alpha, real[] phi, real plateau){
+real beta_regression_lpdf(vector[] p, matrix X, matrix alpha, real[] phi, real plateau, vector Q_r){
 
 		real lp = 0;
-		//matrix[num_elements(p[,1]), num_elements(p[1])] mu;
 		vector[num_elements(phi)]  phi_exp= ( 1.0 ./ (to_vector(phi )+ 0.0001));
 
-		// Build sum to zero variable
-		int c = cols(alpha);
-		int r = rows(alpha);
-		matrix[r, c+1]  alpha_;
-		alpha_[,1:c] = alpha;
-		for(rr in 1:r) alpha_[rr,c+1] = -sum(alpha_[rr, 1:c]);
-		
-	//	print(alpha_);
-	//	print(phi);
-	//	print(X);
-		
+		int R = num_elements(alpha[,1]);
+		int C = num_elements(alpha[1]);
+  	matrix[R,C+1] alpha_ = vector_2D_sum_to_zero(alpha, Q_r);
+  	
+  	
 		for(j in 1:num_elements(p[,1])) {
 
-			vector[num_elements(p[1])] mu  = softmax( append_row([0]', to_vector(X[j] * alpha)));
-
-	//	print((mu .* phi_exp) +1);
+			vector[num_elements(p[1])] mu  = softmax( to_vector( X[j] * alpha_));
 
 
      	lp += beta_lpdf(p[j] | (mu .* phi_exp) +plateau, ((1.0 - mu) .* phi_exp) + plateau);
@@ -108,24 +122,20 @@ real beta_regression_lpdf(vector[] p, matrix X, matrix alpha, real[] phi, real p
 		return (lp);
 	}
 
-vector[] beta_regression_rng( matrix X, matrix alpha, real[] phi, real plateau){
+vector[] beta_regression_rng( matrix X, matrix alpha, real[] phi, real plateau, vector Q_r){
 
 		vector[cols(alpha)+1] p[rows(X)];
-
-		//matrix[num_elements(p[,1]), num_elements(p[1])] mu;
 		vector[num_elements(phi)]  phi_exp= ( 1.0 ./ (to_vector(phi )+ 0.0001));
 
-// Build sum to zero variable
-		int c = cols(alpha);
-		int r = rows(alpha);
-		matrix[r, c+1]  alpha_;
-		alpha_[,1:c] = alpha;
-		for(rr in 1:r) alpha_[rr,c+1] = -sum(alpha_[rr, 1:(c)]);
+
+		int R = num_elements(alpha[,1]);
+		int C = num_elements(alpha[1]);
+  	matrix[R,C+1] alpha_ = vector_2D_sum_to_zero(alpha, Q_r);
 		
 		for(j in 1:num_elements(p[,1])) {
 
 
-			vector[num_elements(p[1])] mu  = softmax( append_row([0]', to_vector(X[j] * alpha)));
+			vector[num_elements(p[1])] mu  = softmax( to_vector( X[j] * alpha_));
 
       	 p[j] = to_vector(beta_rng((mu .* phi_exp) +plateau, ((1.0 - mu) .* phi_exp) + plateau));
 
@@ -133,6 +143,8 @@ vector[] beta_regression_rng( matrix X, matrix alpha, real[] phi, real plateau){
 		return (p);
 	}
 
+
+  
 }
 data {
 	// shards
@@ -212,7 +224,19 @@ data {
   
 }
 transformed data{
-	real real_data[shards, 0];
+	
+	vector[2*ct_in_nodes[1]] Q_r_1 = Q_sum_to_zero_QR(ct_in_nodes[1]);
+	vector[2*ct_in_nodes[2]] Q_r_a = Q_sum_to_zero_QR(ct_in_nodes[2]);
+	vector[2*ct_in_nodes[3]] Q_r_b = Q_sum_to_zero_QR(ct_in_nodes[3]);
+	vector[2*ct_in_nodes[4]] Q_r_c = Q_sum_to_zero_QR(ct_in_nodes[4]);
+	vector[2*ct_in_nodes[5]] Q_r_d = Q_sum_to_zero_QR(ct_in_nodes[5]);
+	vector[2*ct_in_nodes[6]] Q_r_e = Q_sum_to_zero_QR(ct_in_nodes[6]);
+	vector[2*ct_in_nodes[7]] Q_r_f = Q_sum_to_zero_QR(ct_in_nodes[7]);
+	vector[2*ct_in_nodes[8]] Q_r_g = Q_sum_to_zero_QR(ct_in_nodes[8]);
+	vector[2*ct_in_nodes[9]] Q_r_h = Q_sum_to_zero_QR(ct_in_nodes[9]);
+	vector[2*ct_in_nodes[10]] Q_r_i = Q_sum_to_zero_QR(ct_in_nodes[10]);
+	vector[2*ct_in_nodes[11]] Q_r_l = Q_sum_to_zero_QR(ct_in_nodes[11]);
+	vector[2*ct_in_nodes[12]] Q_r_m = Q_sum_to_zero_QR(ct_in_nodes[12]);
 }
 parameters {
 
@@ -302,6 +326,29 @@ model {
 	
 	real sigma_intercept = 1.5;
 	
+	// SUM TO ZERO FRAMEWORK
+	if(lv ==1) 
+		for(a in 1:A) alpha_1[a] ~ normal(0, inv_sqrt(1 - inv(ct_in_nodes[1])));
+
+  if(lv ==2) 
+  	for(a in 1:A) alpha_a[a] ~ normal(0, inv_sqrt(1 - inv(ct_in_nodes[2])));
+
+  if(lv ==3) {
+  	for(a in 1:A) alpha_b[a] ~ normal(0, inv_sqrt(1 - inv(ct_in_nodes[3])));
+  	for(a in 1:A) alpha_c[a] ~ normal(0, inv_sqrt(1 - inv(ct_in_nodes[4])));
+  	for(a in 1:A) alpha_d[a] ~ normal(0, inv_sqrt(1 - inv(ct_in_nodes[5])));
+  	for(a in 1:A) alpha_e[a] ~ normal(0, inv_sqrt(1 - inv(ct_in_nodes[6])));
+  	for(a in 1:A) alpha_f[a] ~ normal(0, inv_sqrt(1 - inv(ct_in_nodes[7])));
+  }
+
+  if(lv ==4) {
+  	for(a in 1:A) alpha_g[a] ~ normal(0, inv_sqrt(1 - inv(ct_in_nodes[8])));
+  	for(a in 1:A) alpha_h[a] ~ normal(0, inv_sqrt(1 - inv(ct_in_nodes[9])));
+  	for(a in 1:A) alpha_i[a] ~ normal(0, inv_sqrt(1 - inv(ct_in_nodes[10])));
+  	for(a in 1:A) alpha_l[a] ~ normal(0, inv_sqrt(1 - inv(ct_in_nodes[11])));
+  	for(a in 1:A) alpha_m[a] ~ normal(0, inv_sqrt(1 - inv(ct_in_nodes[12])));
+  }
+  
 	// proportion of level 2
 	if(lv == 2)
 	prop_2 =
@@ -371,20 +418,11 @@ model {
 	sigma_vector = 1.0 ./ (pow_vector(mu_vector, -0.4) *  exp(sigma_intercept)); //   exp( log(mu_vector)  * -0.4 + sigma_intercept); //;
 	to_array_1d(y) ~ neg_binomial_2(mu_vector, sigma_vector);
 
-	// // MPI
-	// target += sum(map_rect(
-	// 		lp_reduce_simple ,
-	// 		[sigma_intercept, -0.4]', // global parameters
-	// 		get_mu_sigma_vector_MPI(mu_vector,	sigma_vector,	shards),
-	// 		real_data,
-	// 		get_int_MPI( 	to_array_1d(y), shards)
-	// 	));
-
 	// lv 1
   if(lv == 1 && do_regression) {
 
 		//print(X_scaled[,2]);
-  	prop_1 ~ beta_regression(X_scaled, alpha_1, phi[1:4], 0.5);
+  	prop_1 ~ beta_regression(X_scaled, alpha_1, phi[1:4], 0.5, Q_r_1);
   	 alpha_1[1] ~ normal(0,2);
   	 to_vector( alpha_1[2:] ) ~ student_t(5,  0,  2.5);
 
@@ -397,7 +435,7 @@ model {
   if(lv == 2 && do_regression) {
 
   	//prop_a ~ beta_regression(X_scaled, alpha_a, phi[1:6], 1);
-  	for(q in 1:Q) prop_a[q] ~ dirichlet_regression( X_scaled[q], alpha_a, phi[1] , 0.05);
+  	for(q in 1:Q) prop_a[q] ~ dirichlet_regression( X_scaled[q], alpha_a, phi[1] , 0.05, Q_r_a);
   	alpha_a[1] ~ normal(0,2);
   	to_vector( alpha_a[2:] ) ~ student_t(5,  0, 2.5);
 
@@ -408,11 +446,11 @@ model {
 	// lv 3
   if(lv == 3 && do_regression){
 
-  		for(q in 1:Q) prop_b[q] ~ dirichlet_regression( X_scaled[q], alpha_b, phi[1] , 1);
-  		for(q in 1:Q) prop_c[q] ~ dirichlet_regression( X_scaled[q], alpha_c, phi[2] , 1);
-  		for(q in 1:Q) prop_d[q] ~ dirichlet_regression( X_scaled[q], alpha_d, phi[3] , 1);
-  		for(q in 1:Q) prop_e[q] ~ dirichlet_regression( X_scaled[q], alpha_e, phi[4] , 1);
-  		for(q in 1:Q) prop_f[q] ~ dirichlet_regression( X_scaled[q], alpha_f, phi[5] , 1);
+  		for(q in 1:Q) prop_b[q] ~ dirichlet_regression( X_scaled[q], alpha_b, phi[1] , 1, Q_r_b);
+  		for(q in 1:Q) prop_c[q] ~ dirichlet_regression( X_scaled[q], alpha_c, phi[2] , 1, Q_r_c);
+  		for(q in 1:Q) prop_d[q] ~ dirichlet_regression( X_scaled[q], alpha_d, phi[3] , 1, Q_r_d);
+  		for(q in 1:Q) prop_e[q] ~ dirichlet_regression( X_scaled[q], alpha_e, phi[4] , 1, Q_r_e);
+  		for(q in 1:Q) prop_f[q] ~ dirichlet_regression( X_scaled[q], alpha_f, phi[5] , 1, Q_r_f);
 
 		alpha_b[1] ~  normal(0,2);
   	to_vector( alpha_b[2:] ) ~ student_t(5, 0, 2.5);
@@ -436,11 +474,11 @@ model {
 	// lv 4
   if(lv == 4 && do_regression){
 
-  		for(q in 1:Q) prop_g[q] ~ dirichlet_regression( X_scaled[q], alpha_g, phi[1] , 1);
-  		for(q in 1:Q) prop_h[q] ~ dirichlet_regression( X_scaled[q], alpha_h, phi[2] , 1);
-  		for(q in 1:Q) prop_i[q] ~ dirichlet_regression( X_scaled[q], alpha_i, phi[3] , 1);
-  		for(q in 1:Q) prop_l[q] ~ dirichlet_regression( X_scaled[q], alpha_l, phi[4] , 1);
-  		for(q in 1:Q) prop_m[q] ~ dirichlet_regression( X_scaled[q], alpha_m, phi[5] , 1);
+  		for(q in 1:Q) prop_g[q] ~ dirichlet_regression( X_scaled[q], alpha_g, phi[1] , 1, Q_r_g);
+  		for(q in 1:Q) prop_h[q] ~ dirichlet_regression( X_scaled[q], alpha_h, phi[2] , 1, Q_r_h);
+  		for(q in 1:Q) prop_i[q] ~ dirichlet_regression( X_scaled[q], alpha_i, phi[3] , 1, Q_r_i);
+  		for(q in 1:Q) prop_l[q] ~ dirichlet_regression( X_scaled[q], alpha_l, phi[4] , 1, Q_r_l);
+  		for(q in 1:Q) prop_m[q] ~ dirichlet_regression( X_scaled[q], alpha_m, phi[5] , 1, Q_r_m);
 
 // else  prop_4 ~ beta_regression(X_scaled, alpha_4, phi);
 		alpha_g[1] ~ normal(0,2);
