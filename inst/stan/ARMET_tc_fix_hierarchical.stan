@@ -1,6 +1,14 @@
 functions{
 
-	
+real gamma_log_lpdf(vector x_log, real a, real b){
+
+			vector[rows(x_log)] jacob = x_log; //jacobian
+			real norm_constant = a * log(b) -lgamma(a);
+			real a_minus_1 = a-1;
+			return sum( jacob ) + norm_constant * rows(x_log) + sum(  x_log * a_minus_1 - exp(x_log) * b ) ;
+
+		}
+		
 matrix vector_array_to_matrix(vector[] x) {
 		matrix[size(x), rows(x[1])] y;
 		for (m in 1:size(x))
@@ -205,7 +213,10 @@ data {
 	int which_not_cens[Q-how_many_cens];
 	real<lower=0> max_unseen;
 	int spt;
-	real prior_survival_time[spt];
+	vector[spt] prior_survival_time;
+	int CIT;
+	int columns_idx_including_time[CIT];
+	
 
   // Local properties of the data
   vector[Q] exposure_rate;
@@ -277,12 +288,12 @@ transformed parameters{
 	matrix[Q,A] X_scaled = X_;
 	
 	if(how_many_cens > 0) {
-		X_[which_cens,2] = X_[which_cens,2] + unseen;
+	for(i in 1:CIT)	X_scaled[which_cens,columns_idx_including_time[i]] = X_scaled[which_cens,columns_idx_including_time[i]] .* (unseen + 1);
 		
 		// log and scale the survival days
 
-		X_scaled[,2] = log(X_scaled[,2]);
-		X_scaled[,2] = (X_scaled[,2] - mean(X_scaled[,2])) / sd(X_scaled[,2]);
+		// X_scaled[,2] = log(X_scaled[,2]);
+		// X_scaled[,2] = (X_scaled[,2] - mean(X_scaled[,2])) / sd(X_scaled[,2]);
 	} 
 
 }
@@ -476,14 +487,15 @@ model {
 		real mu_cens = prior_unseen_alpha[1] * exp(-prior_unseen_beta[1]);
 		
 		// unseen
-		X_[which_cens,2] ~ gamma( prior_unseen_alpha[1], mu_cens);
+		unseen ~ gamma(1,2);
+		X_[which_cens,2] ~ gamma_log( prior_unseen_alpha[1], mu_cens);
 
 		// Priors
-		target += gamma_lpdf(X[which_not_cens,2] | prior_unseen_alpha[1], mu_cens);
-	 	target += gamma_lccdf(	X[which_cens,2] | prior_unseen_alpha[1], mu_cens);
+		target += gamma_log_lpdf(X[which_not_cens,2] | prior_unseen_alpha[1], mu_cens);
+	 	// target += gamma_lccdf(	X[which_cens,2] | prior_unseen_alpha[1], mu_cens);
 	 	
 	 	// Hyperprior
-	 	prior_survival_time ~ gamma( prior_unseen_alpha[1], mu_cens);
+	 	prior_survival_time ~ gamma_log( prior_unseen_alpha[1], mu_cens);
 	 	
 	 	prior_unseen_beta[1] ~ student_t(3, 6, 10);
   	prior_unseen_alpha[1] ~  gamma(0.01, 0.01);

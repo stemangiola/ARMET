@@ -222,23 +222,30 @@ ARMET_tc = function(.data,
 			if(length(prior_survival_time) == 0) stop("AMET says: you really need to provide third party survival time for your condition/disease")
 			
 			sd_survival_months = .data %>%  select(sample, formula_df$censored_value_column) %>% distinct %>% pull(formula_df$censored_value_column) %>% sd
-			prior_survival_time = prior_survival_time / sd_survival_months
+			prior_survival_time = log1p(prior_survival_time) 
 			
 		}
 		else{
 			cens = NULL
 		} 
 		
+		time_column = formula_df$censored_value_column 
 		
 		X =
 			model.matrix(
 				object = 	formula_df$formula_formatted,
-				data = .data %>% select(sample, one_of(formula_df$covariates_formatted)) %>% distinct %>% arrange(sample)
+				data = 
+					.data %>% 
+					select(sample, one_of(formula_df$covariates_formatted)) %>% 
+					distinct %>% 
+					arrange(sample) %>%
+					mutate(!!as.symbol(formula_df$censored_value_column ) := log(!!as.symbol(formula_df$censored_value_column )))
 			)
 		
-		
+		columns_idx_including_time = which(grepl(time_column, colnames(X)))
 	}	else {
 		formula_df = cens  = NULL	
+		columns_idx_including_time = c()
 		
 		X =
 			model.matrix(
@@ -361,7 +368,8 @@ ARMET_tc = function(.data,
 			tree_properties = tree_propeties,
 			prior_survival_time = prior_survival_time,
 			formula_df = formula_df,
-			sample_scaling = sample_scaling
+			sample_scaling = sample_scaling,
+			columns_idx_including_time = columns_idx_including_time
 		) 
 	
 	internals = 
@@ -424,7 +432,8 @@ run_model = function(reference_filtered,
 										 model = stanmodels$ARMET_tc_fix_hierarchical,
 										 prior_survival_time = c(),
 										 sample_scaling,
-										 prior_prop = matrix(1:Q)[,0]) {
+										 prior_prop = matrix(1:Q)[,0],
+										 columns_idx_including_time ) {
 	
 	
 	# Global properties - derived by previous analyses of the whole reference dataset
@@ -521,6 +530,7 @@ run_model = function(reference_filtered,
 	if(is.null(prior_survival_time)) prior_survival_time = array(1)[0]
 	spt = length(prior_survival_time)
 	
+	CIT = length(columns_idx_including_time)
 
 fit = 
 	sampling(
@@ -762,7 +772,8 @@ run_lv_1 = function(internals,
 		Q = internals$Q,
 		model = model,
 		prior_survival_time = internals$prior_survival_time,
-		sample_scaling = internals$sample_scaling
+		sample_scaling = internals$sample_scaling,
+		columns_idx_including_time = internals$columns_idx_including_time
 	)
 	
 	df = res1[[1]]
