@@ -1786,7 +1786,7 @@ get_alpha = function(fit, level){
 		# Attach convergence information
 		left_join(
 			fit %>% summary_to_tibble("alpha_", "A", "C") %>% filter(A == 2) %>% 
-				select(.variable, C, Rhat),
+				select(.variable, C, one_of("Rhat")),
 			by = c(".variable", "C")
 		) %>%
 		

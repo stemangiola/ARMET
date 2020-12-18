@@ -56,7 +56,9 @@ ARMET_tc_continue = function(armet_obj, level, model = stanmodels$ARMET_tc_fix_h
 		model = model,
 		prior_survival_time = internals$prior_survival_time,
 		sample_scaling = internals$sample_scaling,
-		prior_prop = internals$prop %>% filter(level == !!level -1) %>% distinct(Q, C, .value) %>% spread(C, .value) %>% tidybulk::as_matrix(rownames = Q) 
+		prior_prop = internals$prop %>% filter(level == !!level -1) %>% distinct(Q, C, .value) %>% spread(C, .value) %>% tidybulk::as_matrix(rownames = Q),
+		columns_idx_including_time = internals$columns_idx_including_time,
+		approximate_sampling = internals$approximate_sampling
 	)
 	
 	df = res[[1]]
@@ -103,7 +105,7 @@ ARMET_tc_continue = function(armet_obj, level, model = stanmodels$ARMET_tc_fix_h
 				~ .x %>%
 					nest(proportions = -c(`Cell type category`, C, level)) %>%
 					left_join(
-						internals$alpha %>%	select(`Cell type category`, contains("alpha"), level, draws, rng_prop, rng_mu, .variable, Rhat),
+						internals$alpha %>%	select(`Cell type category`, contains("alpha"), level, draws, rng_prop, rng_mu, .variable, one_of("Rhat")),
 						by = c("Cell type category", "level")
 					)
 			),
@@ -177,7 +179,8 @@ ARMET_tc = function(.data,
 										.n_markers = n_markers,
 										do_regression = T, 
 										prior_survival_time = c(),
-										model = stanmodels$ARMET_tc_fix_hierarchical) {
+										model = stanmodels$ARMET_tc_fix_hierarchical,
+										approximate_sampling = F) {
 	 
 	# At the moment is not active
 	levels = 1
@@ -369,7 +372,8 @@ ARMET_tc = function(.data,
 			prior_survival_time = prior_survival_time,
 			formula_df = formula_df,
 			sample_scaling = sample_scaling,
-			columns_idx_including_time = columns_idx_including_time
+			columns_idx_including_time = columns_idx_including_time,
+			approximate_sampling = approximate_sampling
 		) 
 	
 	internals = 
@@ -401,7 +405,7 @@ ARMET_tc = function(.data,
 				~ .x %>%
 					nest(proportions = -c(`Cell type category`, C, level)) %>%
 					left_join(
-						internals$alpha %>%	select(`Cell type category`, contains("alpha"), level, draws, rng_prop, rng_mu, .variable, Rhat),
+						internals$alpha %>%	select(`Cell type category`, contains("alpha"), level, draws, rng_prop, rng_mu, .variable, one_of("Rhat")),
 						by = c("Cell type category", "level")
 					)
 			),
@@ -433,7 +437,8 @@ run_model = function(reference_filtered,
 										 prior_survival_time = c(),
 										 sample_scaling,
 										 prior_prop = matrix(1:Q)[,0],
-										 columns_idx_including_time ) {
+										 columns_idx_including_time,
+										 approximate_sampling) {
 	
 	
 	# Global properties - derived by previous analyses of the whole reference dataset
@@ -532,33 +537,55 @@ run_model = function(reference_filtered,
 	
 	CIT = length(columns_idx_including_time)
 
-fit = 
-	sampling(
-		model,
-		#rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix_hierarchical.stan", auto_write = F),
-		chains = 3,
-		cores = 3,
-		iter = iterations,
-		warmup = iterations - sampling_iterations,
-		data = prop_posterior %>% c(tree_properties),
-		# pars=
-		# 	c("prop_1", "prop_2", "prop_3", sprintf("prop_%s", letters[1:9])) %>%
-		# 	c("alpha_1", sprintf("alpha_%s", letters[1:9])) %>%
-		# 	c("exposure_rate") %>%
-		# 	c("lambda_UFO") %>%
-		# 	c("prop_UFO") %>%
-		# 	c(additional_par_to_save),
-		init = function ()
-			init_list,
-		save_warmup = FALSE
-		# ,
-		# control=list( adapt_delta=0.9,stepsize = 0.01,  max_treedepth =10  )
-	) %>%
-	{
-		(.)  %>% rstan::summary() %$% summary %>% as_tibble(rownames = "par") %>% arrange(Rhat %>% desc) %>% filter(Rhat > 1.5) %>% ifelse_pipe(nrow(.) > 0, ~ .x %>% print)
-		(.)
-	}
-	
+	fit = 
+		approximate_sampling %>%
+		when(
+			(.) ~ 	vb(
+				model,
+				# rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix_hierarchical.stan", auto_write = F),
+				iter = 50000,
+				tol_rel_obj = 0.0005,
+				data = prop_posterior %>% c(tree_properties),
+				# pars=
+				# 	c("prop_1", "prop_2", "prop_3", sprintf("prop_%s", letters[1:9])) %>%
+				# 	c("alpha_1", sprintf("alpha_%s", letters[1:9])) %>%
+				# 	c("exposure_rate") %>%
+				# 	c("lambda_UFO") %>%
+				# 	c("prop_UFO") %>%
+				# 	c(additional_par_to_save),
+				init = function ()
+					init_list,
+				# ,
+				# control=list( adapt_delta=0.9,stepsize = 0.01,  max_treedepth =10  )
+			),
+			
+			~ 	sampling(
+				model,
+				#rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix_hierarchical.stan", auto_write = F),
+				chains = 3,
+				cores = 3,
+				iter = iterations,
+				warmup = iterations - sampling_iterations,
+				data = prop_posterior %>% c(tree_properties),
+				# pars=
+				# 	c("prop_1", "prop_2", "prop_3", sprintf("prop_%s", letters[1:9])) %>%
+				# 	c("alpha_1", sprintf("alpha_%s", letters[1:9])) %>%
+				# 	c("exposure_rate") %>%
+				# 	c("lambda_UFO") %>%
+				# 	c("prop_UFO") %>%
+				# 	c(additional_par_to_save),
+				init = function ()
+					init_list,
+				save_warmup = FALSE
+				# ,
+				# control=list( adapt_delta=0.9,stepsize = 0.01,  max_treedepth =10  )
+			) %>%
+				{
+					(.)  %>% rstan::summary() %$% summary %>% as_tibble(rownames = "par") %>% arrange(Rhat %>% desc) %>% filter(Rhat > 1.5) %>% ifelse_pipe(nrow(.) > 0, ~ .x %>% print)
+					(.)
+				}
+		)
+
 	list(df,
 			 switch(
 			 	approximate_posterior %>% sum(1),
@@ -773,7 +800,8 @@ run_lv_1 = function(internals,
 		model = model,
 		prior_survival_time = internals$prior_survival_time,
 		sample_scaling = internals$sample_scaling,
-		columns_idx_including_time = internals$columns_idx_including_time
+		columns_idx_including_time = internals$columns_idx_including_time,
+		approximate_sampling = internals$approximate_sampling
 	)
 	
 	df = res1[[1]]
@@ -793,7 +821,8 @@ run_lv_1 = function(internals,
 	
 	prop =
 		fit %>%
-		tidybayes::gather_draws(`prop_[1]`[Q, C], regex = T) %>%
+		draws_to_tibble("prop_1", "Q", "C") %>%
+		#tidybayes::gather_draws(`prop_[1]`[Q, C], regex = T) %>%
 		drop_na  %>%
 		ungroup() %>%
 		
