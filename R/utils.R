@@ -2698,3 +2698,56 @@ as_matrix <- function(tbl,
 		# Convert to matrix
 		as.matrix()
 }
+
+#' vb_iterative
+#'
+#' @description Runs iteratively variational bayes until it suceeds
+#'
+#' @importFrom rstan vb
+#'
+#' @param model A Stan model
+#' @param output_samples An integer of how many samples from posteriors
+#' @param iter An integer of how many max iterations
+#' @param tol_rel_obj A real
+#' @param additional_parameters_to_save A character vector
+#' @param ... List of paramaters for vb function of Stan
+#'
+#' @return A Stan fit object
+#'
+vb_iterative = function(model,
+												output_samples = 2000,
+												iter,
+												tol_rel_obj,
+												additional_parameters_to_save,
+												init,
+												data,
+												...) {
+	res = NULL
+	i = 0
+	while (res %>% is.null | i > 5) {
+		res = tryCatch({
+			my_res = vb(
+				model,
+				output_samples = output_samples,
+				iter = iter,
+				tol_rel_obj = tol_rel_obj,
+				init = init,
+				data = data
+				#seed = 654321,
+				#pars=c("counts_rng", "exposure_rate", "alpha_sub_1", additional_parameters_to_save),
+				#...
+			)
+			boolFalse <- T
+			return(my_res)
+		},
+		error = function(e) {
+			i = i + 1
+			writeLines(sprintf("Further attempt with Variational Bayes: %s", e))
+			return(NULL)
+		},
+		finally = {
+		})
+	}
+	
+	return(res)
+}

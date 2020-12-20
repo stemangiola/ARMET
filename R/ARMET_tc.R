@@ -540,23 +540,12 @@ run_model = function(reference_filtered,
 	fit = 
 		approximate_sampling %>%
 		when(
-			(.) ~ 	vb(
-				model,
-				# rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix_hierarchical.stan", auto_write = F),
-				iter = 50000,
-				tol_rel_obj = 0.0005,
-				data = prop_posterior %>% c(tree_properties),
-				# pars=
-				# 	c("prop_1", "prop_2", "prop_3", sprintf("prop_%s", letters[1:9])) %>%
-				# 	c("alpha_1", sprintf("alpha_%s", letters[1:9])) %>%
-				# 	c("exposure_rate") %>%
-				# 	c("lambda_UFO") %>%
-				# 	c("prop_UFO") %>%
-				# 	c(additional_par_to_save),
-				init = function ()
-					init_list,
-				# ,
-				# control=list( adapt_delta=0.9,stepsize = 0.01,  max_treedepth =10  )
+			(.) ~ vb_iterative(model,
+												 # rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix_hierarchical.stan", auto_write = F),
+												 iter = 50000,
+												 tol_rel_obj = 0.0005,
+												 data = prop_posterior %>% c(tree_properties),
+												 init = function () init_list
 			),
 			
 			~ 	sampling(
@@ -574,8 +563,7 @@ run_model = function(reference_filtered,
 				# 	c("lambda_UFO") %>%
 				# 	c("prop_UFO") %>%
 				# 	c(additional_par_to_save),
-				init = function ()
-					init_list,
+				init = function ()	init_list,
 				save_warmup = FALSE
 				# ,
 				# control=list( adapt_delta=0.9,stepsize = 0.01,  max_treedepth =10  )
