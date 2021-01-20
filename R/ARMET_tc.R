@@ -242,10 +242,10 @@ ARMET_tc = function(.data,
 					select(sample, one_of(formula_df$covariates_formatted)) %>% 
 					distinct %>% 
 					arrange(sample) %>%
-					mutate(!!as.symbol(formula_df$censored_value_column ) := log(!!as.symbol(formula_df$censored_value_column )))
+					mutate(!!as.symbol(formula_df$censored_value_column ) := log(!!as.symbol(formula_df$censored_value_column )) %>% scale())
 			)
 		
-		columns_idx_including_time = which(grepl(time_column, colnames(X)))
+		columns_idx_including_time = which(grepl(time_column, colnames(X))) %>% as.array()
 	}	else {
 		formula_df = cens  = NULL	
 		columns_idx_including_time = c()
@@ -496,6 +496,25 @@ run_model = function(reference_filtered,
 		filter(sample %in% (y_source %>% pull(sample))) %>% 
 		arrange(Q) %>% 
 		pull(multiplier) 
+	
+	
+	# Setup for exposure inference
+	
+	df_for_exposure = 
+		df %>%
+		filter(`query` &  `house keeping`)  %>%
+		distinct(Q, symbol, count) %>%
+		left_join(
+			df %>%
+				filter(!`query` & `house keeping`)  %>%
+				mutate(reference_count = exp(lambda_log)) %>%
+				distinct(symbol, reference_count )
+		)
+	
+	nrow_for_exposure = nrow(df_for_exposure)
+	Q_for_exposure = df_for_exposure$Q
+	reference_for_exposure = df_for_exposure %>% pull(reference_count)
+	counts_for_exposure = df_for_exposure %>% pull(count)
 	
 	init_list = list(	lambda_UFO = rep(6.2, GM)	) 
 	

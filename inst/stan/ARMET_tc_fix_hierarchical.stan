@@ -217,9 +217,14 @@ data {
 	int CIT;
 	int columns_idx_including_time[CIT];
 	
+	// For exposure
+	int nrow_for_exposure;
+	int Q_for_exposure[nrow_for_exposure];
+	int counts_for_exposure[nrow_for_exposure] ;
+	vector[nrow_for_exposure] reference_for_exposure;
+	
 
-  // Local properties of the data
-  vector[Q] exposure_rate;
+ 
   
 }
 transformed data{
@@ -280,6 +285,9 @@ parameters {
 	vector<lower=0>[how_many_cens] unseen;
 	real<lower=0> prior_unseen_alpha[how_many_cens > 0];
 	real prior_unseen_beta[how_many_cens > 0];
+	
+	 // Local properties of the data
+  vector[Q] exposure_rate;
 
 }
 transformed parameters{
@@ -312,7 +320,15 @@ model {
 	matrix[Q, GM] mu;
 	
 	real sigma_intercept = 1.5;
-	
+
+	// Exposure rate
+	vector[nrow_for_exposure] reference_for_exposure_scaled = reference_for_exposure .* exp(exposure_rate)[Q_for_exposure];
+	counts_for_exposure ~ neg_binomial_2(
+		reference_for_exposure_scaled, 
+		1.0 ./ (pow_vector(reference_for_exposure_scaled, -0.4) *  exp(sigma_intercept))
+	);
+	exposure_rate ~ normal(0,2.5);
+
 	// proportion of level 2
 	if(lv == 2)
 	prop_2 =
@@ -373,7 +389,7 @@ model {
 			append_row(	ref,	exp(lambda_UFO) );
 
 	// Correct for exposure
-	for(q in 1:Q) mu[q] = mu[q] * 1.0/exposure_rate[q];
+	for(q in 1:Q) mu[q] = mu[q] * exp(exposure_rate[q]);
 	
 	// Sampling
 		
