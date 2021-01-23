@@ -282,7 +282,7 @@ parameters {
 	vector<lower=0, upper=1>[Q] prop_UFO;
 
 	// Censoring
-	vector<lower=0>[how_many_cens] unseen;
+	//vector<lower=0>[how_many_cens] unseen;
 	real<lower=0> prior_unseen_alpha[how_many_cens > 0];
 	real prior_unseen_beta[how_many_cens > 0];
 	
@@ -293,17 +293,24 @@ parameters {
 transformed parameters{
 
 	matrix[Q,A] X_ = X;
-	matrix[Q,A] X_scaled = X_;
+	matrix[Q,A] X_scaled;
 	
 	if(how_many_cens > 0) {
-	for(i in 1:CIT)	X_scaled[which_cens,columns_idx_including_time[i]] = X_scaled[which_cens,columns_idx_including_time[i]] .* (unseen + 1);
+	// for(i in 1:CIT)
+	// 	for(j in 1:how_many_cens)
+	// 		if(X_[which_cens[j],columns_idx_including_time[i]] > 0)
+	// 			X_[which_cens[j],columns_idx_including_time[i]] = log_sum_exp(X_[which_cens[j],columns_idx_including_time[i]], unseen[j]);
 		
-		// log and scale the survival days
 
-		// X_scaled[,2] = log(X_scaled[,2]);
-		// X_scaled[,2] = (X_scaled[,2] - mean(X_scaled[,2])) / sd(X_scaled[,2]);
-	} 
+	
+	
+	
+	X_scaled = X_;
+	for(i in 1:CIT)	
+			 X_scaled[,columns_idx_including_time[i]] = (X_scaled[,columns_idx_including_time[i]] - mean(X_scaled[,columns_idx_including_time[i]])) / sd(X_scaled[,columns_idx_including_time[i]]);
 
+
+}
 }
 model {
 
@@ -319,7 +326,7 @@ model {
 
 	matrix[Q, GM] mu;
 	
-	real sigma_intercept = 1.5;
+	real sigma_intercept = 1.3420415;
 
 	// Exposure rate
 	vector[nrow_for_exposure] reference_for_exposure_scaled = reference_for_exposure .* exp(exposure_rate)[Q_for_exposure];
@@ -412,8 +419,8 @@ model {
 
 		//print(X_scaled[,2]);
   	prop_1 ~ beta_regression(X_scaled, alpha_1, phi[1:4], 0.5);
-  	 alpha_1[1] ~ normal(0,2);
-  	 to_vector( alpha_1[2:] ) ~ student_t(5,  0,  2.5);
+  	 alpha_1[1] ~ normal(0,5);
+  	 to_vector( alpha_1[2:] ) ~ student_t(5, 0,2.5);
 
 
   }
@@ -498,12 +505,13 @@ model {
 	target += beta_lpdf(prop_UFO | 1.001, 20);
 
 	// Censoring
+
 	if(how_many_cens > 0){
 		
 		real mu_cens = prior_unseen_alpha[1] * exp(-prior_unseen_beta[1]);
 		
 		// unseen
-		unseen ~ gamma(1,2);
+		// unseen ~ gamma(1,2);
 		X_[which_cens,2] ~ gamma_log( prior_unseen_alpha[1], mu_cens);
 
 		// Priors

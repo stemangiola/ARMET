@@ -1,6 +1,6 @@
 functions {
 		real censored_regression_single_lpdf(real time, vector prop, matrix alpha, vector phi, int is_censored){
-		
+		// NOT USED
 		int C = rows(prop);
 		vector[C] mu;
 		real lp = 0;
@@ -44,11 +44,12 @@ functions {
 data {
   // Cell types
  	int<lower=0> S;
- 	int<lower=0> C;
+ 	int<lower=1> C;
  	int A; // factors of interest
  	
 	vector[S] time;
 	matrix[S, A] X[C];
+	
 	
 	// Censoring
 	int	n_cens;
@@ -62,9 +63,12 @@ parameters {
   row_vector<lower=0>[C] phi;
 }
 model {
+	// print(phi);
+	// print(alpha);
+	
   time ~ censored_regression(X, alpha, phi, which_censored, which_non_censored);
-  to_vector(alpha) ~ student_t(3, 0, 10);
-  phi ~ gamma(0.001, 0.001);
+  to_vector(alpha) ~ student_t(3, 0, 5);
+  phi ~ normal(0,3); //student_t(3, 0, 5);
   
 }
 

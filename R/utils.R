@@ -599,55 +599,7 @@ ToDataFrameTypeColFull = function(tree, fill = T, ...) {
 	
 }
 
-#' vb_iterative
-#' @keywords internal
-#'
-#' @description Runs iteratively variational bayes until it suceeds
-#'
-#' @importFrom rstan vb
-#'
-#' @param model A Stan model
-#' @param output_samples An integer of how many samples from posteriors
-#' @param iter An integer of how many max iterations
-#' @param tol_rel_obj A real
-#' @param algorithm A character
-#'
-#' @return A Stan fit object
-#'
-vb_iterative = function(model,
-												output_samples,
-												iter,
-												tol_rel_obj,
-												algorithm = "fullrank",
-												...) {
-	res = NULL
-	i = 0
-	while (res %>% is.null | i > 5) {
-		res = tryCatch({
-			my_res = vb(
-				model,
-				output_samples = output_samples,
-				iter = iter,
-				tol_rel_obj = tol_rel_obj,
-				algorithm = algorithm,
-				...
-				#, pars=c("counts_rng", "exposure_rate", additional_parameters_to_save)
-			)
-			boolFalse <- T
-			return(my_res)
-		},
-		error = function(e) {
-			i = i + 1
-			writeLines(sprintf("Further attempt with Variational Bayes: %s", e))
-			return(NULL)
-		},
-		finally = {
 
-		})
-	}
-
-	return(res)
-}
 
 get_level_lpdf_weights = function(df) {
 	df %>%
@@ -1515,7 +1467,7 @@ cluster_posterior_slopes = function(.data, credible_interval = 0.67){
 							select(-c(proportions  ,   draws , rng_prop )) %>%
 							
 							# Build combination of cell types
-							combine_nest(
+							nanny::combine_nest(
 								.names_from = `Cell type category`,
 								.values_from = c(.lower_alpha2, .upper_alpha2, Rhat)
 							)  %>%
@@ -2221,8 +2173,41 @@ run_censored_model_joint = function(.data, sampling = F){
 	
 	rstan::sampling(
 		stanmodels$censored_regression,
-		data = .data, chain = 1, iter=150+sampling_iter, warmup=150, save_warmup=F, init="0", refresh = 2000)   %>%
+		data = .data, 
+		chain = 1, 
+		iter=150+sampling_iter,
+		warmup=150, 
+		save_warmup=F,
+		refresh = 2000,
+		init = function () list(	phi = rep(3, .data$C), alpha = matrix(0L, nrow = .data$A, ncol = .data$C)	) 
+	)   %>%
 		tidybayes::gather_draws(alpha[A, C]) %>%
+		ungroup() %>%
+		rename(value = .value, .draw2 = .draw) %>%
+		select(-.variable, -.chain, -.iteration)
+	
+	# %>%
+	# 	
+	# 	# Change C 
+	# 	nest(data = -C) %>%
+	# 	mutate(C = !!.data$prop_C_names %>% as.integer)  %>%
+	# 	unnest(data) 
+	
+	
+}
+
+run_censored_model_joint_vb = function(.data, sampling = F){
+	
+	sampling_iter = 5
+	
+	vb_iterative(
+		stanmodels$censored_regression,
+		data = .data, 
+		output_samples = sampling_iter,
+		init = function () list(	phi = rep(3, .data$C), alpha = matrix(0L, nrow = .data$A, ncol = .data$C)	) 
+	)   %>%
+		draws_to_tibble("alpha", "A", "C") %>%
+		#tidybayes::gather_draws(alpha[A, C]) %>%
 		ungroup() %>%
 		rename(value = .value, .draw2 = .draw) %>%
 		select(-.variable, -.chain, -.iteration)
@@ -2287,7 +2272,7 @@ make_cens_data_joint = function(.data, formula_df, relative = TRUE){
 		nest(prop_df = -new_C) %>%
 		
 		# Scale
-		mutate(prop_df = map(prop_df, ~ mutate(.x, proportion %>% boot::logit() %>% scale(scale = F)))) %>%
+		mutate(prop_df = map(prop_df, ~ mutate(.x, proportion = proportion %>% boot::logit() %>% scale(scale = T) %>% .[,1]))) %>%
 		mutate(design = map(prop_df, ~ model.matrix(formula_df$formula_censored_formatted, data=.x) )) %>%
 		pull(design) %>%
 		abind::abind(along=3)  %>% 
@@ -2300,7 +2285,7 @@ make_cens_data_joint = function(.data, formula_df, relative = TRUE){
 	
 	sample_subset =  .data %>% nanny::subset(sample) %>% arrange(sample)
 	
-	time = sample_subset %>% mutate(time = !!as.symbol(formula_df$censored_value_column) %>% log1p %>% scale %>% as.numeric) %>% pull(time) %>% as.array()
+	time = sample_subset %>% mutate(time = !!as.symbol(formula_df$censored_value_column) %>% log1p %>% scale %>% .[,1]) %>% pull(time) %>% as.array()
 	
 	#	print(.y)
 	which_censored = sample_subset %>% pull(!!as.symbol(formula_df$censored_column)) %>% equals(1) %>% which() %>% as.array()
@@ -2353,7 +2338,7 @@ censored_regression_joint =
 		nest(data = -c(node , level,  .chain, .iteration, .draw)) %>%
 		
 		# Sample half if sampling FALSE
-		when(sampling == F ~ (.) %>% group_by(node) %>% sample_frac(0.5) %>% ungroup(), ~ (.)) %>%
+		when(sampling == F ~ (.) %>% group_by(node) %>% sample_frac(0.2) %>% ungroup(), ~ (.)) %>%
 		when(filter_how_many < nrow(.) ~ (.) %>% sample_n(filter_how_many), ~ (.)) %>%
 		
 		# Add indexes
@@ -2368,7 +2353,9 @@ censored_regression_joint =
 		rename(.value_absolute = .value) %>%
 		
 		# Parallelise
-		left_join( (.) %>% distinct(idx_C) %>% mutate(partition = sample(1:partitions, size = n(), replace = T)), by="idx_C") %>%
+		#left_join( (.) %>% distinct(idx_C) %>% mutate(partition = sample(1:partitions, size = n(), replace = T)), by="idx_C") %>%
+		left_join( (.) %>% distinct(idx_C) %>% mutate(partition = rep(1:(n()/2), 2)), by="idx_C") %>%
+		
 		nest(data = -partition) 
 	
 	core_fx = function(.data){
@@ -2383,7 +2370,7 @@ censored_regression_joint =
 					make_cens_data_joint(formula_df, relative = relative) %>%
 					
 					# Run model
-					run_censored_model_joint(sampling) %>%
+					run_censored_model_joint_vb(sampling) %>%
 					rename(.value = value) ,
 				by=c("new_C" = "C")
 			) %>%
@@ -2699,6 +2686,7 @@ as_matrix <- function(tbl,
 		as.matrix()
 }
 
+
 #' vb_iterative
 #'
 #' @description Runs iteratively variational bayes until it suceeds
@@ -2716,9 +2704,9 @@ as_matrix <- function(tbl,
 #'
 vb_iterative = function(model,
 												output_samples = 2000,
-												iter,
-												tol_rel_obj,
-												additional_parameters_to_save,
+												iter = 10000,
+												tol_rel_obj = 0.01,
+												additional_parameters_to_save = list(),
 												init,
 												data,
 												...) {

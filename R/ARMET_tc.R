@@ -242,7 +242,7 @@ ARMET_tc = function(.data,
 					select(sample, one_of(formula_df$covariates_formatted)) %>% 
 					distinct %>% 
 					arrange(sample) %>%
-					mutate(!!as.symbol(formula_df$censored_value_column ) := log(!!as.symbol(formula_df$censored_value_column )) %>% scale())
+					mutate(!!as.symbol(formula_df$censored_value_column ) := log(!!as.symbol(formula_df$censored_value_column )) )
 			)
 		
 		columns_idx_including_time = which(grepl(time_column, colnames(X))) %>% as.array()
@@ -593,34 +593,7 @@ run_model = function(reference_filtered,
 				}
 		)
 
-	list(df,
-			 switch(
-			 	approximate_posterior %>% sum(1),
-			 	
-			 	fit,
-			 	
-			 	vb_iterative(
-			 		model,
-			 		#ARMET_tc_model,
-			 		output_samples = 100,
-			 		iter = 50000,
-			 		tol_rel_obj = 0.01,
-			 		data = MPI_data,
-			 		pars = c(
-			 			"prop_1",
-			 			"prop_2",
-			 			"prop_3",
-			 			"prop_4",
-			 			"lambda_log",
-			 			"sigma_inv_log",
-			 			"sigma_intercept_dec"
-			 		),
-			 		#,
-			 		init = function ()
-			 			list(lambda_log = lambda_log, sigma_inv_log = sigma_inv_log) # runif(G,  lambda_log - 1, lambda_log + 1)	)
-			 		
-			 	)
-			 ))
+	list(df, fit)
 	
 }
 
