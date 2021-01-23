@@ -187,13 +187,13 @@ test_that("check nk dataset run",{
 # test_that("censoring",{
 # 
 # 	mix = readRDS("dev/mix_for_package_test.rds")
-# 	
+# 
 # 	res =
 # 		mix %>%
 # 		mutate(`count mix` = as.integer(`count mix`)) %>%
 # 		mutate(run = as.character(run)) %>%
 # 		select(-level) %>%
-# 	
+# 
 # 		ARMET_tc(
 # 			 ~ censored(days, alive),
 # 			run,
@@ -201,8 +201,8 @@ test_that("check nk dataset run",{
 # 			`count mix`,
 # 			iterations = 600,
 # 			sampling_iterations = 400,
-# 			prior_survival_time = mix %>% distinct(run, real_days) %>% pull(real_days) 
-# 		
+# 			prior_survival_time = mix %>% distinct(run, real_days) %>% pull(real_days)
+# 
 # 		) %>%
 # 		ARMET_tc_continue(2) %>%
 # 		ARMET_tc_continue(3)
