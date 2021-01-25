@@ -279,7 +279,7 @@ parameters {
 
 	// Unknown population
 	row_vector<lower=0, upper = log(max(to_array_1d(y)))>[GM] lambda_UFO;
-	vector<lower=0, upper=1>[Q] prop_UFO;
+	vector<lower=0, upper=0.5>[Q] prop_UFO;
 
 	// Censoring
 	//vector<lower=0>[how_many_cens] unseen;
@@ -301,9 +301,6 @@ transformed parameters{
 	// 		if(X_[which_cens[j],columns_idx_including_time[i]] > 0)
 	// 			X_[which_cens[j],columns_idx_including_time[i]] = log_sum_exp(X_[which_cens[j],columns_idx_including_time[i]], unseen[j]);
 		
-
-	
-	
 	
 	X_scaled = X_;
 	for(i in 1:CIT)	
@@ -419,7 +416,7 @@ model {
 
 		//print(X_scaled[,2]);
   	prop_1 ~ beta_regression(X_scaled, alpha_1, phi[1:4], 0.5);
-  	 alpha_1[1] ~ normal(0,5);
+  	 alpha_1[1] ~ normal(0,3);
   	 to_vector( alpha_1[2:] ) ~ student_t(5, 0,2.5);
 
 
