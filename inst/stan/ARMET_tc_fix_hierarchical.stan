@@ -282,7 +282,7 @@ parameters {
 	vector<lower=0, upper=0.5>[Q] prop_UFO;
 
 	// Censoring
-	//vector<lower=0>[how_many_cens] unseen;
+	vector<lower=0>[how_many_cens] unseen;
 	real<lower=0> prior_unseen_alpha[how_many_cens > 0];
 	real prior_unseen_beta[how_many_cens > 0];
 	
@@ -296,11 +296,11 @@ transformed parameters{
 	matrix[Q,A] X_scaled;
 	
 	if(how_many_cens > 0) {
-	// for(i in 1:CIT)
-	// 	for(j in 1:how_many_cens)
-	// 		if(X_[which_cens[j],columns_idx_including_time[i]] > 0)
-	// 			X_[which_cens[j],columns_idx_including_time[i]] = log_sum_exp(X_[which_cens[j],columns_idx_including_time[i]], unseen[j]);
-		
+	for(i in 1:CIT)
+		for(j in 1:how_many_cens)
+			if(X_[which_cens[j],columns_idx_including_time[i]] > 0)
+				X_[which_cens[j],columns_idx_including_time[i]] = log_sum_exp(X_[which_cens[j],columns_idx_including_time[i]], unseen[j]);
+
 	
 	X_scaled = X_;
 	for(i in 1:CIT)	
@@ -401,15 +401,6 @@ model {
 	mu_vector = to_vector(mu');
 	sigma_vector = 1.0 ./ (pow_vector(mu_vector, -0.4) *  exp(sigma_intercept)); //   exp( log(mu_vector)  * -0.4 + sigma_intercept); //;
 	to_array_1d(y) ~ neg_binomial_2(mu_vector, sigma_vector);
-
-	// // MPI
-	// target += sum(map_rect(
-	// 		lp_reduce_simple ,
-	// 		[sigma_intercept, -0.4]', // global parameters
-	// 		get_mu_sigma_vector_MPI(mu_vector,	sigma_vector,	shards),
-	// 		real_data,
-	// 		get_int_MPI( 	to_array_1d(y), shards)
-	// 	));
 
 	// lv 1
   if(lv == 1 && do_regression) {
@@ -516,7 +507,7 @@ model {
 	 	// target += gamma_lccdf(	X[which_cens,2] | prior_unseen_alpha[1], mu_cens);
 	 	
 	 	// Hyperprior
-	 	prior_survival_time ~ gamma_log( prior_unseen_alpha[1], mu_cens);
+	 	// prior_survival_time ~ gamma_log( prior_unseen_alpha[1], mu_cens);
 	 	
 	 	prior_unseen_beta[1] ~ student_t(3, 6, 10);
   	prior_unseen_alpha[1] ~  gamma(0.01, 0.01);
