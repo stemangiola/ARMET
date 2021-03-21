@@ -141,6 +141,105 @@ vector[] beta_regression_rng( matrix X, matrix alpha, real[] phi, real plateau){
 		return (p);
 	}
 
+	// MPI machinery
+
+	int[] get_elements_per_shard(int lenth_v, int shards){
+
+	// Returned integer(max_size, last_element_size)
+	int tentative_size = lenth_v / shards;
+	int tentative_remaining = lenth_v - (tentative_size * shards);
+	int elements_per_shard = tentative_remaining > 0 ? tentative_size + 1 : tentative_size;
+	int remaining =  (elements_per_shard * shards) - lenth_v;
+
+	int length_obj[shards];
+
+	for(s in 1:shards) {
+		length_obj[s] =
+			s != shards ?
+			elements_per_shard :
+			elements_per_shard - remaining;  // Actual elements in it for last object
+	}
+
+ 	return length_obj;
+
+}
+
+	int[,] get_int_MPI(int[] v, int shards){
+  // Simple MPI for int vector
+
+	int elements_per_shard[shards] = get_elements_per_shard(size(v), shards); // Length of the returned object
+	int size_MPI_obj = elements_per_shard[1]; // the first element is always the full size of the object
+	int v_MPI[shards,size_MPI_obj] = rep_array(-1, shards,size_MPI_obj); // Set values to -1 for the ones that are not filled
+
+	int i = 0; // Index sweeping the vector
+
+	for(s in 1:shards){
+		v_MPI[s, 1:elements_per_shard[s]] = v[ (i + 1) : i + elements_per_shard[s] ];
+		i += elements_per_shard[s];
+	}
+
+	return v_MPI;
+}
+
+	vector[] get_mu_sigma_vector_MPI(vector mus, vector sigmas, int shards){
+
+		int elements_per_shard[shards] = get_elements_per_shard(rows(mus), shards); // Length of the returned object
+		int size_MPI_obj = elements_per_shard[1]; // the first element is always the full size of the object
+		vector[size_MPI_obj * 2] v_MPI[shards] ; // Set values to -999 for the ones that are not filled
+
+		int i = 0; // Index sweeping the vector
+
+		for(s in 1:shards){
+
+			// If last shard fill in
+			if(s == shards) v_MPI[s] = rep_vector(-999.0, size_MPI_obj * 2);
+
+			v_MPI[s, 1:elements_per_shard[s]] = mus[ (i + 1) : i + elements_per_shard[s] ];
+			v_MPI[s, (elements_per_shard[s]+1):(elements_per_shard[s]+elements_per_shard[s])] = sigmas[ (i + 1) : i + elements_per_shard[s] ];
+
+			i += elements_per_shard[s];
+		}
+
+		return v_MPI;
+	}
+
+	int get_real_buffer_size(vector v, real threshold){
+	// This function finds how may fake indexes -1 there are in a vector, added for map_rect needs
+
+	real i = threshold; // Value of the index
+	int n = 0; // Length of the buffer
+	int s = rows(v); // Size of the whole vector
+
+	while(i == threshold){
+		i = v[s-n];
+		if(i==threshold) n += 1;
+	}
+
+	return n;
+}
+
+	vector lp_reduce_simple( vector global_parameters , vector mus_sigmas , real[] real_data , int[] int_data ) {
+
+		real lp;
+		real threshold = -999;
+		int size_buffer = get_real_buffer_size(mus_sigmas, threshold);
+		int size_vector = (rows(mus_sigmas)-size_buffer)/2;
+		real sigma_intercept = global_parameters[1];
+		
+		if(min(mus_sigmas[1:(size_vector*2)]) == threshold) print("ERROR! The MPI implmentation is buggy");
+
+		// Reference / exposure rate
+		lp = neg_binomial_2_lpmf(
+			int_data[1:size_vector] |
+			mus_sigmas[1:size_vector],
+			1.0 ./ (pow_vector(mus_sigmas[size_vector+1:size_vector+size_vector], -0.4) *  exp(sigma_intercept))
+
+		);
+
+	 return [lp]';
+
+	}
+
 }
 data {
 	// shards
@@ -222,9 +321,6 @@ data {
 	int Q_for_exposure[nrow_for_exposure];
 	int counts_for_exposure[nrow_for_exposure] ;
 	vector[nrow_for_exposure] reference_for_exposure;
-	
-
- 
   
 }
 transformed data{
@@ -271,7 +367,7 @@ parameters {
 	// lv4
   matrix[A * (lv == 4) * do_regression,ct_in_nodes[8]-1]  alpha_g; // dendritic myeloid
   matrix[A * (lv == 4) * do_regression,ct_in_nodes[9]-1]  alpha_h; // macrophage
-  matrix[A * (lv == 4) * do_regression,ct_in_nodes[10]-1]  alpha_i; // NK
+  matrix[A * (lv == 4) * do_regression,ct_in_nodes[10]-1] alpha_i; // NK
   matrix[A * (lv == 4) * do_regression,ct_in_nodes[11]-1] alpha_l; // CD4
   matrix[A * (lv == 4) * do_regression,ct_in_nodes[12]-1] alpha_m; // CD8
 
@@ -325,12 +421,12 @@ model {
 	
 	real sigma_intercept = 1.3420415;
 
-	// Exposure rate
+	// Estimate exposure rate
 	vector[nrow_for_exposure] reference_for_exposure_scaled = reference_for_exposure .* exp(exposure_rate)[Q_for_exposure];
-	counts_for_exposure ~ neg_binomial_2(
-		reference_for_exposure_scaled, 
-		1.0 ./ (pow_vector(reference_for_exposure_scaled, -0.4) *  exp(sigma_intercept))
-	);
+	// counts_for_exposure ~ neg_binomial_2(
+	// 	reference_for_exposure_scaled, 
+	// 	1.0 ./ (pow_vector(reference_for_exposure_scaled, -0.4) *  exp(sigma_intercept))
+	// );
 	exposure_rate ~ normal(0,2.5);
 
 	// proportion of level 2
@@ -399,15 +495,29 @@ model {
 		
 	// Vectorise 
 	mu_vector = to_vector(mu');
-	sigma_vector = 1.0 ./ (pow_vector(mu_vector, -0.4) *  exp(sigma_intercept)); //   exp( log(mu_vector)  * -0.4 + sigma_intercept); //;
-	to_array_1d(y) ~ neg_binomial_2(mu_vector, sigma_vector);
+	// sigma_vector = 1.0 ./ (pow_vector(mu_vector, -0.4) *  exp(sigma_intercept)); //   exp( log(mu_vector)  * -0.4 + sigma_intercept); //;
+	
+	// to_array_1d(y) ~ neg_binomial_2(mu_vector, sigma_vector);
+
+	// Fit both exposure reference and mixed counts
+  target += sum(map_rect(
+  		lp_reduce_simple ,
+  		[sigma_intercept, -0.4]', // global parameters
+  		get_mu_sigma_vector_MPI(
+  			append_row(reference_for_exposure_scaled, mu_vector),
+  			append_row(reference_for_exposure_scaled, mu_vector),
+  			shards
+  		),
+  		real_data,
+  		get_int_MPI( append_array(counts_for_exposure, to_array_1d(y)), shards)
+  	));
 
 	// lv 1
   if(lv == 1 && do_regression) {
 
 		//print(X_scaled[,2]);
   	prop_1 ~ beta_regression(X_scaled, alpha_1, phi[1:4], 0.5);
-  	 alpha_1[1] ~ normal(0,3);
+  	 alpha_1[1] ~ normal(0,5);
   	 to_vector( alpha_1[2:] ) ~ student_t(5, 0,2.5);
 
 
