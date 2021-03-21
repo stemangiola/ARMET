@@ -17,7 +17,9 @@ ARMET_tc(
   .n_markers = n_markers,
   do_regression = T,
   prior_survival_time = c(),
-  model = stanmodels$ARMET_tc_fix_hierarchical
+  model = stanmodels$ARMET_tc_fix_hierarchical,
+  approximate_sampling = F,
+  cores = 4
 )
 }
 \arguments{

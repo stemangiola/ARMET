@@ -180,11 +180,11 @@ ARMET_tc = function(.data,
 										do_regression = T, 
 										prior_survival_time = c(),
 										model = stanmodels$ARMET_tc_fix_hierarchical,
-										approximate_sampling = F) {
+										approximate_sampling = F,
+										cores = 4) {
 	 
 	# At the moment is not active
 	levels = 1
-	cores = 4
 	full_bayesian = F
 	
 	input = c(as.list(environment()))
@@ -245,7 +245,13 @@ ARMET_tc = function(.data,
 					mutate(!!as.symbol(formula_df$censored_value_column ) := log(!!as.symbol(formula_df$censored_value_column )) )
 			)
 		
-		columns_idx_including_time = which(grepl(time_column, colnames(X))) %>% as.array()
+		columns_idx_including_time = 
+			which(grepl(time_column, colnames(X))) %>% 
+			as.array() %>% 
+			
+			# Fix if NULL
+			when(is.null(.) ~ c(), ~ (.))
+		
 	}	else {
 		formula_df = cens  = NULL	
 		columns_idx_including_time = c()
@@ -543,6 +549,10 @@ run_model = function(reference_filtered,
 	max_y = max(y)
 	ct_in_ancestor_level = ifelse(lv == 1, 0, tree_properties$ct_in_levels[lv-1])
 	
+	print("---------")
+	print(shards)
+	print("---------")
+	
 	Sys.setenv("STAN_NUM_THREADS" = shards)
 	
 	if(cens %>% is.null) cens =  rep(0, Q)
@@ -631,7 +641,7 @@ add_cox_test = function(.data, relative = TRUE){
 #' @param cluster_CI A double
 #' 
 #' @export
-test_differential_composition = function(.data, credible_interval = 0.90, cluster_CI = 0.55) {
+test_differential_composition = function(.data, credible_interval = 0.90, cluster_CI = 0.55, relative = TRUE) {
        
 	# x = .data$internals$formula_df$components_formatted
 	# alive = .data$internals$formula_df$censored_column
@@ -647,7 +657,7 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 				select(-draws, -contains("rng")) %>%
 				rename(node = .variable)  %>% 
 				unnest(proportions) %>%
-				censored_regression_joint(formula_df = .data$internals$formula_df, filter_how_many = Inf)  %>% 
+				censored_regression_joint(formula_df = .data$internals$formula_df, filter_how_many = Inf, relative = relative)  %>% 
 				rename(.variable = node) %>%
 				nest(draws_cens = -c(level, .variable  ,      C)) 
 		)
