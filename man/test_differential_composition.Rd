@@ -7,7 +7,8 @@
 test_differential_composition(
   .data,
   credible_interval = 0.9,
-  cluster_CI = 0.55
+  cluster_CI = 0.55,
+  relative = TRUE
 )
 }
 \arguments{

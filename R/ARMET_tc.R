@@ -181,7 +181,8 @@ ARMET_tc = function(.data,
 										prior_survival_time = c(),
 										model = stanmodels$ARMET_tc_fix_hierarchical,
 										approximate_sampling = F,
-										cores = 4) {
+										cores = 4,
+										transform_time_function = log1p) {
 	 
 	# At the moment is not active
 	levels = 1
@@ -222,10 +223,10 @@ ARMET_tc = function(.data,
 			
 			# Check cens right type
 			if(typeof(cens) %in% c("integer", "logical") %>% any %>% `!`) stop("ARMET says: censoring variable should be logical of integer (0,1)")
-			if(length(prior_survival_time) == 0) stop("AMET says: you really need to provide third party survival time for your condition/disease")
+			if(length(prior_survival_time) == 0) stop("ARMET says: you really need to provide third party survival time for your condition/disease")
 			
 			sd_survival_months = .data %>%  select(sample, formula_df$censored_value_column) %>% distinct %>% pull(formula_df$censored_value_column) %>% sd
-			prior_survival_time = log1p(prior_survival_time) 
+			prior_survival_time = transform_time_function(prior_survival_time) 
 			
 		}
 		else{
@@ -242,7 +243,7 @@ ARMET_tc = function(.data,
 					select(sample, one_of(formula_df$covariates_formatted)) %>% 
 					distinct %>% 
 					arrange(sample) %>%
-					mutate(!!as.symbol(formula_df$censored_value_column ) := log(!!as.symbol(formula_df$censored_value_column )) )
+					mutate(!!as.symbol(formula_df$censored_value_column ) := transform_time_function(!!as.symbol(formula_df$censored_value_column )) )
 			)
 		
 		columns_idx_including_time = 
@@ -379,7 +380,8 @@ ARMET_tc = function(.data,
 			formula_df = formula_df,
 			sample_scaling = sample_scaling,
 			columns_idx_including_time = columns_idx_including_time,
-			approximate_sampling = approximate_sampling
+			approximate_sampling = approximate_sampling,
+			transform_time_function = transform_time_function
 		) 
 	
 	internals = 
@@ -622,7 +624,7 @@ add_cox_test = function(.data, relative = TRUE){
 		select(-draws, -contains("rng")) %>%
 		rename(node = .variable)  %>% 
 		unnest(proportions) %>%
-		censored_regression_joint(formula_df = .data$internals$formula_df, filter_how_many = Inf, relative = relative)  %>% 
+		censored_regression_joint(formula_df = .data$internals$formula_df, filter_how_many = Inf, relative = relative, transform_time_function = .data$internals$transform_time_function)  %>% 
 		rename(.variable = node) %>%
 		nest(draws_cens = -c(level, .variable  ,      C)) 
 	
@@ -657,7 +659,7 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 				select(-draws, -contains("rng")) %>%
 				rename(node = .variable)  %>% 
 				unnest(proportions) %>%
-				censored_regression_joint(formula_df = .data$internals$formula_df, filter_how_many = Inf, relative = relative)  %>% 
+				censored_regression_joint(formula_df = .data$internals$formula_df, filter_how_many = Inf, relative = relative,  transform_time_function = .data$internals$transform_time_function)  %>% 
 				rename(.variable = node) %>%
 				nest(draws_cens = -c(level, .variable  ,      C)) 
 		)

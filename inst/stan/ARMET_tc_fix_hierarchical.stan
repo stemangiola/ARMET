@@ -610,10 +610,10 @@ model {
 		
 		// unseen
 		// unseen ~ gamma(1,2);
-		X_[which_cens,2] ~ gamma_log( prior_unseen_alpha[1], mu_cens);
+		X_[which_cens,2] ~ gamma( prior_unseen_alpha[1], mu_cens);
 
 		// Priors
-		target += gamma_log_lpdf(X[which_not_cens,2] | prior_unseen_alpha[1], mu_cens);
+		target += gamma_lpdf(X[which_not_cens,2] | prior_unseen_alpha[1], mu_cens);
 	 	// target += gamma_lccdf(	X[which_cens,2] | prior_unseen_alpha[1], mu_cens);
 	 	
 	 	// Hyperprior

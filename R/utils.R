@@ -2229,7 +2229,7 @@ run_censored_model_joint_vb = function(.data, sampling = F){
 #' @param formula_df A formula dataframe
 #' @param relative A boolean
 #' 
-make_cens_data_joint = function(.data, formula_df, relative = TRUE){
+make_cens_data_joint = function(.data, formula_df, relative = TRUE, transform_time_function = log1p){
 	
 	# x = enquo(x)
 	# alive = enquo(alive)
@@ -2285,7 +2285,7 @@ make_cens_data_joint = function(.data, formula_df, relative = TRUE){
 	
 	sample_subset =  .data %>% nanny::subset(sample) %>% arrange(sample)
 	
-	time = sample_subset %>% mutate(time = !!as.symbol(formula_df$censored_value_column) %>% log1p %>% scale %>% .[,1]) %>% pull(time) %>% as.array()
+	time = sample_subset %>% mutate(time = !!as.symbol(formula_df$censored_value_column) %>% transform_time_function %>% scale %>% .[,1]) %>% pull(time) %>% as.array()
 	
 	#	print(.y)
 	which_censored = sample_subset %>% pull(!!as.symbol(formula_df$censored_column)) %>% equals(1) %>% which() %>% as.array()
@@ -2320,7 +2320,7 @@ make_cens_data_joint = function(.data, formula_df, relative = TRUE){
 #' 
 #' 
 censored_regression_joint = 
-	function(.proportions, sampling = F, formula_df, filter_how_many = Inf, partitions = 4, relative = TRUE){
+	function(.proportions, sampling = F, formula_df, filter_how_many = Inf, partitions = 4, relative = TRUE, transform_time_function = log1p){
 	
 	# x = as.symbol(x)
 	# alive = as.symbol(alive)
@@ -2358,7 +2358,7 @@ censored_regression_joint =
 		
 		nest(data = -partition) 
 	
-	core_fx = function(.data){
+	core_fx = function(.data, transform_time_function = log1p){
 		.data %>%
 			nest(data_part = -idx_C) %>%
 			mutate(new_C =  1:n()) %>%
@@ -2367,7 +2367,7 @@ censored_regression_joint =
 			left_join(
 				(.) %>%
 					# Create input for the model
-					make_cens_data_joint(formula_df, relative = relative) %>%
+					make_cens_data_joint(formula_df, relative = relative, transform_time_function = transform_time_function) %>%
 					
 					# Run model
 					run_censored_model_joint_vb(sampling) %>%

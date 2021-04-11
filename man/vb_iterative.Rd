@@ -6,10 +6,12 @@
 \usage{
 vb_iterative(
   model,
-  output_samples,
-  iter,
-  tol_rel_obj,
-  algorithm = "fullrank",
+  output_samples = 2000,
+  iter = 10000,
+  tol_rel_obj = 0.01,
+  additional_parameters_to_save = list(),
+  init,
+  data,
   ...
 )
 }
@@ -22,7 +24,9 @@ vb_iterative(
 
 \item{tol_rel_obj}{A real}
 
-\item{algorithm}{A character}
+\item{additional_parameters_to_save}{A character vector}
+
+\item{...}{List of paramaters for vb function of Stan}
 }
 \value{
 A Stan fit object
@@ -30,4 +34,3 @@ A Stan fit object
 \description{
 Runs iteratively variational bayes until it suceeds
 }
-\keyword{internal}
