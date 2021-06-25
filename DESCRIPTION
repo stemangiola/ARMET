@@ -1,5 +1,5 @@
 Package: ARMET
-Version: 0.1.0
+Version: 0.3.0
 Title: Higher-order deconvolution survival analyses
 Description: This package performs a joint Bayesian inference of association between deconvoluted cell-tyoe proportions and survival.
 Authors@R: person("Stefano", "Mangiola", , "mangiolastefano@gmail.com", c("aut", "cre"))
