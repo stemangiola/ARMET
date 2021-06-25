@@ -1,34 +1,28 @@
 functions{
-			vector dirichlet_regression_rng( row_vector X, matrix alpha, real phi, real plateau){
-
-		// Calculate log prob
-		return (dirichlet_rng( softmax( append_row([0]', to_vector(X * alpha))) * exp( phi) + plateau ));
-}
-
-
-vector[] beta_regression_rng( matrix X, matrix alpha, real[] phi, real plateau){
-
-		vector[cols(alpha)+1] p[rows(X)];
-
-		//matrix[num_elements(p[,1]), num_elements(p[1])] mu;
-		vector[num_elements(phi)] phi_exp= ( 1.0 ./ (to_vector(phi )+ 0.0001));
-
-		for(j in 1:num_elements(p[,1])) {
-
-			vector[num_elements(p[1])] mu  = softmax( append_row([0]', to_vector(X[j] * alpha)));
+	vector[] dirichlet_regression_rng( matrix X, matrix beta, real phi, real plateau){
 		
-		p[j] = to_vector(beta_rng((mu .* phi_exp) +plateau, ((1.0 - mu) .* phi_exp) + plateau));
+		vector[cols(beta)] p[rows(X)];
+		matrix[num_elements(p[1]), num_elements(p[,1])] mu = (X * beta)';
+    real buffer;
+    
+		for(i in 1:cols(mu)) {
+			mu[,i] = softmax(mu[,i]);
+			buffer = 1.0/min(mu[,i]) * plateau;
+			
+			p[i] = dirichlet_rng(mu[,i] * phi * buffer);
+			
+		}
+		
+		return (p);
 		
 	}
-	return (p);
-}
+	
 
-  vector[] get_mean_prop(matrix X, matrix alpha){
+  matrix get_mean_prop(matrix X, matrix alpha){
 
-	  	vector[cols(alpha)+1] mu[rows(X)];
+	  	matrix[rows(X), cols(alpha)] mu = X * alpha;
 
-		  for(j in 1:num_elements(mu[,1])) 
-	  		mu[j]  = softmax( append_row([0]', to_vector(X[j] * alpha)));
+		  for(j in 1:num_elements(mu[,1])) mu[j]  = to_row_vector(softmax( to_vector( mu[j] )));
   
   	return(mu);
   }
@@ -53,14 +47,14 @@ data {
 
 
   // lv3
-  matrix[A,ct_in_nodes[3]-1]  alpha_b; // b cells
-  matrix[A,ct_in_nodes[4]-1]  alpha_c; // granulocyte
-  matrix[A,ct_in_nodes[5]-1]  alpha_d; // mono_derived
-  matrix[A,ct_in_nodes[6]-1]  alpha_e; // natural_killer
-  matrix[A,ct_in_nodes[7]-1]  alpha_f; // t_cell
+  matrix[A,ct_in_nodes[3]]  alpha_b; // b cells
+  matrix[A,ct_in_nodes[4]]  alpha_c; // granulocyte
+  matrix[A,ct_in_nodes[5]]  alpha_d; // mono_derived
+  matrix[A,ct_in_nodes[6]]  alpha_e; // natural_killer
+  matrix[A,ct_in_nodes[7]]  alpha_f; // t_cell
 
 
-	real<lower=0> phi[12]; //[fam_dirichlet ? 10 : ct_in_levels[lv]];
+	vector<lower=0>[12] phi; //[fam_dirichlet ? 10 : ct_in_levels[lv]];
 	matrix[Q,A] X_scaled;
 
 
@@ -77,18 +71,18 @@ generated quantities{
   vector[ct_in_nodes[6]]  prop_e_rng[Q * (lv == 3)]; // natural_killer childrens
   vector[ct_in_nodes[7]]  prop_f_rng[Q * (lv == 3)]; // t_cell childrens
 
-  vector[ct_in_nodes[3]]  mu_b_rng[Q * (lv == 3) ]; 
-  vector[ct_in_nodes[4]]  mu_c_rng[Q * (lv == 3) ]; 
-  vector[ct_in_nodes[5]]  mu_d_rng[Q * (lv == 3) ]; 
-  vector[ct_in_nodes[6]]  mu_e_rng[Q * (lv == 3) ]; 
-  vector[ct_in_nodes[7]]  mu_f_rng[Q * (lv == 3) ]; 
+  matrix[Q * (lv == 3) ,ct_in_nodes[3]] mu_b_rng; 
+  matrix[Q * (lv == 3) ,ct_in_nodes[4]]  mu_c_rng; 
+  matrix[Q * (lv == 3) ,ct_in_nodes[5]]  mu_d_rng; 
+  matrix[Q * (lv == 3) ,ct_in_nodes[6]]  mu_e_rng; 
+  matrix[Q * (lv == 3) ,ct_in_nodes[7]]  mu_f_rng; 
 
 
-	for(q in 1:Q) prop_b_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_b, phi[1] , 1);
-	for(q in 1:Q) prop_c_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_c, phi[2] , 1);
-	for(q in 1:Q) prop_d_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_d, phi[3] , 1);
-	for(q in 1:Q) prop_e_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_e, phi[4] , 1);
-	for(q in 1:Q) prop_f_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_f, phi[5] , 1);
+	prop_b_rng = dirichlet_regression_rng( X_scaled, alpha_b, exp(phi[1]) , 1);
+	prop_c_rng = dirichlet_regression_rng( X_scaled, alpha_c, exp(phi[2]) , 1);
+	prop_d_rng = dirichlet_regression_rng( X_scaled, alpha_d, exp(phi[3]) , 1);
+	prop_e_rng = dirichlet_regression_rng( X_scaled, alpha_e, exp(phi[4]) , 1);
+	prop_f_rng = dirichlet_regression_rng( X_scaled, alpha_f, exp(phi[5]) , 1);
 
 	mu_b_rng = get_mean_prop(X_scaled, alpha_b);
 	mu_c_rng = get_mean_prop(X_scaled, alpha_c);

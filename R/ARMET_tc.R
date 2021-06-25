@@ -643,7 +643,8 @@ add_cox_test = function(.data, relative = TRUE){
 #' @param cluster_CI A double
 #' 
 #' @export
-test_differential_composition = function(.data, credible_interval = 0.90, cluster_CI = 0.55, relative = TRUE) {
+test_differential_composition = 
+	function(.data, credible_interval = 0.90, cluster_CI = 0.55, relative = TRUE) {
        
 	# x = .data$internals$formula_df$components_formatted
 	# alive = .data$internals$formula_df$censored_column
@@ -657,7 +658,7 @@ test_differential_composition = function(.data, credible_interval = 0.90, cluste
 			# Only if I have censoring
 			~ .data$proportions %>% 
 				select(-draws, -contains("rng")) %>%
-				rename(node = .variable)  %>% 
+				dplyr::rename(node = .variable)  %>% 
 				unnest(proportions) %>%
 				censored_regression_joint(formula_df = .data$internals$formula_df, filter_how_many = Inf, relative = relative,  transform_time_function = .data$internals$transform_time_function)  %>% 
 				rename(.variable = node) %>%

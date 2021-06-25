@@ -1,34 +1,29 @@
 functions{
-			vector dirichlet_regression_rng( row_vector X, matrix alpha, real phi, real plateau){
-
-		// Calculate log prob
-		return (dirichlet_rng( softmax( append_row([0]', to_vector(X * alpha))) * exp( phi) + plateau ));
-}
-
-
-vector[] beta_regression_rng( matrix X, matrix alpha, real[] phi, real plateau){
-
-		vector[cols(alpha)+1] p[rows(X)];
-
-		//matrix[num_elements(p[,1]), num_elements(p[1])] mu;
-		vector[num_elements(phi)] phi_exp= ( 1.0 ./ (to_vector(phi )+ 0.0001));
-
-		for(j in 1:num_elements(p[,1])) {
-
-			vector[num_elements(p[1])] mu  = softmax( append_row([0]', to_vector(X[j] * alpha)));
+	
+	vector[] dirichlet_regression_rng( matrix X, matrix beta, real phi, real plateau){
 		
-		p[j] = to_vector(beta_rng((mu .* phi_exp) +plateau, ((1.0 - mu) .* phi_exp) + plateau));
+		vector[cols(beta)] p[rows(X)];
+		matrix[num_elements(p[1]), num_elements(p[,1])] mu = (X * beta)';
+    real buffer;
+    
+		for(i in 1:cols(mu)) {
+			mu[,i] = softmax(mu[,i]);
+			buffer = 1.0/min(mu[,i]) * plateau;
+			
+			p[i] = dirichlet_rng(mu[,i] * phi * buffer);
+			
+		}
+		
+		return (p);
 		
 	}
-	return (p);
-}
+	
 
-  vector[] get_mean_prop(matrix X, matrix alpha){
+  matrix get_mean_prop(matrix X, matrix alpha){
 
-	  	vector[cols(alpha)+1] mu[rows(X)];
+	  	matrix[rows(X), cols(alpha)] mu = X * alpha;
 
-		  for(j in 1:num_elements(mu[,1])) 
-	  		mu[j]  = softmax( append_row([0]', to_vector(X[j] * alpha)));
+		  for(j in 1:num_elements(mu[,1])) mu[j]  = to_row_vector(softmax( to_vector( mu[j] )));
   
   	return(mu);
   }
@@ -52,10 +47,10 @@ data {
 
 
 
-  matrix[A,ct_in_nodes[2]-1]  alpha_a; // Immune cells
+  matrix[A,ct_in_nodes[2]]  alpha_a; // Immune cells
 
 
-	real<lower=0> phi[12]; //[fam_dirichlet ? 10 : ct_in_levels[lv]];
+	vector<lower=0>[12] phi; //[fam_dirichlet ? 10 : ct_in_levels[lv]];
 	matrix[Q,A] X_scaled;
 
 
@@ -66,10 +61,10 @@ generated quantities{
 
 
   vector[ct_in_nodes[2]]  prop_a_rng[Q * (lv == 2)]; // Immune cells childrens
-  vector[ct_in_nodes[2]]  mu_a_rng[Q * (lv == 2) ]; 
+  matrix[Q * (lv == 2), ct_in_nodes[2]]  mu_a_rng; 
 
 
-  for(q in 1:Q) prop_a_rng[q] = dirichlet_regression_rng( X_scaled[q], alpha_a, phi[1] , 0.05);
+  prop_a_rng = dirichlet_regression_rng( X_scaled, alpha_a, exp(phi[1]) , 0.5);
   mu_a_rng = get_mean_prop(X_scaled, alpha_a);
 
 

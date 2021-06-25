@@ -672,6 +672,7 @@ ref_mix_format = function(ref, mix) {
 		left_join((.) %>%
 								filter(`query`) %>%
 								distinct(sample) %>%
+								arrange(sample) %>%
 								mutate(Q = 1:n()), by="sample") %>%
 
 		# Add house keeping into Cell type label
@@ -1726,9 +1727,9 @@ get_alpha = function(fit, level){
 	
 	fit %>%
 		draws_to_tibble("alpha_", "A", "C") %>%
-
+		filter(!grepl("_raw" ,.variable)) %>%
 		# rebuild the last component sum-to-zero
-		rebuild_last_component_sum_to_zero() %>%
+		#rebuild_last_component_sum_to_zero() %>%
 		
 
 		arrange(.chain, .iteration, .draw,     A) %>%
@@ -1737,7 +1738,10 @@ get_alpha = function(fit, level){
 		
 		# Attach convergence information
 		left_join(
-			fit %>% summary_to_tibble("alpha_", "A", "C") %>% filter(A == 2) %>% 
+			fit %>% 
+				summary_to_tibble("alpha_", "A", "C") %>% 
+				filter(!grepl("_raw" ,.variable)) %>%
+				filter(A == 2) %>% 
 				select(.variable, C, one_of("Rhat")),
 			by = c(".variable", "C")
 		) %>%
@@ -2199,7 +2203,7 @@ run_censored_model_joint = function(.data, sampling = F){
 run_censored_model_joint_vb = function(.data, sampling = F){
 	
 	sampling_iter = 5
-	
+
 	vb_iterative(
 		stanmodels$censored_regression,
 		data = .data, 
@@ -2359,6 +2363,7 @@ censored_regression_joint =
 		nest(data = -partition) 
 	
 	core_fx = function(.data, transform_time_function = log1p){
+		
 		.data %>%
 			nest(data_part = -idx_C) %>%
 			mutate(new_C =  1:n()) %>%
