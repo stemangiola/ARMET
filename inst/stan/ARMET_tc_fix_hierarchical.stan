@@ -303,6 +303,10 @@ data {
 	int Q_for_exposure[nrow_for_exposure];
 	int counts_for_exposure[nrow_for_exposure] ;
 	vector[nrow_for_exposure] reference_for_exposure;
+	
+	// Exposure rate
+  vector[Q] exposure_multiplier;
+
   
 }
 transformed data{
@@ -379,8 +383,8 @@ parameters {
 	real<lower=0> prior_unseen_alpha[how_many_cens > 0];
 	real prior_unseen_beta[how_many_cens > 0];
 	
-	 // Local properties of the data
-  vector[Q] exposure_rate;
+// 	 // Local properties of the data
+//   vector[Q] exposure_rate;
 
 }
 transformed parameters{
@@ -450,12 +454,12 @@ model {
 	real sigma_intercept = 1.3420415;
 
 	// Estimate exposure rate
-	vector[nrow_for_exposure] reference_for_exposure_scaled = reference_for_exposure .* exp(exposure_rate)[Q_for_exposure];
+	// vector[nrow_for_exposure] reference_for_exposure_scaled = reference_for_exposure .* exp(exposure_rate)[Q_for_exposure];
 	// counts_for_exposure ~ neg_binomial_2(
 	// 	reference_for_exposure_scaled, 
 	// 	1.0 ./ (pow_vector(reference_for_exposure_scaled, -0.4) *  exp(sigma_intercept))
 	// );
-	exposure_rate ~ normal(0,2.5);
+	// exposure_rate ~ normal(0,2.5);
 
 	// proportion of level 2
 	if(lv == 2)
@@ -517,7 +521,7 @@ model {
 			append_row(	ref,	exp(lambda_UFO) );
 
 	// Correct for exposure
-	for(q in 1:Q) mu[q] = mu[q] * exp(exposure_rate[q]);
+	for(q in 1:Q) mu[q] = mu[q] * exposure_multiplier[q];
 	
 	// Sampling
 		
@@ -532,12 +536,12 @@ model {
   		lp_reduce_simple ,
   		[sigma_intercept, -0.4]', // global parameters
   		get_mu_sigma_vector_MPI(
-  			append_row(reference_for_exposure_scaled, mu_vector),
-  			append_row(reference_for_exposure_scaled, mu_vector),
+  			 mu_vector,
+  			 mu_vector,
   			shards
   		),
   		real_data,
-  		get_int_MPI( append_array(counts_for_exposure, to_array_1d(y)), shards)
+  		get_int_MPI( to_array_1d(y), shards)
   	));
 
 	// lv 1

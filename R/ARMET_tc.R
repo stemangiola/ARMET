@@ -182,7 +182,7 @@ ARMET_tc = function(.data,
 										model = stanmodels$ARMET_tc_fix_hierarchical,
 										approximate_sampling = F,
 										cores = 4,
-										transform_time_function = log1p) {
+										transform_time_function = sqrt) {
 	 
 	# At the moment is not active
 	levels = 1
@@ -359,7 +359,10 @@ ARMET_tc = function(.data,
 		tidybulk::aggregate_duplicates(sample, symbol, count, aggregation_function = median) %>%
 		bind_rows(mix %>% filter(symbol %in% (reference_filtered %>% filter(`house keeping`) %>% distinct(symbol) %>% pull(symbol)))) %>%
 		tidybulk::scale_abundance(sample, symbol, count, reference_sample = "reference", action ="get") %>%
-		distinct(sample, multiplier)
+		distinct(sample, multiplier) %>%
+		mutate(exposure_rate = -log(multiplier)) %>%
+		mutate(exposure_multiplier = exp(exposure_rate)) 
+		
 	
 	
 	# Default internals
@@ -499,11 +502,11 @@ run_model = function(reference_filtered,
 	# close(fileConn)
 	# ARMET_tc_model = rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix.stan", auto_write = F)
 	
-	exposure_rate = 
+	exposure_multiplier = 
 		sample_scaling %>% 
 		filter(sample %in% (y_source %>% pull(sample))) %>% 
 		arrange(Q) %>% 
-		pull(multiplier) 
+		pull(exposure_multiplier) 
 	
 	
 	# Setup for exposure inference
@@ -550,10 +553,6 @@ run_model = function(reference_filtered,
 	
 	max_y = max(y)
 	ct_in_ancestor_level = ifelse(lv == 1, 0, tree_properties$ct_in_levels[lv-1])
-	
-	print("---------")
-	print(shards)
-	print("---------")
 	
 	Sys.setenv("STAN_NUM_THREADS" = shards)
 	
