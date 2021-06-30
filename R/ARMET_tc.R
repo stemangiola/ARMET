@@ -226,7 +226,7 @@ ARMET_tc = function(.data,
 			if(length(prior_survival_time) == 0) stop("ARMET says: you really need to provide third party survival time for your condition/disease")
 			
 			sd_survival_months = .data %>%  select(sample, formula_df$censored_value_column) %>% distinct %>% pull(formula_df$censored_value_column) %>% sd
-			prior_survival_time = transform_time_function(prior_survival_time) 
+			prior_survival_time = transform_time_function(prior_survival_time %>% when(min(.)==0 ~ (.) + 1, (.))) 
 			
 		}
 		else{
