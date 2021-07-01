@@ -505,7 +505,7 @@ run_model = function(reference_filtered,
 	exposure_multiplier = 
 		sample_scaling %>% 
 		filter(sample %in% (y_source %>% pull(sample))) %>% 
-		arrange(Q) %>% 
+		arrange(sample) %>% 
 		pull(exposure_multiplier) 
 	
 	
