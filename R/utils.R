@@ -1518,7 +1518,7 @@ identify_baseline_by_clustering = function(.data, CI){
 		mutate(node = map(
 			node, ~ .x %>%
 				#mutate(baseline = TRUE) %>%
-				add_count(community) %>%
+				add_count(community, name = "n") %>%
 				
 				# Add sd
 				nest(comm_data = -community) %>%
@@ -1530,39 +1530,15 @@ identify_baseline_by_clustering = function(.data, CI){
 				
 				purrr::when(
 					
-					# # If I have a reference change make zero frm it
-					# (.) %>% distinct(fold_change_ancestor) %>% pull(1) %>% `!=` (0) ~ 
-					# 	(.) %>% mutate(zero = -fold_change_ancestor),
-					
 					# Otherwise, if I have a consensus of overlapping posteriors make that zero
-					(.) %>% distinct(community, n) %>% count(n) %>% nrow %>% `>` (1) ~ 
-						(.) %>% mutate(zero = (.) %>% filter( n == max(n)) %>% pull(median_community) %>% mean),
+					(.) %>% distinct(community, n) %>% count(n, name = "nn") %>% nrow %>% `>` (1) ~ 
+					(.) %>% mutate(zero = (.) %>% filter( n == max(n)) %>% pull(median_community) %>% mean),
 					
 					# Otherwise make zero the 0
 					~ (.) %>% mutate(zero = 0)
 				)
 		)) %>%
 				 
-		# 		
-		# 		# If we have a unique bigger community
-		# 		ifelse2_pipe(
-		# 			(.) %>% distinct(community) %>% nrow %>% equals(1),
-		# 			(.) %>% distinct(community, n) %>% count(n) %>% arrange(n %>% desc) %>% slice(1) %>% pull(nn) %>% equals(1) ,
-		# 			
-		# 			# If I have just one community
-		# 			~ .x %>% mutate(baseline = TRUE),
-		# 			
-		# 			# Majority roule
-		# 			~ .x %>% mutate(baseline = n == max(n)) ,
-		# 			
-		# 			# If ancestor changed, if no consensus the zero will be absolute 0 
-		# 			~ .x %>% mutate(baseline = FALSE)
-		# 		)
-		# 	
-		# )) %>% 
-		# 
-		# # Select zero. If I hav comunity select mean otherwise select 0
-		# mutate(zero = map_dbl(node, ~ .x %>% filter(baseline) %>% ifelse_pipe( (.) %>% distinct(community) %>% nrow %>% equals(1), ~.x %>% pull(mean_community) %>% unique, ~ 0) )) %>%
 		unnest(node)
 	
 	
@@ -1841,6 +1817,11 @@ get_survival_X = function(S){
 		mutate(intercept = 1)
 }
 
+add_attr = function(var, attribute, name) {
+	attr(var, name) <- attribute
+	var
+}
+
 #' @keywords internal
 #' 
 #' @importFrom nanny subset
@@ -1851,10 +1832,7 @@ get_survival_X = function(S){
 #' @param alpha A real
 #'
 generate_mixture = function(.data, X_df, alpha) {
-	add_attr = function(var, attribute, name) {
-		attr(var, name) <- attribute
-		var
-	}
+
 	
 	logsumexp <- function (x) {
 		y = max(x)

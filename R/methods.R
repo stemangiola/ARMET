@@ -39,6 +39,8 @@
 #' @param prior_survival_time An array
 #' @param model A stan model
 #' 
+#' @rdname setup_convolved_lm
+#' @name setup_convolved_lm
 #'
 #' @return An ARMET object
 #'
@@ -272,12 +274,17 @@ setup_convolved_lm = function(.data,
 #' 
 #' @description This function does inference for higher levels of the hierarchy
 #' 
+#' @rdname estimate_convoluted_lm
+#' @name estimate_convoluted_lm_1
+#' 
 #' @param armet_obj An ARMET object
 #' @param level An integer
 #' @param model A stan model
 #' 
 #' @export
 estimate_convoluted_lm_1 = function(armet_obj){
+	
+	level = 1 
 	
 	internals = 
 		run_lv_1(
@@ -311,7 +318,8 @@ estimate_convoluted_lm_1 = function(armet_obj){
 		)
 	
 	
-	list(
+	attrib = 
+		list(
 		# Matrix of proportions
 		proportions = proportions,
 		
@@ -321,18 +329,39 @@ estimate_convoluted_lm_1 = function(armet_obj){
 		# Return the fitted object
 		internals = internals
 	)
+	
+	proportions %>% 
+		get_estimates(level) %>% 
+		add_attr(attrib, "full_results")
 }
 
 #' estimate_convoluted_lm_2
 #' 
 #' @description This function does inference for higher levels of the hierarchy
 #' 
+#' 
+#' @rdname estimate_convoluted_lm
+#' @name estimate_convoluted_lm_2
+#' 
 #' @param armet_obj An ARMET object
 #' 
 #' @export
 estimate_convoluted_lm_2 = function(armet_obj){
 	
-	ARMET_tc_continue(armet_obj, 2, model = armet_obj$internals$model)
+	level = 2
+	
+	attrib = attr(armet_obj, "full_results")
+	
+	attrib = ARMET_tc_continue(attrib, level, model = attrib$internals$model)
+	
+	armet_obj %>% 
+		bind_rows(
+			attrib$proportions %>% 
+				get_estimates(level) 
+		) %>% 
+		
+		# Add back update attributes
+		add_attr(attrib, "full_results")
 	
 }
 
@@ -340,24 +369,56 @@ estimate_convoluted_lm_2 = function(armet_obj){
 #' 
 #' @description This function does inference for higher levels of the hierarchy
 #' 
+#' 
+#' @rdname estimate_convoluted_lm
+#' @name estimate_convoluted_lm_3
+#' 
 #' @param armet_obj An ARMET object
 #' 
 #' @export
 estimate_convoluted_lm_3 = function(armet_obj){
 	
-	ARMET_tc_continue(armet_obj, 3, model = armet_obj$internals$model)
+	level = 3
 	
+	attrib = attr(armet_obj, "full_results")
+	
+	attrib = ARMET_tc_continue(attrib, level, model = attrib$internals$model)
+	
+	armet_obj %>% 
+		bind_rows(
+			attrib$proportions %>% 
+				get_estimates(level) 
+		) %>% 
+		
+		# Add back update attributes
+		add_attr(attrib, "full_results")	
 }
 
 #' estimate_convoluted_lm_4
 #' 
 #' @description This function does inference for higher levels of the hierarchy
 #' 
+#' 
+#' @rdname estimate_convoluted_lm
+#' @name estimate_convoluted_lm_4
+#' 
 #' @param armet_obj An ARMET object
 #' 
 #' @export
 estimate_convoluted_lm_4 = function(armet_obj){
 	
-	ARMET_tc_continue(armet_obj, 4, model = armet_obj$internals$model)
+	level = 4
 	
+	attrib = attr(armet_obj, "full_results")
+	
+	attrib = ARMET_tc_continue(attrib, level, model = attrib$internals$model)
+	
+	armet_obj %>% 
+		bind_rows(
+			attrib$proportions %>% 
+				get_estimates(level) 
+		) %>% 
+		
+		# Add back update attributes
+		add_attr(attrib, "full_results")	
 }

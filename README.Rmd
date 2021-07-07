@@ -80,6 +80,8 @@ armet_estimate =
 	estimate_convoluted_lm_2() %>% 
 	estimate_convoluted_lm_3() %>% 
 	estimate_convoluted_lm_4() 
+
+
 ```
 
 Plotting
