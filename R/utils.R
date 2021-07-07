@@ -1100,6 +1100,7 @@ create_design_matrix = function(input.df, formula, sample_column){
 }
 
 # Formula parser
+#' @importFrom stringr str_split
 parse_formula <- function(fm) {
 	
 	components = as.character(attr(terms(fm), "variables"))[-1]

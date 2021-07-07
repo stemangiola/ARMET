@@ -18,8 +18,8 @@ ARMET_tc(
   do_regression = T,
   prior_survival_time = c(),
   model = stanmodels$ARMET_tc_fix_hierarchical,
-  approximate_sampling = F,
-  cores = 4
+  cores = 4,
+  transform_time_function = sqrt
 )
 }
 \arguments{

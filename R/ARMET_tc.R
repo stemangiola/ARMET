@@ -44,7 +44,6 @@ ARMET_tc_continue = function(armet_obj, level, model = stanmodels$ARMET_tc_fix_h
 		shards = input$cores,
 		lv = level,
 		full_bayesian = input$full_bayesian,
-		approximate_posterior = input$approximate_posterior,
 		internals$prop_posterior,
 		iterations = input$iterations,
 		sampling_iterations = input$sampling_iterations	,
@@ -58,7 +57,7 @@ ARMET_tc_continue = function(armet_obj, level, model = stanmodels$ARMET_tc_fix_h
 		sample_scaling = internals$sample_scaling,
 		prior_prop = internals$prop %>% filter(level == !!level -1) %>% distinct(Q, C, .value) %>% spread(C, .value) %>% tidybulk::as_matrix(rownames = Q),
 		columns_idx_including_time = internals$columns_idx_including_time,
-		approximate_sampling = internals$approximate_sampling
+		approximate_posterior = internals$approximate_posterior
 	)
 	
 	df = res[[1]]
@@ -180,7 +179,6 @@ ARMET_tc = function(.data,
 										do_regression = T, 
 										prior_survival_time = c(),
 										model = stanmodels$ARMET_tc_fix_hierarchical,
-										approximate_sampling = F,
 										cores = 4,
 										transform_time_function = sqrt) {
 	 
@@ -383,7 +381,7 @@ ARMET_tc = function(.data,
 			formula_df = formula_df,
 			sample_scaling = sample_scaling,
 			columns_idx_including_time = columns_idx_including_time,
-			approximate_sampling = approximate_sampling,
+			approximate_posterior = approximate_posterior,
 			transform_time_function = transform_time_function
 		) 
 	
@@ -448,8 +446,7 @@ run_model = function(reference_filtered,
 										 prior_survival_time = c(),
 										 sample_scaling,
 										 prior_prop = matrix(1:Q)[,0],
-										 columns_idx_including_time,
-										 approximate_sampling) {
+										 columns_idx_including_time) {
 	
 	
 	# Global properties - derived by previous analyses of the whole reference dataset
@@ -568,7 +565,7 @@ run_model = function(reference_filtered,
 	CIT = length(columns_idx_including_time)
 
 	fit = 
-		approximate_sampling %>%
+		approximate_posterior %>%
 		when(
 			(.) ~ vb_iterative(model,
 												 # rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix_hierarchical.stan", auto_write = F),
@@ -792,8 +789,8 @@ run_lv_1 = function(internals,
 		model = model,
 		prior_survival_time = internals$prior_survival_time,
 		sample_scaling = internals$sample_scaling,
-		columns_idx_including_time = internals$columns_idx_including_time,
-		approximate_sampling = internals$approximate_sampling
+		columns_idx_including_time = internals$columns_idx_including_time
+		
 	)
 	
 	df = res1[[1]]
