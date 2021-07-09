@@ -21,11 +21,8 @@ knitr::opts_chunk$set( fig.path = "man/figures/")
 ```
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(ARMET)
 library(dplyr)
-library(sccomp)
-library(ggplot2)
-library(forcats)
-library(tidyr)
 data("ACC")
 ```
 
@@ -39,32 +36,10 @@ devtools::install_github("stemangiola/sccomp")
 
 ```{r}
 
-# prior_survival_time = 
-# 	read_csv("dev/survival_TCGA_curated.csv") %>% 
-# 				filter(PFI.2==1 & !is.na(PFI.time.2) & PFI.time.2 != "#N/A") %>%
-# 				pull(PFI.time.2) %>% 
-# 				as.numeric
-
-prior_survival_time = ACC %>% filter(!alive) %>% distinct(patient, time) %>% pull(time)
-
-# my_formula = F %>% when((.) ~ ~ censored(PFI.time.2, alive) * gender, ~ ~ censored(PFI.time.2, alive))
-# 
-# my_df = readRDS("dev/armet_TCGA_June7_2021_fixed_regression/armet_ACC_input.rds") %>%
-# # Do gender
-# ARMET_tc(
-# # model = stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix_hierarchical.stan"),
-# my_formula,
-# patient,
-# transcript,
-# count,
-# cores = 4,
-# prior_survival_time = read_csv("dev/survival_TCGA_curated.csv") %>% filter(PFI.2==1 & !is.na(PFI.time.2) & PFI.time.2 != "#N/A") %>% pull(PFI.time.2) %>% as.numeric,
-# transform_time_function =sqrt
-# )
-
+prior_survival_time = ACC |> filter(!alive) |> distinct(patient, time) |> pull(time)
 
 armet_obj = 	
-	ACC %>%
+	ACC |>
 	setup_convolved_lm(
 		~ censored(time, alive),
 			.sample = patient,
@@ -75,13 +50,15 @@ armet_obj =
 	)
 
 armet_estimate = 
-	armet_obj %>% 
-	estimate_convoluted_lm_1() %>% 
-	estimate_convoluted_lm_2() %>% 
-	estimate_convoluted_lm_3() %>% 
+	armet_obj |>
+	estimate_convoluted_lm_1() |>
+	estimate_convoluted_lm_2() |>
+	estimate_convoluted_lm_3() |>
 	estimate_convoluted_lm_4() 
 
-
+armet_hypothesis_test = 
+	armet_estimate |>
+	test_hypothesis_convoluted_lm(CI = 0.9)
 ```
 
 Plotting

@@ -1,40 +1,25 @@
 
 
-
-
-#' test_differential_composition
-#' 
-#' @description This function performs statistical testing on the fit object
-#' 
-#' @param .data A tibble
-#' @param credible_interval A double
-#' @param cluster_CI A double
-#' 
-#' @export
-get_estimates = 
-	function(.data, level, credible_interval = 0.90, cluster_CI = 0.55, relative = TRUE) {
-		
+get_estimates = function(.data, lev,X) {
 	
-		.d = 
-			.data %>%
-			filter(.variable %>% is.na %>% `!`) %>%
-			extract_CI(credible_interval = credible_interval)
+	.data %>% 
+		filter(level ==lev) %>%
+		filter(.variable %>% is.na %>% `!`) %>%
+		select(level, `Cell type category`, draws) %>% 
+		mutate(regression = map(draws,
+														~ .x %>%
+															group_by(A) %>%
+															summarise(.median = median(.value), .sd = sd(.value)) %>% 
+															#tidybayes::median_qi(.width = credible_interval) %>%
+													
+															left_join(tibble(A=1:ncol(X), A_name = colnames(X)) ,  by = "A") %>% 
+															select(-A) %>% 
+														
+															pivot_wider(
+																names_from = A_name,
+																values_from = c(median, sd)
+															))) %>% 
+		select(-draws) %>% 
+		unnest(regression)
 	
-		dx = 
-			.d %>%
-			
-			filter(level ==!!level) %>%
-			mutate(fold_change_ancestor = 0) %>%
-			mutate(significant = ((.lower_alpha2  - 0) * (.upper_alpha2  - 0)) > 0) %>%
-			mutate(fold_change  = ifelse(significant, .value_alpha2 , 0))
-		
-		dx %>% 
-			select(
-				level, `Cell type category`, .value_alpha1, .value_alpha2, .lower_alpha1,
-				.lower_alpha2, .upper_alpha1, .upper_alpha2, significant
-			)
-		
-	}
-
-
-
+}
