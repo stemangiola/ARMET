@@ -1589,43 +1589,6 @@ extract_CI =  function(.data, credible_interval = 0.90){
 	
 }
 
-calculate_x_for_polar = function(.data){
-	# Create annotation
-	internal_branch_length = 40
-	external_branch_length = 10
-	
-	
-	# Integrate data
-	tree_df_source = 
-		ARMET::tree %>%
-		data.tree::ToDataFrameTree("name", "isLeaf", "level", "leafCount", pruneFun = function(x)	x$level <= 5) %>%
-		as_tibble() %>%
-		rename(`Cell type category` = name) %>%
-		mutate(level = level -1)
-	
-	# Calculate x
-	map_df(
-		0:4,
-		~ tree_df_source %>%
-			filter(level == .x | (level < .x & isLeaf)) %>%
-			mutate(leafCount_norm = leafCount/sum(leafCount)) %>%
-			mutate(leafCount_norm_cum = cumsum(leafCount_norm)) %>%
-			mutate(length_error_bar = leafCount_norm - 0.005) %>%
-			mutate(x = leafCount_norm_cum - 0.5 * leafCount_norm) 	
-	) %>%
-		
-		# Attach data
-		left_join(.data) %>%
-		
-		# process
-		mutate(Estimate = ifelse(significant, fold_change, NA)) %>%
-		mutate(branch_length = ifelse(isLeaf, 0.1, 2)) %>%
-		
-		# Correct branch length
-		mutate(branch_length = ifelse(!isLeaf, internal_branch_length,	external_branch_length) ) %>%
-		mutate(branch_length =  ifelse(	isLeaf, branch_length + ((max(level) - level) * internal_branch_length),	branch_length	)) 
-	
-}
 
 get_draws = function(fit_prop_parsed, level, internals){
 	

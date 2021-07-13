@@ -17,7 +17,7 @@ get_estimates = function(.data, lev,X) {
 														
 															pivot_wider(
 																names_from = A_name,
-																values_from = c(median, sd)
+																values_from = c(.median, .sd)
 															))) %>% 
 		select(-draws) %>% 
 		unnest(regression)
