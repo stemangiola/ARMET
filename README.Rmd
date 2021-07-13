@@ -58,7 +58,7 @@ armet_estimate =
 
 armet_hypothesis_test = 
 	armet_estimate |>
-	test_hypothesis_convoluted_lm(CI = 0.9)
+	test_hypothesis_convoluted_lm()
 ```
 
 Plotting
