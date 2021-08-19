@@ -255,7 +255,7 @@ ARMET_tc = function(.data,
 		
 	}	else {
 		formula_df = cens  = NULL	
-		columns_idx_including_time = c()
+		columns_idx_including_time = array(0)[0]
 		
 		X =
 			model.matrix(
@@ -317,22 +317,34 @@ ARMET_tc = function(.data,
 	
 	Q = mix %>% distinct(sample) %>% nrow
 	
+	# reference_filtered =
+	# 	ARMET::ARMET_ref %>%
+	# 	
+	# 	left_join(.n_markers, by = c("ct1", "ct2")) %>%
+	# 	filter_reference(mix, .n_markers) %>%
+	# 	select(-ct1,-ct2,-rank,-`n markers`) %>%
+	# 	distinct %>%
+	# 	
+	# 	# Select cell types in hierarchy
+	# 	inner_join(
+	# 		tree %>%
+	# 			data.tree::ToDataFrameTree("Cell type category", "C", "C1", "C2", "C3", "C4") %>%
+	# 			as_tibble %>%
+	# 			select(-1),
+	# 		by = "Cell type category"
+	# 	)	
+	
 	reference_filtered =
-		ARMET::ARMET_ref %>%
-		
-		left_join(.n_markers, by = c("ct1", "ct2")) %>%
-		filter_reference(mix, .n_markers) %>%
-		select(-ct1,-ct2,-rank,-`n markers`) %>%
-		distinct %>%
-		
-		# Select cell types in hierarchy
+		reference %>% 
 		inner_join(
 			tree %>%
 				data.tree::ToDataFrameTree("Cell type category", "C", "C1", "C2", "C3", "C4") %>%
 				as_tibble %>%
+				rename(cell_type = `Cell type category`) %>% 
 				select(-1),
-			by = "Cell type category"
+			by = "cell_type"
 		)	
+	
 	# %>%
 	# 	
 	# 	# Decrease the number of house keeping used
@@ -352,13 +364,12 @@ ARMET_tc = function(.data,
 	# Find normalisation
 	sample_scaling = 
 		reference_filtered %>%
-		filter(`house keeping`) %>% 
-		select(count = lambda_log, symbol) %>%
-		distinct() %>%
-		mutate(count = exp(count), sample = "reference") %>% 
+		
+		mutate(sample = "reference") %>% 
 		tidybulk::aggregate_duplicates(sample, symbol, count, aggregation_function = median) %>%
-		bind_rows(mix %>% filter(symbol %in% (reference_filtered %>% filter(`house keeping`) %>% distinct(symbol) %>% pull(symbol)))) %>%
-		tidybulk::scale_abundance(sample, symbol, count, reference_sample = "reference", action ="get") %>%
+		bind_rows(mix) %>%
+		tidybulk::identify_abundant(sample, symbol, count) %>%
+		tidybulk::scale_abundance(sample, symbol, count, reference_sample = "reference", action ="get", .subset_for_scaling = .abundant) %>%
 		distinct(sample, multiplier) %>%
 		mutate(exposure_rate = -log(multiplier)) %>%
 		mutate(exposure_multiplier = exp(exposure_rate)) 
@@ -374,7 +385,7 @@ ARMET_tc = function(.data,
 			prop_posterior = get_null_prop_posterior(tree_propeties$ct_in_nodes),
 			alpha = NULL,
 			Q = Q,
-			reference_filtered = reference_filtered,
+			reference_filtered = reference_filtered %>% rename(sample = cell_type) %>% filter(is_marker) %>% select(-is_marker),
 			mix = mix,
 			X = X,
 			cens = cens,
@@ -470,28 +481,27 @@ run_model = function(reference_filtered,
 	
 	df = ref_mix_format(reference_filtered, mix)
 	
-	G = df %>% filter(!`query`) %>% distinct(G) %>% nrow()
-	GM = df %>% filter(!`house keeping`) %>% distinct(symbol) %>% nrow()
+	GM = df  %>% distinct(symbol) %>% nrow()
 	
 	y_source =
 		df %>%
-		filter(`query` & !`house keeping`) %>%
-		select(S, Q, symbol, count, GM, sample) %>%
-		left_join(
-			df %>% filter(!query) %>% distinct(
-				symbol,
-				G,
-				`Cell type category`,
-				level,
-				lambda_log,
-				sigma_inv_log,
-				GM,
-				C
-			),
-			by = c("symbol", "GM")
-		) %>%
-		arrange(C, Q, symbol) %>%
-		mutate(`Cell type category` = factor(`Cell type category`, unique(`Cell type category`)))
+		filter(`query`) %>%
+		select(S, Q, symbol, count, GM, sample) 
+		# left_join(
+		# 	df %>% filter(!query) %>% distinct(
+		# 		symbol,
+		# 		G,
+		# 		`Cell type category`,
+		# 		level,
+		# 		lambda_log,
+		# 		sigma_inv_log,
+		# 		GM,
+		# 		C
+		# 	),
+		# 	by = c("symbol", "GM")
+		# ) %>%
+		#arrange(C, Q, symbol) %>%
+		#mutate(`Cell type category` = factor(`Cell type category`, unique(`Cell type category`)))
 	
 	# Dirichlet regression
 	A = X %>% ncol
@@ -510,22 +520,22 @@ run_model = function(reference_filtered,
 	
 	
 	# Setup for exposure inference
-	
-	df_for_exposure = 
-		df %>%
-		filter(`query` &  `house keeping`)  %>%
-		distinct(Q, symbol, count) %>%
-		left_join(
-			df %>%
-				filter(!`query` & `house keeping`)  %>%
-				mutate(reference_count = exp(lambda_log)) %>%
-				distinct(symbol, reference_count )
-		)
-	
-	nrow_for_exposure = nrow(df_for_exposure)
-	Q_for_exposure = df_for_exposure$Q
-	reference_for_exposure = df_for_exposure %>% pull(reference_count)
-	counts_for_exposure = df_for_exposure %>% pull(count)
+	# 
+	# df_for_exposure = 
+	# 	df %>%
+	# 	filter(`query` &  `house keeping`)  %>%
+	# 	distinct(Q, symbol, count) %>%
+	# 	left_join(
+	# 		df %>%
+	# 			filter(!`query` & `house keeping`)  %>%
+	# 			mutate(reference_count = exp(lambda_log)) %>%
+	# 			distinct(symbol, reference_count )
+	# 	)
+	# 
+	# nrow_for_exposure = nrow(df_for_exposure)
+	# Q_for_exposure = df_for_exposure$Q
+	# reference_for_exposure = df_for_exposure %>% pull(reference_count)
+	# counts_for_exposure = df_for_exposure %>% pull(count)
 	
 	init_list = list(	lambda_UFO = rep(6.2, GM)	) 
 	
@@ -533,14 +543,12 @@ run_model = function(reference_filtered,
 		df %>%
 		
 		# Eliminate the query part, not the house keeping of the query
-		filter(!`query` | `house keeping`)  %>%
+		filter(!`query`)  %>%
 		
-		filter(!`house keeping`) %>%
-		mutate(lambda = exp(lambda_log)) %>%
-		select(C, GM, lambda ) %>% 
+		select(C, GM, count ) %>% 
 		distinct() %>%
 		arrange(C, GM) %>% 
-		spread(GM, lambda) %>% 
+		spread(GM, count) %>% 
 		tidybulk::as_matrix(rownames = "C") 
 	
 	y = 

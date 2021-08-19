@@ -647,73 +647,57 @@ filter_house_keeping_query_if_fixed =  function(.data, full_bayesian) {
 
 
 ref_mix_format = function(ref, mix) {
-	bind_rows( 
+	bind_rows(  
 		# Get reference based on mix genes
-		ref %>% mutate(`query` = FALSE),
+		ref %>% 
+			inner_join(mix %>% distinct(symbol), by = "symbol") %>%  
+			mutate(`query` = FALSE),
 		
 		# Select only markers
 		mix %>%
-			inner_join(ref %>% distinct(symbol, `house keeping`), by = "symbol") %>%
-			mutate(`Cell type category` = "query") %>%
+			inner_join(ref %>% distinct(symbol), by = "symbol") %>%
 			mutate(`query` = TRUE)
 	)	%>%
 
 		# Add marker symbol indexes
-		left_join((.) %>%
-								filter(!`house keeping`) %>%
-								distinct(symbol) %>%
-								mutate(M = 1:n()), by = "symbol") %>%
+		nest(data = -symbol) %>% 
+		mutate(M = 1:n()) %>% 
+		unnest(data) %>% 
+		# left_join((.) %>%
+		# 						distinct(symbol) %>%
+		# 						mutate(M = 1:n()), by = "symbol") %>%
 
-		# Add sample indeces
+		# Add sample indexes
 		arrange(!`query`) %>% # query first
 		mutate(S = factor(sample, levels = .$sample %>% unique) %>% as.integer) %>%
 
-		# Add query samples indeces
+		# Add query samples indexes
 		left_join((.) %>%
 								filter(`query`) %>%
 								distinct(sample) %>%
 								arrange(sample) %>%
 								mutate(Q = 1:n()), by="sample") %>%
 
-		# Add house keeping into Cell type label
-		mutate(`Cell type category` = ifelse(`house keeping`, "house_keeping", `Cell type category`)) %>%
+		# # Create unique symbol ID
+		# unite(ct_symbol, c("Cell type category", "symbol"), remove = F) %>%
 
-		# Still needed?
-		anti_join(
-			(.) %>%
-				filter(`house keeping` & !`query`) %>%
-				distinct(symbol, level) %>%
-				group_by(symbol) %>%
-				arrange(level) %>%
-				slice(2:max(n(), 2)) %>% # take away house keeping from level 2 above
-				ungroup(),
-			by = c("level", "symbol")
-		) %>%
-
-		# If house keeping delete level infomation
-		mutate(level = ifelse(`house keeping`, NA, level)) %>%
-
-		# Create unique symbol ID
-		unite(ct_symbol, c("Cell type category", "symbol"), remove = F) %>%
-
-		# Add gene idx
-		left_join(
-			(.) %>%
-				filter(!`query`) %>%
-				distinct(`Cell type category`, ct_symbol, `house keeping`) %>%
-				arrange(!`house keeping`, ct_symbol) %>% # House keeping first
-				mutate(G = 1:n()),
-			by = c("ct_symbol", "Cell type category", "house keeping")
-		) %>%
-		left_join(
-			(.) %>%
-				filter(!`house keeping` & !`query`) %>%
-				distinct(level, symbol) %>%
-				arrange(level, symbol) %>%
-				mutate(GM = 1:n()) %>%
-				select(-level),
-			by = "symbol"
-		)
+		# # Add gene idx
+		# left_join(
+		# 	(.) %>%
+		# 		filter(!`query`) %>%
+		# 		distinct(`Cell type category`, ct_symbol, `house keeping`) %>%
+		# 		arrange(!`house keeping`, ct_symbol) %>% # House keeping first
+		# 		mutate(G = 1:n()),
+		# 	by = c("ct_symbol", "Cell type category", "house keeping")
+		# ) %>%
+	left_join(
+		(.) %>%
+			filter(!query) %>%
+			distinct(symbol) %>%
+			arrange(symbol) %>%
+			mutate(GM = 1:n()) ,
+		by = "symbol"
+	)
 
 }
 
