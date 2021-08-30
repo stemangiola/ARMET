@@ -338,7 +338,7 @@ ARMET_tc = function(.data,
 		reference %>% 
 		inner_join(
 			tree %>%
-				data.tree::ToDataFrameTree("Cell type category", "C", "C1", "C2", "C3", "C4") %>%
+				data.tree::ToDataFrameTree("Cell type category", "C", "C1", "C2", "C3", "C4", "isLeaf") %>%
 				as_tibble %>%
 				rename(cell_type = `Cell type category`) %>% 
 				select(-1),
@@ -385,7 +385,7 @@ ARMET_tc = function(.data,
 			prop_posterior = get_null_prop_posterior(tree_propeties$ct_in_nodes),
 			alpha = NULL,
 			Q = Q,
-			reference_filtered = reference_filtered %>% rename(sample = cell_type) %>% filter(is_marker) %>% select(-is_marker),
+			reference_filtered = reference_filtered %>% rename(sample = cell_type) ,
 			mix = mix,
 			X = X,
 			cens = cens,
@@ -477,7 +477,8 @@ run_model = function(reference_filtered,
 	sigma_intercept_prior = c(1.9 , 0.1)
 	
 	# Filter on level considered
-	reference_filtered = reference_filtered %>% filter(level %in% lv)
+	my_genes = reference_filtered %>% filter(level == lv ) %>% filter(is_marker) %>% pull(symbol) %>% unique()
+	reference_filtered = reference_filtered %>% filter(level == lv | (level < lv & isLeaf)) %>% filter(symbol %in% my_genes)
 	
 	df = ref_mix_format(reference_filtered, mix)
 	
