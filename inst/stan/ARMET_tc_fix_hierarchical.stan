@@ -229,7 +229,6 @@ data {
 	int lv;
 	
 	// Reference matrix inference
-	int<lower=0> G;
 	int<lower=0> GM;
 
 	// Priors
@@ -299,10 +298,10 @@ data {
 	int columns_idx_including_time[CIT];
 	
 	// For exposure
-	int nrow_for_exposure;
-	int Q_for_exposure[nrow_for_exposure];
-	int counts_for_exposure[nrow_for_exposure] ;
-	vector[nrow_for_exposure] reference_for_exposure;
+	// int nrow_for_exposure;
+	// int Q_for_exposure[nrow_for_exposure];
+	// int counts_for_exposure[nrow_for_exposure] ;
+	// vector[nrow_for_exposure] reference_for_exposure;
 	
 	// Exposure rate
   vector[Q] exposure_multiplier;
@@ -408,7 +407,7 @@ transformed parameters{
   matrix[A * (lv == 4) * do_regression,ct_in_nodes[12]] alpha_m; // CD8
   
 	matrix[Q,A] X_ = X;
-	matrix[Q,A] X_scaled;
+	matrix[Q,A] X_scaled = X_;
 	
 	if(lv == 1) for(a in 1:A)	alpha_1[a] =  sum_to_zero_QR(alpha_1_raw[a], Q_r_1);
 	if(lv == 2) for(a in 1:A)	alpha_a[a] =  sum_to_zero_QR(alpha_a_raw[a], Q_r_a);
@@ -430,12 +429,13 @@ transformed parameters{
 				X_[which_cens[j],columns_idx_including_time[i]] = sqrt(X_[which_cens[j],columns_idx_including_time[i]]^2 + unseen[j]^2);
 
 	
-	X_scaled = X_;
+	
 	for(i in 1:CIT)	
 			 X_scaled[,columns_idx_including_time[i]] = (X_scaled[,columns_idx_including_time[i]] - mean(X_scaled[,columns_idx_including_time[i]])) / sd(X_scaled[,columns_idx_including_time[i]]);
 
 
 }
+
 }
 model {
 
