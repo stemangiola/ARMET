@@ -1,0 +1,70 @@
+---
+title: "Introduction to ARMET"
+author: "Stefano Mangiola"
+date: "6/25/2021"
+output: html_document
+---
+---
+title: "sccomp - Outlier-aware and count-based compositional analysis of single-cell data"
+output: github_document
+always_allow_html: true
+---
+
+<!-- badges: start -->
+[![Lifecycle:maturing](https://img.shields.io/badge/lifecycle-maturing-blue.svg)](https://www.tidyverse.org/lifecycle/#maturing) [![R build status](https://github.com/stemangiola/tidyseurat/workflows/R-CMD-check/badge.svg)](https://github.com/stemangiola/tidyseurat/actions/)
+<!-- badges: end -->
+
+#  <img src="inst/logo-01.png" height="139px" width="120px" />
+
+```{r echo=FALSE}
+knitr::opts_chunk$set( fig.path = "man/figures/")
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(ARMET)
+library(dplyr)
+data("ACC")
+```
+
+# Installation
+
+```{r eval=FALSE}
+devtools::install_github("stemangiola/sccomp")
+```
+
+# Usage
+
+```{r}
+
+prior_survival_time = ACC |> filter(!alive) |> distinct(patient, time) |> pull(time)
+
+armet_obj = 	
+	ACC |>
+	setup_convolved_lm(
+		~ censored(time, alive),
+			.sample = patient,
+			.transcript = transcript,
+			.abundance = count, 
+			prior_survival_time = prior_survival_time, 
+			transform_time_function = sqrt
+	)
+
+armet_estimate = 
+	armet_obj |>
+	estimate_convoluted_lm_1() |>
+	estimate_convoluted_lm_2() |>
+	estimate_convoluted_lm_3() |>
+	estimate_convoluted_lm_4() 
+
+armet_hypothesis_test = 
+	armet_estimate |>
+	test_hypothesis_convoluted_lm()
+```
+
+Plotting
+
+```{r}
+
+ACC = readRDS("/stornext/Bioinf/data/bioinf-data/Papenfuss_lab/projects/mangiola.s/ARMET_dev/dev/armet_ACC_input.rds")
+
+```

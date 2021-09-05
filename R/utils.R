@@ -1084,6 +1084,7 @@ create_design_matrix = function(input.df, formula, sample_column){
 }
 
 # Formula parser
+#' @importFrom stringr str_split
 parse_formula <- function(fm) {
 	
 	components = as.character(attr(terms(fm), "variables"))[-1]
@@ -1501,7 +1502,7 @@ identify_baseline_by_clustering = function(.data, CI){
 		mutate(node = map(
 			node, ~ .x %>%
 				#mutate(baseline = TRUE) %>%
-				add_count(community) %>%
+				add_count(community, name = "n") %>%
 				
 				# Add sd
 				nest(comm_data = -community) %>%
@@ -1513,39 +1514,15 @@ identify_baseline_by_clustering = function(.data, CI){
 				
 				purrr::when(
 					
-					# # If I have a reference change make zero frm it
-					# (.) %>% distinct(fold_change_ancestor) %>% pull(1) %>% `!=` (0) ~ 
-					# 	(.) %>% mutate(zero = -fold_change_ancestor),
-					
 					# Otherwise, if I have a consensus of overlapping posteriors make that zero
-					(.) %>% distinct(community, n) %>% count(n) %>% nrow %>% `>` (1) ~ 
-						(.) %>% mutate(zero = (.) %>% filter( n == max(n)) %>% pull(median_community) %>% mean),
+					(.) %>% distinct(community, n) %>% count(n, name = "nn") %>% nrow %>% `>` (1) ~ 
+					(.) %>% mutate(zero = (.) %>% filter( n == max(n)) %>% pull(median_community) %>% mean),
 					
 					# Otherwise make zero the 0
 					~ (.) %>% mutate(zero = 0)
 				)
 		)) %>%
 				 
-		# 		
-		# 		# If we have a unique bigger community
-		# 		ifelse2_pipe(
-		# 			(.) %>% distinct(community) %>% nrow %>% equals(1),
-		# 			(.) %>% distinct(community, n) %>% count(n) %>% arrange(n %>% desc) %>% slice(1) %>% pull(nn) %>% equals(1) ,
-		# 			
-		# 			# If I have just one community
-		# 			~ .x %>% mutate(baseline = TRUE),
-		# 			
-		# 			# Majority roule
-		# 			~ .x %>% mutate(baseline = n == max(n)) ,
-		# 			
-		# 			# If ancestor changed, if no consensus the zero will be absolute 0 
-		# 			~ .x %>% mutate(baseline = FALSE)
-		# 		)
-		# 	
-		# )) %>% 
-		# 
-		# # Select zero. If I hav comunity select mean otherwise select 0
-		# mutate(zero = map_dbl(node, ~ .x %>% filter(baseline) %>% ifelse_pipe( (.) %>% distinct(community) %>% nrow %>% equals(1), ~.x %>% pull(mean_community) %>% unique, ~ 0) )) %>%
 		unnest(node)
 	
 	
@@ -1596,43 +1573,6 @@ extract_CI =  function(.data, credible_interval = 0.90){
 	
 }
 
-calculate_x_for_polar = function(.data){
-	# Create annotation
-	internal_branch_length = 40
-	external_branch_length = 10
-	
-	
-	# Integrate data
-	tree_df_source = 
-		ARMET::tree %>%
-		data.tree::ToDataFrameTree("name", "isLeaf", "level", "leafCount", pruneFun = function(x)	x$level <= 5) %>%
-		as_tibble() %>%
-		rename(`Cell type category` = name) %>%
-		mutate(level = level -1)
-	
-	# Calculate x
-	map_df(
-		0:4,
-		~ tree_df_source %>%
-			filter(level == .x | (level < .x & isLeaf)) %>%
-			mutate(leafCount_norm = leafCount/sum(leafCount)) %>%
-			mutate(leafCount_norm_cum = cumsum(leafCount_norm)) %>%
-			mutate(length_error_bar = leafCount_norm - 0.005) %>%
-			mutate(x = leafCount_norm_cum - 0.5 * leafCount_norm) 	
-	) %>%
-		
-		# Attach data
-		left_join(.data) %>%
-		
-		# process
-		mutate(Estimate = ifelse(significant, fold_change, NA)) %>%
-		mutate(branch_length = ifelse(isLeaf, 0.1, 2)) %>%
-		
-		# Correct branch length
-		mutate(branch_length = ifelse(!isLeaf, internal_branch_length,	external_branch_length) ) %>%
-		mutate(branch_length =  ifelse(	isLeaf, branch_length + ((max(level) - level) * internal_branch_length),	branch_length	)) 
-	
-}
 
 get_draws = function(fit_prop_parsed, level, internals){
 	
@@ -1824,6 +1764,11 @@ get_survival_X = function(S){
 		mutate(intercept = 1)
 }
 
+add_attr = function(var, attribute, name) {
+	attr(var, name) <- attribute
+	var
+}
+
 #' @keywords internal
 #' 
 #' @importFrom nanny subset
@@ -1834,10 +1779,7 @@ get_survival_X = function(S){
 #' @param alpha A real
 #'
 generate_mixture = function(.data, X_df, alpha) {
-	add_attr = function(var, attribute, name) {
-		attr(var, name) <- attribute
-		var
-	}
+
 	
 	logsumexp <- function (x) {
 		y = max(x)
