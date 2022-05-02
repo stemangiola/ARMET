@@ -54,6 +54,7 @@ setup_convolved_lm = function(.data,
 										approximate_posterior = F,
 										prior_survival_time = c(),
 										transform_time_function = sqrt,
+										reference = NULL,
 										...) {
 	
 	# At the moment is not active
@@ -63,9 +64,8 @@ setup_convolved_lm = function(.data,
 	do_regression = T
 	cores = 4
 	shards = cores 
-	reference = NULL
-	iterations = 250
-	sampling_iterations = 100
+	iterations = 800
+	sampling_iterations = 200
 	model = stanmodels$ARMET_tc_fix_hierarchical
 	
 	
@@ -111,35 +111,49 @@ setup_convolved_lm = function(.data,
 			sd_survival_months = .data %>%  select(sample, formula_df$censored_value_column) %>% distinct %>% pull(formula_df$censored_value_column) %>% sd
 			prior_survival_time = transform_time_function(prior_survival_time %>% when(min(.)==0 ~ (.) + 1, (.))) 
 			
+			
+			time_column = formula_df$censored_value_column 
+			
+			X =
+				model.matrix(
+					object = 	formula_df$formula_formatted,
+					data = 
+						.data %>% 
+						select(sample, one_of(formula_df$covariates_formatted)) %>% 
+						distinct %>% 
+						arrange(sample) %>%
+						mutate(!!as.symbol(formula_df$censored_value_column ) := transform_time_function(!!as.symbol(formula_df$censored_value_column )) )
+				)
+			
+			columns_idx_including_time = 
+				which(grepl(time_column, colnames(X))) %>% 
+				as.array() %>% 
+				
+				# Fix if NULL
+				when(is.null(.) ~ c(), ~ (.))
+			
 		}
 		else{
+			X =
+				model.matrix(
+					object = 	formula_df$formula_formatted,
+					data = 
+						.data %>% 
+						select(sample, one_of(formula_df$covariates_formatted)) %>% 
+						distinct %>% 
+						arrange(sample) 
+				)
+			
 			cens = NULL
+			columns_idx_including_time = array(0)[0]
+			
 		} 
 		
-		time_column = formula_df$censored_value_column 
-		
-		X =
-			model.matrix(
-				object = 	formula_df$formula_formatted,
-				data = 
-					.data %>% 
-					select(sample, one_of(formula_df$covariates_formatted)) %>% 
-					distinct %>% 
-					arrange(sample) %>%
-					mutate(!!as.symbol(formula_df$censored_value_column ) := transform_time_function(!!as.symbol(formula_df$censored_value_column )) )
-			)
-		
-		columns_idx_including_time = 
-			which(grepl(time_column, colnames(X))) %>% 
-			as.array() %>% 
-			
-			# Fix if NULL
-			when(is.null(.) ~ c(), ~ (.))
+	
 		
 	}	else {
 		formula_df = cens  = NULL	
-		columns_idx_including_time = c()
-		
+		columns_idx_including_time = array(0)[0]
 		X =
 			model.matrix(
 				object = 	~ 1,
@@ -200,20 +214,14 @@ setup_convolved_lm = function(.data,
 	Q = mix %>% distinct(sample) %>% nrow
 	
 	reference_filtered =
-		ARMET::ARMET_ref %>%
-		
-		left_join(.n_markers, by = c("ct1", "ct2")) %>%
-		filter_reference(mix, .n_markers) %>%
-		select(-ct1,-ct2,-rank,-`n markers`) %>%
-		distinct %>%
-		
-		# Select cell types in hierarchy
+		reference %>% 
 		inner_join(
 			tree %>%
-				data.tree::ToDataFrameTree("Cell type category", "C", "C1", "C2", "C3", "C4") %>%
+				data.tree::ToDataFrameTree("Cell type category", "C", "C1", "C2", "C3", "C4", "isLeaf") %>%
 				as_tibble %>%
+				rename(cell_type = `Cell type category`) %>% 
 				select(-1),
-			by = "Cell type category"
+			by = "cell_type"
 		)	
 
 	tree_propeties = get_tree_properties(tree)
@@ -221,13 +229,12 @@ setup_convolved_lm = function(.data,
 	# Find normalisation
 	sample_scaling = 
 		reference_filtered %>%
-		filter(`house keeping`) %>% 
-		select(count = lambda_log, symbol) %>%
-		distinct() %>%
-		mutate(count = exp(count), sample = "reference") %>% 
+		
+		mutate(sample = "reference") %>% 
 		tidybulk::aggregate_duplicates(sample, symbol, count, aggregation_function = median) %>%
-		bind_rows(mix %>% filter(symbol %in% (reference_filtered %>% filter(`house keeping`) %>% distinct(symbol) %>% pull(symbol)))) %>%
-		tidybulk::scale_abundance(sample, symbol, count, reference_sample = "reference", action ="get") %>%
+		bind_rows(mix) %>%
+		tidybulk::identify_abundant(sample, symbol, count) %>%
+		tidybulk::scale_abundance(sample, symbol, count, reference_sample = "reference", action ="get", .subset_for_scaling = .abundant) %>%
 		distinct(sample, multiplier) %>%
 		mutate(exposure_rate = -log(multiplier)) %>%
 		mutate(exposure_multiplier = exp(exposure_rate)) 

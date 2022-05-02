@@ -65,7 +65,8 @@ result_fix =
 		.transcript = symbol,
 		.abundance = count,
 		iterations = 50,
-		sampling_iterations = 5
+		sampling_iterations = 5,
+		reference = readRDS("/wehisan/bioinf/bioinf-data/Papenfuss_lab/projects/mangiola.s/ARMET_dev/dev/TCGA_makeflow_pipeline/ref_jian_3_optimisations.rds")
 	)
 
 
