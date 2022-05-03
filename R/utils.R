@@ -647,73 +647,57 @@ filter_house_keeping_query_if_fixed =  function(.data, full_bayesian) {
 
 
 ref_mix_format = function(ref, mix) {
-	bind_rows( 
+	bind_rows(  
 		# Get reference based on mix genes
-		ref %>% mutate(`query` = FALSE),
+		ref %>% 
+			inner_join(mix %>% distinct(symbol), by = "symbol") %>%  
+			mutate(`query` = FALSE),
 		
 		# Select only markers
 		mix %>%
-			inner_join(ref %>% distinct(symbol, `house keeping`), by = "symbol") %>%
-			mutate(`Cell type category` = "query") %>%
+			inner_join(ref %>% distinct(symbol), by = "symbol") %>%
 			mutate(`query` = TRUE)
 	)	%>%
 
 		# Add marker symbol indexes
-		left_join((.) %>%
-								filter(!`house keeping`) %>%
-								distinct(symbol) %>%
-								mutate(M = 1:n()), by = "symbol") %>%
+		nest(data = -symbol) %>% 
+		mutate(M = 1:n()) %>% 
+		unnest(data) %>% 
+		# left_join((.) %>%
+		# 						distinct(symbol) %>%
+		# 						mutate(M = 1:n()), by = "symbol") %>%
 
-		# Add sample indeces
+		# Add sample indexes
 		arrange(!`query`) %>% # query first
 		mutate(S = factor(sample, levels = .$sample %>% unique) %>% as.integer) %>%
 
-		# Add query samples indeces
+		# Add query samples indexes
 		left_join((.) %>%
 								filter(`query`) %>%
 								distinct(sample) %>%
 								arrange(sample) %>%
 								mutate(Q = 1:n()), by="sample") %>%
 
-		# Add house keeping into Cell type label
-		mutate(`Cell type category` = ifelse(`house keeping`, "house_keeping", `Cell type category`)) %>%
+		# # Create unique symbol ID
+		# unite(ct_symbol, c("Cell type category", "symbol"), remove = F) %>%
 
-		# Still needed?
-		anti_join(
-			(.) %>%
-				filter(`house keeping` & !`query`) %>%
-				distinct(symbol, level) %>%
-				group_by(symbol) %>%
-				arrange(level) %>%
-				slice(2:max(n(), 2)) %>% # take away house keeping from level 2 above
-				ungroup(),
-			by = c("level", "symbol")
-		) %>%
-
-		# If house keeping delete level infomation
-		mutate(level = ifelse(`house keeping`, NA, level)) %>%
-
-		# Create unique symbol ID
-		unite(ct_symbol, c("Cell type category", "symbol"), remove = F) %>%
-
-		# Add gene idx
-		left_join(
-			(.) %>%
-				filter(!`query`) %>%
-				distinct(`Cell type category`, ct_symbol, `house keeping`) %>%
-				arrange(!`house keeping`, ct_symbol) %>% # House keeping first
-				mutate(G = 1:n()),
-			by = c("ct_symbol", "Cell type category", "house keeping")
-		) %>%
-		left_join(
-			(.) %>%
-				filter(!`house keeping` & !`query`) %>%
-				distinct(level, symbol) %>%
-				arrange(level, symbol) %>%
-				mutate(GM = 1:n()) %>%
-				select(-level),
-			by = "symbol"
-		)
+		# # Add gene idx
+		# left_join(
+		# 	(.) %>%
+		# 		filter(!`query`) %>%
+		# 		distinct(`Cell type category`, ct_symbol, `house keeping`) %>%
+		# 		arrange(!`house keeping`, ct_symbol) %>% # House keeping first
+		# 		mutate(G = 1:n()),
+		# 	by = c("ct_symbol", "Cell type category", "house keeping")
+		# ) %>%
+	left_join(
+		(.) %>%
+			filter(!query) %>%
+			distinct(symbol) %>%
+			arrange(symbol) %>%
+			mutate(GM = 1:n()) ,
+		by = "symbol"
+	)
 
 }
 
@@ -1100,6 +1084,7 @@ create_design_matrix = function(input.df, formula, sample_column){
 }
 
 # Formula parser
+#' @importFrom stringr str_split
 parse_formula <- function(fm) {
 	
 	components = as.character(attr(terms(fm), "variables"))[-1]
@@ -1517,7 +1502,7 @@ identify_baseline_by_clustering = function(.data, CI){
 		mutate(node = map(
 			node, ~ .x %>%
 				#mutate(baseline = TRUE) %>%
-				add_count(community) %>%
+				add_count(community, name = "n") %>%
 				
 				# Add sd
 				nest(comm_data = -community) %>%
@@ -1529,39 +1514,15 @@ identify_baseline_by_clustering = function(.data, CI){
 				
 				purrr::when(
 					
-					# # If I have a reference change make zero frm it
-					# (.) %>% distinct(fold_change_ancestor) %>% pull(1) %>% `!=` (0) ~ 
-					# 	(.) %>% mutate(zero = -fold_change_ancestor),
-					
 					# Otherwise, if I have a consensus of overlapping posteriors make that zero
-					(.) %>% distinct(community, n) %>% count(n) %>% nrow %>% `>` (1) ~ 
-						(.) %>% mutate(zero = (.) %>% filter( n == max(n)) %>% pull(median_community) %>% mean),
+					(.) %>% distinct(community, n) %>% count(n, name = "nn") %>% nrow %>% `>` (1) ~ 
+					(.) %>% mutate(zero = (.) %>% filter( n == max(n)) %>% pull(median_community) %>% mean),
 					
 					# Otherwise make zero the 0
 					~ (.) %>% mutate(zero = 0)
 				)
 		)) %>%
 				 
-		# 		
-		# 		# If we have a unique bigger community
-		# 		ifelse2_pipe(
-		# 			(.) %>% distinct(community) %>% nrow %>% equals(1),
-		# 			(.) %>% distinct(community, n) %>% count(n) %>% arrange(n %>% desc) %>% slice(1) %>% pull(nn) %>% equals(1) ,
-		# 			
-		# 			# If I have just one community
-		# 			~ .x %>% mutate(baseline = TRUE),
-		# 			
-		# 			# Majority roule
-		# 			~ .x %>% mutate(baseline = n == max(n)) ,
-		# 			
-		# 			# If ancestor changed, if no consensus the zero will be absolute 0 
-		# 			~ .x %>% mutate(baseline = FALSE)
-		# 		)
-		# 	
-		# )) %>% 
-		# 
-		# # Select zero. If I hav comunity select mean otherwise select 0
-		# mutate(zero = map_dbl(node, ~ .x %>% filter(baseline) %>% ifelse_pipe( (.) %>% distinct(community) %>% nrow %>% equals(1), ~.x %>% pull(mean_community) %>% unique, ~ 0) )) %>%
 		unnest(node)
 	
 	
@@ -1612,43 +1573,6 @@ extract_CI =  function(.data, credible_interval = 0.90){
 	
 }
 
-calculate_x_for_polar = function(.data){
-	# Create annotation
-	internal_branch_length = 40
-	external_branch_length = 10
-	
-	
-	# Integrate data
-	tree_df_source = 
-		ARMET::tree %>%
-		data.tree::ToDataFrameTree("name", "isLeaf", "level", "leafCount", pruneFun = function(x)	x$level <= 5) %>%
-		as_tibble() %>%
-		rename(`Cell type category` = name) %>%
-		mutate(level = level -1)
-	
-	# Calculate x
-	map_df(
-		0:4,
-		~ tree_df_source %>%
-			filter(level == .x | (level < .x & isLeaf)) %>%
-			mutate(leafCount_norm = leafCount/sum(leafCount)) %>%
-			mutate(leafCount_norm_cum = cumsum(leafCount_norm)) %>%
-			mutate(length_error_bar = leafCount_norm - 0.005) %>%
-			mutate(x = leafCount_norm_cum - 0.5 * leafCount_norm) 	
-	) %>%
-		
-		# Attach data
-		left_join(.data) %>%
-		
-		# process
-		mutate(Estimate = ifelse(significant, fold_change, NA)) %>%
-		mutate(branch_length = ifelse(isLeaf, 0.1, 2)) %>%
-		
-		# Correct branch length
-		mutate(branch_length = ifelse(!isLeaf, internal_branch_length,	external_branch_length) ) %>%
-		mutate(branch_length =  ifelse(	isLeaf, branch_length + ((max(level) - level) * internal_branch_length),	branch_length	)) 
-	
-}
 
 get_draws = function(fit_prop_parsed, level, internals){
 	
@@ -1840,6 +1764,11 @@ get_survival_X = function(S){
 		mutate(intercept = 1)
 }
 
+add_attr = function(var, attribute, name) {
+	attr(var, name) <- attribute
+	var
+}
+
 #' @keywords internal
 #' 
 #' @importFrom nanny subset
@@ -1850,10 +1779,7 @@ get_survival_X = function(S){
 #' @param alpha A real
 #'
 generate_mixture = function(.data, X_df, alpha) {
-	add_attr = function(var, attribute, name) {
-		attr(var, name) <- attribute
-		var
-	}
+
 	
 	logsumexp <- function (x) {
 		y = max(x)
