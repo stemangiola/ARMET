@@ -573,7 +573,68 @@ run_model = function(reference_filtered,
 	
 	CIT = length(columns_idx_including_time)
 
-	fit = 
+	#  mod = cmdstanr::cmdstan_model("inst/stan/ARMET_tc_fix_hierarchical.stan", cpp_options = list(stan_threads = TRUE))
+	# mod$sample(data = prop_posterior %>% c(tree_properties) %>% c(list(shards = shards, lv = lv, GM = GM, sigma_slope = sigma_slope, sigma_sigma = sigma_sigma, Q = Q, y = y, max_y = max_y, ct_in_ancestor_level= ct_in_ancestor_level, ref = ref, prior_prop = prior_prop, A = A, X = X, do_regression = do_regression, how_many_cens = how_many_cens, which_cens = which_cens, which_not_cens = which_not_cens, max_unseen = max_unseen, spt= spt, prior_survival_time = prior_survival_time, CIT= CIT, columns_idx_including_time = columns_idx_including_time, exposure_multiplier = exposure_multiplier)))
+	# mod$sample(data = prop_posterior %>% c(tree_properties) %>% c(list(shards = shards, lv = lv, GM = GM, sigma_slope = sigma_slope, sigma_sigma = sigma_sigma, Q = Q, y = y, max_y = max_y, ct_in_ancestor_level= ct_in_ancestor_level, ref = ref, prior_prop = prior_prop, A = A, X = X, do_regression = do_regression, how_many_cens = how_many_cens, which_cens = which_cens, which_not_cens = which_not_cens, max_unseen = max_unseen, spt= spt, prior_survival_time = prior_survival_time, CIT= CIT, columns_idx_including_time = columns_idx_including_time, exposure_multiplier = exposure_multiplier)), chains = 1, iter_warmup = 1, iter_sampling = 1, threads_per_chain=5	)
+	
+	# Load model
+	
+	# mod = when(
+	# 	"cmdstanr_ARMET_tc_fix_hierarchical.rds",
+	# 	file.exists(.) ~ readRDS(.),
+	# 	~ {
+	# 		.x = (.)
+	# 		write_file(cmdstanr_ARMET_tc_fix_hierarchical, "cmdstanr_ARMET_tc_fix_hierarchical.stan")
+	# 		mod = cmdstanr::cmdstan_model( "cmdstanr_ARMET_tc_fix_hierarchical.stan" , cpp_options = list(stan_threads = TRUE))
+	# 		mod  %>% saveRDS(file = .x)
+	# 		mod
+	# 	}
+	# )
+
+	
+	# 
+	# fit = 
+	# 	mod$sample(
+	# 		data = prop_posterior %>% c(tree_properties) %>% c(
+	# 		list(
+	# 			shards = shards,
+	# 			lv = lv,
+	# 			GM = GM,
+	# 			sigma_slope = sigma_slope,
+	# 			sigma_sigma = sigma_sigma,
+	# 			Q = Q,
+	# 			y = y,
+	# 			max_y = max_y,
+	# 			ct_in_ancestor_level = ct_in_ancestor_level,
+	# 			ref = ref,
+	# 			prior_prop = prior_prop,
+	# 			A = A,
+	# 			X = X,
+	# 			do_regression = do_regression,
+	# 			how_many_cens = how_many_cens,
+	# 			which_cens = which_cens,
+	# 			which_not_cens = which_not_cens,
+	# 			max_unseen = max_unseen,
+	# 			spt = spt,
+	# 			prior_survival_time = prior_survival_time,
+	# 			CIT = CIT,
+	# 			columns_idx_including_time = columns_idx_including_time,
+	# 			exposure_multiplier = exposure_multiplier
+	# 		)
+	# 	), 
+	# 	iter_warmup = iterations - sampling_iterations,
+	# 	iter_sampling = as.integer(sampling_iterations),
+	# 	init = function ()	init_list, 
+	# 	chains = 3,
+	# 	parallel_chains = 3,
+	# 	threads_per_chain = 5
+	# )
+	
+	
+	Sys.setenv(STAN_NUM_THREADS=5)
+
+
+	fit =
 		approximate_posterior %>%
 		when(
 			(.) ~ vb_iterative(model,
@@ -583,7 +644,7 @@ run_model = function(reference_filtered,
 												 data = prop_posterior %>% c(tree_properties),
 												 init = function () init_list
 			),
-			
+
 			~ 	sampling(
 				model,
 				#rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix_hierarchical.stan", auto_write = F),
@@ -807,6 +868,7 @@ run_lv_1 = function(internals,
 	
 	fit_prop_parsed = 
 		fit %>%
+		# draws_to_tibble_x_y("prop_", "Q", "C") %>%
 		draws_to_tibble("prop_", "Q", "C") %>%
 		filter(!grepl("_UFO|_rng", .variable))  %>%
 		mutate(Q = Q %>% as.integer)
@@ -819,6 +881,7 @@ run_lv_1 = function(internals,
 	
 	prop =
 		fit %>%
+		# draws_to_tibble_x_y("prop_1", "Q", "C") %>%
 		draws_to_tibble("prop_1", "Q", "C") %>%
 		#tidybayes::gather_draws(`prop_[1]`[Q, C], regex = T) %>%
 		drop_na  %>%
