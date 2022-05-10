@@ -159,6 +159,8 @@ ARMET_tc_continue = function(armet_obj, level, model = stanmodels$ARMET_tc_fix_h
 #' @param do_regression A boolean
 #' @param prior_survival_time An array
 #' @param model A stan model
+#' @param cores An integer
+#' @param transform_time_function transformation of the time covariate
 #' 
 #'
 #' @return An ARMET object

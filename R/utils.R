@@ -2630,7 +2630,7 @@ get_CI = function(.data, credible_interval = 0.90, cluster_CI = 0.55) {
 #'
 #' @examples
 #'
-#' as_matrix(head(dplyr::select(tidybulk::counts_mini, transcript, count)), rownames=transcript)
+#' 1
 #'
 as_matrix <- function(tbl,
 											rownames = NULL,
