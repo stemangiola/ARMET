@@ -1,50 +1,52 @@
 
 test_that("check data set",{
-
+	
 	# Test fo anylvel that all gnes are in all cel tpes
-expect_lte(
-	ARMET::ARMET_ref %>%
-		distinct(level, symbol, `Cell type category`) %>%
-		count(level, symbol) %>%
-		distinct(level, n) %>%
-		nrow,
-	4
-)
-
-# Test dataset house keeping should be in all levels
-expect_equal(
-	ARMET::ARMET_ref %>% distinct(`house keeping`, level) %>% nrow,
-	8
-)
-
-# Test dataset house keeping should be in all samples
-expect_equal(
-	ARMET::ARMET_ref %>% distinct(`house keeping`, sample) %>% count(`house keeping`) %>% distinct(n) %>% nrow,
-	1
-)
-
-# there should be howse keeping
-expect_equal(
-	ARMET::ARMET_ref %>% distinct(`house keeping`) %>% nrow,
-	2
-)
-
-# there should be howse keeping
-expect_equal(
-	ARMET::ARMET_ref %>% filter(level==3) %>% pull(`Cell type category`) %>% unique %>% intersect(c("endothelial", "epithelial", "fibroblast")) %>% length,
-	3
-)
-
-# test if any count is NA
-expect_equal(
-	ARMET::ARMET_ref %>% filter(count %>% is.na) %>% nrow,
-	0
-)
-
-
-
+	expect_lte(
+		ARMET::ARMET_ref %>%
+			distinct(level, symbol, `Cell type category`) %>%
+			count(level, symbol) %>%
+			distinct(level, n) %>%
+			nrow,
+		4
+	)
+	
+	# Test dataset house keeping should be in all levels
+	expect_equal(
+		ARMET::ARMET_ref %>% distinct(`house keeping`, level) %>% nrow,
+		8
+	)
+	
+	# Test dataset house keeping should be in all samples
+	expect_equal(
+		ARMET::ARMET_ref %>% distinct(`house keeping`, sample) %>% count(`house keeping`) %>% distinct(n) %>% nrow,
+		1
+	)
+	
+	# there should be howse keeping
+	expect_equal(
+		ARMET::ARMET_ref %>% distinct(`house keeping`) %>% nrow,
+		2
+	)
+	
+	# there should be howse keeping
+	expect_equal(
+		ARMET::ARMET_ref %>% filter(level==3) %>% pull(`Cell type category`) %>% unique %>% intersect(c("endothelial", "epithelial", "fibroblast")) %>% length,
+		3
+	)
+	
+	# test if any count is NA
+	expect_equal(
+		ARMET::ARMET_ref %>% filter(count %>% is.na) %>% nrow,
+		0
+	)
+	
+	
+	
 })
 
+library(tidyverse)
+library(ARMET)
 my_mix =
 	ARMET_ref %>% 
 	inner_join( (.) %>% distinct(sample) %>% slice(1:2)) %>% select(-level) %>%
@@ -57,19 +59,19 @@ my_mix =
 
 
 test_that("check simple run",{
-
-result_fix =
-	my_mix %>%
-	ARMET_tc(
-		.sample = sample,
-		.transcript = symbol,
-		.abundance = count,
-		iterations = 50,
-		sampling_iterations = 5,
-		reference = readRDS("/wehisan/bioinf/bioinf-data/Papenfuss_lab/projects/mangiola.s/ARMET_dev/dev/TCGA_makeflow_pipeline/ref_jian_3_optimisations.rds")
-	)
-
-
+	
+	result_fix =
+		my_mix %>%
+		ARMET_tc(
+			.sample = sample,
+			.transcript = symbol,
+			.abundance = count,
+			iterations = 50,
+			sampling_iterations = 5,
+			reference = readRDS("/wehisan/bioinf/bioinf-data/Papenfuss_lab/projects/mangiola.s/ARMET_dev/dev/TCGA_makeflow_pipeline/ref_jian_3_optimisations.rds")
+		)
+	
+	
 })
 
 
@@ -84,10 +86,10 @@ result_fix =
 # 	geom_point()
 
 test_that("check nk dataset run",{
-
+	
 	`%$%` = magrittr::`%$%`
-
-		ARMET_ref %>%
+	
+	ARMET_ref %>%
 		inner_join( (.) %>% dplyr::filter(`Cell type category` == "nk_primed") %>% distinct(sample) %>% slice(1:2)) %>%
 		dplyr::select(-level) %>%
 		
@@ -101,21 +103,20 @@ test_that("check nk dataset run",{
 		ARMET_tc(
 			.sample = sample,
 			.transcript = symbol,
-			.abundance = count
+			.abundance = count,
+			reference = readRDS("/wehisan/bioinf/bioinf-data/Papenfuss_lab/projects/mangiola.s/ARMET_dev/dev/TCGA_makeflow_pipeline/ref_jian_3_optimisations.rds")
 		)  %>%
 		ARMET_tc_continue(2) %>%
 		ARMET_tc_continue(3) %$%
 		proportions %>%
 		dplyr::filter(level==3) %>%
 		dplyr::filter(`Cell type category` == "nk_primed") %>%
-			select(-.variable) %>%
-			pull(.value) %>% 
-			mean %>%
-			expect_gt(0.95)
+		select(-.variable) %>%
+		pull(.value) %>% 
+		mean %>%
+		expect_gt(0.90)
 	
-	
-
-	})
+})
 
 
 # test_that("Check accuracy N52",{
