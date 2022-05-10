@@ -38,11 +38,13 @@ Imports:
 	scales,
 	tidybulk,
 	gtools,
-	foreach
+	foreach,
+	xopen,
+	stringr
 Suggests:
 	testthat
 Biarch: true
 LinkingTo: StanHeaders (>= 2.18.0), rstan (>= 2.18.1), BH (>= 1.66.0), Rcpp (>= 0.12.17), RcppEigen (>= 0.3.3.4.0)
 SystemRequirements: GNU make
 NeedsCompilation: yes
-RoxygenNote: 7.1.1
+RoxygenNote: 7.1.2

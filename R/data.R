@@ -22,3 +22,13 @@
 #'
 #'
 "ct_names_polar"
+
+#' Model for cmdstanr
+#' 
+#' 
+"cmdstanr_ARMET_tc_fix_hierarchical"
+
+#' House keeping genes list
+#' 
+#'
+"house_keeping_genes"

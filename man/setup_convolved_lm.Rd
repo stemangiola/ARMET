@@ -13,6 +13,7 @@ setup_convolved_lm(
   approximate_posterior = F,
   prior_survival_time = c(),
   transform_time_function = sqrt,
+  reference = NULL,
   ...
 )
 }
