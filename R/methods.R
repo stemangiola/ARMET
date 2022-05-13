@@ -310,7 +310,7 @@ estimate_convoluted_lm_1 = function(armet_obj){
 		
 		# Attach alpha if regression
 		ifelse_pipe(
-			internals$do_regression && paste(as.character(internals$.formula), collapse="")  != "~1" ,
+			internals$do_regression, # && paste(as.character(internals$.formula), collapse="")  != "~1" ,
 			~ .x %>%
 				nest(proportions = -c(`Cell type category`, C, level)) %>%
 				left_join(
@@ -333,7 +333,7 @@ estimate_convoluted_lm_1 = function(armet_obj){
 	)
 	
 	proportions %>% 
-		get_estimates(level, 	X = attrib$internals$X) %>% 
+		 get_estimates(level, 	X = attrib$internals$X) %>% 
 		add_attr(attrib, "full_results")
 }
 
@@ -358,8 +358,9 @@ estimate_convoluted_lm_2 = function(armet_obj){
 	
 	armet_obj %>% 
 		bind_rows(
-			attrib$proportions %>% 
-				get_estimates(level, 	X = attrib$internals$X) 
+			attrib$proportions 
+			#%>% 
+			#	get_estimates(level, 	X = attrib$internals$X) 
 		) %>% 
 		
 		# Add back update attributes
@@ -388,8 +389,9 @@ estimate_convoluted_lm_3 = function(armet_obj){
 	
 	armet_obj %>% 
 		bind_rows(
-			attrib$proportions %>% 
-				get_estimates(level, 	X = attrib$internals$X) 
+			attrib$proportions 
+			#%>% 
+			#	get_estimates(level, 	X = attrib$internals$X) 
 		) %>% 
 		
 		# Add back update attributes
@@ -417,8 +419,9 @@ estimate_convoluted_lm_4 = function(armet_obj){
 	
 	armet_obj %>% 
 		bind_rows(
-			attrib$proportions %>% 
-				get_estimates(level, 	X = attrib$internals$X)
+			attrib$proportions 
+			#%>% 
+			#	get_estimates(level, 	X = attrib$internals$X)
 		) %>% 
 		
 		# Add back update attributes

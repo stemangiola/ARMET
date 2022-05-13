@@ -32,17 +32,9 @@ setup_convolved_lm(
 
 \item{prior_survival_time}{An array}
 
+\item{transform_time_function}{transformation of the time covariate}
+
 \item{reference}{A tibble}
-
-\item{iterations}{An integer total iterations}
-
-\item{sampling_iterations}{An integer. Sampling iteractions}
-
-\item{.n_markers}{A tibble}
-
-\item{do_regression}{A boolean}
-
-\item{model}{A stan model}
 }
 \value{
 An ARMET object

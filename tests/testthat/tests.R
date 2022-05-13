@@ -57,39 +57,42 @@ my_mix =
 	mutate(count = as.integer(count))
 
 
-
 test_that("check simple run",{
 	
-	result_fix =
-		my_mix %>%
-		ARMET_tc(
+	armet_obj =
+		
+		# Read data
+		my_mix |>
+		nest(data = -sample) %>%
+		mutate(factor_of_interest = sample(1:2, replace = TRUE)) %>%
+		unnest(data) %>%
+		
+		# Format
+		setup_convolved_lm(
+			~ factor_of_interest,
 			.sample = sample,
 			.transcript = symbol,
 			.abundance = count,
-			iterations = 50,
-			sampling_iterations = 5,
 			reference = readRDS("/wehisan/bioinf/bioinf-data/Papenfuss_lab/projects/mangiola.s/ARMET_dev/dev/TCGA_makeflow_pipeline/ref_jian_3_optimisations.rds")
 		)
 	
+	armet_estimate =
+		armet_obj |>
+		estimate_convoluted_lm_1() 
+	
+	armet_estimate %>% test_hypothesis_convoluted_lm()
 	
 })
-
-
-# ARMET_ref %>%
-# 	#filter(ct1 %in% c("nk_primed", "nk_resting")) %>% 
-# 	filter(level==3) %>% 
-# 	filter(rank<20) %>%
-# 	tidybulk(sample, symbol, `count scaled bayes`) %>% 
-# 	aggregate_duplicates(aggregation_function = median) %>%
-# 	tidybulk::reduce_dimensions(method = "PCA", action="get") %>% 
-# 	ggplot(aes(PC1, PC2, color=`Cell type category`))  + 
-# 	geom_point()
 
 test_that("check nk dataset run",{
 	
 	`%$%` = magrittr::`%$%`
 	
-	ARMET_ref %>%
+	
+	armet_obj =
+		
+		# Read data
+		ARMET_ref %>%
 		inner_join( (.) %>% dplyr::filter(`Cell type category` == "nk_primed") %>% distinct(sample) %>% slice(1:2)) %>%
 		dplyr::select(-level) %>%
 		
@@ -98,16 +101,19 @@ test_that("check nk dataset run",{
 		# complete
 		mutate_if(is.factor, as.character) %>% 
 		tidyr::complete(sample, symbol, fill = list(count = 0)) %>%
-		mutate(count = as.integer(count)) %>%
+		mutate(count = as.integer(count)) |>
 		
-		ARMET_tc(
+		# Format
+		setup_convolved_lm(
+			~ 1,
 			.sample = sample,
 			.transcript = symbol,
 			.abundance = count,
 			reference = readRDS("/wehisan/bioinf/bioinf-data/Papenfuss_lab/projects/mangiola.s/ARMET_dev/dev/TCGA_makeflow_pipeline/ref_jian_3_optimisations.rds")
-		)  %>%
-		ARMET_tc_continue(2) %>%
-		ARMET_tc_continue(3) %$%
+		) |>
+		estimate_convoluted_lm_1() %>%
+		estimate_convoluted_lm_2() %>%
+		estimate_convoluted_lm_3() %$%
 		proportions %>%
 		dplyr::filter(level==3) %>%
 		dplyr::filter(`Cell type category` == "nk_primed") %>%

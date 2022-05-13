@@ -21,6 +21,6 @@ Get matrix from tibble
 }
 \examples{
 
-as_matrix(head(dplyr::select(tidybulk::counts_mini, transcript, count)), rownames=transcript)
+1
 
 }
