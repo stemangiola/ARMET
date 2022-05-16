@@ -421,7 +421,7 @@ model {
 	// lv 1
   if(lv == 1 && do_regression) {
 
-  	 prop_1 ~ beta_regression(X_scaled, alpha_1, exp(phi[1:4]));
+  	 prop_1 ~ beta_regression(X_scaled, alpha_1, phi[1:4]);
   	 alpha_1_raw[1] ~ normal(0, 2);
   	 if(A > 1) to_vector( alpha_1_raw[2:] ) ~ normal(0, 2);
 
@@ -433,7 +433,7 @@ model {
   if(lv == 2 && do_regression) {
 
   	//prop_a ~ beta_regression(X_scaled, alpha_a, phi[1:6], 1);
-  	prop_a ~ dirichlet_regression( X_scaled, alpha_a, exp(phi[1]) , 0.5);
+  	prop_a ~ dirichlet_regression( X_scaled, alpha_a, phi[1] , 0.5);
   	alpha_a_raw[1] ~ normal(0,2);
   	if(A > 1)  to_vector( alpha_a_raw[2:] ) ~ normal(0, 2);
 
@@ -443,11 +443,11 @@ model {
 	// lv 3
   if(lv == 3 && do_regression){
 
-  		prop_b ~ dirichlet_regression( X_scaled, alpha_b,  exp(phi[1]) , 1);
-  		prop_c ~ dirichlet_regression( X_scaled, alpha_c, exp(phi[2]) , 1);
-  		prop_d ~ dirichlet_regression( X_scaled, alpha_d,  exp(phi[3]) , 1);
-  		prop_e ~ dirichlet_regression( X_scaled, alpha_e,  exp(phi[4]), 1);
-  		prop_f ~ dirichlet_regression( X_scaled, alpha_f,  exp(phi[5]), 1);
+  		prop_b ~ dirichlet_regression( X_scaled, alpha_b,  phi[1] , 1);
+  		prop_c ~ dirichlet_regression( X_scaled, alpha_c, phi[2] , 1);
+  		prop_d ~ dirichlet_regression( X_scaled, alpha_d,  phi[3] , 1);
+  		prop_e ~ dirichlet_regression( X_scaled, alpha_e,  phi[4], 1);
+  		prop_f ~ dirichlet_regression( X_scaled, alpha_f,  phi[5], 1);
 
 		to_vector(alpha_b_raw) ~  normal(0,1);
 		to_vector(alpha_c_raw) ~  normal(0,1);
@@ -467,11 +467,11 @@ model {
 	// lv 4
   if(lv == 4 && do_regression){
 
-  		 prop_g ~ dirichlet_regression( X_scaled, alpha_g,  exp(phi[1]) , 1);
-  		 prop_h ~ dirichlet_regression( X_scaled, alpha_h,  exp(phi[2]) , 1);
-  		 prop_i ~ dirichlet_regression( X_scaled, alpha_i,  exp(phi[3]) , 1);
-  		 prop_l ~ dirichlet_regression( X_scaled, alpha_l,  exp(phi[4]), 1);
-  		 prop_m ~ dirichlet_regression( X_scaled, alpha_m,  exp(phi[5]) , 1);
+  		 prop_g ~ dirichlet_regression( X_scaled, alpha_g,  phi[1] , 1);
+  		 prop_h ~ dirichlet_regression( X_scaled, alpha_h,  phi[2] , 1);
+  		 prop_i ~ dirichlet_regression( X_scaled, alpha_i,  phi[3] , 1);
+  		 prop_l ~ dirichlet_regression( X_scaled, alpha_l,  phi[4], 1);
+  		 prop_m ~ dirichlet_regression( X_scaled, alpha_m,  phi[5] , 1);
 
 // else  prop_4 ~ beta_regression(X_scaled, alpha_4, phi);
 		to_vector(alpha_g_raw) ~  normal(0,1);

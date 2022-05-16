@@ -64,7 +64,7 @@ test_that("check simple run",{
 		# Read data
 		my_mix |>
 		nest(data = -sample) %>%
-		mutate(factor_of_interest = sample(1:2, replace = TRUE)) %>%
+		mutate(factor_of_interest = sample(c(0,1), replace = TRUE)) %>%
 		unnest(data) %>%
 		
 		# Format
@@ -93,7 +93,7 @@ test_that("check nk dataset run",{
 		
 		# Read data
 		ARMET_ref %>%
-		inner_join( (.) %>% dplyr::filter(`Cell type category` == "nk_primed") %>% distinct(sample) %>% slice(1:2)) %>%
+		inner_join( (.) %>% dplyr::filter(`Cell type category` == "nk_primed") %>% distinct(sample) %>% slice(0:1)) %>%
 		dplyr::select(-level) %>%
 		
 		mutate(count = as.numeric(count)) %>%
