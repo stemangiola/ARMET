@@ -113,14 +113,13 @@ test_that("check nk dataset run",{
 		) |>
 		estimate_convoluted_lm_1() %>%
 		estimate_convoluted_lm_2() %>%
-		estimate_convoluted_lm_3() %$%
-		proportions %>%
+		estimate_convoluted_lm_3()  %>%
 		dplyr::filter(level==3) %>%
 		dplyr::filter(`Cell type category` == "nk_primed") %>%
 		select(-.variable) %>%
 		pull(.value) %>% 
 		mean %>%
-		expect_gt(0.90)
+		expect_gt(0.95)
 	
 })
 

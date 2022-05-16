@@ -163,7 +163,7 @@ run_model = function(reference_filtered,
 										 model = stanmodels$ARMET_tc_fix_hierarchical,
 										 prior_survival_time = c(),
 										 sample_scaling,
-										 prior_prop = matrix(1:Q)[,0],
+										 prior_prop = matrix(1:Q)[,0, drop=FALSE],
 										 columns_idx_including_time) {
 	
 	
@@ -221,7 +221,8 @@ run_model = function(reference_filtered,
 		sample_scaling %>% 
 		filter(sample %in% (y_source %>% pull(sample))) %>% 
 		arrange(sample) %>% 
-		pull(exposure_multiplier) 
+		pull(exposure_multiplier) %>%
+		as.array()
 	
 	
 	# Setup for exposure inference
