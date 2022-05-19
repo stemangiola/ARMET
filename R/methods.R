@@ -32,12 +32,9 @@
 #' @param .abundance A column symbol
 #' @param reference A tibble
 #' @param approximate_posterior A boolean for variational Bayes
-#' @param iterations An integer total iterations
-#' @param sampling_iterations An integer. Sampling iteractions
-#' @param .n_markers A tibble
-#' @param do_regression A boolean
 #' @param prior_survival_time An array
-#' @param model A stan model
+#' @param transform_time_function transformation of the time covariate
+#' @param reference A tibble
 #' 
 #' @rdname setup_convolved_lm
 #' @name setup_convolved_lm
@@ -285,8 +282,6 @@ setup_convolved_lm = function(.data,
 #' @name estimate_convoluted_lm_1
 #' 
 #' @param armet_obj An ARMET object
-#' @param level An integer
-#' @param model A stan model
 #' 
 #' @export
 estimate_convoluted_lm_1 = function(armet_obj){
@@ -315,7 +310,7 @@ estimate_convoluted_lm_1 = function(armet_obj){
 		
 		# Attach alpha if regression
 		ifelse_pipe(
-			internals$do_regression && paste(as.character(internals$.formula), collapse="")  != "~1" ,
+			internals$do_regression, # && paste(as.character(internals$.formula), collapse="")  != "~1" ,
 			~ .x %>%
 				nest(proportions = -c(`Cell type category`, C, level)) %>%
 				left_join(
@@ -338,7 +333,7 @@ estimate_convoluted_lm_1 = function(armet_obj){
 	)
 	
 	proportions %>% 
-		get_estimates(level, 	X = attrib$internals$X) %>% 
+		 get_estimates(level, 	X = attrib$internals$X) %>% 
 		add_attr(attrib, "full_results")
 }
 
@@ -363,8 +358,9 @@ estimate_convoluted_lm_2 = function(armet_obj){
 	
 	armet_obj %>% 
 		bind_rows(
-			attrib$proportions %>% 
-				get_estimates(level, 	X = attrib$internals$X) 
+			attrib$proportions 
+			#%>% 
+			#	get_estimates(level, 	X = attrib$internals$X) 
 		) %>% 
 		
 		# Add back update attributes
@@ -393,8 +389,9 @@ estimate_convoluted_lm_3 = function(armet_obj){
 	
 	armet_obj %>% 
 		bind_rows(
-			attrib$proportions %>% 
-				get_estimates(level, 	X = attrib$internals$X) 
+			attrib$proportions 
+			#%>% 
+			#	get_estimates(level, 	X = attrib$internals$X) 
 		) %>% 
 		
 		# Add back update attributes
@@ -422,8 +419,9 @@ estimate_convoluted_lm_4 = function(armet_obj){
 	
 	armet_obj %>% 
 		bind_rows(
-			attrib$proportions %>% 
-				get_estimates(level, 	X = attrib$internals$X)
+			attrib$proportions 
+			#%>% 
+			#	get_estimates(level, 	X = attrib$internals$X)
 		) %>% 
 		
 		# Add back update attributes

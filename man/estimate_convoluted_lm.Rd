@@ -17,10 +17,6 @@ estimate_convoluted_lm_4(armet_obj)
 }
 \arguments{
 \item{armet_obj}{An ARMET object}
-
-\item{level}{An integer}
-
-\item{model}{A stan model}
 }
 \description{
 This function does inference for higher levels of the hierarchy

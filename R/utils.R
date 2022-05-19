@@ -1703,6 +1703,57 @@ get_alpha = function(fit, level){
 
 }
 
+#' draws_to_tibble_x_y
+#'
+#' @importFrom tidyr pivot_longer
+#' @importFrom rstan extract
+#' @importFrom rlang :=
+#'
+#' @param fit A fit object
+#' @param par A character vector. The parameters to extract.
+#' @param x A character. The first index.
+#' @param y A character. The first index.
+#'
+#' @keywords internal
+#' @noRd
+draws_to_tibble_x_y = function(fit, par, x, y, number_of_draws = NULL) {
+	
+	par_names =
+		fit$summary()$variable %>% grep(sprintf("%s", par), ., value = TRUE)
+	
+	fit$draws(variables = par_names) %>%
+		as.data.frame %>%
+		as_tibble() %>%
+		mutate(.iteration = seq_len(n())) %>%
+		
+		#when(!is.null(number_of_draws) ~ sample_n(., number_of_draws), ~ (.)) %>%
+		
+		pivot_longer(
+			names_to = c( ".chain", ".variable", x, y),
+			cols = contains(par),
+			names_sep = "\\.|\\[|,|\\]|:",
+			names_ptypes = list(
+				".variable" = character()),
+			values_to = ".value"
+		) %>%
+		
+		# Warning message:
+		# Expected 5 pieces. Additional pieces discarded
+		suppressWarnings() %>%
+		
+		mutate(
+			!!as.symbol(x) := as.integer(!!as.symbol(x)),
+			!!as.symbol(y) := as.integer(!!as.symbol(y))
+		) %>%
+		arrange(.variable, !!as.symbol(x), !!as.symbol(y), .chain) %>%
+		group_by(.variable, !!as.symbol(x), !!as.symbol(y)) %>%
+		mutate(.draw = seq_len(n())) %>%
+		ungroup() %>%
+		select(!!as.symbol(x), !!as.symbol(y), .chain, .iteration, .draw ,.variable ,     .value) %>%
+		filter(grepl(par, .variable))
+	
+}
+
 draws_to_tibble = function(fit, par, x, y) {
 	 
 	par_names = names(fit) %>% grep(sprintf("%s", par), ., value = T)
@@ -2579,7 +2630,7 @@ get_CI = function(.data, credible_interval = 0.90, cluster_CI = 0.55) {
 #'
 #' @examples
 #'
-#' as_matrix(head(dplyr::select(tidybulk::counts_mini, transcript, count)), rownames=transcript)
+#' 1
 #'
 as_matrix <- function(tbl,
 											rownames = NULL,

@@ -1,50 +1,52 @@
 
 test_that("check data set",{
-
+	
 	# Test fo anylvel that all gnes are in all cel tpes
-expect_lte(
-	ARMET::ARMET_ref %>%
-		distinct(level, symbol, `Cell type category`) %>%
-		count(level, symbol) %>%
-		distinct(level, n) %>%
-		nrow,
-	4
-)
-
-# Test dataset house keeping should be in all levels
-expect_equal(
-	ARMET::ARMET_ref %>% distinct(`house keeping`, level) %>% nrow,
-	8
-)
-
-# Test dataset house keeping should be in all samples
-expect_equal(
-	ARMET::ARMET_ref %>% distinct(`house keeping`, sample) %>% count(`house keeping`) %>% distinct(n) %>% nrow,
-	1
-)
-
-# there should be howse keeping
-expect_equal(
-	ARMET::ARMET_ref %>% distinct(`house keeping`) %>% nrow,
-	2
-)
-
-# there should be howse keeping
-expect_equal(
-	ARMET::ARMET_ref %>% filter(level==3) %>% pull(`Cell type category`) %>% unique %>% intersect(c("endothelial", "epithelial", "fibroblast")) %>% length,
-	3
-)
-
-# test if any count is NA
-expect_equal(
-	ARMET::ARMET_ref %>% filter(count %>% is.na) %>% nrow,
-	0
-)
-
-
-
+	expect_lte(
+		ARMET::ARMET_ref %>%
+			distinct(level, symbol, `Cell type category`) %>%
+			count(level, symbol) %>%
+			distinct(level, n) %>%
+			nrow,
+		4
+	)
+	
+	# Test dataset house keeping should be in all levels
+	expect_equal(
+		ARMET::ARMET_ref %>% distinct(`house keeping`, level) %>% nrow,
+		8
+	)
+	
+	# Test dataset house keeping should be in all samples
+	expect_equal(
+		ARMET::ARMET_ref %>% distinct(`house keeping`, sample) %>% count(`house keeping`) %>% distinct(n) %>% nrow,
+		1
+	)
+	
+	# there should be howse keeping
+	expect_equal(
+		ARMET::ARMET_ref %>% distinct(`house keeping`) %>% nrow,
+		2
+	)
+	
+	# there should be howse keeping
+	expect_equal(
+		ARMET::ARMET_ref %>% filter(level==3) %>% pull(`Cell type category`) %>% unique %>% intersect(c("endothelial", "epithelial", "fibroblast")) %>% length,
+		3
+	)
+	
+	# test if any count is NA
+	expect_equal(
+		ARMET::ARMET_ref %>% filter(count %>% is.na) %>% nrow,
+		0
+	)
+	
+	
+	
 })
 
+library(tidyverse)
+library(ARMET)
 my_mix =
 	ARMET_ref %>% 
 	inner_join( (.) %>% distinct(sample) %>% slice(1:2)) %>% select(-level) %>%
@@ -55,40 +57,43 @@ my_mix =
 	mutate(count = as.integer(count))
 
 
-
 test_that("check simple run",{
-
-result_fix =
-	my_mix %>%
-	ARMET_tc(
-		.sample = sample,
-		.transcript = symbol,
-		.abundance = count,
-		iterations = 50,
-		sampling_iterations = 5,
-		reference = readRDS("/wehisan/bioinf/bioinf-data/Papenfuss_lab/projects/mangiola.s/ARMET_dev/dev/TCGA_makeflow_pipeline/ref_jian_3_optimisations.rds")
-	)
-
-
+	
+	armet_obj =
+		
+		# Read data
+		my_mix |>
+		nest(data = -sample) %>%
+		mutate(factor_of_interest = sample(c(0,1), replace = TRUE)) %>%
+		unnest(data) %>%
+		
+		# Format
+		setup_convolved_lm(
+			~ factor_of_interest,
+			.sample = sample,
+			.transcript = symbol,
+			.abundance = count,
+			reference = readRDS("/wehisan/bioinf/bioinf-data/Papenfuss_lab/projects/mangiola.s/ARMET_dev/dev/TCGA_makeflow_pipeline/ref_jian_3_optimisations.rds")
+		)
+	
+	armet_estimate =
+		armet_obj |>
+		estimate_convoluted_lm_1() 
+	
+	armet_estimate %>% test_hypothesis_convoluted_lm()
+	
 })
 
-
-# ARMET_ref %>%
-# 	#filter(ct1 %in% c("nk_primed", "nk_resting")) %>% 
-# 	filter(level==3) %>% 
-# 	filter(rank<20) %>%
-# 	tidybulk(sample, symbol, `count scaled bayes`) %>% 
-# 	aggregate_duplicates(aggregation_function = median) %>%
-# 	tidybulk::reduce_dimensions(method = "PCA", action="get") %>% 
-# 	ggplot(aes(PC1, PC2, color=`Cell type category`))  + 
-# 	geom_point()
-
 test_that("check nk dataset run",{
-
+	
 	`%$%` = magrittr::`%$%`
-
+	
+	
+	armet_obj =
+		
+		# Read data
 		ARMET_ref %>%
-		inner_join( (.) %>% dplyr::filter(`Cell type category` == "nk_primed") %>% distinct(sample) %>% slice(1:2)) %>%
+		inner_join( (.) %>% dplyr::filter(`Cell type category` == "nk_primed") %>% distinct(sample) %>% slice(0:1)) %>%
 		dplyr::select(-level) %>%
 		
 		mutate(count = as.numeric(count)) %>%
@@ -96,26 +101,27 @@ test_that("check nk dataset run",{
 		# complete
 		mutate_if(is.factor, as.character) %>% 
 		tidyr::complete(sample, symbol, fill = list(count = 0)) %>%
-		mutate(count = as.integer(count)) %>%
+		mutate(count = as.integer(count)) |>
 		
-		ARMET_tc(
+		# Format
+		setup_convolved_lm(
+			~ 1,
 			.sample = sample,
 			.transcript = symbol,
-			.abundance = count
-		)  %>%
-		ARMET_tc_continue(2) %>%
-		ARMET_tc_continue(3) %$%
-		proportions %>%
+			.abundance = count,
+			reference = readRDS("/wehisan/bioinf/bioinf-data/Papenfuss_lab/projects/mangiola.s/ARMET_dev/dev/TCGA_makeflow_pipeline/ref_jian_3_optimisations.rds")
+		) |>
+		estimate_convoluted_lm_1() %>%
+		estimate_convoluted_lm_2() %>%
+		estimate_convoluted_lm_3()  %>%
 		dplyr::filter(level==3) %>%
 		dplyr::filter(`Cell type category` == "nk_primed") %>%
-			select(-.variable) %>%
-			pull(.value) %>% 
-			mean %>%
-			expect_gt(0.95)
+		select(-.variable) %>%
+		pull(.value) %>% 
+		mean %>%
+		expect_gt(0.95)
 	
-	
-
-	})
+})
 
 
 # test_that("Check accuracy N52",{
