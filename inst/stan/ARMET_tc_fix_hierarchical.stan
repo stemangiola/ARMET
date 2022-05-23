@@ -350,10 +350,9 @@ model {
 	matrix[Q * (lv >= 2), ct_in_levels[3]] prop_3;
 	matrix[Q * (lv >= 2), ct_in_levels[4]] prop_4;
 	
-	vector[Q*GM] mu_vector;
-	vector[Q*GM] sigma_vector;
-
-	matrix[Q, GM] mu;
+	// vector[Q*GM] mu_vector;
+	// vector[Q*GM] sigma_vector;
+	// matrix[Q, GM] mu;
 	
 	real sigma_intercept = 1.3420415;
 

@@ -145,7 +145,6 @@ ARMET_tc_continue = function(armet_obj, level, model = stanmodels$ARMET_tc_fix_h
 	
 }
 
-
 run_model = function(reference_filtered,
 										 mix,
 										 shards,
@@ -322,6 +321,8 @@ run_model = function(reference_filtered,
 	
 }
 
+
+
 #' add_cox_test
 #' 
 #' @description This function adds cox regression statistics to the fit object
@@ -478,7 +479,6 @@ test_differential_composition =
 
 
 #------------------------------------#
-
 run_lv_1 = function(internals,
 										shards,
 										level = 1,
@@ -589,6 +589,8 @@ run_lv_1 = function(internals,
 	
 	
 }
+
+
 
 
 get_theoretical_data_disrtibution = function(fit){

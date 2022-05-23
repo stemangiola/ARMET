@@ -1703,6 +1703,38 @@ get_alpha = function(fit, level){
 
 }
 
+get_alpha_NO_hierarchy = function(fit){
+	
+
+	fit %>%
+		draws_to_tibble("alpha_", "A", "C") %>%
+		filter(!grepl("_raw" ,.variable)) %>%
+		# rebuild the last component sum-to-zero
+		#rebuild_last_component_sum_to_zero() %>%
+		
+		
+		arrange(.chain, .iteration, .draw,     A) %>%
+		
+		nest(draws = -c(C, .variable)) %>%
+		
+		# Attach convergence information
+		left_join(
+			fit %>% 
+				summary_to_tibble("alpha_", "A", "C") %>% 
+				filter(!grepl("_raw" ,.variable)) %>%
+				filter(A == 2) %>% 
+				select(.variable, C, one_of("Rhat")),
+			by = c(".variable", "C")
+		) %>%
+		
+		# FOR HIERARCHICAL
+		mutate(C = 1:n()) %>% 
+		
+		# Attach generated quantities
+		separate(.variable, c("par", "node"), remove = F)
+	
+}
+
 #' draws_to_tibble_x_y
 #'
 #' @importFrom tidyr pivot_longer
@@ -2437,6 +2469,47 @@ draws_to_prob_non_zero = function(.data){
 		pull(prob)
 }
 
+get_generated_quantities_standalone_NO_hierarchy = function(fit, internals){
+	
+	
+	S = internals$Q
+	Q = internals$Q
+	A = dim(data.frame(internals$X))[2]
+	
+	mod = stanmodels$generated_quantities_lv1
+	
+	fit2 = rstan::gqs(
+		mod,
+		draws =  as.matrix(fit),
+		data = internals$tree_properties
+	) 
+	
+	
+	left_join(
+		fit2 %>%
+			draws_to_tibble("prop_", "Q", "C") %>%
+			mutate(Q = as.integer(Q)) %>%
+			mutate(.variable = gsub("_rng", "", .variable)) %>%
+			separate(.variable, c("par", "node"), remove = F)  %>%
+			select(-par) %>%
+			nest(rng_prop = -c(node, C)) %>%
+			mutate(C = 1:n()),
+		
+		fit2 %>%
+			draws_to_tibble("mu_", "Q", "C") %>%
+			mutate(Q = as.integer(Q)) %>%
+			mutate(.variable = gsub("_rng", "", .variable)) %>%
+			separate(.variable, c("par", "node"), remove = F)  %>%
+			select(-par) %>%
+			nest(rng_mu = -c(node, C)) %>%
+			mutate(C = 1:n()),
+		by=c("C", "node")
+	)
+	
+	
+}
+
+
 get_generated_quantities_standalone = function(fit, level, internals){
 	
 	
@@ -2720,4 +2793,36 @@ vb_iterative = function(model,
 	}
 	
 	return(res)
+}
+
+check_if_data_rectangular = function(.data, .sample, .transcript, .abundance){
+	
+	# Parse column names
+	.sample = enquo(.sample)
+	.transcript = enquo(.transcript)
+	.abundance = enquo(.abundance)
+	
+	is_rectangular =
+		.data %>%
+		distinct(!!.sample, !!.transcript, !!.abundance) %>%
+		count(!!.sample) %>%
+		count(n, name = "nn") %>%
+		nrow %>%
+		equals(1)
+	
+	is_rectangular
+	
+}
+
+
+warning_if_data_is_not_rectangular = function(.data, .sample, .transcript, .abundance){
+	
+	# Parse column names
+	.sample = enquo(.sample)
+	.transcript = enquo(.transcript)
+	.abundance = enquo(.abundance)
+	
+	if(!check_if_data_rectangular(.data, !!.sample, !!.transcript, !!.abundance))
+		warning("tidybulk says: the data does not have the same number of transcript per sample. The data set is not rectangular.")
+	
 }

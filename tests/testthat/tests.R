@@ -56,10 +56,9 @@ my_mix =
 	tidyr::complete(sample, symbol, fill = list(count = 0)) %>%
 	mutate(count = as.integer(count))
 
-
-test_that("check simple run",{
+test_that("check simple run NO hierarchy",{
 	
-	armet_obj =
+	armet_obj_NO_hierarchy =
 		
 		# Read data
 		my_mix |>
@@ -68,7 +67,37 @@ test_that("check simple run",{
 		unnest(data) %>%
 		
 		# Format
-		setup_convolved_lm(
+		setup_convolved_lm_NON_hierarchical(
+			~ factor_of_interest,
+			.sample = sample,
+			.transcript = symbol,
+			.abundance = count,
+			reference = 
+				readRDS("/wehisan/bioinf/bioinf-data/Papenfuss_lab/projects/mangiola.s/ARMET_dev/dev/TCGA_makeflow_pipeline/ref_jian_3_optimisations.rds") %>%
+				filter(level==1)
+		)
+	
+	armet_estimate =
+		armet_obj_NO_hierarchy |>
+		estimate_convoluted_lm() 
+	
+	armet_estimate %>% test_hypothesis_convoluted_lm()
+	
+})
+
+
+test_that("check simple run",{
+	
+	armet_obj_hierarchical =
+		
+		# Read data
+		my_mix |>
+		nest(data = -sample) %>%
+		mutate(factor_of_interest = sample(c(0,1), replace = TRUE)) %>%
+		unnest(data) %>%
+		
+		# Format
+		ARMET:::setup_convolved_lm_hierarchical(
 			~ factor_of_interest,
 			.sample = sample,
 			.transcript = symbol,
@@ -77,7 +106,7 @@ test_that("check simple run",{
 		)
 	
 	armet_estimate =
-		armet_obj |>
+		armet_obj_hierarchical |>
 		estimate_convoluted_lm_1() 
 	
 	armet_estimate %>% test_hypothesis_convoluted_lm()
