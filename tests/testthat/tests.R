@@ -81,7 +81,6 @@ test_that("check simple run NO hierarchy",{
 		armet_obj_NO_hierarchy |>
 		estimate_convoluted_lm() 
 	
-	armet_estimate %>% test_hypothesis_convoluted_lm()
 	
 })
 
@@ -109,8 +108,6 @@ test_that("check simple run",{
 		armet_obj_hierarchical |>
 		estimate_convoluted_lm_1() 
 	
-	armet_estimate %>% test_hypothesis_convoluted_lm()
-	
 })
 
 test_that("check nk dataset run",{
@@ -133,7 +130,7 @@ test_that("check nk dataset run",{
 		mutate(count = as.integer(count)) |>
 		
 		# Format
-		setup_convolved_lm(
+		setup_convolved_lm_hierarchical(
 			~ 1,
 			.sample = sample,
 			.transcript = symbol,
