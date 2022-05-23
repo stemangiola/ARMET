@@ -36,13 +36,11 @@ vector[] beta_regression_rng( matrix X, matrix beta, vector phi){
 data {
 	// shards
 
-	int lv;
 	// Reference matrix inference
 
 	// Cell types
  	int<lower=0> Q;
-  int<lower=1> n_nodes;
-  int<lower=1> ct_in_nodes[n_nodes];
+  int<lower=2> number_of_cell_types;
 
 	// Dirichlet regression
 	int A; // factors of interest
@@ -50,20 +48,20 @@ data {
 } 
 parameters {
 
-  matrix[A,ct_in_nodes[1]]  alpha_1; // Root
-	vector<lower=0>[12] phi; //[fam_dirichlet ? 10 : ct_in_levels[lv]];
+  matrix[A,number_of_cell_types]  alpha_1; // Root
+	vector<lower=0>[number_of_cell_types] phi; //[fam_dirichlet ? 10 : ct_in_levels[lv]];
 	matrix[Q,A] X_scaled;
 
 }
 generated quantities{
 
   // lv1
-  vector[ct_in_nodes[1]]  prop_1_rng[Q * (lv == 1) ]; // Root
-  vector[ct_in_nodes[1]]  mu_1_rng[Q * (lv == 1) ]; 
+  vector[number_of_cell_types]  prop_1_rng[Q  ]; // Root
+  vector[number_of_cell_types]  mu_1_rng[Q  ]; 
 
 
 
-	prop_1_rng = beta_regression_rng(X_scaled, alpha_1, phi[1:4]);
+	prop_1_rng = beta_regression_rng(X_scaled, alpha_1, phi	);
 	mu_1_rng = get_mean_prop(X_scaled, alpha_1);
 
  

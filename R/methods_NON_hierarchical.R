@@ -276,6 +276,86 @@ setup_convolved_lm_NON_hierarchical = function(.data,
 	
 }
 
+median_qi_nest_draws_NO_hierarchical = function(d){
+	# Anonymous function to add the draws to the summary
+	
+	left_join(
+		d %>%
+			#group_by(.variable,  Q,  C) %>%
+			tidybayes::median_qi() %>%
+			ungroup(),
+		# Reattach draws as nested
+		d %>%
+			ungroup() %>%
+			nest(.draws = c(.chain, .iteration, .draw , .value, .value_relative)),
+		by = c(".variable", "Q", "sample", "C")
+	)
+}
+
+
+# @description Parse the stan fit object and check for divergences
+parse_summary_check_divergence_NO_hierarchical = function(draws) {
+	draws %>%
+		
+		group_by(.variable,  Q, sample,  C) %>%
+		
+		# If not converged choose the majority chains
+		mutate(converged = diptest::dip.test(`.value_relative`) %$%	`p.value` > 0.05) %>%
+		
+		# Anonymous function - add summary fit to converged label
+	# input: tibble
+	# output: tibble
+	{
+		left_join(
+			(.) %>% select(-converged) %>% median_qi_nest_draws_NO_hierarchical(),
+			(.) %>% distinct(converged),
+			by = c( ".variable", "Q", "sample", "C")
+		)
+	} %>%
+		ungroup()
+}
+
+get_generated_quantities_standalone_NO_hierarchy = function(fit, internals){
+	
+	
+	S = internals$Q
+	Q = internals$Q
+	A = dim(data.frame(internals$X))[2]
+	
+	number_of_cell_types = internals$reference_filtered %>% distinct(cell_type) %>% nrow
+	mod = stanmodels$generated_quantities
+	
+	fit2 = rstan::gqs(
+		mod,
+		draws =  as.matrix(fit)
+	) 
+	
+	
+	left_join(
+		fit2 %>%
+			draws_to_tibble("prop_", "Q", "C") %>%
+			mutate(Q = as.integer(Q)) %>%
+			mutate(.variable = gsub("_rng", "", .variable)) %>%
+			separate(.variable, c("par", "node"), remove = F)  %>%
+			select(-par) %>%
+			nest(rng_prop = -c(node, C)) %>%
+			mutate(C = 1:n()),
+		
+		fit2 %>%
+			draws_to_tibble("mu_", "Q", "C") %>%
+			mutate(Q = as.integer(Q)) %>%
+			mutate(.variable = gsub("_rng", "", .variable)) %>%
+			separate(.variable, c("par", "node"), remove = F)  %>%
+			select(-par) %>%
+			nest(rng_mu = -c(node, C)) %>%
+			mutate(C = 1:n()),
+		by=c("C", "node")
+	)
+	
+	
+}
+
+
 #' estimate_convoluted_lm
 #' 
 #' @description This function does inference for higher levels of the hierarchy
@@ -308,19 +388,23 @@ estimate_convoluted_lm = function(armet_obj){
 		armet_obj$input$.data %>%
 		select(c(sample, (.) %>% get_specific_annotation_columns(sample))) %>%
 		distinct() %>%
-		left_join(internals$prop) %>%
+		left_join(internals$prop, by="sample") %>%
 		
 		# Attach alpha if regression
 		ifelse_pipe(
 			internals$do_regression, # && paste(as.character(internals$.formula), collapse="")  != "~1" ,
 			~ .x %>%
-				nest(proportions = -c(`Cell type category`, C, level)) %>%
+				nest(proportions = -c( C)) %>%
 				left_join(
-					internals$alpha %>%	select(`Cell type category`, contains("alpha"), level, draws, rng_prop, rng_mu, .variable, one_of("Rhat")),
-					by = c("Cell type category", "level")
+					internals$alpha %>%	select( C, contains("alpha"), draws, rng_prop, rng_mu, .variable, one_of("Rhat")),
+					by = c("C")
 				)
-		)
-	
+		) %>% 
+		
+		# Add cell type
+		left_join(internals$reference_filtered %>% distinct(cell_type, C), by="C") %>% 
+		select(-C) %>% 
+		select(cell_type, everything())
 	
 	attrib = 
 		list(
@@ -335,7 +419,7 @@ estimate_convoluted_lm = function(armet_obj){
 		)
 	
 	proportions %>% 
-		get_estimates(level, 	X = attrib$internals$X) %>% 
+		get_estimates_NO_hierarchy(X = attrib$internals$X) %>% 
 		add_attr(attrib, "full_results")
 }
 
@@ -399,7 +483,7 @@ run_lv = function(internals,
 		# If MCMC is used check divergences as well
 		ifelse_pipe(
 			!approximate_posterior,
-			~ .x %>% parse_summary_check_divergence(),
+			~ .x %>% parse_summary_check_divergence_NO_hierarchical(),
 			~ .x %>% parse_summary() %>% rename(.value = mean)
 		) %>%
 		
@@ -416,9 +500,9 @@ run_lv = function(internals,
 	
 	if (do_regression) # && paste(as.character(.formula), collapse="")  != "~1" ) 
 		internals$alpha = 
-		get_alpha_NO_hierarchy(fit, level) %>% 
+		get_alpha_NO_hierarchy(fit) %>% 
 		left_join(
-			get_generated_quantities_standalone(fit, level, internals),
+			get_generated_quantities_standalone_NO_hierarchy(fit, internals),
 			by = c("node", "C")
 			
 		)
@@ -432,6 +516,29 @@ run_lv = function(internals,
 	
 	internals
 	
+	
+}
+
+get_estimates_NO_hierarchy = function(.data, X) {
+	
+	.data %>% 
+		filter(.variable %>% is.na %>% `!`) %>%
+		select(cell_type, draws) %>% 
+		mutate(regression = map(draws,
+														~ .x %>%
+															group_by(A) %>%
+															summarise(.median = median(.value), .sd = sd(.value)) %>% 
+															#tidybayes::median_qi(.width = credible_interval) %>%
+															
+															left_join(tibble(A=1:ncol(X), A_name = colnames(X)) ,  by = "A") %>% 
+															select(-A) %>% 
+															
+															pivot_wider(
+																names_from = A_name,
+																values_from = c(.median, .sd)
+															))) %>% 
+		select(-draws) %>% 
+		unnest(regression)
 	
 }
 

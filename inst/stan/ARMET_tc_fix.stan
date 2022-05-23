@@ -7,13 +7,6 @@ functions{
 			return y; 
 	}
 	
-	matrix which(int x, vector[] a, matrix b, matrix c, matrix d){
-			if(x == 1) return(vector_array_to_matrix(a));
-			if(x == 2) return(b);
-			if(x == 3) return(c);
-			else return(d);
-		}
-		
 	matrix multiply_by_column(vector[] v, vector r){
 		int n_rows = num_elements(v[,1]);
 		int n_cols = num_elements(v[1]);
@@ -128,7 +121,7 @@ functions{
 data {
 	// shards
 	int<lower=1> shards;
-	int lv;
+
 		
 	// Reference matrix inference
 	int<lower=0> GM;
@@ -174,6 +167,7 @@ data {
   
 }
 transformed data{
+	int lv = 1;
 	vector[number_of_cell_types*2] Q_r_1 = Q_sum_to_zero_QR(number_of_cell_types);
 
   real x_raw_sigma = inv_sqrt(1 - inv(number_of_cell_types));
@@ -250,7 +244,7 @@ model {
 
 	// proportion of level 2
 		
-	prop_lv	= which(lv, prop_1, prop_2, prop_3, prop_4);
+	prop_lv	= vector_array_to_matrix(prop_1)  ;
 
 
  target += reduce_sum(

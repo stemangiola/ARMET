@@ -63,7 +63,7 @@ test_that("check simple run NO hierarchy",{
 		# Read data
 		my_mix |>
 		nest(data = -sample) %>%
-		mutate(factor_of_interest = sample(c(0,1), replace = TRUE)) %>%
+		mutate(factor_of_interest = c(0,1)) %>%
 		unnest(data) %>%
 		
 		# Format
@@ -93,7 +93,7 @@ test_that("check simple run",{
 		# Read data
 		my_mix |>
 		nest(data = -sample) %>%
-		mutate(factor_of_interest = sample(c(0,1), replace = TRUE)) %>%
+		mutate(factor_of_interest = c(0,1)) %>%
 		unnest(data) %>%
 		
 		# Format

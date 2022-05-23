@@ -2469,47 +2469,6 @@ draws_to_prob_non_zero = function(.data){
 		pull(prob)
 }
 
-get_generated_quantities_standalone_NO_hierarchy = function(fit, internals){
-	
-	
-	S = internals$Q
-	Q = internals$Q
-	A = dim(data.frame(internals$X))[2]
-	
-	mod = stanmodels$generated_quantities_lv1
-	
-	fit2 = rstan::gqs(
-		mod,
-		draws =  as.matrix(fit),
-		data = internals$tree_properties
-	) 
-	
-	
-	left_join(
-		fit2 %>%
-			draws_to_tibble("prop_", "Q", "C") %>%
-			mutate(Q = as.integer(Q)) %>%
-			mutate(.variable = gsub("_rng", "", .variable)) %>%
-			separate(.variable, c("par", "node"), remove = F)  %>%
-			select(-par) %>%
-			nest(rng_prop = -c(node, C)) %>%
-			mutate(C = 1:n()),
-		
-		fit2 %>%
-			draws_to_tibble("mu_", "Q", "C") %>%
-			mutate(Q = as.integer(Q)) %>%
-			mutate(.variable = gsub("_rng", "", .variable)) %>%
-			separate(.variable, c("par", "node"), remove = F)  %>%
-			select(-par) %>%
-			nest(rng_mu = -c(node, C)) %>%
-			mutate(C = 1:n()),
-		by=c("C", "node")
-	)
-	
-	
-}
-
-
 get_generated_quantities_standalone = function(fit, level, internals){
 	
 	
