@@ -22,14 +22,12 @@ knitr::opts_chunk$set( fig.path = "man/figures/")
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 library(ARMET)
-library(dplyr)
-data("ACC")
 ```
 
 # Installation
 
 ```{r eval=FALSE}
-devtools::install_github("stemangiola/sccomp")
+devtools::install_github("stemangiola/ARMET")
 ```
 
 # Usage

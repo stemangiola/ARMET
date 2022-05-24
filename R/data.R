@@ -11,7 +11,12 @@
 #' Reference signatures
 #'
 #'
-"ARMET_ref"
+"hierarchy_reference"
+
+#' Reference signatures
+#'
+#'
+"no_hierarchy_reference"
 
 #' Cell tree
 #'
