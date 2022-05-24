@@ -64,7 +64,7 @@ generated quantities{
   matrix[Q * (lv == 2), ct_in_nodes[2]]  mu_a_rng; 
 
 
-  prop_a_rng = dirichlet_regression_rng( X_scaled, alpha_a, exp(phi[1]) , 0.5);
+  prop_a_rng = dirichlet_regression_rng( X_scaled, alpha_a, phi[1] , 0.5);
   mu_a_rng = get_mean_prop(X_scaled, alpha_a);
 
 

@@ -1,49 +1,6 @@
-#' ARMET-tc main
-#'
-#' @description This function calls the stan model.
-#'
-#'
-#' @import dplyr
-#' @import purrr
-#' 
-#' @importFrom tidybulk aggregate_duplicates
-#' @importFrom tidybulk scale_abundance
-#' @importFrom tidybulk as_matrix
-#'
-#' @importFrom tidyr spread
-#' @importFrom tidyr gather
-#' @importFrom tidyr drop_na
-#' @importFrom rlang enquo
-#' @importFrom tibble tibble
-#' @importFrom tidybayes gather_draws
-#'
-#' @importFrom tidybayes gather_samples
-#' @importFrom tidybayes median_qi
-#'
-#' @importFrom magrittr equals
-#' @importFrom magrittr %$%
-#'
-#' @import data.tree
-#'
-#' @param .data A tibble
-#' @param .formula A formula
-#' @param .sample A column symbol
-#' @param .transcript A column symbol
-#' @param .abundance A column symbol
-#' @param reference A tibble
-#' @param approximate_posterior A boolean for variational Bayes
-#' @param prior_survival_time An array
-#' @param transform_time_function transformation of the time covariate
-#' @param reference A tibble
-#' 
-#' @rdname setup_convolved_lm
-#' @name setup_convolved_lm
-#'
-#' @return An ARMET object
-#'
-#' @export
-#'
-setup_convolved_lm = function(.data,
+
+
+setup_convolved_lm_hierarchical = function(.data,
 										.formula = ~ 1,
 										.sample = NULL,
 										.transcript = NULL,
@@ -63,9 +20,6 @@ setup_convolved_lm = function(.data,
 	iterations = 800
 	sampling_iterations = 200
 	model = stanmodels$ARMET_tc_fix_hierarchical
-	
-	
-
 	
 	input = c(as.list(environment()))
 	input$.formula = .formula
@@ -426,4 +380,5 @@ estimate_convoluted_lm_4 = function(armet_obj){
 		# Add back update attributes
 		add_attr(attrib, "full_results")	
 }
+
 

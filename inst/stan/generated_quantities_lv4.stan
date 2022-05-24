@@ -71,11 +71,11 @@ generated quantities{
   matrix[Q * (lv == 4),ct_in_nodes[12]] mu_m_rng; // CD8 childrens
   
 
-	prop_g_rng = dirichlet_regression_rng( X_scaled, alpha_g, exp(phi[1]) , 1);
-	prop_h_rng = dirichlet_regression_rng( X_scaled, alpha_h, exp(phi[2]) , 1);
-	prop_i_rng = dirichlet_regression_rng( X_scaled, alpha_i, exp(phi[3]) , 1);
-	prop_l_rng = dirichlet_regression_rng( X_scaled, alpha_l, exp(phi[4]) , 1);
-	prop_m_rng = dirichlet_regression_rng( X_scaled, alpha_m, exp(phi[5]) , 1);
+	prop_g_rng = dirichlet_regression_rng( X_scaled, alpha_g, (phi[1]) , 1);
+	prop_h_rng = dirichlet_regression_rng( X_scaled, alpha_h, (phi[2]) , 1);
+	prop_i_rng = dirichlet_regression_rng( X_scaled, alpha_i, (phi[3]) , 1);
+	prop_l_rng = dirichlet_regression_rng( X_scaled, alpha_l, (phi[4]) , 1);
+	prop_m_rng = dirichlet_regression_rng( X_scaled, alpha_m, (phi[5]) , 1);
 
 	mu_g_rng = get_mean_prop(X_scaled, alpha_g);
 	mu_h_rng = get_mean_prop(X_scaled, alpha_h);

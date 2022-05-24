@@ -78,11 +78,11 @@ generated quantities{
   matrix[Q * (lv == 3) ,ct_in_nodes[7]]  mu_f_rng; 
 
 
-	prop_b_rng = dirichlet_regression_rng( X_scaled, alpha_b, exp(phi[1]) , 1);
-	prop_c_rng = dirichlet_regression_rng( X_scaled, alpha_c, exp(phi[2]) , 1);
-	prop_d_rng = dirichlet_regression_rng( X_scaled, alpha_d, exp(phi[3]) , 1);
-	prop_e_rng = dirichlet_regression_rng( X_scaled, alpha_e, exp(phi[4]) , 1);
-	prop_f_rng = dirichlet_regression_rng( X_scaled, alpha_f, exp(phi[5]) , 1);
+	prop_b_rng = dirichlet_regression_rng( X_scaled, alpha_b, (phi[1]) , 1);
+	prop_c_rng = dirichlet_regression_rng( X_scaled, alpha_c, (phi[2]) , 1);
+	prop_d_rng = dirichlet_regression_rng( X_scaled, alpha_d, (phi[3]) , 1);
+	prop_e_rng = dirichlet_regression_rng( X_scaled, alpha_e, (phi[4]) , 1);
+	prop_f_rng = dirichlet_regression_rng( X_scaled, alpha_f, (phi[5]) , 1);
 
 	mu_b_rng = get_mean_prop(X_scaled, alpha_b);
 	mu_c_rng = get_mean_prop(X_scaled, alpha_c);
