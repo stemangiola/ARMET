@@ -45,7 +45,7 @@ test_that("check data set",{
 	
 })
 
-library(tidyverse)
+library(dplyr)
 library(ARMET)
 my_mix =
 	ARMET_ref %>% 
@@ -79,8 +79,6 @@ test_that("check simple run",{
 	armet_estimate =
 		armet_obj |>
 		estimate_convoluted_lm_1() 
-	
-	armet_estimate %>% test_hypothesis_convoluted_lm()
 	
 })
 

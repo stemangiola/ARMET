@@ -26,6 +26,10 @@ vb_iterative(
 
 \item{additional_parameters_to_save}{A character vector}
 
+\item{init}{A list}
+
+\item{data}{A list}
+
 \item{...}{List of paramaters for vb function of Stan}
 }
 \value{

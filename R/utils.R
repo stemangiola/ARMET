@@ -1335,8 +1335,6 @@ get_ancestor_child = function(tree){
 }
 
 #' @importFrom purrr map_int
-#' @importFrom foreach foreach
-#' @importFrom foreach %do%
 #' @keywords internal
 #' 
 #' @param tree A tree
@@ -1354,35 +1352,21 @@ get_tree_properties = function(tree){
 		filter(!isLeaf) %>%
 		pull(count)
 	
-	ct_in_levels = foreach(l = levels_in_the_tree + 1, .combine = c) %do% {
-		data.tree::Clone(tree) %>%
-			ifelse_pipe((.) %>% data.tree::ToDataFrameTree("level") %>% pull(2) %>% max %>% `>` (l),
-									~ {
-										.x
-										data.tree::Prune(.x, function(x)
-											x$level <= l)
-										.x
-									})  %>%
-			data.tree::Traverse(., filterFun = isLeaf) %>%
-			length()
-	}
-	
-	# # Get the number of leafs for every level
-	# ct_in_levels =
-	# 	levels_in_the_tree + 1 %>%
-	# 	map_int(~ {
-	# 		data.tree::Clone(tree) %>%
-	# 			when(
-	# 				data.tree::ToDataFrameTree(., "level") %>% pull(2) %>% max %>% gt(.x) ~ {
-	# 					t = (.)
-	# 					data.tree::Prune(t, function(x)	x$level <= .x)
-	# 					t
-	# 				},
-	# 				~ (.)
-	# 			) %>%
-	# 			data.tree::Traverse(., filterFun = isLeaf) %>%
-	# 			length()
-	# 	})
+	ct_in_levels = (levels_in_the_tree + 1) %>% map_int(
+		~ {
+			l = .x
+			data.tree::Clone(tree) %>%
+				ifelse_pipe((.) %>% data.tree::ToDataFrameTree("level") %>% pull(2) %>% max %>% `>` (l),
+										~ {
+											.x
+											data.tree::Prune(.x, function(x)
+												x$level <= l)
+											.x
+										})  %>%
+				data.tree::Traverse(., filterFun = isLeaf) %>%
+				length()
+		}
+	) 
 	
 	n_nodes = ct_in_nodes %>% length
 	n_levels = ct_in_levels %>% length
@@ -1428,70 +1412,6 @@ get_tree_properties = function(tree){
 		parents_lv4 = parents_lv4,
 		PLV4 = PLV4
 	)
-}
-
-#' @importFrom tidygraph tbl_graph
-#' @keywords internal
-#' 
-#' @param .data A tibble
-#' @param credible_interval A double
-cluster_posterior_slopes = function(.data, credible_interval = 0.67){
-	   
-	# Add cluster info to cell types per node
-	.data %>%
-		filter(.variable %>% is.na %>% `!`) %>%
-		nest(node = -c(level, .variable)) %>%
-		mutate(node = map(
-			node,
-			~ {
-				.x %>% 
-					left_join(
-						
-						# Unnest data
-						(.) %>% 
-							extract_CI(credible_interval) %>%
-							select(-c(proportions  ,   draws , rng_prop )) %>%
-							
-							# Build combination of cell types
-							nanny::combine_nest(
-								.names_from = `Cell type category`,
-								.values_from = c(.lower_alpha2, .upper_alpha2, Rhat)
-							)  %>%
-							
-							# Check overlap of credible intervals
-							mutate(is_cluster = map_lgl(
-								data,
-								~ .x %>% 
-									summarise(ma = max(.lower_alpha2), mi = min(.upper_alpha2), converged = any(Rhat > 1.6 & !is.na(Rhat))==F) %>% 
-									mutate(is_cluster = ma < mi & converged) %>%
-									pull(is_cluster)
-							)) %>% 
-							
-							# If there is not cluster
-							
-							# Find communities based on cell type clusters
-							{
-								ct_levels = (.) %>% arrange(!is_cluster) %>% select(1:2) %>% as_matrix %>% t %>% as.character() %>% unique
-								
-								(.) %>%
-									filter(is_cluster) %>% 
-									select(1:2) %>%
-										tbl_graph(
-										edges = .,
-										nodes = data.frame(name = ct_levels)
-									)%>%
-									mutate(community = as.factor(tidygraph::group_infomap())) 
-							}	%>%
-							
-							# Format for joining
-							as_tibble() %>%
-							rename(`Cell type category` = name),
-						by = "Cell type category"
-					)
-				
-			}	)) %>%
-		unnest(node)
-	
 }
 
 identify_baseline_by_clustering = function(.data, CI){
@@ -1822,7 +1742,6 @@ add_attr = function(var, attribute, name) {
 
 #' @keywords internal
 #' 
-#' @importFrom nanny subset
 #' @importFrom gtools rdirichlet 
 #' 
 #' @param .data A tibble
@@ -1842,7 +1761,7 @@ generate_mixture = function(.data, X_df, alpha) {
 	}
 	
 	
-	X = X_df %>% select(intercept, real_days) %>% nanny::as_matrix()
+	X = X_df %>% select(intercept, real_days) %>% as_matrix()
 	
 	samples_per_run =
 		map_dfr(
@@ -1915,7 +1834,7 @@ generate_mixture = function(.data, X_df, alpha) {
 		summarise(`count mix` = c %>% sum) %>%
 		ungroup %>%
 		
-		left_join(dirichlet_source %>% nanny::subset(run) ) %>%
+		left_join(dirichlet_source %>% subset(run) ) %>%
 		
 		mutate(fold_change = fold_change) %>%
 		
@@ -2037,7 +1956,6 @@ run_censored_model = function(.data, sampling = F){
 #' @keywords internal
 #' @importFrom abind abind
 #' @importFrom boot logit
-#' @importFrom nanny subset
 #' 
 #' @param .data A tibble
 #' @param formula_df A formula dataframe
@@ -2094,7 +2012,7 @@ make_cens_data = function(.data, formula_df){
 	C = .data %>% distinct(C) %>% nrow
 	A = ncol(X[1,,])
 	
-	sample_subset =  .data %>% nanny::subset(sample) %>% arrange(sample)
+	sample_subset =  .data %>% subset(sample) %>% arrange(sample)
 	
 	time = sample_subset %>% mutate(time = !!as.symbol(formula_df$censored_value_column) %>% log1p %>% scale %>% as.numeric) %>% pull(time) %>% as.array()
 
@@ -2204,7 +2122,6 @@ run_censored_model_joint_vb = function(.data, sampling = F){
 }
 
 #' @keywords internal
-#' @importFrom nanny subset
 #' 
 #' @param .data A tibble
 #' @param formula_df A formula dataframe
@@ -2264,7 +2181,7 @@ make_cens_data_joint = function(.data, formula_df, relative = TRUE, transform_ti
 	C = .data %>% distinct(new_C) %>% nrow
 	A = ncol(X[1,,])
 	
-	sample_subset =  .data %>% nanny::subset(sample) %>% arrange(sample)
+	sample_subset =  .data %>% subset(sample) %>% arrange(sample)
 	
 	time = sample_subset %>% mutate(time = !!as.symbol(formula_df$censored_value_column) %>% transform_time_function %>% scale %>% .[,1]) %>% pull(time) %>% as.array()
 	
@@ -2484,135 +2401,6 @@ get_generated_quantities_standalone = function(fit, level, internals){
 	
 }
 
-#' @importFrom nanny permute_nest
-#' 
-#' @param .data A tibble
-#' 
-get_signatures = function(.data){
-	.data$proportions %>%
-		filter(.variable %>% is.na %>% `!`) %>%
-		select(-proportions, -rng) %>%
-		unnest(draws) %>%
-		
-		# Group
-		nest(node = -c(level, .variable, A)) %>%
-		mutate(node = map(
-			node,
-			~ .x %>%
-				
-				# Build combination of cell types
-				nanny::permute_nest(
-					.names_from = `Cell type category`,
-					.values_from = c(.value)
-				) %>% 
-				
-				# Perform calculation
-				mutate(prob_df = map(
-					data, 
-					~.x %>%
-						nest(data = -c(`Cell type category`)) %>% 
-						mutate(med = map_dbl(data, ~.x$.value %>% median )) %>% 
-						mutate(med = rev(med)) %>% 
-						mutate(frac_up = map2_dbl(data, med, ~ (.x$.value  > .y) %>% sum %>% magrittr::divide_by(nrow(.x)))) %>% 
-						mutate(frac_down = map2_dbl(data, med, ~ (.x$.value  < .y) %>% sum %>% magrittr::divide_by(nrow(.x)))) %>%
-						mutate(prob = ifelse(frac_up > frac_down, frac_up, frac_down)) %>%
-						
-						# stretch to o 1 interval
-						mutate(prob = (prob-0.5)/0.5) %>%
-						
-						# Insert sign
-						mutate(prob = ifelse(frac_up < frac_down, -prob, prob)) %>%
-						select(`Cell type category`, prob)
-				)) %>%
-				select(-data) %>%
-				unnest(prob_df) %>% 
-				filter(`Cell type category_1` == `Cell type category`) %>%
-				select(-`Cell type category`)
-			
-		)) %>%
-		unnest( node)
-}
-
-get_CI = function(.data, credible_interval = 0.90, cluster_CI = 0.55) {
-	
-	# Choose the test
-	if("draws_cens" %in% colnames(.data$proportions)){
-		.v = as.symbol(".value_2")
-		.l = as.symbol(".lower_2")
-		.u = as.symbol(".upper_2")
-	} else {
-		.v = as.symbol(".value_alpha2")
-		.l = as.symbol(".lower_alpha2")
-		.u = as.symbol(".upper_alpha2")
-	}
-	
-	.d = 
-		.data$proportions %>%
-		filter(.variable %>% is.na %>% `!`) %>%
-		cluster_posterior_slopes(credible_interval = cluster_CI) %>%
-		extract_CI(credible_interval)
-	
-	dx = list()	
-	
-	# Level 1
-	if(.d %>% filter(level ==1) %>% nrow %>% `>` (0))
-		dx = 
-		.d %>%
-		
-		filter(level ==1) %>%
-		mutate(fold_change_ancestor = 0) %>%
-		identify_baseline_by_clustering( ) %>%
-		
-		mutate(significant = ((!!.l - 0) * (!!.u - 0)) > 0) %>%
-		mutate(fold_change  = ifelse(significant, !!.v, 0))
-	
-	# Level 2
-	if(.d %>% filter(level ==2) %>% nrow %>% `>` (0))
-		dx =	dx %>% bind_rows(
-			.d %>%
-				
-				filter(level ==2) %>%
-				left_join(ancestor_child, by = "Cell type category") %>%
-				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change),  by = "ancestor" )  %>%
-				identify_baseline_by_clustering( ) %>%
-				
-				mutate(significant = ((!!.l - 0) * (!!.u - 0)) > 0) %>%
-				mutate(fold_change  = ifelse(significant, !!.v, 0))
-		) 
-	
-	
-	# Level 3
-	if(.d %>% filter(level ==3) %>% nrow %>% `>` (0))
-		dx =	dx %>% bind_rows(
-			.d %>%
-				
-				filter(level ==3) %>%
-				left_join(ancestor_child, by = "Cell type category") %>%
-				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) ,  by = "ancestor")  %>%
-				identify_baseline_by_clustering( ) %>%
-				
-				mutate(significant = ((!!.l - 0) * (!!.u - 0)) > 0) %>%
-				mutate(fold_change  = ifelse(significant, !!.v, 0))
-		)
-	
-	# Level 4
-	if(.d %>% filter(level ==4) %>% nrow %>% `>` (0))
-		dx =	dx %>% bind_rows(
-			.d %>%
-				
-				filter(level ==4) %>%
-				left_join(ancestor_child, by = "Cell type category") %>%
-				left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) ,  by = "ancestor")  %>%
-				identify_baseline_by_clustering( ) %>%
-				
-				mutate(significant = ((!!.l - 0) * (!!.u - 0)) > 0) %>%
-				mutate(fold_change  = ifelse(significant, !!.v, 0))
-		)
-	
-	dx
-	
-	
-}
 
 
 #' Get matrix from tibble
@@ -2680,6 +2468,8 @@ as_matrix <- function(tbl,
 #' @param iter An integer of how many max iterations
 #' @param tol_rel_obj A real
 #' @param additional_parameters_to_save A character vector
+#' @param init A list
+#' @param data A list
 #' @param ... List of paramaters for vb function of Stan
 #'
 #' @return A Stan fit object
