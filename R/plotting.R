@@ -287,7 +287,6 @@ plot_polar = function(	.data,
 #' @import ggplot2
 #' @import tibble
 #' @import dplyr
-#' @importFrom nanny subset
 #'
 #'
 #' @param .data ARMET-tc object
@@ -360,7 +359,7 @@ plot_scatter = function(.data){
 		group_by(level, `Cell type category`, C,Q, .variable) %>% 
 		slice(1:50) %>%
 		ungroup() %>%
-		left_join(plot_data %>% nanny::subset(c(sample, `Cell type category`))) %>%
+		left_join(plot_data %>% .subset(c(sample, `Cell type category`))) %>%
 		filter(!alive)
 	
 	outlier_df =

@@ -82,7 +82,12 @@ ARMET_tc_continue = function(armet_obj, level, model = stanmodels$ARMET_tc_fix_h
 		model = model,
 		prior_survival_time = internals$prior_survival_time,
 		sample_scaling = internals$sample_scaling,
-		prior_prop = internals$prop %>% filter(level == !!level -1) %>% distinct(Q, C, .value) %>% spread(C, .value) %>% tidybulk::as_matrix(rownames = Q),
+		prior_prop = 
+			internals$prop %>% 
+			filter(level == !!level -1) %>% 
+			distinct(Q, C, .value) %>%
+			spread(C, .value) %>% 
+			as_matrix(rownames = Q),
 		columns_idx_including_time = internals$columns_idx_including_time,
 		approximate_posterior = internals$approximate_posterior
 	)
@@ -255,7 +260,7 @@ run_model = function(reference_filtered,
 		distinct() %>%
 		arrange(C, GM) %>% 
 		spread(GM, count) %>% 
-		tidybulk::as_matrix(rownames = "C") 
+		as_matrix(rownames = "C") 
 	
 	y = 
 		y_source %>%
@@ -263,7 +268,7 @@ run_model = function(reference_filtered,
 		distinct() %>%
 		arrange(Q, GM) %>% 
 		spread(GM, count) %>% 
-		tidybulk::as_matrix(rownames = "Q") 
+		as_matrix(rownames = "Q") 
 	
 	max_y = max(y)
 	ct_in_ancestor_level = ifelse(lv == 1, 0, tree_properties$ct_in_levels[lv-1])
@@ -346,134 +351,6 @@ add_cox_test = function(.data, relative = TRUE){
 		left_join(cens_alpha, by = c("level", "C", ".variable"))
 }
 
-
-#' test_differential_composition
-#' 
-#' @description This function performs statistical testing on the fit object
-#' 
-#' @param .data A tibble
-#' @param credible_interval A double
-#' @param cluster_CI A double
-#' 
-#' @export
-test_differential_composition = 
-	function(.data, credible_interval = 0.90, cluster_CI = 0.55, relative = TRUE) {
-		
-		# x = .data$internals$formula_df$components_formatted
-		# alive = .data$internals$formula_df$censored_column
-		# 	
-		
-		cens_alpha = 
-			.data$internals$formula_df$censored_formatted %>%
-			when(
-				length(.) == 0 ~ NULL,
-				
-				# Only if I have censoring
-				~ .data$proportions %>% 
-					select(-draws, -contains("rng")) %>%
-					dplyr::rename(node = .variable)  %>% 
-					unnest(proportions) %>%
-					censored_regression_joint(formula_df = .data$internals$formula_df, filter_how_many = Inf, relative = relative,  transform_time_function = .data$internals$transform_time_function)  %>% 
-					rename(.variable = node) %>%
-					nest(draws_cens = -c(level, .variable  ,      C)) 
-			)
-		
-		
-		.d = 
-			.data$proportions %>%
-			filter(.variable %>% is.na %>% `!`) %>%
-			
-			# If I have censoring
-			when(
-				!is.null(cens_alpha) ~ (.) %>% left_join(cens_alpha, by = c("level", "C", ".variable")),
-				~ (.)
-			) %>%
-			
-			cluster_posterior_slopes(credible_interval = cluster_CI) %>%
-			extract_CI(credible_interval = credible_interval)
-		
-		dx = list()	
-		
-		# Level 1
-		if(.d %>% filter(level ==1) %>% nrow %>% `>` (0))
-			dx = 
-			.d %>%
-			
-			filter(level ==1) %>%
-			mutate(fold_change_ancestor = 0) %>%
-			identify_baseline_by_clustering( ) %>%
-			
-			when(
-				!is.null(cens_alpha) ~ 
-					mutate(., significant = ((.value.lower_2 - 0) * (.value.upper_2 - 0)) > 0) %>%
-					mutate(fold_change  = ifelse(significant, .value_2, 0)),
-				~ mutate(., significant = ((.lower_alpha2  - 0) * (.upper_alpha2  - 0)) > 0) %>%
-					mutate(fold_change  = ifelse(significant, .value_alpha2 , 0))
-			) 
-		
-		
-		# Level 2
-		if(.d %>% filter(level ==2) %>% nrow %>% `>` (0))
-			dx =	dx %>% bind_rows(
-				.d %>%
-					
-					filter(level ==2) %>%
-					left_join(ancestor_child, by = "Cell type category") %>%
-					left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change),  by = "ancestor" )  %>%
-					identify_baseline_by_clustering( ) %>%
-					
-					when(
-						!is.null(cens_alpha) ~ 
-							mutate(., significant = ((.value.lower_2 - 0) * (.value.upper_2 - 0)) > 0) %>%
-							mutate(fold_change  = ifelse(significant, .value_2, 0)),
-						~ mutate(., significant = ((.lower_alpha2  - 0) * (.upper_alpha2  - 0)) > 0) %>%
-							mutate(fold_change  = ifelse(significant, .value_alpha2 , 0))
-					) 
-			) 
-		
-		
-		# Level 3
-		if(.d %>% filter(level ==3) %>% nrow %>% `>` (0))
-			dx =	dx %>% bind_rows(
-				.d %>%
-					
-					filter(level ==3) %>%
-					left_join(ancestor_child, by = "Cell type category") %>%
-					left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) ,  by = "ancestor")  %>%
-					identify_baseline_by_clustering( ) %>%
-					
-					when(
-						!is.null(cens_alpha) ~ 
-							mutate(., significant = ((.value.lower_2 - 0) * (.value.upper_2 - 0)) > 0) %>%
-							mutate(fold_change  = ifelse(significant, .value_2, 0)),
-						~ mutate(., significant = ((.lower_alpha2  - 0) * (.upper_alpha2  - 0)) > 0) %>%
-							mutate(fold_change  = ifelse(significant, .value_alpha2 , 0))
-					) 
-			)
-		
-		# Level 4
-		if(.d %>% filter(level ==4) %>% nrow %>% `>` (0))
-			dx =	dx %>% bind_rows(
-				.d %>%
-					
-					filter(level ==4) %>%
-					left_join(ancestor_child, by = "Cell type category") %>%
-					left_join( dx %>%	select(ancestor = `Cell type category`, fold_change_ancestor = fold_change) ,  by = "ancestor")  %>%
-					identify_baseline_by_clustering( ) %>%
-					
-					when(
-						!is.null(cens_alpha) ~ 
-							mutate(., significant = ((.value.lower_2 - 0) * (.value.upper_2 - 0)) > 0) %>%
-							mutate(fold_change  = ifelse(significant, .value_2, 0)),
-						~ mutate(., significant = ((.lower_alpha2  - 0) * (.upper_alpha2  - 0)) > 0) %>%
-							mutate(fold_change  = ifelse(significant, .value_alpha2 , 0))
-					) 
-			)
-		
-		dx
-		
-		
-	}
 
 
 

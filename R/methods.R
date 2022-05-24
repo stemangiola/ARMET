@@ -428,7 +428,7 @@ estimate_convoluted_lm_4 = function(armet_obj){
 		add_attr(attrib, "full_results")	
 }
 
-#' test_differential_composition
+#' test_hypothesis_convoluted_lm
 #' 
 #' @description This function performs statistical testing on the fit object
 #' 
