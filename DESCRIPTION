@@ -10,8 +10,7 @@ ByteCompile: true
 Depends: 
 	R (>= 4.0.0), 
 	Rcpp (>= 1.0.8.3),
-	methods,
-	remotes
+	methods
 Imports: 
 	rstan (>= 2.26.6),
 	rstantools (>= 2.2.0), 
@@ -47,4 +46,4 @@ LinkingTo: StanHeaders (>= 2.26.6), rstan (>= 2.26.6), BH (>= 1.66.0), Rcpp (>= 
 SystemRequirements: GNU make
 NeedsCompilation: yes
 RoxygenNote: 7.2.0
-Remotes: stan-dev/rstan@v2.26.6
+Additional_repositories: https://mc-stan.org/r-packages/
