@@ -109,7 +109,7 @@ setup_convolved_lm_NON_hierarchical = function(.data,
 			if(length(prior_survival_time) == 0) stop("ARMET says: you really need to provide third party survival time for your condition/disease")
 			
 			sd_survival_months = .data |>  select(sample, formula_df$censored_value_column) |> distinct() |> pull(formula_df$censored_value_column) |> sd()
-			prior_survival_time = transform_time_function(prior_survival_time |> when(min(.)==0 ~ (.) + 1, (.))) 
+			prior_survival_time = transform_time_function( when(min(prior_survival_time)==0, ~ prior_survival_time + 1, prior_survival_time)) 
 			
 			
 			time_column = formula_df$censored_value_column 
@@ -127,7 +127,7 @@ setup_convolved_lm_NON_hierarchical = function(.data,
 			
 			columns_idx_including_time = 
 				which(grepl(time_column, colnames(X))) |> 
-				as.array() |> 
+				as.array() %>%
 				
 				# Fix if NULL
 				when(is.null(.) ~ c(), ~ (.))
