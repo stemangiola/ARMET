@@ -58,13 +58,10 @@ my_mix =
 
 test_that("check simple run NO hierarchy",{
 	
-	armet_obj_NO_hierarchy =
-		
+
+	armet_estimate =
 		# Read data
-		my_mix |>
-		nest(data = -sample) %>%
-		mutate(factor_of_interest = c(0,1)) %>%
-		unnest(data) %>%
+		test_mixture %>%
 		
 		# Format
 		setup_convolved_lm_NON_hierarchical(
@@ -75,11 +72,8 @@ test_that("check simple run NO hierarchy",{
 			reference = 
 				readRDS("/wehisan/bioinf/bioinf-data/Papenfuss_lab/projects/mangiola.s/ARMET_dev/dev/TCGA_makeflow_pipeline/ref_jian_3_optimisations.rds") %>%
 				filter(level==1)
-		)
-	
-	armet_estimate =
-		armet_obj_NO_hierarchy |>
-		estimate_convoluted_lm() 
+		) |>
+			estimate_convoluted_lm(use_data = FALSE) 
 	
 	
 })

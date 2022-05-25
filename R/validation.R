@@ -60,31 +60,22 @@ error_if_duplicated_genes <- function(.data,
 }
 
 
-check_if_data_rectangular = function(.data, .sample, .transcript, .abundance, type = "hard"){
-
+check_if_data_rectangular = function(.data, .sample, .transcript, .abundance){
+	
 	# Parse column names
 	.sample = enquo(.sample)
 	.transcript = enquo(.transcript)
 	.abundance = enquo(.abundance)
-
+	
 	is_rectangular =
 		.data %>%
-		distinct(!!.sample, !!.transcript, !!.abundance) %>%
+		dplyr::distinct(!!.sample, !!.transcript, !!.abundance) %>%
 		count(!!.sample) %>%
-		count(n) %>%
+		count(n, name = "nn") %>%
 		nrow %>%
 		equals(1)
-
+	
 	is_rectangular
-
-	# if(!is_rectangular & type == "hard") stop("tidyBulk says: the data must have the same number of transcript per sample.")
-	#
-	# if(!is_rectangular & type == "soft") warning("tidyBulk says: the data should have the same number of transcript per sample.")
-
-
-	# # Eliminate sparse transcripts
-	# .data %>% eliminate_sparse_transcripts(!!.transcript)
-
-
+	
 }
 

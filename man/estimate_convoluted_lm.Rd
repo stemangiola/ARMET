@@ -9,7 +9,7 @@
 \alias{estimate_convoluted_lm_4}
 \title{estimate_convoluted_lm}
 \usage{
-estimate_convoluted_lm(armet_obj)
+estimate_convoluted_lm(armet_obj, use_data = TRUE)
 
 estimate_convoluted_lm_1(armet_obj)
 

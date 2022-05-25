@@ -163,6 +163,8 @@ data {
 	
 	// Exposure rate
   vector[Q] exposure_multiplier;
+  
+  int<lower=0, upper=1> use_data;
 
   
 }
@@ -181,13 +183,11 @@ parameters {
   // lv1
   simplex[number_of_cell_types]  prop_1[Q * (lv == 1)]; // Root
 
- 
 	// Dirichlet regression
   // lv1
   matrix[A * (lv == 1) * do_regression,number_of_cell_types-1]  alpha_1_raw; // Root
 
-
-	vector<lower=0>[number_of_cell_types] phi; 
+	vector<lower=1>[number_of_cell_types] phi; 
 
 	// Unknown population
 	row_vector<lower=0, upper = log(max(to_array_1d(y)))>[GM] lambda_UFO;
@@ -246,23 +246,23 @@ model {
 		
 	prop_lv	= vector_array_to_matrix(prop_1)  ;
 
-
- target += reduce_sum(
-  	partial_sum_lupmf,  to_array_1d(y), grainsize,
-  	append_row(	ref,	exp(lambda_UFO) ),
-  	append_col(	multiply_matrix_by_column( prop_lv,  (1-prop_UFO) ), 	prop_UFO ),
-  	exposure_multiplier,
-  	sigma_intercept,
-  	-0.4
-  );
+	if(use_data==1)
+		 target += reduce_sum(
+		  	partial_sum_lupmf,  to_array_1d(y), grainsize,
+		  	append_row(	ref,	exp(lambda_UFO) ),
+		  	append_col(	multiply_matrix_by_column( prop_lv,  (1-prop_UFO) ), 	prop_UFO ),
+		  	exposure_multiplier,
+		  	sigma_intercept,
+		  	-0.4
+		  );
 
 
 	// lv 1
   if(lv == 1 && do_regression) {
 
-  	 prop_1 ~ beta_regression(X_scaled, alpha_1, phi[1:4]);
-  	 alpha_1_raw[1] ~ normal(0, 2);
-  	 if(A > 1) to_vector( alpha_1_raw[2:] ) ~ normal(0, 2);
+  	 prop_1 ~  beta_regression(X_scaled, alpha_1, phi);
+  	 to_vector(alpha_1_raw) ~ normal(0, 0.5);
+  	 //if(A > 1) to_vector( alpha_1_raw[2:] ) ~ normal(0, 0.t);
 
 
   }

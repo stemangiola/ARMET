@@ -14,7 +14,8 @@ convoluted_glm(
   tree = NULL,
   approximate_posterior = F,
   prior_survival_time = c(),
-  transform_time_function = sqrt
+  transform_time_function = sqrt,
+  use_data = TRUE
 )
 }
 \arguments{

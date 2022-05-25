@@ -20,10 +20,6 @@ always_allow_html: true
 knitr::opts_chunk$set( fig.path = "man/figures/")
 ```
 
-```{r echo=FALSE, message=FALSE, warning=FALSE}
-library(ARMET)
-```
-
 # Installation
 
 ```{r eval=FALSE}
@@ -33,7 +29,26 @@ devtools::install_github("stemangiola/ARMET")
 # Usage
 
 ```{r}
+library(ARMET)
+library(dplyr)
+```
 
+```{r}
+data("test_mixture")
+data("no_hierarchy_reference")
+
+ estimates = 
+ 	test_mixture |>
+	convoluted_glm(
+   ~ factor_of_interest,
+   .sample = sample,
+   .transcript = symbol,
+   .abundance = count,
+   reference = no_hierarchy_reference 
+  )
+```
+
+```{r eval=FALSE, echo=FALSE}
 prior_survival_time = ACC |> filter(!alive) |> distinct(patient, time) |> pull(time)
 
 armet_obj = 	

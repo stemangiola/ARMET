@@ -2546,24 +2546,6 @@ vb_iterative = function(model,
 	return(res)
 }
 
-check_if_data_rectangular = function(.data, .sample, .transcript, .abundance){
-	
-	# Parse column names
-	.sample = enquo(.sample)
-	.transcript = enquo(.transcript)
-	.abundance = enquo(.abundance)
-	
-	is_rectangular =
-		.data %>%
-		distinct(!!.sample, !!.transcript, !!.abundance) %>%
-		count(!!.sample) %>%
-		count(n, name = "nn") %>%
-		nrow %>%
-		equals(1)
-	
-	is_rectangular
-	
-}
 
 
 warning_if_data_is_not_rectangular = function(.data, .sample, .transcript, .abundance){
