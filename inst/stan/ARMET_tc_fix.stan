@@ -101,7 +101,7 @@ functions{
                         vector exposure_multiplier,
                         real sigma_intercept, 
                         real sigma_slope) {
-                          
+                         
 	matrix[rows(prop), cols(ref)] mu = (prop * ref);
 	vector[rows(prop) * cols(ref)] mu_vector;
 	for(q in 1:rows(mu)) mu[q] = mu[q] * exposure_multiplier[q];
@@ -181,11 +181,11 @@ parameters {
 
   // Proportions
   // lv1
-  simplex[number_of_cell_types]  prop_1[Q * (lv == 1)]; // Root
+  simplex[number_of_cell_types]  prop_1[Q ]; // Root
 
 	// Dirichlet regression
   // lv1
-  matrix[A * (lv == 1) * do_regression,number_of_cell_types-1]  alpha_1_raw; // Root
+  matrix[A  * do_regression,number_of_cell_types-1]  alpha_1_raw; // Root
 
 	vector<lower=1>[number_of_cell_types] phi; 
 
@@ -204,12 +204,12 @@ parameters {
 }
 transformed parameters{
 
-  matrix[A * (lv == 1) * do_regression,number_of_cell_types]  alpha_1; // Root
+  matrix[A  * do_regression,number_of_cell_types]  alpha_1; // Root
 
 	matrix[Q,A] X_ = X;
 	matrix[Q,A] X_scaled = X_;
 	
-	if(lv == 1) for(a in 1:A)	alpha_1[a] =  sum_to_zero_QR(alpha_1_raw[a], Q_r_1);
+	for(a in 1:A)	alpha_1[a] =  sum_to_zero_QR(alpha_1_raw[a], Q_r_1);
 	
 
 	if(how_many_cens > 0) {
@@ -230,19 +230,8 @@ transformed parameters{
 model {
 
  	matrix[Q, number_of_cell_types] prop_lv ;
-
-	// Tree poportion
-	matrix[Q * (lv >= 2), number_of_cell_types] prop_2;
-	matrix[Q * (lv >= 2), number_of_cell_types] prop_3;
-	matrix[Q * (lv >= 2), number_of_cell_types] prop_4;
-	
-	// vector[Q*GM] mu_vector;
-	// vector[Q*GM] sigma_vector;
-	// matrix[Q, GM] mu;
 	
 	real sigma_intercept = 1.3420415;
-
-	// proportion of level 2
 		
 	prop_lv	= vector_array_to_matrix(prop_1)  ;
 
@@ -258,7 +247,7 @@ model {
 
 
 	// lv 1
-  if(lv == 1 && do_regression) {
+  if(do_regression) {
 
   	 prop_1 ~  beta_regression(X_scaled, alpha_1, phi);
   	 to_vector(alpha_1_raw) ~ normal(0, 0.5);
@@ -266,13 +255,13 @@ model {
 
 
   }
-	if(lv == 1 && !do_regression) for(q in 1:Q) target += dirichlet_lpdf(prop_1[q] | rep_vector(1, num_elements(prop_1[1])));
+	else for(q in 1:Q) prop_1[q] ~ dirichlet(rep_vector(1, num_elements(prop_1[1])));
 
 
 	phi ~ normal(5,2);
 
 	// lambda UFO
-	for(i in 1:shards) lambda_UFO[i] ~ skew_normal(6.2, 3.3, -2.7);
+	lambda_UFO ~ skew_normal(6.2, 3.3, -2.7);
 	target += beta_lpdf(prop_UFO | 1.001, 20);
 
 	// Censoring
