@@ -27,6 +27,16 @@ functions{
 		return v_mult;
 	}
 	
+	matrix multiply_matrix_by_row(matrix v, row_vector r){
+		int n_rows = rows(v);
+		int n_cols = cols(v);
+	
+		matrix[n_rows,n_cols] v_mult ;
+		for(i in 1:n_cols) v_mult[,i] = v[,i] * r[i];
+	
+		return v_mult;
+	}
+	
 	vector pow_vector(vector v, real p){
 			vector[rows(v)] v_pow;
 			
@@ -117,6 +127,31 @@ functions{
   
 
 	}
+	
+		real partial_sum2_lpmf(int[] slice_Y,
+                        int start, int end,
+                        matrix ref,
+                        matrix prop,
+                        vector exposure_multiplier,
+                        real sigma_intercept, 
+                        real sigma_slope) {
+                         
+	matrix[rows(ref), cols(prop)] mu = (ref * prop );
+	vector[cols(prop) * rows(ref)] mu_vector;
+	for(q in 1:cols(mu)) mu[,q] = mu[,q] * exposure_multiplier[q];
+
+ mu_vector = to_vector(mu)[start:end];
+	
+	return( neg_binomial_2_lupmf(
+		slice_Y |
+		mu_vector,
+		1.0 ./ (pow_vector(mu_vector, sigma_slope) *  exp(sigma_intercept))
+
+	));
+  
+
+	}
+	
 }
 data {
 	// shards
@@ -170,6 +205,7 @@ data {
 }
 transformed data{
 	int lv = 1;
+	matrix[GM, number_of_cell_types]  ref_t = ref';
 	vector[number_of_cell_types*2] Q_r_1 = Q_sum_to_zero_QR(number_of_cell_types);
 
   real x_raw_sigma = inv_sqrt(1 - inv(number_of_cell_types));
@@ -190,7 +226,7 @@ parameters {
 	vector<lower=1>[number_of_cell_types] phi; 
 
 	// Unknown population
-	row_vector<lower=0, upper = log(max(to_array_1d(y)))>[GM] lambda_UFO;
+	vector<lower=0, upper = log(max(to_array_1d(y)))>[GM] lambda_UFO;
 	vector<lower=0, upper=0.5>[Q] prop_UFO;
 
 	// Censoring
@@ -205,6 +241,7 @@ parameters {
 transformed parameters{
 
   matrix[A  * do_regression,number_of_cell_types]  alpha_1; // Root
+	row_vector<lower=0, upper=0.5>[Q] prop_UFO_t = prop_UFO';
 
 	matrix[Q,A] X_ = X;
 	matrix[Q,A] X_scaled = X_;
@@ -236,14 +273,23 @@ model {
 	prop_lv	= vector_array_to_matrix(prop_1)  ;
 
 	if(use_data==1)
-		 target += reduce_sum(
+		 print (reduce_sum(
 		  	partial_sum_lupmf,  to_array_1d(y), grainsize,
-		  	append_row(	ref,	exp(lambda_UFO) ),
+		  	append_row(	ref,	exp(lambda_UFO') ),
 		  	append_col(	multiply_matrix_by_column( prop_lv,  (1-prop_UFO) ), 	prop_UFO ),
 		  	exposure_multiplier,
 		  	sigma_intercept,
 		  	-0.4
-		  );
+		  ), "--1--");
+		  
+		   print (reduce_sum(
+		  	partial_sum2_lupmf,  to_array_1d(y), grainsize,
+		  	append_col(	ref_t,	exp(lambda_UFO) ),
+		  	append_row(	multiply_matrix_by_row( prop_lv',  (1-prop_UFO_t) ), 	prop_UFO_t ),
+		  	exposure_multiplier,
+		  	sigma_intercept,
+		  	-0.4
+		  ), "--2--");
 
 
 	// lv 1
