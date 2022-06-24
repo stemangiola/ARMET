@@ -10,8 +10,8 @@ vb_iterative(
   iter = 10000,
   tol_rel_obj = 0.01,
   additional_parameters_to_save = list(),
-  init,
-  data,
+  init = "random",
+  data = list(),
   ...
 )
 }

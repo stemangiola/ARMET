@@ -30,9 +30,10 @@ devtools::install_github("stemangiola/ARMET")
 ```{r}
 library(ARMET)
 library(dplyr)
+library(tidyr)
 ```
 
-```{r}
+```{r, message=FALSE}
 data("test_mixture")
 data("no_hierarchy_reference")
 
@@ -43,7 +44,8 @@ data("no_hierarchy_reference")
    .sample = sample,
    .transcript = symbol,
    .abundance = count,
-   reference = no_hierarchy_reference 
+   reference = no_hierarchy_reference, 
+   approximate_posterior = TRUE
   )
  
  estimates
@@ -55,6 +57,8 @@ prior_survival_time = ACC |> filter(!alive) |> distinct(patient, DSS.time.cr) |>
 
  estimates = 
  	ACC |>
+ 	
+ 	filter(alive==FALSE) |> nest(data = -patient) %>% sample_n(10) %>% unnest(data) %>% 
 	convoluted_glm(
    ~ censored(DSS.time.cr, alive),
    .sample = patient,
@@ -62,8 +66,21 @@ prior_survival_time = ACC |> filter(!alive) |> distinct(patient, DSS.time.cr) |>
 	 .abundance = count, 
    reference = no_hierarchy_reference,
    prior_survival_time = prior_survival_time,
-   transform_time_function = sqrt
+   transform_time_function = log1p
   )
+ 
+ ACC |>
+filter(alive==FALSE) |> nest(data = -patient) %>% sample_n(10) %>% unnest(data) %>%
+mutate(DSS.time.cr = DSS.time.cr %>% sqrt %>% scale %>% as.numeric) %>%
+convoluted_glm(
+~ DSS.time.cr,
+.sample = patient,
+.transcript = transcript,
+.abundance = count,
+reference = no_hierarchy_reference,
+prior_survival_time = prior_survival_time,
+transform_time_function = sqrt
+)
  
 armet_obj = 	
 	ACC |>

@@ -68,9 +68,6 @@ setup_convolved_lm_NON_hierarchical = function(.data,
 	sampling_iterations = 200
 	model = stanmodels$ARMET_tc_fix
 	
-	
-	
-	
 	input = c(as.list(environment()))
 	input$.formula = .formula
 	
@@ -483,11 +480,7 @@ run_lv = function(internals,
 		left_join(df |> distinct(Q, sample), by = "Q")	|>
 		
 		# If MCMC is used check divergences as well
-		ifelse_pipe(
-			!approximate_posterior,
-			~ .x |> parse_summary_check_divergence_NO_hierarchical(),
-			~ .x |> parse_summary() |> rename(.value = mean)
-		) |>
+		parse_summary_check_divergence_NO_hierarchical() |>
 		
 		# Parse
 		separate(.variable, c(".variable", "level"), convert = T) |>
@@ -658,7 +651,6 @@ run_model_no_hierarchy = function(reference_filtered,
 												 # rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix_hierarchical.stan", auto_write = F),
 												 iter = 50000,
 												 tol_rel_obj = 0.0005,
-												 data = prop_posterior |> c(tree_properties),
 												 init = function () init_list
 			),
 			

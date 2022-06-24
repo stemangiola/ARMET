@@ -5,7 +5,7 @@
 \alias{no_hierarchy_reference}
 \title{Reference signatures}
 \format{
-An object of class \code{tbl_df} (inherits from \code{tbl}, \code{data.frame}) with 736364 rows and 4 columns.
+An object of class \code{tbl_df} (inherits from \code{tbl}, \code{data.frame}) with 1449323 rows and 4 columns.
 }
 \usage{
 no_hierarchy_reference

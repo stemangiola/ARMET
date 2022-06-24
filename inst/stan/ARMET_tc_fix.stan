@@ -7,6 +7,13 @@ functions{
 			return y; 
 	}
 	
+	matrix vector_array_to_matrix_transpose(vector[] x) {
+			matrix[rows(x[1]), size(x)] y;
+			for (m in 1:cols(y))
+			  y[,m] = x[m];
+			return y; 
+	}
+	
 	matrix multiply_by_column(vector[] v, vector r){
 		int n_rows = num_elements(v[,1]);
 		int n_cols = num_elements(v[1]);
@@ -206,6 +213,7 @@ data {
 transformed data{
 	int lv = 1;
 	matrix[GM, number_of_cell_types]  ref_t = ref';
+	int y_array[Q * GM] = to_array_1d(y);
 	vector[number_of_cell_types*2] Q_r_1 = Q_sum_to_zero_QR(number_of_cell_types);
 
   real x_raw_sigma = inv_sqrt(1 - inv(number_of_cell_types));
@@ -227,7 +235,7 @@ parameters {
 
 	// Unknown population
 	vector<lower=0, upper = log(max(to_array_1d(y)))>[GM] lambda_UFO;
-	vector<lower=0, upper=0.5>[Q] prop_UFO;
+	row_vector<lower=0, upper=0.5>[Q] prop_UFO;
 
 	// Censoring
 	vector<lower=0>[how_many_cens] unseen;
@@ -241,7 +249,6 @@ parameters {
 transformed parameters{
 
   matrix[A  * do_regression,number_of_cell_types]  alpha_1; // Root
-	row_vector<lower=0, upper=0.5>[Q] prop_UFO_t = prop_UFO';
 
 	matrix[Q,A] X_ = X;
 	matrix[Q,A] X_scaled = X_;
@@ -266,30 +273,19 @@ transformed parameters{
 }
 model {
 
- 	matrix[Q, number_of_cell_types] prop_lv ;
-	
 	real sigma_intercept = 1.3420415;
 		
-	prop_lv	= vector_array_to_matrix(prop_1)  ;
-
+	matrix[number_of_cell_types, Q] prop_lv_t = vector_array_to_matrix_transpose(prop_1);
+	
 	if(use_data==1)
-		 print (reduce_sum(
-		  	partial_sum_lupmf,  to_array_1d(y), grainsize,
-		  	append_row(	ref,	exp(lambda_UFO') ),
-		  	append_col(	multiply_matrix_by_column( prop_lv,  (1-prop_UFO) ), 	prop_UFO ),
-		  	exposure_multiplier,
-		  	sigma_intercept,
-		  	-0.4
-		  ), "--1--");
-		  
-		   print (reduce_sum(
-		  	partial_sum2_lupmf,  to_array_1d(y), grainsize,
+			target += reduce_sum(
+		  	partial_sum2_lupmf,  y_array, grainsize,
 		  	append_col(	ref_t,	exp(lambda_UFO) ),
-		  	append_row(	multiply_matrix_by_row( prop_lv',  (1-prop_UFO_t) ), 	prop_UFO_t ),
+		  	append_row(	multiply_matrix_by_row( prop_lv_t,  (1-prop_UFO) ), 	prop_UFO ),
 		  	exposure_multiplier,
 		  	sigma_intercept,
 		  	-0.4
-		  ), "--2--");
+		  );
 
 
 	// lv 1
@@ -297,7 +293,7 @@ model {
 
   	 prop_1 ~  beta_regression(X_scaled, alpha_1, phi);
   	 to_vector(alpha_1_raw) ~ normal(0, 0.5);
-  	 //if(A > 1) to_vector( alpha_1_raw[2:] ) ~ normal(0, 0.t);
+  	 //if(A > 1) to_vector( alpha_1_raw[2:] ) ~ normal(0, 0.5);
 
 
   }
@@ -308,20 +304,15 @@ model {
 
 	// lambda UFO
 	lambda_UFO ~ skew_normal(6.2, 3.3, -2.7);
-	target += beta_lpdf(prop_UFO | 1.001, 20);
+	prop_UFO ~ beta( 1.001, 20);
 
 	// Censoring
 
 	if(how_many_cens > 0){
 		
-
-		// unseen
-		// unseen ~ gamma(1,2);
-		X_[which_cens,2] ~ gamma( prior_unseen_alpha[1], prior_unseen_beta[1]);
-
-		// Priors
-		//target += gamma_lpdf(X[which_not_cens,2] | prior_unseen_alpha[1], prior_unseen_beta[1]);
-	 	target += gamma_lccdf(	X_[which_cens,2] | prior_unseen_alpha[1], prior_unseen_beta[1]);
+		// Priors unseen
+		target += gamma_lpdf(X_[which_not_cens,2] | prior_unseen_alpha[1], prior_unseen_beta[1]);
+	 	target += gamma_lccdf(X_[which_cens,2] | prior_unseen_alpha[1], prior_unseen_beta[1]);
 	 	
 	 	// Hyperprior
 	 	prior_survival_time ~ gamma( prior_unseen_alpha[1], prior_unseen_beta[1]);
