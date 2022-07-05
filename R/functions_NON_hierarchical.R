@@ -56,6 +56,8 @@ setup_convolved_lm_NON_hierarchical = function(.data,
 																							 prior_survival_time = c(),
 																							 transform_time_function = sqrt,
 																							 reference = NULL,
+																							 iterations_warmup = 800,
+																							 iterations_sampling = 200,
 																							 ...) {
 	
 	# At the moment is not active
@@ -64,8 +66,8 @@ setup_convolved_lm_NON_hierarchical = function(.data,
 	do_regression = T
 	cores = 4
 	shards = cores 
-	iterations = 800
-	sampling_iterations = 200
+	iterations = iterations_warmup
+	sampling_iterations = iterations_sampling
 	model = stanmodels$ARMET_tc_fix
 	
 	input = c(as.list(environment()))
@@ -315,21 +317,8 @@ parse_summary_check_divergence_NO_hierarchical = function(draws) {
 get_generated_quantities_standalone_NO_hierarchy = function(fit, internals){
 	
 	
-	S = internals$Q
-	Q = internals$Q
-	A = dim(data.frame(internals$X))[2]
-	
-	number_of_cell_types = internals$reference_filtered |> distinct(cell_type) |> nrow()
-	mod = stanmodels$generated_quantities
-	
-	fit2 = rstan::gqs(
-		mod,
-		draws =  as.matrix(fit)
-	) 
-	
-	
 	left_join(
-		fit2 |>
+		fit |>
 			draws_to_tibble("prop_", "Q", "C") |>
 			mutate(Q = as.integer(Q)) |>
 			mutate(.variable = gsub("_rng", "", .variable)) |>
@@ -338,7 +327,7 @@ get_generated_quantities_standalone_NO_hierarchy = function(fit, internals){
 			nest(rng_prop = -c(node, C)) |>
 			mutate(C = 1:n()),
 		
-		fit2 |>
+		fit |>
 			draws_to_tibble("mu_", "Q", "C") |>
 			mutate(Q = as.integer(Q)) |>
 			mutate(.variable = gsub("_rng", "", .variable)) |>
@@ -349,6 +338,109 @@ get_generated_quantities_standalone_NO_hierarchy = function(fit, internals){
 		by=c("C", "node")
 	)
 	
+	
+}
+
+get_generated_quantities_standalone_NO_hierarchy_cmdstanr = function(fit, internals, model_data){
+	
+	
+	left_join(
+		fit$draws("prop_1_rng", format = "draws_df") |> 
+			pivot_longer(
+				names_to = c( ".variable", "C", "Q"),  
+				cols = contains("prop_1_rng"), 
+				names_sep = "\\[|,|\\]|:",
+				values_to = ".value"
+			) |> 
+			suppressWarnings() |> 
+			mutate(Q = as.integer(Q), C = as.integer(C)) |> 
+			nest(rng_prop = -C),
+		
+		fit$draws("mu_1_rng", format = "draws_df") |> 
+			pivot_longer(
+				names_to = c( ".variable", "Q", "C"),  
+				cols = contains("mu_1_rng"), 
+				names_sep = "\\[|,|\\]|:",
+				values_to = ".value"
+			) |> 
+			suppressWarnings() |> 
+			mutate(Q = as.integer(Q), C = as.integer(C)) |> 
+			nest(rng_mu = -C),
+		by = "C"
+	) |> 
+		mutate(node = "1")
+	
+	
+}
+
+get_alpha_NO_hierarchy = function(fit){
+	
+	
+	fit %>%
+		draws_to_tibble("alpha_", "A", "C") %>%
+		filter(!grepl("_raw" ,.variable)) %>%
+		# rebuild the last component sum-to-zero
+		#rebuild_last_component_sum_to_zero() %>%
+		
+		
+		arrange(.chain, .iteration, .draw,     A) %>%
+		
+		nest(draws = -c(C, .variable)) %>%
+		
+		# Attach convergence information
+		left_join(
+			fit %>% 
+				summary_to_tibble("alpha_", "A", "C") %>% 
+				filter(!grepl("_raw" ,.variable)) %>%
+				filter(A == 2) %>% 
+				select(.variable, C, one_of("Rhat")),
+			by = c(".variable", "C")
+		) %>%
+		
+		# FOR HIERARCHICAL
+		mutate(C = 1:n()) %>% 
+		
+		# Attach generated quantities
+		separate(.variable, c("par", "node"), remove = F)
+	
+}
+
+get_alpha_NO_hierarchy_cmdstanr = function(fit){
+	
+	
+	fit$draws("alpha_1", format = "draws_df") |> 
+		
+		# rebuild the last component sum-to-zero
+		#rebuild_last_component_sum_to_zero() %>%
+		
+		pivot_longer(
+			names_to = c( ".variable", "A", "C"),  
+			cols = contains("alpha_1"), 
+			names_sep = "\\[|,|\\]|:",
+			values_to = ".value"
+		) |> 
+		suppressWarnings() |> 
+		mutate(A = as.integer(A), C = as.integer(C)) |> 
+		arrange(.chain, .iteration, .draw,     A) %>%
+		
+		nest(draws = -c(C, .variable)) %>%
+		
+		# Attach convergence information
+		left_join(
+			fit$summary("alpha_1") %>% 
+				tidyr::extract(variable, c(".variable", "A", "C"), "([a-z0-9_]+)\\[([0-9]+),([0-9]+)\\]") |> 
+				mutate(A = as.integer(A), C = as.integer(C)) |> 
+				filter(A == 2) |> 
+				rename(Rhat = rhat) |> 
+				select(.variable, C, one_of("Rhat")),
+			by = c(".variable", "C")
+		) %>%
+		
+		# FOR HIERARCHICAL
+		mutate(C = 1:n()) %>% 
+		
+		# Attach generated quantities
+		separate(.variable, c("par", "node"), remove = F)
 	
 }
 
@@ -363,7 +455,7 @@ get_generated_quantities_standalone_NO_hierarchy = function(fit, internals){
 #' @param armet_obj An ARMET object
 #' 
 #' @export
-estimate_convoluted_lm = function(armet_obj, use_data = TRUE){
+estimate_convoluted_lm = function(armet_obj, use_data = TRUE, use_cmdstanr = FALSE){
 	
 	
 	internals = 
@@ -377,7 +469,8 @@ estimate_convoluted_lm = function(armet_obj, use_data = TRUE){
 			do_regression = armet_obj$internals$do_regression,
 			.formula = armet_obj$internals$.formula,
 			model = armet_obj$internals$model,
-			use_data = use_data
+			use_data = use_data,
+			use_cmdstanr = use_cmdstanr
 		)
 	
 
@@ -428,132 +521,22 @@ run_lv = function(internals,
 									iterations = iterations,
 									sampling_iterations = sampling_iterations,
 									do_regression = do_regression,
-									.formula = .formula, model = stanmodels$ARMET_tc_fix, use_data = TRUE){
-	
-	res1 = run_model_no_hierarchy( 
-		internals$reference_filtered,
-		internals$mix,
-		shards,
-		full_bayesian,
-		approximate_posterior,
-		internals$prop_posterior,
-		iterations = iterations,
-		sampling_iterations = sampling_iterations,
-		X = internals$X,
-		do_regression = do_regression,
-		cens = internals$cens,
-		Q = internals$Q,
-		model = model,
-		prior_survival_time = internals$prior_survival_time,
-		sample_scaling = internals$sample_scaling,
-		columns_idx_including_time = internals$columns_idx_including_time,
-		use_data = use_data
-		
-	)
-	
-	df = res1[[1]]
-	fit = res1[[2]]
-	
-	fit_prop_parsed = 
-		fit |>
-		draws_to_tibble("prop_", "Q", "C") |>
-		filter(!grepl("_UFO|_rng", .variable))  |>
-		mutate(Q = Q |> as.integer())
-	
-	draws =
-		fit_prop_parsed |>
-		ungroup() |>
-		select(-.variable) |>
-		mutate(.value_relative = .value)
-	
-	prop =
-		fit |>
-		draws_to_tibble("prop_1", "Q", "C") |>
-		#tidybayes::gather_draws(`prop_[1]`[Q, C], regex = T) |>
-		drop_na()  |>
-		ungroup() |>
-		
-		# Add relative proportions
-		mutate(.value_relative = .value) |> 
-		
-		# add sample annotation
-		left_join(df |> distinct(Q, sample), by = "Q")	|>
-		
-		# If MCMC is used check divergences as well
-		parse_summary_check_divergence_NO_hierarchical() |>
-		
-		# Parse
-		separate(.variable, c(".variable", "level"), convert = T) |>
-		
-		# Add sample information
-		left_join(df |>
-								filter(`query`) |>
-								distinct(Q, sample))
+									.formula = .formula, model = stanmodels$ARMET_tc_fix, use_data = TRUE,  use_cmdstanr = FALSE){
 	
 	
-	
-	
-	if (do_regression) # && paste(as.character(.formula), collapse="")  != "~1" ) 
-		internals$alpha = 
-		get_alpha_NO_hierarchy(fit) |> 
-		left_join(
-			get_generated_quantities_standalone_NO_hierarchy(fit, internals),
-			by = c("node", "C")
-			
-		)
-	
-	
-	internals$prop = prop
-	internals$fit = list(fit)
-	internals$df = list(df)
-	internals$draws = list(draws)
-	internals$prop_posterior[[1]] = fit_prop_parsed |> group_by(.variable, Q, C) |> prop_to_list() %>% `[[` ("prop_1") 
-	
-	internals
-	
-	
-}
+	reference_filtered = internals$reference_filtered
+	mix = internals$mix
+	prop_posterior = internals$prop_posterior
+	X = internals$X
+	cens = internals$cens
+	Q = internals$Q
+	model = stanmodels$ARMET_tc_fix
+	prior_survival_time = internals$prior_survival_time
+	sample_scaling = internals$sample_scaling
+	columns_idx_including_time = internals$columns_idx_including_time
 
-get_estimates_NO_hierarchy = function(.data, X) {
+# Inference
 	
-	.data %>% 
-		filter(.variable %>% is.na %>% `!`) %>%
-		select(cell_type, draws) %>% 
-		mutate(regression = map(draws,
-														~ .x %>%
-															group_by(A) %>%
-															summarise(.median = median(.value), .sd = sd(.value)) %>% 
-															#tidybayes::median_qi(.width = credible_interval) %>%
-															
-															left_join(tibble(A=1:ncol(X), A_name = colnames(X)) ,  by = "A") %>% 
-															select(-A) %>% 
-															
-															pivot_wider(
-																names_from = A_name,
-																values_from = c(.median, .sd)
-															))) %>% 
-		select(-draws) %>% 
-		unnest(regression)
-	
-}
-
-run_model_no_hierarchy = function(reference_filtered,
-																	mix,
-																	shards,
-																	full_bayesian,
-																	approximate_posterior,
-																	prop_posterior,
-																	iterations = 250,
-																	sampling_iterations = 100,
-																	X,
-																	do_regression,
-																	cens,
-																	Q,
-																	model = stanmodels$ARMET_tc_fix,
-																	prior_survival_time = c(),
-																	sample_scaling,
-																	prior_prop = matrix(1:Q)[,0, drop=FALSE],
-																	columns_idx_including_time, use_data = TRUE) {
 	
 	
 	# Global properties - derived by previous analyses of the whole reference dataset
@@ -601,7 +584,7 @@ run_model_no_hierarchy = function(reference_filtered,
 		arrange(sample) |> 
 		pull(exposure_multiplier) |>
 		as.array()
-
+	
 	
 	init_list = list(	
 		lambda_UFO = rep(6.2, GM), 
@@ -630,7 +613,7 @@ run_model_no_hierarchy = function(reference_filtered,
 		tidybulk::as_matrix(rownames = "Q") 
 	
 	max_y = max(y)
-
+	
 	Sys.setenv("STAN_NUM_THREADS" = shards)
 	
 	if(cens |> is.null()) cens =  rep(0, Q)
@@ -644,42 +627,212 @@ run_model_no_hierarchy = function(reference_filtered,
 	
 	CIT = length(columns_idx_including_time)
 	
-	fit = 
-		approximate_posterior |>
-		when(
-			(.) ~ vb_iterative(model,
-												 # rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix_hierarchical.stan", auto_write = F),
-												 iter = 50000,
-												 tol_rel_obj = 0.0005,
-												 init = function () init_list
-			),
-			
-			~ 	sampling(
-				model,
-				#rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix_hierarchical.stan", auto_write = F),
-				chains = 3,
-				cores = 3,
-				iter = iterations,
-				warmup = iterations - sampling_iterations,
-				#data = prop_posterior |> c(tree_properties),
-				# pars=
-				# 	c("prop_1", "prop_2", "prop_3", sprintf("prop_%s", letters[1:9])) |>
-				# 	c("alpha_1", sprintf("alpha_%s", letters[1:9])) |>
-				# 	c("exposure_rate") |>
-				# 	c("lambda_UFO") |>
-				# 	c("prop_UFO") |>
-				# 	c(additional_par_to_save),
-				init = function ()	init_list,
-				save_warmup = FALSE
-				# ,
-				# control=list( adapt_delta=0.9,stepsize = 0.01,  max_treedepth =10  )
-			) %>%
-				{
-					(.)  |> rstan::summary() %$% summary |> as_tibble(rownames = "par") |> arrange(Rhat |> desc()) |> filter(Rhat > 1.5) |> ifelse_pipe(nrow(.) > 0, ~  print(.x))
-					(.)
-				}
-		)
+	model_data = list(
+		shards = shards,
+		GM = GM,
+		sigma_slope = sigma_slope,
+		sigma_sigma = sigma_sigma,
+		Q = Q,
+		number_of_cell_types = number_of_cell_types,
+		
+		y = y,
+		max_y = max_y,
+		ref = ref,
+		A = A,
+		X = X,
+		do_regression = do_regression,
+		how_many_cens = how_many_cens,
+		which_cens = which_cens,
+		which_not_cens = which_not_cens,
+		max_unseen = max_unseen,
+		spt = spt,
+		prior_survival_time = prior_survival_time,
+		CIT = CIT,
+		columns_idx_including_time = columns_idx_including_time,
+		exposure_multiplier = exposure_multiplier,
+		use_data = use_data
+	)
 	
-	list(df, fit)
+	if( use_cmdstanr ){
+		
+		# Lad model code
+		if(file.exists("ARMET_tc_fix_cmdstanr.rds"))
+			mod = readRDS("ARMET_tc_fix_cmdstanr.rds")
+		else {
+			readr::write_file(ARMET_tc_fix_cmdstanr, "ARMET_tc_fix_cmdstanr.stan")
+			mod = cmdstanr::cmdstan_model( "ARMET_tc_fix_cmdstanr.stan") #, cpp_options = list(stan_threads = TRUE) )
+			mod  %>% saveRDS("ARMET_tc_fix_cmdstanr.rds")
+		}
+		
+		if(approximate_posterior)
+			fit = 
+				mod$variational(
+					data = model_data ,
+					init = function ()	init_list
+				) %>%
+				suppressWarnings()
+		
+		else
+			fit = 
+				mod$sample(
+					data = model_data ,
+					init = function ()	init_list,
+					iter_warmup = iterations - sampling_iterations,
+					iter_sampling = sampling_iterations, 
+					parallel_chains = 3, chains = 3, 
+					threads_per_chain = ceiling(shards / 3)
+				) %>%
+				suppressWarnings()
+		
+		
+		fit$summary() |>  arrange(rhat |> desc()) |> filter(rhat > 1.2) |> print()
+		
+		fit_prop_parsed = 
+			fit$draws("prop_1", format = "draws_df") |> 
+				pivot_longer(
+					names_to = c( ".variable", "C", "Q"),  
+					cols = contains("prop_1"), 
+					names_sep = "\\[|,|\\]|:",
+					values_to = ".value"
+				) |> 
+				suppressWarnings() |> 
+				mutate(Q = as.integer(Q), C = as.integer(C))
+		
+		if (do_regression) # && paste(as.character(.formula), collapse="")  != "~1" ) 
+			internals$alpha = 
+			get_alpha_NO_hierarchy_cmdstanr(fit) |> 
+			left_join(
+				get_generated_quantities_standalone_NO_hierarchy_cmdstanr(fit, internals, model_data),
+				by = c("node", "C")
+				
+			)
+		
+	}
+	else {
+		fit = 
+			approximate_posterior |>
+			when(
+				(.) ~ vb_iterative(model,
+													 # rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix_hierarchical.stan", auto_write = F),
+													 iter = 50000,
+													 tol_rel_obj = 0.0005,
+													 init = function () init_list
+				),
+				
+				~ 	sampling(
+					model,
+					#rstan::stan_model("~/PhD/deconvolution/ARMET/inst/stan/ARMET_tc_fix_hierarchical.stan", auto_write = F),
+					chains = 3,
+					cores = 3,
+					iter = iterations,
+					warmup = iterations - sampling_iterations,
+					data = ,
+					#data = prop_posterior |> c(tree_properties),
+					# pars=
+					# 	c("prop_1", "prop_2", "prop_3", sprintf("prop_%s", letters[1:9])) |>
+					# 	c("alpha_1", sprintf("alpha_%s", letters[1:9])) |>
+					# 	c("exposure_rate") |>
+					# 	c("lambda_UFO") |>
+					# 	c("prop_UFO") |>
+					# 	c(additional_par_to_save),
+					init = function ()	init_list,
+					save_warmup = FALSE
+					# ,
+					# control=list( adapt_delta=0.9,stepsize = 0.01,  max_treedepth =10  )
+				)) %>%
+			{
+				(.)  |> rstan::summary() %$% summary |> as_tibble(rownames = "par") |> arrange(Rhat |> desc()) |> filter(Rhat > 1.5) |> ifelse_pipe(nrow(.) > 0, ~  print(.x))
+				(.)
+			}
+		
+		fit_prop_parsed = 
+			fit |>
+			draws_to_tibble("prop_1", "C", "Q") |>
+			filter(!grepl("_UFO|_rng", .variable))  |>
+			mutate(Q = Q |> as.integer())
+		
+		if (do_regression) # && paste(as.character(.formula), collapse="")  != "~1" ) 
+			internals$alpha = 
+			get_alpha_NO_hierarchy(fit) |> 
+			left_join(
+				get_generated_quantities_standalone_NO_hierarchy(fit, internals),
+				by = c("node", "C")
+				
+			)
+	}
+	
+	# Parsing
+
+	
+	draws =
+		fit_prop_parsed |>
+		ungroup() |>
+		select(-.variable) |>
+		mutate(.value_relative = .value)
+	
+	
+	
+	prop =
+		fit_prop_parsed |> 
+		drop_na()  |>
+		ungroup() |>
+		
+		# Add relative proportions
+		mutate(.value_relative = .value) |> 
+		
+		# add sample annotation
+		left_join(df |> distinct(Q, sample), by = "Q")	|>
+		
+		# If MCMC is used check divergences as well
+		parse_summary_check_divergence_NO_hierarchical() |>
+		
+		# Parse
+		separate(.variable, c(".variable", "level"), convert = T) |>
+		
+		# Add sample information
+		left_join(df |>
+								filter(`query`) |>
+								distinct(Q, sample),
+							by = c("Q", "sample")
+							)
+	
+	
+	
+	
+
+	
+	
+	internals$prop = prop
+	internals$fit = list(fit)
+	internals$df = list(df)
+	internals$draws = list(draws)
+	internals$prop_posterior[[1]] = fit_prop_parsed |> group_by(.variable, Q, C) |> prop_to_list() %>% `[[` ("prop_1") 
+	
+	internals
+	
 	
 }
+
+get_estimates_NO_hierarchy = function(.data, X) {
+	
+	.data %>% 
+		filter(.variable %>% is.na %>% `!`) %>%
+		select(cell_type, draws) %>% 
+		mutate(regression = map(draws,
+														~ .x %>%
+															group_by(A) %>%
+															summarise(.median = median(.value), .sd = sd(.value)) %>% 
+															#tidybayes::median_qi(.width = credible_interval) %>%
+															
+															left_join(tibble(A=1:ncol(X), A_name = colnames(X)) ,  by = "A") %>% 
+															select(-A) %>% 
+															
+															pivot_wider(
+																names_from = A_name,
+																values_from = c(.median, .sd)
+															))) %>% 
+		select(-draws) %>% 
+		unnest(regression)
+	
+}
+

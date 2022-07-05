@@ -63,7 +63,8 @@ convoluted_glm = function(.data,
 													approximate_posterior = F,
 													prior_survival_time = c(),
 													transform_time_function = sqrt,
-													use_data = TRUE
+													use_data = TRUE,
+													use_cmdstanr = FALSE
 												){
 	
 	.sample = enquo(.sample)
@@ -83,8 +84,9 @@ convoluted_glm = function(.data,
 			prior_survival_time = prior_survival_time,
 			transform_time_function = transform_time_function,
 			reference = reference
+			
 		) |>
-			estimate_convoluted_lm(use_data)
+			estimate_convoluted_lm(use_data, use_cmdstanr = use_cmdstanr)
 	}
 	else {
 		
