@@ -156,13 +156,13 @@ parameters {
 
   // Proportions
   // lv1
-  matrix[number_of_cell_types-1, Q]  prop_1_raw; // Root
+  matrix[number_of_cell_types-1, Q]  prop_1_raw_raw; // Root
 
 	// Dirichlet regression
   // lv1
   matrix[A  * do_regression,number_of_cell_types-1]  alpha_1_raw; // Root
 
-	vector<lower=1>[number_of_cell_types] phi; 
+	vector<lower=0>[number_of_cell_types] phi; 
 
 	// Unknown population
 	vector<lower=0, upper = log(max(to_array_1d(y)))>[GM] lambda_UFO;
@@ -183,6 +183,10 @@ transformed parameters{
 	matrix[Q,A] X_ = X;
 	matrix[Q,A] X_scaled = X;
 	matrix[number_of_cell_types, Q]  prop_1;
+	matrix[number_of_cell_types-1, Q]  prop_1_raw; // Root
+
+	for(c in 1:(number_of_cell_types-1)) prop_1_raw[c] = to_row_vector(X_scaled * alpha_1_raw[,c]) + phi[c] * prop_1_raw_raw[c];
+	
 	for(q in 1:Q) prop_1[,q] =  softmax( sum_to_zero_QR(  prop_1_raw[,q], Q_r_1 )) ;
 	
 
@@ -220,17 +224,18 @@ model {
 	// lv 1
   if(do_regression) {
 
-  	 for(c in 1:(number_of_cell_types-1)) prop_1_raw[c] ~  normal(X_scaled * alpha_1_raw[,c], phi[c]);
+		// non centered
+  	to_vector(prop_1_raw_raw) ~  std_normal();
   	 
 
   }
 // 	else for(q in 1:Q) prop_1[q] ~ dirichlet(rep_vector(1, num_elements(prop_1[1])));
 
-	to_vector(alpha_1_raw) ~ normal(0, x_raw_sigma * 0.2);
-	phi ~ gamma(3, 5);
+	to_vector(alpha_1_raw) ~ normal(0, x_raw_sigma * 0.5);
+	phi ~ gamma(1.1, 6);
 
 	// lambda UFO
-	lambda_UFO ~ skew_normal(6.2, 3.3, -2.7);
+	lambda_UFO ~ skew_normal(3, 1.5, -2.7);
 	prop_UFO ~ beta( 1.001, 20);
 
 	// Censoring
@@ -261,8 +266,6 @@ generated quantities{
 	for(q in 1:Q) prop_1_rng[,q] =  softmax( sum_to_zero_QR( prop_1_raw_rng[,q], Q_r_1 )) ;
 	for(a in 1:A)	alpha_1[a] =  to_row_vector(sum_to_zero_QR(  to_vector(alpha_1_raw[a]), Q_r_1 ));
 	
-
-
 	mu_1_rng = get_mean_prop(X_scaled, alpha_1);
 
  
