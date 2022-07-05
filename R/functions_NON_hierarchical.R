@@ -56,7 +56,7 @@ setup_convolved_lm_NON_hierarchical = function(.data,
 																							 prior_survival_time = c(),
 																							 transform_time_function = sqrt,
 																							 reference = NULL,
-																							 iterations_warmup = 800,
+																							 iterations_warmup = 1200,
 																							 iterations_sampling = 200,
 																							 ...) {
 	

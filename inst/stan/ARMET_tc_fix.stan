@@ -105,7 +105,7 @@ data {
 	int<lower=0> GM;
 
 	// Priors
-	real<upper=0> sigma_slope;
+	//real<upper=0> sigma_slope;
 	real<lower=0> sigma_sigma;
 	//real sigma_intercept;
 	
@@ -164,6 +164,9 @@ parameters {
 
 	vector<lower=0>[number_of_cell_types] phi; 
 
+	real sigma_intercept;
+	real<upper=0> sigma_slope;
+	
 	// Unknown population
 	vector<lower=0, upper = log(max(to_array_1d(y)))>[GM] lambda_UFO;
 	row_vector<lower=0, upper=0.5>[Q] prop_UFO;
@@ -172,9 +175,8 @@ parameters {
 	vector<lower=0>[how_many_cens] unseen;
 	real<lower=0> prior_unseen_alpha[how_many_cens > 0];
 	real prior_unseen_beta[how_many_cens > 0];
-	
-// 	 // Local properties of the data
-//   vector[Q] exposure_rate;
+
+
 
 }
 transformed parameters{
@@ -196,10 +198,10 @@ transformed parameters{
 			if(X_[which_cens[j],columns_idx_including_time[i]] > 0)
 				X_[which_cens[j],columns_idx_including_time[i]] = sqrt(X_[which_cens[j],columns_idx_including_time[i]]^2 + unseen[j]^2);
 
-	
+
 	X_scaled = X_;
 
-	for(i in 1:CIT)	
+	for(i in 1:CIT)
 			 X_scaled[,columns_idx_including_time[i]] = (X_scaled[,columns_idx_including_time[i]] - mean(X_scaled[,columns_idx_including_time[i]])) / sd(X_scaled[,columns_idx_including_time[i]]);
 
 
@@ -208,17 +210,15 @@ transformed parameters{
 }
 model {
 
-	real sigma_intercept = 1.3420415;
+
 		
-	if(use_data==1)
-			target += reduce_sum(
-		  	partial_sum2_lupmf,  y_array, grainsize,
-		  	append_col(	ref_t,	exp(lambda_UFO) ),
-		  	append_row(	multiply_matrix_by_row( prop_1,  (1-prop_UFO) ), 	prop_UFO ),
-		  	exposure_multiplier,
-		  	sigma_intercept,
-		  	-0.4
-		  );
+	if(use_data==1){
+			matrix[GM, Q] mu = (ref_t * prop_1 ); // matrix G x Q
+			for(q in 1:Q) mu[,q] = mu[,q] * exposure_multiplier[q];
+			vector[GM * Q] mu_vector = to_vector(mu);
+			//print(min(to_vector(prop_1)));
+			y_array ~  neg_binomial_2(mu_vector,	1.0 ./ (pow_vector(mu_vector, sigma_slope) *  exp(sigma_intercept)));
+	}
 
 
 	// lv 1
@@ -231,8 +231,11 @@ model {
   }
 // 	else for(q in 1:Q) prop_1[q] ~ dirichlet(rep_vector(1, num_elements(prop_1[1])));
 
-	to_vector(alpha_1_raw) ~ normal(0, x_raw_sigma * 0.5);
-	phi ~ gamma(1.1, 6);
+	to_vector(alpha_1_raw) ~ normal(0,3);
+	phi ~ gamma(1.1, 5);
+	sigma_intercept ~ normal(0,1);
+	sigma_slope ~ normal(0,0.5);
+	
 
 	// lambda UFO
 	lambda_UFO ~ skew_normal(3, 1.5, -2.7);
@@ -241,14 +244,14 @@ model {
 	// Censoring
 
 	if(how_many_cens > 0){
-		
+
 		// Priors unseen
 		target += gamma_lpdf(X_[which_not_cens,2] | prior_unseen_alpha[1], prior_unseen_beta[1]);
 	 	target += gamma_lccdf(X_[which_cens,2] | prior_unseen_alpha[1], prior_unseen_beta[1]);
-	 	
+
 	 	// Hyperprior
 	 	prior_survival_time ~ gamma( prior_unseen_alpha[1], prior_unseen_beta[1]);
-	 	
+
 	 	prior_unseen_beta[1] ~ student_t(3, 6, 10);
   	prior_unseen_alpha[1] ~  gamma(0.01, 0.01);
 

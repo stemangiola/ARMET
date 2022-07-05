@@ -15,7 +15,8 @@ convoluted_glm(
   approximate_posterior = F,
   prior_survival_time = c(),
   transform_time_function = sqrt,
-  use_data = TRUE
+  use_data = TRUE,
+  use_cmdstanr = FALSE
 )
 }
 \arguments{
