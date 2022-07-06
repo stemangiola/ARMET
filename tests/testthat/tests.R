@@ -130,7 +130,7 @@ test_that("check nk dataset run",{
 		select(-n) |> 
 		tidyr::unnest(data) |> 
 
-		#filter(sample=="S02_B") |>  
+	#	filter(sample=="S02_B") |>  
 		
 		# Format
 		convoluted_glm(
