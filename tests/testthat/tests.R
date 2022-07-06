@@ -138,7 +138,9 @@ test_that("check nk dataset run",{
 			.sample = sample,
 			.transcript = symbol,
 			.abundance = count,
-			reference = cellsig_cibersortx_reference, 
+			reference = #cellsig_cibersortx_reference, 
+				readRDS("/wehisan/bioinf/bioinf-data/Papenfuss_lab/projects/mangiola.s/ARMET_dev/dev/TCGA_makeflow_pipeline/ref_jian_3_optimisations.rds") %>%
+				filter(level==3),
 			use_cmdstanr = T
 		) |>
 		arrange(desc(`.median_(Intercept)`)) |> 

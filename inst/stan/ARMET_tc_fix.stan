@@ -150,6 +150,10 @@ transformed data{
   real x_raw_sigma = inv_sqrt(1 - inv(number_of_cell_types));
   
   int grainsize = 1;
+  
+  real lambda_UFO_mean = mean(log1p(to_array_1d(ref)));
+  real lambda_UFO_sd = sd(log1p(to_array_1d(ref)));
+  
 }
 parameters {
 
@@ -211,8 +215,13 @@ model {
 
 		
 	if(use_data==1){
-			matrix[GM, Q] mu = (ref_t * prop_1 ); // matrix G x Q
+		
+			matrix[GM, Q] mu = // matrix G x Q
+				append_col(	ref_t,	exp(lambda_UFO) ) * // MU
+				append_row(	multiply_matrix_by_row( prop_1,  (1-prop_UFO) ), 	prop_UFO ); // PROP
+				
 			for(q in 1:Q) mu[,q] = mu[,q] * exposure_multiplier[q];
+			
 			vector[GM * Q] mu_vector = to_vector(mu);
 
 			y_array ~  neg_binomial_2(mu_vector,	1.0 ./ (pow_vector(mu_vector, sigma_slope) *  exp(sigma_intercept)));
@@ -229,7 +238,7 @@ model {
 	
 
 	// lambda UFO
-	lambda_UFO ~ skew_normal(3, 1.5, -2.7);
+	lambda_UFO ~ normal( lambda_UFO_mean , lambda_UFO_sd);
 	prop_UFO ~ beta( 1.001, 20);
 
 	// Censoring
