@@ -107,7 +107,20 @@ test_that("check simple run NO hierarchy",{
 
 test_that("check nk dataset run",{
 	
-		
+	cell_types = data.tree::as.Node(yaml::read_yaml("~/PostDoc/cellsig/dev/tree_kamran.yaml"))$leaves %>% purrr::map(~ .x$name) %>% as.character()
+	
+	genes = 
+		readRDS("~/PostDoc/PPCG_tumour_microenvironment/methodwise_markers.rds") |> 
+		filter(stream == "cibersortx") |> 
+		pull(signature)
+	
+	cellsig_cibersortx_reference = 
+		readRDS("~/PostDoc/cellsig/dev/modeling_results/counts_bayes_parsed.rds") |> 
+		filter(cell_type %in% cell_types) |> 
+		mutate(is_marker = .feature %in% genes) |> 
+		select(symbol = .feature, cell_type, count= `50%`, is_marker) |> 
+		distinct() 
+	
 		# Read data
 	readRDS("~/PostDoc/cellsig/dev/counts.rds") |>
 		filter(cell_type == "nk_resting") |> 
@@ -117,7 +130,7 @@ test_that("check nk dataset run",{
 		select(-n) |> 
 		tidyr::unnest(data) |> 
 
-		filter(sample=="S02_B") |>  
+		#filter(sample=="S02_B") |>  
 		
 		# Format
 		convoluted_glm(
@@ -125,9 +138,7 @@ test_that("check nk dataset run",{
 			.sample = sample,
 			.transcript = symbol,
 			.abundance = count,
-			reference = 
-				readRDS("/wehisan/bioinf/bioinf-data/Papenfuss_lab/projects/mangiola.s/ARMET_dev/dev/TCGA_makeflow_pipeline/ref_jian_3_optimisations.rds") %>%
-				filter(level==3), 
+			reference = cellsig_cibersortx_reference, 
 			use_cmdstanr = T
 		) |>
 		arrange(desc(`.median_(Intercept)`)) |> 

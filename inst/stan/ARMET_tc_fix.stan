@@ -155,11 +155,9 @@ parameters {
 
 
   // Proportions
-  // lv1
   matrix[number_of_cell_types-1, Q]  prop_1_raw_raw; // Root
 
 	// Dirichlet regression
-  // lv1
   matrix[A  * do_regression,number_of_cell_types-1]  alpha_1_raw; // Root
 
 	vector<lower=0>[number_of_cell_types] phi; 
@@ -216,21 +214,14 @@ model {
 			matrix[GM, Q] mu = (ref_t * prop_1 ); // matrix G x Q
 			for(q in 1:Q) mu[,q] = mu[,q] * exposure_multiplier[q];
 			vector[GM * Q] mu_vector = to_vector(mu);
-			//print(min(to_vector(prop_1)));
+
 			y_array ~  neg_binomial_2(mu_vector,	1.0 ./ (pow_vector(mu_vector, sigma_slope) *  exp(sigma_intercept)));
 	}
 
+	// Prior
+  to_vector(prop_1_raw_raw) ~  std_normal();
 
-	// lv 1
-  if(do_regression) {
-
-		// non centered
-  	to_vector(prop_1_raw_raw) ~  std_normal();
-  	 
-
-  }
-// 	else for(q in 1:Q) prop_1[q] ~ dirichlet(rep_vector(1, num_elements(prop_1[1])));
-
+	// Hyper Prior
 	to_vector(alpha_1_raw) ~ normal(0,3);
 	phi ~ gamma(1.1, 5);
 	sigma_intercept ~ normal(0,1);
