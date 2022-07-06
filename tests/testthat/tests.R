@@ -107,13 +107,17 @@ test_that("check simple run NO hierarchy",{
 
 test_that("check nk dataset run",{
 	
-
-	armet_obj =
 		
 		# Read data
-		readRDS("~/PostDoc/cellsig/dev/counts.rds") |>
+	readRDS("~/PostDoc/cellsig/dev/counts.rds") |>
 		filter(cell_type == "nk_resting") |> 
-		filter(sample=="S02_B") |> 
+		tidyr::nest(data = -symbol) |> 
+		mutate(n = purrr::map_int(data, ~ distinct(.x, sample) |> nrow())) |> 
+		filter(n==max(n)) |> 
+		select(-n) |> 
+		tidyr::unnest(data) |> 
+
+		filter(sample=="S02_B") |>  
 		
 		# Format
 		convoluted_glm(
@@ -129,7 +133,17 @@ test_that("check nk dataset run",{
 		arrange(desc(`.median_(Intercept)`)) |> 
 		pull(cell_type) |>
 		magrittr::extract2(1) |> 
+		as.character() |> 
 		expect_equal("nk_resting")
+	
+	# # A tibble: 12 × 3
+	# cell_type         `.median_(Intercept)` `.sd_(Intercept)`
+	# <fct>                             <dbl>             <dbl>
+	# 	1 nk_resting                        7.48               1.89
+	# 2 nk_primed                         0.395              3.04
+	# 3 t_gamma_delta                     0.375              3.34
+	
+	
 	
 })
 
