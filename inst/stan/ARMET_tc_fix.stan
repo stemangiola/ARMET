@@ -1,38 +1,16 @@
 functions{
 
-	matrix vector_array_to_matrix(vector[] x) {
-			matrix[size(x), rows(x[1])] y;
-			for (m in 1:size(x))
-			  y[m] = x[m]';
-			return y; 
-	}
+  vector[] get_mean_prop(matrix X, matrix alpha){
+
+	  	vector[cols(alpha)] mu[rows(X)];
+
+		  for(j in 1:num_elements(mu[,1])) 
+	  		mu[j]  = softmax( to_vector(X[j] * alpha));
+  
+  	return(mu);
+  }
 	
-	matrix vector_array_to_matrix_transpose(vector[] x) {
-			matrix[rows(x[1]), size(x)] y;
-			for (m in 1:cols(y))
-			  y[,m] = x[m];
-			return y; 
-	}
-	
-	matrix multiply_by_column(vector[] v, vector r){
-		int n_rows = num_elements(v[,1]);
-		int n_cols = num_elements(v[1]);
-	
-		matrix[n_rows,n_cols] v_mult ;
-		for(i in 1:n_rows) v_mult[i] = to_row_vector(v[i] * r[i]);
-	
-		return v_mult;
-	}
-	
-	matrix multiply_matrix_by_column(matrix v, vector r){
-		int n_rows = rows(v);
-		int n_cols = cols(v);
-	
-		matrix[n_rows,n_cols] v_mult ;
-		for(i in 1:n_rows) v_mult[i] = v[i] * r[i];
-	
-		return v_mult;
-	}
+
 	
 	matrix multiply_matrix_by_row(matrix v, row_vector r){
 		int n_rows = rows(v);
@@ -52,42 +30,6 @@ functions{
 			return(v_pow);
 		}
 	
-	real beta_regression_lpdf(vector[] p, matrix X, matrix beta, vector phi){
-
-		real lp = 0;
-    matrix[num_elements(p[1]), num_elements(p[,1])] mu = (X * beta)';
-    real buffer;
-    
-		for(i in 1:cols(mu)) mu[,i] = softmax(mu[,i]);
-		for(i in 1:cols(mu)) {
-			for(j in 1:rows(mu)) {
-			
-			buffer = 1.0/fmin(mu[j,i], 1-mu[j,i]) * 1;
-			
-     	lp += beta_lpdf(p[i,j] | mu[j,i] .* phi[j] * buffer, (1.0 - mu[j,i]) .* phi[j] * buffer );
-
-			// add parashoot
-			//lp += beta_lpdf(p[i] | 1.5, 1.5 );
-		}}
-		return (lp);
-	}
-
-	real dirichlet_regression_lpdf(vector[] p, matrix X, matrix beta, real phi, real plateau){
-		
-		real lp = 0;
-    matrix[num_elements(p[1]), num_elements(p[,1])] mu = (X * beta)';
-		real buffer;
-	
-	for(i in 1:cols(mu)){
-		mu[,i] = softmax(mu[,i]);
-		buffer = 1.0/min(mu[,i]) * plateau;
-	
-		lp += dirichlet_lpdf(p[i] | mu[,i] * phi * buffer );
-	}
-	
-	return(lp);
-	}
-
   vector Q_sum_to_zero_QR(int N) {
     vector [2*N] Q_r;
 
@@ -98,9 +40,10 @@ functions{
     return Q_r;
   }
 
-  row_vector sum_to_zero_QR(row_vector x_raw, vector Q_r) {
+
+  vector sum_to_zero_QR(vector x_raw, vector Q_r) {
     int N = num_elements(x_raw) + 1;
-    row_vector [N] x;
+    vector [N] x;
     real x_aux = 0;
 
     for(i in 1:N-1){
@@ -110,30 +53,23 @@ functions{
     x[N] = x_aux;
     return x;
   }
-
-	real partial_sum_lpmf(int[] slice_Y,
-                        int start, int end,
-                        matrix ref,
-                        matrix prop,
-                        vector exposure_multiplier,
-                        real sigma_intercept, 
-                        real sigma_slope) {
-                         
-	matrix[rows(prop), cols(ref)] mu = (prop * ref);
-	vector[rows(prop) * cols(ref)] mu_vector;
-	for(q in 1:rows(mu)) mu[q] = mu[q] * exposure_multiplier[q];
-
- mu_vector = to_vector(mu');
-	
-	return( neg_binomial_2_lupmf(
-		slice_Y |
-		mu_vector[start:end],
-		1.0 ./ (pow_vector(mu_vector[start:end], sigma_slope) *  exp(sigma_intercept))
-
-	));
   
+  matrix get_A_qr(int K){
+  		matrix[K, K] A = diag_matrix(rep_vector(1,K));
+  
+		 for (i in 1:K-1) A[K,i] = -1;
+  		A[K,K] = 0;
+  	
+  	return qr_Q(A)[ , 1:(K-1)];
+  
+  }
+  
+   vector sum_to_zero_QR_2(matrix A_qr, vector beta_raw) {
+    
+    return A_qr * beta_raw;
+  }
 
-	}
+
 	
 		real partial_sum2_lpmf(int[] slice_Y,
                         int start, int end,
@@ -144,7 +80,7 @@ functions{
                         real sigma_slope) {
                          
 	matrix[rows(ref), cols(prop)] mu = (ref * prop );
-	vector[cols(prop) * rows(ref)] mu_vector;
+	vector[end-start+1] mu_vector;
 	for(q in 1:cols(mu)) mu[,q] = mu[,q] * exposure_multiplier[q];
 
  mu_vector = to_vector(mu)[start:end];
@@ -169,7 +105,7 @@ data {
 	int<lower=0> GM;
 
 	// Priors
-	real<upper=0> sigma_slope;
+	//real<upper=0> sigma_slope;
 	real<lower=0> sigma_sigma;
 	//real sigma_intercept;
 	
@@ -197,12 +133,6 @@ data {
 	int CIT;
 	int columns_idx_including_time[CIT];
 	
-	// For exposure
-	// int nrow_for_exposure;
-	// int Q_for_exposure[nrow_for_exposure];
-	// int counts_for_exposure[nrow_for_exposure] ;
-	// vector[nrow_for_exposure] reference_for_exposure;
-	
 	// Exposure rate
   vector[Q] exposure_multiplier;
   
@@ -215,24 +145,30 @@ transformed data{
 	matrix[GM, number_of_cell_types]  ref_t = ref';
 	int y_array[Q * GM] = to_array_1d(y);
 	vector[number_of_cell_types*2] Q_r_1 = Q_sum_to_zero_QR(number_of_cell_types);
+	matrix[number_of_cell_types, number_of_cell_types-1] A_qr = get_A_qr(number_of_cell_types);
 
   real x_raw_sigma = inv_sqrt(1 - inv(number_of_cell_types));
   
   int grainsize = 1;
+  
+  real lambda_UFO_mean = mean(log1p(to_array_1d(ref)));
+  real lambda_UFO_sd = sd(log1p(to_array_1d(ref)));
+  
 }
 parameters {
 
 
   // Proportions
-  // lv1
-  simplex[number_of_cell_types]  prop_1[Q ]; // Root
+  matrix[number_of_cell_types-1, Q]  prop_1_raw_raw; // Root
 
 	// Dirichlet regression
-  // lv1
   matrix[A  * do_regression,number_of_cell_types-1]  alpha_1_raw; // Root
 
-	vector<lower=1>[number_of_cell_types] phi; 
+	vector<lower=0>[number_of_cell_types] phi; 
 
+	real sigma_intercept;
+	real<upper=0> sigma_slope;
+	
 	// Unknown population
 	vector<lower=0, upper = log(max(to_array_1d(y)))>[GM] lambda_UFO;
 	row_vector<lower=0, upper=0.5>[Q] prop_UFO;
@@ -241,19 +177,21 @@ parameters {
 	vector<lower=0>[how_many_cens] unseen;
 	real<lower=0> prior_unseen_alpha[how_many_cens > 0];
 	real prior_unseen_beta[how_many_cens > 0];
-	
-// 	 // Local properties of the data
-//   vector[Q] exposure_rate;
+
+
 
 }
 transformed parameters{
 
-  matrix[A  * do_regression,number_of_cell_types]  alpha_1; // Root
 
 	matrix[Q,A] X_ = X;
-	matrix[Q,A] X_scaled = X_;
+	matrix[Q,A] X_scaled = X;
+	matrix[number_of_cell_types, Q]  prop_1;
+	matrix[number_of_cell_types-1, Q]  prop_1_raw; // Root
+
+	for(c in 1:(number_of_cell_types-1)) prop_1_raw[c] = to_row_vector(X_scaled * alpha_1_raw[,c]) + phi[c] * prop_1_raw_raw[c];
 	
-	for(a in 1:A)	alpha_1[a] =  sum_to_zero_QR(alpha_1_raw[a], Q_r_1);
+	for(q in 1:Q) prop_1[,q] =  softmax( sum_to_zero_QR(  prop_1_raw[,q], Q_r_1 )) ;
 	
 
 	if(how_many_cens > 0) {
@@ -262,9 +200,10 @@ transformed parameters{
 			if(X_[which_cens[j],columns_idx_including_time[i]] > 0)
 				X_[which_cens[j],columns_idx_including_time[i]] = sqrt(X_[which_cens[j],columns_idx_including_time[i]]^2 + unseen[j]^2);
 
-	
-	
-	for(i in 1:CIT)	
+
+	X_scaled = X_;
+
+	for(i in 1:CIT)
 			 X_scaled[,columns_idx_including_time[i]] = (X_scaled[,columns_idx_including_time[i]] - mean(X_scaled[,columns_idx_including_time[i]])) / sd(X_scaled[,columns_idx_including_time[i]]);
 
 
@@ -273,52 +212,64 @@ transformed parameters{
 }
 model {
 
-	real sigma_intercept = 1.3420415;
+
 		
-	matrix[number_of_cell_types, Q] prop_lv_t = vector_array_to_matrix_transpose(prop_1);
+	if(use_data==1){
+		
+			matrix[GM, Q] mu = // matrix G x Q
+				append_col(	ref_t,	exp(lambda_UFO) ) * // MU
+				append_row(	multiply_matrix_by_row( prop_1,  (1-prop_UFO) ), 	prop_UFO ); // PROP
+				
+			for(q in 1:Q) mu[,q] = mu[,q] * exposure_multiplier[q];
+			
+			vector[GM * Q] mu_vector = to_vector(mu);
+
+			y_array ~  neg_binomial_2(mu_vector,	1.0 ./ (pow_vector(mu_vector, sigma_slope) *  exp(sigma_intercept)));
+	}
+
+	// Prior
+  to_vector(prop_1_raw_raw) ~  std_normal();
+
+	// Hyper Prior
+	to_vector(alpha_1_raw) ~ normal(0,3);
+	phi ~ gamma(1.1, 5);
+	sigma_intercept ~ normal(0,1);
+	sigma_slope ~ normal(0,0.5);
 	
-	if(use_data==1)
-			target += reduce_sum(
-		  	partial_sum2_lupmf,  y_array, grainsize,
-		  	append_col(	ref_t,	exp(lambda_UFO) ),
-		  	append_row(	multiply_matrix_by_row( prop_lv_t,  (1-prop_UFO) ), 	prop_UFO ),
-		  	exposure_multiplier,
-		  	sigma_intercept,
-		  	-0.4
-		  );
-
-
-	// lv 1
-  if(do_regression) {
-
-  	 prop_1 ~  beta_regression(X_scaled, alpha_1, phi);
-  	 to_vector(alpha_1_raw) ~ normal(0, 0.5);
-  	 //if(A > 1) to_vector( alpha_1_raw[2:] ) ~ normal(0, 0.5);
-
-
-  }
-	else for(q in 1:Q) prop_1[q] ~ dirichlet(rep_vector(1, num_elements(prop_1[1])));
-
-
-	phi ~ normal(5,2);
 
 	// lambda UFO
-	lambda_UFO ~ skew_normal(6.2, 3.3, -2.7);
+	lambda_UFO ~ normal( lambda_UFO_mean , lambda_UFO_sd);
 	prop_UFO ~ beta( 1.001, 20);
 
 	// Censoring
 
 	if(how_many_cens > 0){
-		
+
 		// Priors unseen
 		target += gamma_lpdf(X_[which_not_cens,2] | prior_unseen_alpha[1], prior_unseen_beta[1]);
 	 	target += gamma_lccdf(X_[which_cens,2] | prior_unseen_alpha[1], prior_unseen_beta[1]);
-	 	
+
 	 	// Hyperprior
 	 	prior_survival_time ~ gamma( prior_unseen_alpha[1], prior_unseen_beta[1]);
-	 	
+
 	 	prior_unseen_beta[1] ~ student_t(3, 6, 10);
   	prior_unseen_alpha[1] ~  gamma(0.01, 0.01);
 
 	}
+}
+
+generated quantities{
+
+	matrix[A  * do_regression,number_of_cell_types]  alpha_1; // Root
+  matrix[number_of_cell_types-1, Q]  prop_1_raw_rng; 
+	matrix[number_of_cell_types, Q]  prop_1_rng;
+	vector[number_of_cell_types]  mu_1_rng[Q  ]; 
+	
+	for(c in 1:(number_of_cell_types-1)) prop_1_raw_rng[c] =  to_row_vector(normal_rng(X_scaled * alpha_1_raw[,c] * 0.5, phi[c]));
+	for(q in 1:Q) prop_1_rng[,q] =  softmax( sum_to_zero_QR( prop_1_raw_rng[,q], Q_r_1 )) ;
+	for(a in 1:A)	alpha_1[a] =  to_row_vector(sum_to_zero_QR(  to_vector(alpha_1_raw[a]), Q_r_1 ));
+	
+	mu_1_rng = get_mean_prop(X_scaled, alpha_1);
+
+ 
 }

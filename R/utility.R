@@ -1625,37 +1625,7 @@ get_alpha = function(fit, level){
 
 }
 
-get_alpha_NO_hierarchy = function(fit){
-	
 
-	fit %>%
-		draws_to_tibble("alpha_", "A", "C") %>%
-		filter(!grepl("_raw" ,.variable)) %>%
-		# rebuild the last component sum-to-zero
-		#rebuild_last_component_sum_to_zero() %>%
-		
-		
-		arrange(.chain, .iteration, .draw,     A) %>%
-		
-		nest(draws = -c(C, .variable)) %>%
-		
-		# Attach convergence information
-		left_join(
-			fit %>% 
-				summary_to_tibble("alpha_", "A", "C") %>% 
-				filter(!grepl("_raw" ,.variable)) %>%
-				filter(A == 2) %>% 
-				select(.variable, C, one_of("Rhat")),
-			by = c(".variable", "C")
-		) %>%
-		
-		# FOR HIERARCHICAL
-		mutate(C = 1:n()) %>% 
-		
-		# Attach generated quantities
-		separate(.variable, c("par", "node"), remove = F)
-	
-}
 
 #' draws_to_tibble_x_y
 #'

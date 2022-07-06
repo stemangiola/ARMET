@@ -1,43 +1,47 @@
+library(dplyr)
+library(ARMET)
+data("test_mixture")
+data("no_hierarchy_reference")
 
 test_that("check data set",{
 	
 	# Test fo anylvel that all gnes are in all cel tpes
 	expect_lte(
-		ARMET::ARMET_ref %>%
-			distinct(level, symbol, `Cell type category`) %>%
-			count(level, symbol) %>%
-			distinct(level, n) %>%
-			nrow,
+		ARMET::ARMET_ref |>
+			distinct(level, symbol, `Cell type category`) |>
+			count(level, symbol) |>
+			distinct(level, n) |>
+			nrow(),
 		4
 	)
 	
 	# Test dataset house keeping should be in all levels
 	expect_equal(
-		ARMET::ARMET_ref %>% distinct(`house keeping`, level) %>% nrow,
+		ARMET::ARMET_ref |> distinct(`house keeping`, level) |> nrow(),
 		8
 	)
 	
 	# Test dataset house keeping should be in all samples
 	expect_equal(
-		ARMET::ARMET_ref %>% distinct(`house keeping`, sample) %>% count(`house keeping`) %>% distinct(n) %>% nrow,
+		ARMET::ARMET_ref |> distinct(`house keeping`, sample) |> count(`house keeping`) |> distinct(n) |> nrow(),
 		1
 	)
 	
 	# there should be howse keeping
 	expect_equal(
-		ARMET::ARMET_ref %>% distinct(`house keeping`) %>% nrow,
+		ARMET::ARMET_ref |> distinct(`house keeping`) |> nrow(),
 		2
 	)
 	
 	# there should be howse keeping
 	expect_equal(
-		ARMET::ARMET_ref %>% filter(level==3) %>% pull(`Cell type category`) %>% unique %>% intersect(c("endothelial", "epithelial", "fibroblast")) %>% length,
+		ARMET::ARMET_ref |> filter(level==3) |> pull(`Cell type category`) |> unique() |> intersect(c("endothelial", "epithelial", "fibroblast")) |> length(),
 		3
 	)
 	
 	# test if any count is NA
 	expect_equal(
-		ARMET::ARMET_ref %>% filter(count %>% is.na) %>% nrow,
+		ARMET::ARMET_ref |> filter(count |> is.na()) |> nrow(),
 		0
 	)
 	
@@ -45,101 +49,114 @@ test_that("check data set",{
 	
 })
 
-library(dplyr)
-library(ARMET)
-my_mix =
-	ARMET_ref %>% 
-	inner_join( (.) %>% distinct(sample) %>% slice(1:2)) %>% select(-level) %>%
-	
-	# complete
-	mutate_if(is.factor, as.character) %>% 
-	tidyr::complete(sample, symbol, fill = list(count = 0)) %>%
-	mutate(count = as.integer(count))
+# my_mix =
+# 	ARMET_ref |> 
+# 	inner_join( (.) %>% distinct(sample) %>% slice(1:2)) %>% select(-level) %>%
+# 	
+# 	# complete
+# 	mutate_if(is.factor, as.character) %>% 
+# 	tidyr::complete(sample, symbol, fill = list(count = 0)) %>%
+# 	mutate(count = as.integer(count))
 
 test_that("check simple run NO hierarchy",{
 	
 
 	armet_estimate =
 		# Read data
-		test_mixture %>%
+		test_mixture |>
 		
-		# Format
-		setup_convolved_lm_NON_hierarchical(
+		convoluted_glm(
 			~ factor_of_interest,
 			.sample = sample,
 			.transcript = symbol,
 			.abundance = count,
 			reference = 
 				readRDS("/wehisan/bioinf/bioinf-data/Papenfuss_lab/projects/mangiola.s/ARMET_dev/dev/TCGA_makeflow_pipeline/ref_jian_3_optimisations.rds") %>%
-				filter(level==1)
-		) |>
-			estimate_convoluted_lm(use_data = FALSE) 
-	
-	
-})
-
-
-test_that("check simple run",{
-	
-	armet_obj_hierarchical =
-		
-		# Read data
-		my_mix |>
-		nest(data = -sample) %>%
-		mutate(factor_of_interest = c(0,1)) %>%
-		unnest(data) %>%
-		
-		# Format
-		ARMET:::setup_convolved_lm_hierarchical(
-			~ factor_of_interest,
-			.sample = sample,
-			.transcript = symbol,
-			.abundance = count,
-			reference = readRDS("/wehisan/bioinf/bioinf-data/Papenfuss_lab/projects/mangiola.s/ARMET_dev/dev/TCGA_makeflow_pipeline/ref_jian_3_optimisations.rds")
+				filter(level==1),
+			use_data = FALSE
 		)
 	
-	armet_estimate =
-		armet_obj_hierarchical |>
-		estimate_convoluted_lm_1() 
 	
 })
+
+
+# test_that("check simple run",{
+# 	
+# 	armet_obj_hierarchical =
+# 		
+# 		# Read data
+# 		my_mix |>
+# 		nest(data = -sample) %>%
+# 		mutate(factor_of_interest = c(0,1)) %>%
+# 		unnest(data) %>%
+# 		
+# 		# Format
+# 		ARMET:::setup_convolved_lm_hierarchical(
+# 			~ factor_of_interest,
+# 			.sample = sample,
+# 			.transcript = symbol,
+# 			.abundance = count,
+# 			reference = readRDS("/wehisan/bioinf/bioinf-data/Papenfuss_lab/projects/mangiola.s/ARMET_dev/dev/TCGA_makeflow_pipeline/ref_jian_3_optimisations.rds")
+# 		)
+# 	
+# 	armet_estimate =
+# 		armet_obj_hierarchical |>
+# 		estimate_convoluted_lm_1() 
+# 	
+# })
 
 test_that("check nk dataset run",{
 	
-	`%$%` = magrittr::`%$%`
+	cell_types = data.tree::as.Node(yaml::read_yaml("~/PostDoc/cellsig/dev/tree_kamran.yaml"))$leaves %>% purrr::map(~ .x$name) %>% as.character()
 	
+	genes = 
+		readRDS("~/PostDoc/PPCG_tumour_microenvironment/methodwise_markers.rds") |> 
+		filter(stream == "cibersortx") |> 
+		pull(signature)
 	
-	armet_obj =
-		
+	cellsig_cibersortx_reference = 
+		readRDS("~/PostDoc/cellsig/dev/modeling_results/counts_bayes_parsed.rds") |> 
+		filter(cell_type %in% cell_types) |> 
+		mutate(is_marker = .feature %in% genes) |> 
+		select(symbol = .feature, cell_type, count= `50%`, is_marker) |> 
+		distinct() 
+	
 		# Read data
-		ARMET_ref %>%
-		inner_join( (.) %>% dplyr::filter(`Cell type category` == "nk_primed") %>% distinct(sample) %>% slice(0:1)) %>%
-		dplyr::select(-level) %>%
-		
-		mutate(count = as.numeric(count)) %>%
-		
-		# complete
-		mutate_if(is.factor, as.character) %>% 
-		tidyr::complete(sample, symbol, fill = list(count = 0)) %>%
-		mutate(count = as.integer(count)) |>
+	readRDS("~/PostDoc/cellsig/dev/counts.rds") |>
+		filter(cell_type == "nk_resting") |> 
+		tidyr::nest(data = -symbol) |> 
+		mutate(n = purrr::map_int(data, ~ distinct(.x, sample) |> nrow())) |> 
+		filter(n==max(n)) |> 
+		select(-n) |> 
+		tidyr::unnest(data) |> 
+
+	#	filter(sample=="S02_B") |>  
 		
 		# Format
-		setup_convolved_lm_hierarchical(
+		convoluted_glm(
 			~ 1,
 			.sample = sample,
 			.transcript = symbol,
 			.abundance = count,
-			reference = readRDS("/wehisan/bioinf/bioinf-data/Papenfuss_lab/projects/mangiola.s/ARMET_dev/dev/TCGA_makeflow_pipeline/ref_jian_3_optimisations.rds")
+			reference = #cellsig_cibersortx_reference, 
+				readRDS("/wehisan/bioinf/bioinf-data/Papenfuss_lab/projects/mangiola.s/ARMET_dev/dev/TCGA_makeflow_pipeline/ref_jian_3_optimisations.rds") %>%
+				filter(level==3),
+			use_cmdstanr = T
 		) |>
-		estimate_convoluted_lm_1() %>%
-		estimate_convoluted_lm_2() %>%
-		estimate_convoluted_lm_3()  %>%
-		dplyr::filter(level==3) %>%
-		dplyr::filter(`Cell type category` == "nk_primed") %>%
-		select(-.variable) %>%
-		pull(.value) %>% 
-		mean %>%
-		expect_gt(0.95)
+		arrange(desc(`.median_(Intercept)`)) |> 
+		pull(cell_type) |>
+		magrittr::extract2(1) |> 
+		as.character() |> 
+		expect_equal("nk_resting")
+	
+	# # A tibble: 12 × 3
+	# cell_type         `.median_(Intercept)` `.sd_(Intercept)`
+	# <fct>                             <dbl>             <dbl>
+	# 	1 nk_resting                        7.48               1.89
+	# 2 nk_primed                         0.395              3.04
+	# 3 t_gamma_delta                     0.375              3.34
+	
+	
 	
 })
 
